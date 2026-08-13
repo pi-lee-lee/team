@@ -106,7 +106,10 @@ team/bin/req.sh done  REQ-0001 --by cpp-engineer --note "jstring 인자 추가, 
 
 | 명령 | 용도 |
 |---|---|
-| **`team/team.sh`** | **기본 기동 방식.** tmux 창 하나씩에 에이전트를 띄운다(포그라운드) |
+| **`learn`** (별칭) | **단 하나의 진입점** = `team/start.sh`. 에이전트 보장 + 루트 세션 시작 |
+| `learn-status` | 현황만 확인하고 종료 |
+| `learn-team` | 에이전트 tmux 창에 붙기(승인 프롬프트에 답할 때). 분리 `Ctrl-b d` |
+| `team/team.sh` | 에이전트만 기동/복구(멱등). `start.sh` 가 내부적으로 호출한다 |
 | `team/team.sh --fresh` | 기존 tmux 세션 종료 후 새로 기동 |
 | `team/bin/team-up.sh` | 대안: headless 백그라운드 기동(터미널 없이 돌려야 할 때) |
 | `team/bin/team-up.sh --restart` | 백그라운드 전원 재기동 |

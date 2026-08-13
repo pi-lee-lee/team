@@ -24,9 +24,7 @@
 #
 # 루트 에이전트 창은 만들지 않는다. **네가 지금 쓰고 있는 터미널이 루트다.**
 # 여기에 루트를 하나 더 띄우면 루트가 둘이 되어 흐름 제어 주체가 모호해진다.
-source "$(dirname "${BASH_SOURCE[0]}")/bin/_common.sh"
-
-TEAM_SESSION="${TEAM_SESSION:-learnteam}"
+source "$(dirname "${BASH_SOURCE[0]}")/bin/_common.sh"   # TEAM_SESSION 포함
 
 fresh=0; attach=1
 while [ $# -gt 0 ]; do

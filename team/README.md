@@ -7,7 +7,8 @@
 
 ```
 team/
-├─ team.sh         ⭐ 기본 기동 — tmux 창 하나씩에 에이전트(포그라운드)
+├─ start.sh        ⭐ 단 하나의 진입점 — 에이전트 보장 + 루트 세션 시작 (별칭 `learn`)
+├─ team.sh         에이전트만 기동/복구(에이전트별 멱등). start.sh 가 호출한다
 ├─ launchd/        로그인 자동 기동 plist(설치는 사용자가 직접)
 team/bin/
 ├─ _agent_pane.sh  tmux 창 하나에서 대화형 에이전트를 띄우는 실행부
