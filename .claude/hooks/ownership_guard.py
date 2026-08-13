@@ -190,24 +190,43 @@ def _mutation_hit(cmd, pats):
     return None
 
 
+# 리다이렉션의 '대상'만 뽑는다.
+#   `> out.txt`, `>>out.txt`, `2> err.log`  → 대상 파일
+#   `2>&1`, `>&2`                           → 파일이 아니라 fd 복제이므로 잡히면 안 된다
+#     ('&' 를 대상 문자에서 제외했으므로 `>&…` 는 아예 매치되지 않는다)
+_REDIR = re.compile(r">>?\s*([^\s;|&<>]+)")
+
+
 def check_bash(cmd, cwd, role, own):
     cfg = own.get("bash_mutation_guard") or {}
     if not cfg.get("enabled"):
         return
-    hit = _mutation_hit(cmd or "", cfg.get("mutating_patterns") or [])
-    if not hit:
-        return  # 읽기 전용으로 보이는 명령은 통과
-    for tok in bash_candidates(cmd, own):
+    cmd = cmd or ""
+    pats = cfg.get("mutating_patterns") or []
+
+    def verdict(tok, why):
         rel = rel_path(tok, cwd)
         if rel is None:
-            continue
+            return
         owner, reason = owner_of(rel, own)
         if owner is None or owner == role:
-            continue
-        deny(
-            role, rel, owner, reason,
-            extra="\n  탐지: Bash 명령에 파일 변조 패턴 '%s' 이 있고 대상이 남의 영역이다." % hit,
-        )
+            return
+        deny(role, rel, owner, reason, extra="\n  탐지: %s" % why)
+
+    # 1) 리다이렉션은 '쓰는 대상'이 명확하다 → 그 대상만 본다.
+    #    명령줄 전체의 경로 토큰을 훑으면 `req.sh --files <남의경로> ... 2>&1` 같은
+    #    정상 호출이 막힌다(실제로 겪은 오탐). 대상만 보면 그 오탐이 사라진다.
+    for m in _REDIR.finditer(cmd):
+        verdict(m.group(1).strip("'\""), "출력 리다이렉션으로 남의 영역 파일에 쓴다")
+
+    # 2) 낱말형 변조 명령(rm/mv/cp/sed -i …)은 대상을 특정하기 어렵다 →
+    #    그런 명령이 실제로 있을 때만 경로 토큰을 전수 검사한다.
+    word_pats = [p for p in pats if p.strip() and p.strip()[0].isalpha()]
+    hit = _mutation_hit(cmd, word_pats)
+    if not hit:
+        return
+    for tok in bash_candidates(cmd, own):
+        verdict(tok, "Bash 명령에 파일 변조 패턴 '%s' 이 있고 대상이 남의 영역이다." % hit)
 
 
 def main():

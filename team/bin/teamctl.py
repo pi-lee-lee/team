@@ -98,6 +98,61 @@ def cmd_ownership_add(owner, paths, exts):
     print("소유권 추가: %s ← %s" % (owner, ", ".join(added) if added else "(없음)"))
 
 
+def cmd_agents_table():
+    """에이전트별 기동 상태 + 등록 여부 + 미결 요청 수를 한 줄씩 출력."""
+    import glob
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["claude", "agents", "--cwd", ROOT, "--json"],
+            capture_output=True, text=True, timeout=30,
+        ).stdout
+        rows = json.loads(out)
+    except Exception:
+        rows = []
+    live = {r.get("name"): r for r in rows if r.get("kind") == "background"}
+
+    reg = (load(REGISTRY, {}).get("agents") or {})
+    registered = {v.get("role") for v in reg.values() if isinstance(v, dict)}
+
+    # 에이전트별 미결(open/claimed) 요청 수
+    pending = {}
+    for f in glob.glob(os.path.join(ROOT, "requests", "*", "REQ-*.md")):
+        to = st = None
+        try:
+            with open(f) as fh:
+                for line in fh:
+                    if line.startswith("to: "):
+                        to = line[4:].strip()
+                    elif line.startswith("status: "):
+                        st = line[8:].strip()
+                    elif line.strip() == "---" and to and st:
+                        break
+        except OSError:
+            continue
+        if st in ("open", "claimed") and to:
+            pending[to] = pending.get(to, 0) + 1
+
+    names = roster()
+    if not names:
+        print("  (.claude/agents/ 에 에이전트가 없다)")
+        return
+    for nm in names:
+        r = live.get(nm)
+        if r:
+            state = r.get("status", "?")
+            if state == "waiting":
+                state = "⏸ 대기(%s)" % (r.get("waitingFor") or "승인")
+            else:
+                state = "● %s" % state
+            detail = "%-22s short=%s" % (state, r.get("id", "?"))
+        else:
+            detail = "%-22s %s" % ("○ 미기동", "team-up.sh 로 기동")
+        ok = "등록✓" if nm in registered else "등록✗ 소유권미적용!"
+        print("  %-18s %-40s %-20s 미결 %d" % (nm, detail, ok, pending.get(nm, 0)))
+
+
 def cmd_render_table():
     own = load(OWNERSHIP, None)
     if own is None:
@@ -164,6 +219,8 @@ def main():
             else:
                 sys.exit("알 수 없는 옵션: %s" % a[i])
         cmd_ownership_add(owner, paths, exts)
+    elif c == "agents-table":
+        cmd_agents_table()
     elif c == "render-table":
         cmd_render_table()
     else:

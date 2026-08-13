@@ -12,62 +12,10 @@ n=10
 [ "${1:-}" = "-n" ] && n="${2:-10}"
 
 echo "══ AGENTS ══════════════════════════════════════════════════"
-claude agents --cwd "$PROJECT_DIR" --json 2>/dev/null \
-  | python3 - "$PROJECT_DIR" <<'PY'
-import json, os, sys, glob
-
-root = sys.argv[1]
-try:
-    rows = json.load(sys.stdin)
-except Exception:
-    rows = []
-
-live = {r.get("name"): r for r in rows if r.get("kind") == "background"}
-
-try:
-    with open(os.path.join(root, ".claude", "team", "registry.json")) as f:
-        reg = (json.load(f).get("agents") or {})
-except Exception:
-    reg = {}
-registered_roles = {v.get("role") for v in reg.values() if isinstance(v, dict)}
-
-names = sorted(
-    os.path.basename(p)[:-3]
-    for p in glob.glob(os.path.join(root, ".claude", "agents", "*.md"))
-)
-
-# 에이전트별 미결(open/claimed) 요청 수
-pending = {}
-for f in glob.glob(os.path.join(root, "requests", "*", "REQ-*.md")):
-    to = st = None
-    with open(f) as fh:
-        for line in fh:
-            if line.startswith("to: "):
-                to = line[4:].strip()
-            elif line.startswith("status: "):
-                st = line[8:].strip()
-            elif line.strip() == "---" and to and st:
-                break
-    if st in ("open", "claimed") and to:
-        pending[to] = pending.get(to, 0) + 1
-
-if not names:
-    print("  (.claude/agents/ 에 에이전트가 없다)")
-for nm in names:
-    r = live.get(nm)
-    if r:
-        state = r.get("status", "?")
-        wf = r.get("waitingFor")
-        mark = "●"
-        if state == "waiting":
-            mark, state = "⏸", "%s(%s)" % (state, wf or "")
-        detail = "%s %-9s short=%s" % (mark, state, r.get("id", "?"))
-    else:
-        detail = "○ 미기동      —  team/bin/team-up.sh 로 기동"
-    ok = "등록✓" if nm in registered_roles else "등록✗(소유권 미적용!)"
-    p = pending.get(nm, 0)
-    print("  %-18s %-34s %-22s 미결 %d" % (nm, detail, ok, p))
-PY
+# 파이썬을 heredoc 으로 넘기면 stdin 이 스크립트로 점유되어 파이프로 들어온 JSON 을
+# 못 읽는다(초기 버전의 버그: 전원 살아 있는데 "미기동"으로 보였다).
+# 그래서 목록 조회 자체를 teamctl.py 안에서 하도록 옮겼다.
+python3 "$BIN_DIR/teamctl.py" agents-table
 
 echo
 echo "══ OPEN (미결 요청) ════════════════════════════════════════"

@@ -78,6 +78,11 @@ team/bin/req.sh new --from android-engineer --to cpp-engineer \
 
 # 2) 요청자: SendMessage 로 포인터만 전달 (내용을 문장으로 옮기지 않는다)
 #    to: "cpp-engineer", message: "[REQ-0001] requests/open/REQ-0001.md 를 읽고 처리하라."
+#
+#    ⚠ 다른 세션에 처음 보낼 때는 이름만으로는 거부되고 ref 를 요구받는다.
+#      ListAgents 로 확인하거나, 거부 메시지에 찍힌 ref 를 그대로 붙여 재전송한다:
+#        to: "cpp-engineer [4d3e0f]"
+#      (같은 이름의 다른 세션과 헷갈리지 않게 하려는 확인 절차다. 실패가 아니다.)
 
 # 3) 담당: 확인 → 착수 → 구현 → 결과 기록 → 완료
 team/bin/req.sh show  REQ-0001

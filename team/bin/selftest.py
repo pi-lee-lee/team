@@ -98,6 +98,13 @@ CASES = [
      lambda: bash("cpp-engineer", "cat cpp/performance.cpp"), False),
     ("Bash: cpp 가 자기 파일 리다이렉션 (허용)",
      lambda: bash("cpp-engineer", "echo x > cpp/gen.h"), False),
+    ("Bash: 오탐 방지 — '2>&1' 은 fd 복제지 파일 쓰기가 아니다",
+     lambda: bash("root", 'team/bin/req.sh new --to android-engineer '
+                          '--files android/app/src/main/java/A.kt 2>&1'), False),
+    ("Bash: 오탐 방지 — 남의 경로를 '인자로 언급'만 하는 명령",
+     lambda: bash("root", 'team/bin/req.sh show REQ-0001 --files cpp/main.cpp'), False),
+    ("Bash: 리다이렉션 대상이 남의 파일이면 여전히 차단",
+     lambda: bash("root", "echo x 2> cpp/err.log"), True),
 
     ("하위 에이전트 생성 시도 (전문 에이전트)",
      lambda: run(NOSUB, "cpp-engineer", "Agent", {"subagent_type": "general-purpose"}), True),
