@@ -7,3 +7,9 @@ requests/.seq/
 
 .DS_Store
 *.tmp
+
+# Gradle/Android 빌드 산출물 — 에이전트가 만든 소스만 추적한다
+android/app/build/
+android/app/.cxx/
+android/.gradle/
+android/local.properties

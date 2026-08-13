@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">JNI Demo</string>
+    <string name="default_name">홍길동</string>
+    <string name="native_library_missing">네이티브 라이브러리(libjnidemo.so) 적재 실패: %1$s</string>
+    <string name="native_symbol_missing">네이티브 심볼 연결 실패: %1$s</string>
+</resources>
