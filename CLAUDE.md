@@ -85,6 +85,12 @@ team/bin/req.sh new --from android-engineer --to cpp-engineer \
 #      ListAgents 로 확인하거나, 거부 메시지에 찍힌 ref 를 그대로 붙여 재전송한다:
 #        to: "cpp-engineer [4d3e0f]"
 #      (같은 이름의 다른 세션과 헷갈리지 않게 하려는 확인 절차다. 실패가 아니다.)
+#
+#    ⚠⚠ SendMessage 는 "성공"을 돌려주고도 **도착하지 않을 수 있다.**
+#      권한 모드 계급이 다르면 수신 측에서 승인 대기로 보류됐다가 만료된다.
+#      team-up.sh 가 --settings 로 crossSessionInbound=accept 를 넘겨 해결해 뒀지만,
+#      수동으로 띄운 세션에는 적용되지 않는다. 지시를 보냈는데 상대가 반응이 없으면
+#      "무시했다"고 단정하지 말고 미도달을 의심하라 — 실제로 그런 사고가 있었다.
 
 # 3) 담당: 확인 → 착수 → 구현 → 결과 기록 → 완료
 team/bin/req.sh show  REQ-0001
@@ -100,8 +106,10 @@ team/bin/req.sh done  REQ-0001 --by cpp-engineer --note "jstring 인자 추가, 
 
 | 명령 | 용도 |
 |---|---|
-| `team/bin/team-up.sh` | 팀 전원 상시 기동(멱등 — 살아있는 건 건드리지 않음) |
-| `team/bin/team-up.sh --restart` | 전원 재기동(세션 컨텍스트는 초기화됨) |
+| **`team/team.sh`** | **기본 기동 방식.** tmux 창 하나씩에 에이전트를 띄운다(포그라운드) |
+| `team/team.sh --fresh` | 기존 tmux 세션 종료 후 새로 기동 |
+| `team/bin/team-up.sh` | 대안: headless 백그라운드 기동(터미널 없이 돌려야 할 때) |
+| `team/bin/team-up.sh --restart` | 백그라운드 전원 재기동 |
 | `team/bin/team-status.sh` | 에이전트 상태 + 미결 요청 + 최근 이벤트 |
 | `team/bin/req.sh new\|list\|show\|claim\|done\|reject` | 요청 프로토콜 |
 | `team/bin/agent-new.sh <이름> --desc "..." --paths "..." --exts "..."` | 새 상시 에이전트 생성(정의+소유권+표+기동을 한 번에) |
@@ -110,9 +118,23 @@ team/bin/req.sh done  REQ-0001 --by cpp-engineer --note "jstring 인자 추가, 
 **삭제 명령은 없다.** 규약상 에이전트는 삭제되지 않고 상시 기동을 유지한다.
 필요 없어진 에이전트는 지우지 않고 유휴 상태로 둔다.
 
+## 기동 방식 — tmux 포그라운드가 기본이다
+
+`team/team.sh` 가 tmux 세션 `learnteam` 을 만들고 **에이전트마다 창 하나**를 준다
+(0번 창은 상태판). 루트 창은 만들지 않는다 — **네가 쓰는 터미널이 루트**이고,
+루트를 하나 더 띄우면 흐름 제어 주체가 둘이 된다.
+
+포그라운드를 기본으로 삼은 이유는 백그라운드에서 밟은 함정 셋 중 **둘이 bg 전용 기본값**이었기 때문이다:
+`worktree` 격리로 파일을 못 쓰는 문제, 루트 메시지가 권한 계급 불일치로 보류되는 문제.
+남은 하나(승인 프롬프트)도 **조용히 멈춤 → 창에 떠서 답할 수 있는 대기**로 성격이 바뀐다.
+대가는 tmux 세션이 죽으면 팀이 죽는다는 것 — 헤드리스가 필요하면 `team-up.sh` 를 쓴다.
+
+- 창 이동 `Ctrl-b <숫자>` / `Ctrl-b w` · 분리 `Ctrl-b d` · 재진입 `team/team.sh`
+- 어떤 창이 승인 대기면 그 창으로 가서 직접 답하면 된다.
+
 ## 에이전트 수명 규약
 
-- 각 에이전트는 `claude --bg` 백그라운드 세션으로 **개별 기동**되고 스스로 종료하지 않는다.
+- 각 에이전트는 자기 창(또는 bg 세션)에서 **개별 기동**되고 스스로 종료하지 않는다.
 - 자원이 허용하는 한 정지시키지 않는다. 유휴 세션의 비용은 사실상 대기 메모리뿐이다.
 - **일회성 하위 에이전트는 존재하지 않는다.** `Agent`/`Task`/`Workflow` 도구는 훅이 막는다.
   일손이 더 필요하면 서브에이전트가 아니라 `agent-new.sh` 로 **상시 에이전트**를 늘린다.

@@ -7,10 +7,11 @@
   허용하는 한 종료하지 않는다" 이다. 재부팅하면 백그라운드 세션이 전부 죽으므로, 이것이
   없으면 매번 사람이 team-up.sh 를 기억해서 쳐야 한다.
 
-  StartInterval 은 크래시 복구 하트비트다. team-up.sh 가 **멱등**이기에 가능한 설계다 —
-  이미 살아 있는 에이전트는 건드리지 않고 죽은 것만 되살린다. 전원 정상이면 사실상 무비용
-  (claude agents 조회 한 번). 반대로 team-up.sh 의 멱등성이 깨지면 30분마다 세션이
-  중복 기동되므로, team-up.sh 를 고칠 때 이 의존관계를 기억해야 한다.
+  StartInterval 은 크래시 복구 하트비트다. team.sh 가 **에이전트별로 멱등**이기에 가능한
+  설계다 — 이름별로 살아있는지 각각 확인해 이미 도는 것은 건드리지 않고 죽은 창만 되살린다.
+  전원 정상이면 사실상 무비용(claude agents 조회 한 번).
+  ⚠ team.sh 의 이 멱등성이 깨지면 30분마다 창이 중복 기동되므로, 고칠 때 이 의존관계를
+  반드시 기억해야 한다.
 
   설치:
     cp team/launchd/com.idongu.learn-team.plist ~/Library/LaunchAgents/
@@ -32,7 +33,8 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>/Users/idong-u/learn/team/bin/team-up.sh</string>
+    <string>/Users/idong-u/learn/team/team.sh</string>
+    <string>--no-attach</string>
   </array>
 
   <key>WorkingDirectory</key>

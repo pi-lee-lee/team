@@ -63,7 +63,17 @@ EOF
 
 launch() {
   local name="$1" out short sid i
-  out="$(claude --bg -n "$name" --agent "$name" --permission-mode "$TEAM_PERM" "$(boot_prompt "$name")" 2>&1)" \
+  # --settings 로 crossSessionInbound 를 넘기는 이유:
+  # 기본값은 "보내는 쪽과 받는 쪽의 권한 모드 계급이 같을 때만 자동 전달"이다.
+  # 에이전트는 bypassPermissions, 루트(대화형)는 프롬프트 모드라 계급이 어긋나서
+  # **루트가 보낸 메시지가 수신 승인 대기로 보류됐다가 만료됐다**(실측: REQ-0001 마감
+  # 지시 3건이 전부 미도달). 에이전트끼리는 계급이 같아 정상 전달됐다.
+  # 이 값은 동의에 영향을 주는 설정이라 프로젝트 settings.json 에서는 읽히지 않는다 —
+  # 신뢰된 소스(플래그)로 넘겨야 하고, 그래야 사용자 전역 설정을 건드리지 않고
+  # 팀 에이전트에만 적용된다.
+  out="$(claude --bg -n "$name" --agent "$name" --permission-mode "$TEAM_PERM" \
+          --settings '{"crossSessionInbound":"accept"}' \
+          "$(boot_prompt "$name")" 2>&1)" \
     || { echo "  ✗ $name 기동 실패: $out"; return 1; }
   short="$(printf '%s' "$out" | grep -oE '[0-9a-f]{8}' | head -1)"
   [ -n "$short" ] || { echo "  ✗ $name: 세션 id 를 못 읽었다: $out"; return 1; }

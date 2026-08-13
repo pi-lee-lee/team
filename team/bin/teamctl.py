@@ -116,7 +116,13 @@ def cmd_agents_table():
         rows = json.loads(out)
     except Exception:
         rows = []
-    live = {r.get("name"): r for r in rows if r.get("kind") == "background"}
+    # tmux 포그라운드 에이전트는 kind="interactive", headless 는 "background" 다.
+    # 둘 다 받는다 — 어느 방식으로 띄웠든 상태판은 같아야 한다.
+    live = {}
+    for r in rows:
+        nm = r.get("name")
+        if nm and r.get("kind") in ("background", "interactive"):
+            live[nm] = r
 
     reg = (load(REGISTRY, {}).get("agents") or {})
     registered = {v.get("role") for v in reg.values() if isinstance(v, dict)}
@@ -155,9 +161,10 @@ def cmd_agents_table():
                 state = "⏸ 대기(%s)" % (r.get("waitingFor") or "승인")
             else:
                 state = "● %s" % state
-            detail = "%-22s short=%s" % (state, r.get("id", "?"))
+            kind = "tmux" if r.get("kind") == "interactive" else "bg"
+            detail = "%-22s %-5s %s" % (state, kind, (r.get("sessionId") or "")[:8])
         else:
-            detail = "%-22s %s" % ("○ 미기동", "team-up.sh 로 기동")
+            detail = "%-22s %s" % ("○ 미기동", "team/team.sh 로 복구")
         ok = "등록✓" if nm in registered else "등록✗ 소유권미적용!"
         print("  %-18s %-40s %-20s 미결 %d" % (nm, detail, ok, pending.get(nm, 0)))
 
