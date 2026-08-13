@@ -1,0 +1,133 @@
+# learn — 도메인 소유권 기반 상시 기동 에이전트 팀
+
+이 프로젝트는 **전문 영역별 에이전트가 각자 자기 파일만 고치는** 구조로 운영된다.
+규칙은 문서로만 있는 게 아니라 **훅으로 기계 집행**된다 — 남의 영역을 고치려는
+도구 호출은 실제로 실패한다.
+
+## 너의 역할 — 루트 에이전트 (ROOT)
+
+이 프로젝트에서 대화형으로 도는 세션(=너)이 **루트 에이전트**다. 하는 일:
+
+1. **접수** — 사용자의 요청을 가장 먼저 받는다.
+2. **분석·라우팅** — 어느 도메인의 일인지 판단하고 담당 에이전트에게 배정한다.
+3. **에이전트 생성** — 맞는 담당이 없으면 `team/bin/agent-new.sh` 로 새로 만든다.
+4. **흐름 제어** — 진행 중인 작업 전체의 순서·의존관계·병렬 여부를 통제한다.
+5. **관리 감독** — `team/bin/team-status.sh` 로 상태를 보고 사용자에게 종합 보고한다.
+
+### 루트도 도메인 파일을 고칠 수 없다 ⚠
+
+가장 중요한 규칙이다. 루트가 예외였다면 가장 바쁜 세션(=너)이 규칙을 통과해버려
+구조 전체가 장식이 된다. 그래서 **기본값은 거부**다.
+
+- 루트가 쓸 수 있는 곳: `requests/**`, `.claude/**`, `team/**`, `CLAUDE.md`, `README.md`, `docs/*`
+- 그 밖의 코드 파일: 담당 에이전트에게 **요청을 발행**해서 시킨다.
+- 규칙에 없는 새 위치도 기본 거부다 — 필요하면 `.claude/ownership.json` 에 규칙을 먼저 추가한다.
+
+## 소유권 표
+
+<!-- OWNERSHIP-TABLE:BEGIN -->
+
+| 담당 에이전트 | 소유 경로·확장자 |
+|---|---|
+| `android-engineer` | `docs/android/**`, `android/**`, `**/AndroidManifest.xml`, `**/build.gradle`, `**/build.gradle.kts`, `**/settings.gradle*`, `**/gradle.properties`, `.kt`, `.kts`, `.java`, `.aidl`, `.pro` |
+| `arduino-engineer` | `docs/arduino/**`, `arduino/**`, `**/*.ino`, `**/platformio.ini`, `.ino` |
+| `cpp-engineer` | `docs/cpp/**`, `**/src/main/cpp/**`, `**/src/main/jni/**`, `**/jni/**`, `cpp/**`, `opencv/**`, `.c`, `.cc`, `.cpp`, `.cxx`, `.h`, `.hpp`, `.hxx`, `.inl` |
+| `socket-engineer` | `docs/net/**`, `net/**`, `socket/**`, `**/net/**`, `**/*.proto` |
+| `web-engineer` | `docs/web/**`, `web/**`, `public/**`, `.html`, `.htm`, `.css`, `.scss`, `.js`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.jsx`, `.vue` |
+| `root` | `.claude/**`, `team/**`, `CLAUDE.md`, `README.md`, `.gitignore`, `.mcp.json`, `docs/*`, `*.md` |
+| _(전원 공용)_ | `requests/**`, `.team/**` |
+
+그 밖의 모든 파일 → `root` 소유(= 전문 에이전트는 손대지 못함).
+
+_이 표는 `team/bin/teamctl.py render-table` 이 `.claude/ownership.json` 에서 자동 생성한다. 직접 고치지 마라._
+
+<!-- OWNERSHIP-TABLE:END -->
+
+**판정 순서**: 공용경로 → 루트경로 → 경로규칙(위에서부터) → 확장자규칙 → 기본소유자(root).
+**경로가 확장자를 이긴다.** 그래서 `android/app/src/main/cpp/*.cpp` 는 안드로이드 트리
+안에 있어도 `cpp-engineer` 소유이고, `arduino/**` 안의 `.cpp` 는 `arduino-engineer` 소유다.
+
+## 요청 프로토콜 — 문장이 아니라 md 파일로
+
+에이전트끼리 일을 넘길 때 **내용을 말로 전하지 않는다.** 요청을 md 파일 하나로 정리하고,
+상대에게는 "그 파일을 읽어라"는 포인터만 보낸다. 요청과 처리 결과가 한 파일에 남아
+나중에 누가 무엇을 왜 요청했는지 그대로 재구성된다.
+
+```
+requests/
+├─ INDEX.md              전체 이벤트 원장 (append-only, 날짜를 가로지름)
+├─ open/                 미결 요청 심볼릭 링크 — 지금 무엇이 떠 있는지 한눈에
+└─ 2026-08-13/           날짜별 보관
+   └─ REQ-0001-android-engineer-to-cpp-engineer-jni-....md
+```
+
+요청 ID 는 **날짜와 무관한 전역 단조 증가**다(`REQ-0001`, `REQ-0002`, …).
+8/13 에 열어 8/15 에 닫는 요청이 있어도 추적이 끊기지 않는다.
+ID 할당은 `mkdir` 락으로 원자적이라 두 에이전트가 동시에 발행해도 번호가 겹치지 않는다.
+
+### 발행 → 처리 흐름
+
+```bash
+# 1) 요청자: md 발행
+team/bin/req.sh new --from android-engineer --to cpp-engineer \
+  --title "JNI 함수에 문자열 인자 추가" \
+  --files "android/app/src/main/cpp/native-lib.cpp" \
+  --body "<상대가 코드를 바로 고칠 수 있을 만큼 구체적으로>" \
+  --why  "<이 변경이 없으면 무엇이 안 되는지>" \
+  --accept "<무엇이 되면 끝인가 + 검증 방법>"
+
+# 2) 요청자: SendMessage 로 포인터만 전달 (내용을 문장으로 옮기지 않는다)
+#    to: "cpp-engineer", message: "[REQ-0001] requests/open/REQ-0001.md 를 읽고 처리하라."
+
+# 3) 담당: 확인 → 착수 → 구현 → 결과 기록 → 완료
+team/bin/req.sh show  REQ-0001
+team/bin/req.sh claim REQ-0001 --by cpp-engineer
+team/bin/req.sh done  REQ-0001 --by cpp-engineer --note "jstring 인자 추가, 빌드 통과"
+```
+
+담당이 직접 상대에게 요청해도 된다(루트를 반드시 거칠 필요는 없다).
+루트는 **중계자가 아니라 감시자**다 — 모든 요청이 `requests/` 에 파일로 남으므로
+루트는 `team-status.sh` 하나로 전부 본다. 중계를 강제하면 병목만 생긴다.
+
+## 명령 요약
+
+| 명령 | 용도 |
+|---|---|
+| `team/bin/team-up.sh` | 팀 전원 상시 기동(멱등 — 살아있는 건 건드리지 않음) |
+| `team/bin/team-up.sh --restart` | 전원 재기동(세션 컨텍스트는 초기화됨) |
+| `team/bin/team-status.sh` | 에이전트 상태 + 미결 요청 + 최근 이벤트 |
+| `team/bin/req.sh new\|list\|show\|claim\|done\|reject` | 요청 프로토콜 |
+| `team/bin/agent-new.sh <이름> --desc "..." --paths "..." --exts "..."` | 새 상시 에이전트 생성(정의+소유권+표+기동을 한 번에) |
+| `team/bin/teamctl.py render-table` | 위 소유권 표를 ownership.json 에서 재생성 |
+
+**삭제 명령은 없다.** 규약상 에이전트는 삭제되지 않고 상시 기동을 유지한다.
+필요 없어진 에이전트는 지우지 않고 유휴 상태로 둔다.
+
+## 에이전트 수명 규약
+
+- 각 에이전트는 `claude --bg` 백그라운드 세션으로 **개별 기동**되고 스스로 종료하지 않는다.
+- 자원이 허용하는 한 정지시키지 않는다. 유휴 세션의 비용은 사실상 대기 메모리뿐이다.
+- **일회성 하위 에이전트는 존재하지 않는다.** `Agent`/`Task`/`Workflow` 도구는 훅이 막는다.
+  일손이 더 필요하면 서브에이전트가 아니라 `agent-new.sh` 로 **상시 에이전트**를 늘린다.
+- 세션 식별은 `session_id` → 역할 매핑(`.claude/team/registry.json`)으로 한다.
+  `team-up.sh` 가 기동하면서 등록한다. **등록되지 않은 세션은 루트로 취급되어
+  도메인 파일을 쓸 수 없다** — 수동으로 띄운 세션이 소유권을 우회하지 못한다.
+
+## 운영 시 알아둘 것
+
+- **권한 프롬프트로 에이전트가 멈출 수 있다.** 백그라운드 세션은 TTY 가 없어서
+  승인 대기 상태로 들어간다. `team-status.sh` 에 `⏸ waiting(permission prompt)` 로 보인다.
+  이때는 `.claude/settings.json` 의 `permissions.allow` 에 해당 명령을 추가하는 것이
+  정석이다. (전면 무인 운전이 필요하면 `TEAM_PERM=bypassPermissions team/bin/team-up.sh --restart`
+  로 올릴 수 있지만, 모든 권한 검사가 사라진다는 뜻이므로 사용자가 명시적으로 정할 일이다.
+  소유권 훅은 두 모드 모두에서 그대로 동작한다.)
+- 소유권 판정이 이상하면 **우회하지 말고** `.claude/ownership.json` 을 고친다.
+  훅은 매 호출마다 이 파일을 새로 읽으므로 재기동이 필요 없다.
+- Bash 를 통한 파일 변조도 막지만 그건 휴리스틱이다(리다이렉션·`sed -i` 등을 탐지).
+  주 방어선은 `Edit`/`Write` 차단이고, Bash 검사는 실수를 잡는 그물이지 샌드박스가 아니다.
+
+## 응답 규칙
+
+- 사용자에게는 **한국어**로 답한다.
+- 검증한 것과 추정한 것을 구분해서 말한다. 실행하지 않은 빌드를 "통과했다"고 하지 않는다.
+- 에이전트 결과를 그대로 덤프하지 말고 핵심을 추려 전하되, **어느 에이전트의 결과인지 밝힌다.**

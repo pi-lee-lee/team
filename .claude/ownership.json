@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "_설명": [
+    "파일 소유권의 단일 원천(single source of truth). ownership_guard.py 가 매 훅 호출마다",
+    "이 파일을 새로 읽는다 — 편집하면 즉시 반영되고 재기동이 필요 없다.",
+    "CLAUDE.md 의 소유권 표는 이 파일을 사람이 읽도록 옮긴 것이며, 판정 근거는 항상 여기다.",
+    "",
+    "판정 순서 (먼저 맞는 규칙이 이긴다):",
+    "  1) open_paths   — 전원 쓰기 가능 (요청 폴더 등)",
+    "  2) root_paths   — 루트 에이전트만 쓰기 가능",
+    "  3) path_rules   — 경로 규칙(위에서부터 순서대로, 첫 일치가 소유자)",
+    "  4) ext_rules    — 확장자 규칙(경로 규칙에 안 걸린 경우)",
+    "  5) 그 외        — default_owner (root). 즉 미분류 파일은 전문 에이전트가 못 건드린다.",
+    "",
+    "핵심: 경로가 확장자를 이긴다. Android JNI 의 .cpp 는 android 트리에 있어도 cpp-engineer 소유다.",
+    "경로는 프로젝트 루트(/Users/idong-u/learn) 기준 상대경로 POSIX 형식으로 매칭한다."
+  ],
+
+  "project_root": "/Users/idong-u/learn",
+  "default_owner": "root",
+  "outside_project_owner": "root",
+
+  "open_paths": [
+    "requests/**",
+    ".team/**"
+  ],
+
+  "root_paths": [
+    ".claude/**",
+    "team/**",
+    "CLAUDE.md",
+    "README.md",
+    ".gitignore",
+    ".mcp.json",
+    "docs/*",
+    "*.md"
+  ],
+
+  "path_rules": [
+    {
+      "glob": "docs/android/**",
+      "owner": "android-engineer",
+      "note": "각 에이전트는 자기 도메인 문서만 직접 쓴다"
+    },
+    { "glob": "docs/cpp/**", "owner": "cpp-engineer" },
+    { "glob": "docs/arduino/**", "owner": "arduino-engineer" },
+    { "glob": "docs/net/**", "owner": "socket-engineer" },
+    { "glob": "docs/web/**", "owner": "web-engineer" },
+
+    {
+      "glob": "**/src/main/cpp/**",
+      "owner": "cpp-engineer",
+      "note": "Android JNI. android/ 트리 안이지만 C/C++ 이므로 cpp-engineer 소유 — 사용자가 명시한 교차요청 사례"
+    },
+    { "glob": "**/src/main/jni/**", "owner": "cpp-engineer" },
+    { "glob": "**/jni/**", "owner": "cpp-engineer" },
+
+    {
+      "glob": "arduino/**",
+      "owner": "arduino-engineer",
+      "note": "스케치 트리 전체. 안의 .cpp/.h 도 arduino-engineer 소유 — 아두이노 스케치는 C++ 이지만 툴체인·수명주기가 다르다"
+    },
+    { "glob": "**/*.ino", "owner": "arduino-engineer" },
+    { "glob": "**/platformio.ini", "owner": "arduino-engineer" },
+
+    {
+      "glob": "net/**",
+      "owner": "socket-engineer",
+      "note": "소켓/네트워크 전용 트리. 소켓은 파일형식이 아니라 관심사이므로 전용 디렉터리로 소유권을 준다"
+    },
+    { "glob": "socket/**", "owner": "socket-engineer" },
+    { "glob": "**/net/**", "owner": "socket-engineer" },
+    { "glob": "**/*.proto", "owner": "socket-engineer" },
+
+    { "glob": "android/**", "owner": "android-engineer" },
+    { "glob": "**/AndroidManifest.xml", "owner": "android-engineer" },
+    { "glob": "**/build.gradle", "owner": "android-engineer" },
+    { "glob": "**/build.gradle.kts", "owner": "android-engineer" },
+    { "glob": "**/settings.gradle*", "owner": "android-engineer" },
+    { "glob": "**/gradle.properties", "owner": "android-engineer" },
+
+    { "glob": "web/**", "owner": "web-engineer" },
+    { "glob": "public/**", "owner": "web-engineer" },
+
+    { "glob": "cpp/**", "owner": "cpp-engineer" },
+    {
+      "glob": "opencv/**",
+      "owner": "cpp-engineer",
+      "note": "기존 폴더. OpenCV 는 C/C++ 계열이므로 cpp-engineer 소유"
+    }
+  ],
+
+  "ext_rules": {
+    ".kt": "android-engineer",
+    ".kts": "android-engineer",
+    ".java": "android-engineer",
+    ".aidl": "android-engineer",
+    ".pro": "android-engineer",
+
+    ".c": "cpp-engineer",
+    ".cc": "cpp-engineer",
+    ".cpp": "cpp-engineer",
+    ".cxx": "cpp-engineer",
+    ".h": "cpp-engineer",
+    ".hpp": "cpp-engineer",
+    ".hxx": "cpp-engineer",
+    ".inl": "cpp-engineer",
+
+    ".ino": "arduino-engineer",
+
+    ".html": "web-engineer",
+    ".htm": "web-engineer",
+    ".css": "web-engineer",
+    ".scss": "web-engineer",
+    ".js": "web-engineer",
+    ".mjs": "web-engineer",
+    ".cjs": "web-engineer",
+    ".ts": "web-engineer",
+    ".tsx": "web-engineer",
+    ".jsx": "web-engineer",
+    ".vue": "web-engineer"
+  },
+
+  "_모호한_확장자_주의": [
+    "CMakeLists.txt / Makefile / package.json 은 일부러 확장자 규칙에 넣지 않았다.",
+    "여러 도메인이 각자 갖는 빌드 파일이라 확장자만으로 소유자를 정할 수 없다.",
+    "경로 규칙(cpp/**, web/**, arduino/** …)으로 자연스럽게 결정되고,",
+    "어느 규칙에도 안 걸리면 default_owner=root 로 떨어져 아무 전문 에이전트도 못 건드린다.",
+    "즉 '모르면 막는다'가 기본값이다. 새 위치가 필요하면 루트가 여기에 규칙을 추가한다."
+  ],
+
+  "bash_mutation_guard": {
+    "enabled": true,
+    "_설명": [
+      "Edit/Write 를 우회해 셸로 파일을 고치는 것을 막는 2차 방어선이다.",
+      "완전한 셸 파서가 아니라 휴리스틱이다 — 주 방어선은 Edit/Write/NotebookEdit 차단이고",
+      "이건 '실수로 우회'를 잡는 그물이지 샌드박스가 아니다. 이 한계를 알고 쓴다."
+    ],
+    "mutating_patterns": [
+      ">", ">>", "tee", "sed -i", "perl -i", "rm ", "rmdir", "mv ", "cp ",
+      "truncate", "dd ", "patch ", "git apply", "git checkout --", "git restore",
+      "install -", "chmod", "chown", "touch "
+    ]
+  }
+}

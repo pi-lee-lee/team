@@ -1,0 +1,9 @@
+# 런타임 상태 — 기동할 때마다 바뀐다(세션 id 매핑)
+.claude/team/registry.json
+
+# 요청 ID 할당용 락 디렉터리(빈 디렉터리라 git 이 추적하지 못한다).
+# 사라져도 alloc_id 가 기존 REQ 파일의 최대 번호에서 이어받으므로 안전하다.
+requests/.seq/
+
+.DS_Store
+*.tmp

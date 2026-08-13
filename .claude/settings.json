@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/ownership_guard.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Task|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/no_subagent_guard.py\""
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(/Users/idong-u/learn/team/bin/req.sh:*)",
+      "Bash(/Users/idong-u/learn/team/bin/team-status.sh:*)",
+      "Bash(team/bin/req.sh:*)",
+      "Bash(team/bin/team-status.sh:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(file:*)",
+      "Bash(stat:*)",
+      "Bash(diff:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git show:*)",
+      "Bash(python3:*)",
+      "Bash(node:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(cmake:*)",
+      "Bash(make:*)",
+      "Bash(g++:*)",
+      "Bash(gcc:*)",
+      "Bash(clang:*)",
+      "Bash(clang++:*)",
+      "Bash(pkg-config:*)",
+      "Bash(gradle:*)",
+      "Bash(./gradlew:*)",
+      "Bash(adb:*)",
+      "Bash(arduino-cli:*)",
+      "Bash(pio:*)",
+      "Bash(nc:*)",
+      "Bash(socat:*)",
+      "Bash(ss:*)",
+      "Bash(lsof:*)",
+      "Bash(mkdir:*)",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs"
+    ],
+    "deny": [
+      "Bash(rm -rf /:*)",
+      "Bash(claude stop:*)"
+    ]
+  }
+}
