@@ -8,7 +8,8 @@ BIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEAM_DIR="$(cd "$BIN_DIR/.." && pwd)"
 PROJECT_DIR="$(cd "$TEAM_DIR/.." && pwd)"
 
-TEAM_SESSION="${TEAM_SESSION:-learnteam}"   # tmux 세션 이름(team.sh / start.sh 공용)
+TEAM_SESSION="${TEAM_SESSION:-learnteam}"   # tmux 세션 이름
+TEAM_STATUS_WIDTH="${TEAM_STATUS_WIDTH:-32%}"  # 루트 창 우측 상태판 폭
 
 REQ_DIR="$PROJECT_DIR/requests"      # 요청 관리 폴더 — 날짜별 하위 폴더로 분리
 SEQ_DIR="$REQ_DIR/.seq"              # 전역 단조 ID 원자적 할당용 락 디렉터리

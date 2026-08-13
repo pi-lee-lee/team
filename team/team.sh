@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
-# team.sh — 팀을 tmux 포그라운드로 기동한다.
+# team.sh — 이 폴더에서 팀을 통째로 기동한다. **진입점은 이것 하나다.**
 #
 # 창 구성
-#   0: status   — team-status.sh 주기 갱신(누가 살아있고 무엇이 미결인지)
+#   0: root   — 좌: 루트 세션(여기에 작업을 지시한다) / 우: 상태판
 #   1..N: 에이전트 이름별 창 — 각 창에 대화형 claude 하나
+#
+# 수명주기: 팀 전체가 이 tmux 세션 하나 안에 있다. **세션이 끝나면 전원 종료된다.**
+#   OS 부팅 시 자동 기동 같은 건 하지 않는다 — 에이전트는 작업 세션이 사는 동안만
+#   상주하면 된다(작업마다 워커를 만들고 죽이지 않는다는 뜻이지, 머신이 켜져 있는
+#   내내 떠 있으라는 뜻이 아니다).
+#   끝낼 때: team/bin/stop.sh  (또는 tmux kill-session -t learnteam)
 #
 # 왜 포그라운드인가
 #   백그라운드(`claude --bg`)로 돌렸을 때 밟은 함정 셋 중 둘이 **bg 세션 전용 기본값**이었다.
@@ -21,9 +27,10 @@
 #   team/team.sh --no-attach  기동만 하고 붙지 않음(스크립트용)
 #
 # 분리: Ctrl-b d · 재진입: team/team.sh · 창 이동: Ctrl-b <숫자> 또는 Ctrl-b w
+# 종료: team/bin/stop.sh
 #
-# 루트 에이전트 창은 만들지 않는다. **네가 지금 쓰고 있는 터미널이 루트다.**
-# 여기에 루트를 하나 더 띄우면 루트가 둘이 되어 흐름 제어 주체가 모호해진다.
+# 루트는 0번 창 좌측 패널이다. 루트를 이 세션 밖(별도 터미널)에서 또 띄우면
+# 흐름 제어 주체가 둘이 되므로 그러지 마라 — 지시는 언제나 0번 창에서 한다.
 source "$(dirname "${BASH_SOURCE[0]}")/bin/_common.sh"   # TEAM_SESSION 포함
 
 fresh=0; attach=1
@@ -48,8 +55,12 @@ mkdir -p "$REG_DIR" "$REQ_DIR" "$OPEN_DIR"
 echo "팀 기동(tmux) — 프로젝트: $PROJECT_DIR / 권한모드: $TEAM_PERM"
 
 if ! tmux has-session -t "$TEAM_SESSION" 2>/dev/null; then
-  # 0번 창: 상태판.
-  tmux new-session -d -s "$TEAM_SESSION" -n status -c "$PROJECT_DIR" \
+  # 0번 창 = 루트. 좌측이 루트 세션(여기에 작업을 지시한다), 우측이 상태판.
+  #
+  # 팀 전체가 이 tmux 세션 하나 안에 있다는 점이 중요하다. 세션을 끝내면 루트도
+  # 에이전트도 함께 끝난다 — "작업 세션이 사는 동안만 상주"가 구조로 보장된다.
+  tmux new-session -d -s "$TEAM_SESSION" -n root -c "$PROJECT_DIR" "claude"
+  tmux split-window -h -d -t "$TEAM_SESSION:root" -l "$TEAM_STATUS_WIDTH" -c "$PROJECT_DIR" \
     "while :; do clear; bash '$BIN_DIR/team-status.sh'; sleep 10; done"
   # 크래시한 에이전트 창이 소리 없이 사라지면 관리감독이 안 된다 → 시신을 남긴다.
   tmux set-option -t "$TEAM_SESSION" -g remain-on-exit on 2>/dev/null || true
