@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  learn 에이전트 팀을 로그인 시 자동 기동한다.  ※ 설치는 사용자가 직접 한다(아래 참조).
+
+  왜 필요한가: 규약은 "생성된 모든 에이전트는 상시 기동 상태를 유지한다. 컴퓨터의 자원이
+  허용하는 한 종료하지 않는다" 이다. 재부팅하면 백그라운드 세션이 전부 죽으므로, 이것이
+  없으면 매번 사람이 team-up.sh 를 기억해서 쳐야 한다.
+
+  StartInterval 은 크래시 복구 하트비트다. team-up.sh 가 **멱등**이기에 가능한 설계다 —
+  이미 살아 있는 에이전트는 건드리지 않고 죽은 것만 되살린다. 전원 정상이면 사실상 무비용
+  (claude agents 조회 한 번). 반대로 team-up.sh 의 멱등성이 깨지면 30분마다 세션이
+  중복 기동되므로, team-up.sh 를 고칠 때 이 의존관계를 기억해야 한다.
+
+  설치:
+    cp team/launchd/com.idongu.learn-team.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.idongu.learn-team.plist
+    launchctl list | grep learn-team        # 적재 확인
+
+  제거:
+    launchctl unload ~/Library/LaunchAgents/com.idongu.learn-team.plist
+    rm ~/Library/LaunchAgents/com.idongu.learn-team.plist
+
+  참고: 로그인할 때마다 에이전트 5개가 기동되며 각자 부팅 프롬프트를 처리하므로
+  약간의 토큰을 쓴다. 상시 기동을 원치 않는 날에는 unload 해두면 된다.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.idongu.learn-team</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/idong-u/learn/team/bin/team-up.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/idong-u/learn</string>
+
+  <!-- launchd 는 최소 PATH 로 실행한다. claude 는 ~/.npm-global/bin 에 있으므로 명시해야 한다. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/idong-u/.npm-global/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>HOME</key>
+    <string>/Users/idong-u</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StartInterval</key>
+  <integer>1800</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/idong-u/learn/team/.runtime/launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/idong-u/learn/team/.runtime/launchd.log</string>
+</dict>
+</plist>

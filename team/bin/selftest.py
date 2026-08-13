@@ -105,6 +105,13 @@ CASES = [
      lambda: bash("root", 'team/bin/req.sh show REQ-0001 --files cpp/main.cpp'), False),
     ("Bash: 리다이렉션 대상이 남의 파일이면 여전히 차단",
      lambda: bash("root", "echo x 2> cpp/err.log"), True),
+    ("Bash: 루트 소유 스크립트를 '실행'하는 건 수정이 아니다",
+     lambda: bash("android-engineer", "team/bin/req.sh list --to android-engineer 2>&1"), False),
+    ("Bash: 인자에 변조 낱말이 섞여도 실행은 허용 (--note \"cp 로 복사\")",
+     lambda: bash("android-engineer",
+                  'team/bin/req.sh done REQ-0001 --by android-engineer --note "cp 로 복사함"'), False),
+    ("Bash: 루트 소유 스크립트를 '수정'하려 하면 차단",
+     lambda: bash("android-engineer", "echo x > team/bin/req.sh"), True),
 
     ("하위 에이전트 생성 시도 (전문 에이전트)",
      lambda: run(NOSUB, "cpp-engineer", "Agent", {"subagent_type": "general-purpose"}), True),

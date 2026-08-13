@@ -157,16 +157,31 @@ def deny(role, rel, owner, reason, extra=""):
 _PATHY = re.compile(r"[A-Za-z0-9_./~$-]{2,}")
 
 
+_SEGSPLIT = re.compile(r"(?:\|\||&&|[;|&\n]|\$\(|`)")
+
+
 def bash_candidates(cmd, own):
-    """명령어 문자열에서 '파일 경로처럼 생긴' 토큰을 뽑는다."""
+    """명령어 문자열에서 '파일 경로처럼 생긴' 토큰을 뽑는다.
+
+    각 명령 구획의 **첫 토큰(실행 파일)은 제외한다.** 스크립트를 실행하는 것과
+    스크립트를 수정하는 것은 다르다. 이 구분이 없으면 에이전트가 루트 소유인
+    `team/bin/req.sh` 를 호출하는 것만으로 차단된다 — 실제로 겪은 사고다.
+    (`req.sh done ... --note "cp 로 복사함"` 처럼 인자에 변조 낱말이 섞이면 발동했다.)
+    """
     exts = set((own.get("ext_rules") or {}).keys())
     out = []
-    for tok in _PATHY.findall(cmd or ""):
-        tok = tok.strip("'\"")
-        if tok.startswith("-"):
-            continue
-        if "/" in tok or os.path.splitext(tok)[1].lower() in exts:
-            out.append(tok)
+    for seg in _SEGSPLIT.split(cmd or ""):
+        toks = seg.split()
+        for i, tok in enumerate(toks):
+            tok = tok.strip("'\"()")
+            if i == 0:
+                continue  # 실행 파일 자리 — 호출은 수정이 아니다
+            if not tok or tok.startswith("-"):
+                continue
+            if not _PATHY.fullmatch(tok):
+                continue
+            if "/" in tok or os.path.splitext(tok)[1].lower() in exts:
+                out.append(tok)
     return out
 
 

@@ -119,6 +119,10 @@ def cmd_agents_table():
     # 에이전트별 미결(open/claimed) 요청 수
     pending = {}
     for f in glob.glob(os.path.join(ROOT, "requests", "*", "REQ-*.md")):
+        # requests/open/ 안은 원본을 가리키는 심볼릭 링크다. 걸러내지 않으면
+        # 미결 요청이 두 번 세어진다(1건인데 "미결 2"로 보였던 버그).
+        if os.path.islink(f):
+            continue
         to = st = None
         try:
             with open(f) as fh:
