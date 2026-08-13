@@ -59,7 +59,9 @@ if ! tmux has-session -t "$TEAM_SESSION" 2>/dev/null; then
   #
   # 팀 전체가 이 tmux 세션 하나 안에 있다는 점이 중요하다. 세션을 끝내면 루트도
   # 에이전트도 함께 끝난다 — "작업 세션이 사는 동안만 상주"가 구조로 보장된다.
-  tmux new-session -d -s "$TEAM_SESSION" -n root -c "$PROJECT_DIR" "claude"
+  # 루트는 래퍼로 띄운다. `claude` 를 직접 띄우면 /exit 로 루트가 끝나도 에이전트 창이
+  # 남아 "루트 없이 에이전트만 떠 있는" 상태가 된다(_root_pane.sh 주석 참조).
+  tmux new-session -d -s "$TEAM_SESSION" -n root -c "$PROJECT_DIR" "'$BIN_DIR/_root_pane.sh'"
   tmux split-window -h -d -t "$TEAM_SESSION:root" -l "$TEAM_STATUS_WIDTH" -c "$PROJECT_DIR" \
     "while :; do clear; bash '$BIN_DIR/team-status.sh'; sleep 10; done"
   # 크래시한 에이전트 창이 소리 없이 사라지면 관리감독이 안 된다 → 시신을 남긴다.
