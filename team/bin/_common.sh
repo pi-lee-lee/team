@@ -19,10 +19,19 @@ AGENTS_DIR="$PROJECT_DIR/.claude/agents"
 OWNERSHIP="$PROJECT_DIR/.claude/ownership.json"
 
 # 에이전트 세션의 권한 모드.
-#   acceptEdits = 파일 편집은 자동 승인, 위험한 셸은 사용자 확인.
-# bypassPermissions 로 올리면 완전 무인 운전이 되지만 모든 권한 검사가 사라진다.
-# 소유권 훅은 두 모드 모두에서 동작한다(훅은 권한 시스템과 별개 — 실측 확인).
-TEAM_PERM="${TEAM_PERM:-acceptEdits}"
+#
+# 사용자 결정(2026-08-13): **bypassPermissions** — 완전 무인 운전.
+# 배경: acceptEdits 에서는 파일 편집만 자동 승인되고 셸·MCP 호출 일부가 승인 프롬프트에
+# 걸린다. 백그라운드 세션은 TTY 가 없어 스스로 승인하지 못하므로 그 자리에서 멈추고,
+# 사람이 알아채 재기동해야 진행된다 — "상시 기동·자율 수행"이 사실상 성립하지 않았다.
+# (실제로 android 에이전트가 복합 셸 명령과 MCP 호출에서 두 번 멈췄다.)
+#
+# 대가: 권한 검사라는 2차 관문이 사라진다. 다만 **소유권 훅은 그대로 작동한다** —
+# 훅은 권한 시스템과 별개 계층이고, 실제 에이전트 세션에서 차단이 일어나는 것을 확인했다.
+# 즉 "무엇을 실행해도 되는가"는 열리지만 "어느 파일을 고칠 수 있는가"는 여전히 강제된다.
+#
+# 되돌리려면: TEAM_PERM=acceptEdits team/bin/team-up.sh --restart
+TEAM_PERM="${TEAM_PERM:-bypassPermissions}"
 
 die() { echo "[team] 오류: $*" >&2; exit 1; }
 now_iso() { date '+%Y-%m-%dT%H:%M:%S%z'; }

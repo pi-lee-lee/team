@@ -85,6 +85,12 @@ CASES = [
      lambda: write("cpp-engineer", "requests/2026-08-13/REQ-0001-a.md"), False),
     ("규칙 없는 새 경로 → 기본 거부",
      lambda: write("cpp-engineer", "sandbox/scratch.txt"), True),
+    ("cpp 가 docs/cpp/ 문서 작성 (자기 도메인 문서)",
+     lambda: write("cpp-engineer", "docs/cpp/jni-notes.md"), False),
+    ("cpp 가 docs/ 최상위 문서 작성 시도 (루트 소유)",
+     lambda: write("cpp-engineer", "docs/overview.md"), True),
+    ("cpp 가 docs/web/ 문서 작성 시도 (남의 도메인 문서)",
+     lambda: write("cpp-engineer", "docs/web/notes.md"), True),
 
     ("Bash: android 가 리다이렉션으로 JNI 변조 시도",
      lambda: bash("android-engineer", "echo x > android/app/src/main/cpp/a.cpp"), True),
