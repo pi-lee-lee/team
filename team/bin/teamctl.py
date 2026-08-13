@@ -58,8 +58,13 @@ def cmd_registry_set(sid, role, short):
         "'지금 도구를 부른 세션이 누구인가'를 판정한다. 여기에 없는 세션은 루트로 "
         "취급되고 도메인 파일을 쓸 수 없다(기본 거부). team-up.sh 가 갱신한다."
     ))
-    reg.setdefault("agents", {})
-    reg["agents"][sid] = {"role": role, "short": short}
+    agents = reg.setdefault("agents", {})
+    # 같은 역할의 옛 세션 항목은 지운다. 재기동할 때마다 새 session_id 가 생기는데
+    # 옛 항목을 남겨두면 "이 역할의 세션이 뭐지?"를 물을 때 죽은 세션이 먼저 잡힌다
+    # (실제로 로그를 잘못 읽어 헤맸다). 살아 있는 세션은 언제나 역할당 하나다.
+    for old in [k for k, v in agents.items() if isinstance(v, dict) and v.get("role") == role]:
+        del agents[old]
+    agents[sid] = {"role": role, "short": short}
     save(REGISTRY, reg)
     print("등록: %s → %s (%s)" % (sid[:8], role, short))
 
