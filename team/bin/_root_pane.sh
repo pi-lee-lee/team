@@ -16,7 +16,14 @@
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 
 cd "$PROJECT_DIR" || exit 1
-claude "$@"
+
+# --settings 로 crossSessionInbound=accept 를 넘기는 이유 (team-up.sh 의 같은 주석과 짝이다)
+#   에이전트는 team-up.sh 가 이 값을 넣어 띄우는데 **루트만 빠져 있었다.** 그래서
+#   에이전트가 루트에게 보낸 메시지마다 "거부/전달" 승인창이 사용자에게 떴다.
+#   루트 창은 사용자가 보는 창이라 그 부담이 전부 사용자에게 갔다 — 실제로 불만이 나왔다.
+#   이 값은 동의에 영향을 주는 설정이라 프로젝트 settings.json 에서는 읽히지 않는다.
+#   신뢰된 소스(플래그 또는 ~/.claude/settings.json)로 넘겨야 한다.
+claude --settings '{"crossSessionInbound":"accept"}' "$@"
 
 n="$(python3 "$BIN_DIR/teamctl.py" roster 2>/dev/null | grep -c . || echo 0)"
 

@@ -6,7 +6,9 @@
     "CLAUDE.md 의 소유권 표는 이 파일을 사람이 읽도록 옮긴 것이며, 판정 근거는 항상 여기다.",
     "",
     "판정 순서 (먼저 맞는 규칙이 이긴다):",
-    "  1) open_paths   — 전원 쓰기 가능 (요청 폴더 등)",
+    "  1) open_paths   — 전원 쓰기 가능 (요청 폴더, 공용 샘플 이미지 등)",
+    "     samples/** 는 세 도메인이 같은 시험 데이터로 결과를 비교해야 하므로 공용이다.",
+    "     한쪽 소유로 두면 나머지가 각자 복사본을 만들어 결과가 어긋난다.",
     "  2) root_paths   — 루트 에이전트만 쓰기 가능",
     "  3) path_rules   — 경로 규칙(위에서부터 순서대로, 첫 일치가 소유자)",
     "  4) ext_rules    — 확장자 규칙(경로 규칙에 안 걸린 경우)",
@@ -22,7 +24,8 @@
 
   "open_paths": [
     "requests/**",
-    ".team/**"
+    ".team/**",
+    "samples/**"
   ],
 
   "root_paths": [
@@ -37,6 +40,16 @@
   ],
 
   "path_rules": [
+    {
+      "glob": "조별과제샘플/server.cpp",
+      "owner": "socket-engineer",
+      "note": "주차 관제 데모 서버. .cpp 이지만 내용은 TCP+WebSocket 서버라 socket-engineer 소유다. 폴더 전체(조별과제샘플/**)를 주면 .ino/.html 까지 뺏기므로 이 파일 하나만 지정한다"
+    },
+    {
+      "glob": "조별과제샘플/server.cpp",
+      "owner": "socket-engineer",
+      "note": "바로 위 규칙과 글자는 같지만 한글이 NFD(자모 분리)로 적혀 있다 — 오타가 아니다. macOS 는 같은 한글 경로를 NFC/NFD 두 형태로 넘기는데 훅은 유니코드 정규화를 하지 않아, NFC 규칙만 두면 NFD 로 들어온 경로가 조용히 확장자 규칙(cpp-engineer)으로 새어나간다(실측 확인). 두 형태를 모두 적어 막는다"
+    },
     {
       "glob": "docs/android/**",
       "owner": "android-engineer",

@@ -4,6 +4,10 @@
 규칙은 문서로만 있는 게 아니라 **훅으로 기계 집행**된다 — 남의 영역을 고치려는
 도구 호출은 실제로 실패한다.
 
+> **진행 중인 작업이 있다면 먼저 읽어라**
+> `docs/digitcam-status.md` — 지금 어디까지 왔고 다음이 무엇인가 (인수인계)
+> `docs/digitcam-contract.md` — 도메인 경계 계약서 (개정 8). 숫자와 인터페이스의 원본
+
 ## 너의 역할 — 루트 에이전트 (ROOT)
 
 이 프로젝트에서 대화형으로 도는 세션(=너)이 **루트 에이전트**다. 하는 일:
@@ -34,10 +38,10 @@
 | `android-engineer` | `docs/android/**`, `android/**`, `**/AndroidManifest.xml`, `**/build.gradle`, `**/build.gradle.kts`, `**/settings.gradle*`, `**/gradle.properties`, `.kt`, `.kts`, `.java`, `.aidl`, `.pro` |
 | `arduino-engineer` | `docs/arduino/**`, `arduino/**`, `**/*.ino`, `**/platformio.ini`, `.ino` |
 | `cpp-engineer` | `docs/cpp/**`, `**/src/main/cpp/**`, `**/src/main/jni/**`, `**/jni/**`, `cpp/**`, `opencv/**`, `.c`, `.cc`, `.cpp`, `.cxx`, `.h`, `.hpp`, `.hxx`, `.inl` |
-| `socket-engineer` | `docs/net/**`, `net/**`, `socket/**`, `**/net/**`, `**/*.proto` |
+| `socket-engineer` | `조별과제샘플/server.cpp`, `조별과제샘플/server.cpp`, `docs/net/**`, `net/**`, `socket/**`, `**/net/**`, `**/*.proto` |
 | `web-engineer` | `docs/web/**`, `web/**`, `public/**`, `.html`, `.htm`, `.css`, `.scss`, `.js`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.jsx`, `.vue` |
 | `root` | `.claude/**`, `team/**`, `CLAUDE.md`, `README.md`, `.gitignore`, `.mcp.json`, `docs/*`, `*.md` |
-| _(전원 공용)_ | `requests/**`, `.team/**` |
+| _(전원 공용)_ | `requests/**`, `.team/**`, `samples/**` |
 
 그 밖의 모든 파일 → `root` 소유(= 전문 에이전트는 손대지 못함).
 
@@ -101,6 +105,20 @@ team/bin/req.sh done  REQ-0001 --by cpp-engineer --note "jstring 인자 추가, 
 담당이 직접 상대에게 요청해도 된다(루트를 반드시 거칠 필요는 없다).
 루트는 **중계자가 아니라 감시자**다 — 모든 요청이 `requests/` 에 파일로 남으므로
 루트는 `team-status.sh` 하나로 전부 본다. 중계를 강제하면 병목만 생긴다.
+
+### 루트에게도 완료를 알려라 — 다만 승인창이 뜨지 않게 띄워야 한다 ⚠
+
+담당이 `req.sh done` 으로 닫고 **루트에게 포인터 한 줄을 보내는 것**이 기본이다. 원장만 남기고
+알리지 않으면 루트가 폴링해야 하고, 그만큼 다음 지시가 늦어진다.
+
+문제는 알림 자체가 아니라 **수신 승인**이었다. `crossSessionInbound` 의 기본값은 "보내는 쪽과
+받는 쪽의 권한 모드 계급이 같을 때만 자동 전달" 이라, 에이전트(bypassPermissions)가 루트
+(프롬프트 모드)에게 보내면 **매번 사용자에게 "거부/전달" 승인창이 뜬다.** 에이전트는
+`team-up.sh` 가 `--settings '{"crossSessionInbound":"accept"}'` 로 띄워 이 문제가 없었는데
+**루트만 빠져 있었다.** `team/bin/_root_pane.sh` 가 이제 같은 플래그로 루트를 띄운다.
+
+즉 이 설정이 빠지면 팀의 모든 보고가 사용자의 승인 노동으로 바뀐다. 루트를 이 스크립트 밖에서
+수동으로 띄우지 마라 — 띄우면 그 순간 승인창이 돌아온다.
 
 ## 명령 요약
 

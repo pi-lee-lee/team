@@ -209,7 +209,38 @@ def _mutation_hit(cmd, pats):
 #   `> out.txt`, `>>out.txt`, `2> err.log`  → 대상 파일
 #   `2>&1`, `>&2`                           → 파일이 아니라 fd 복제이므로 잡히면 안 된다
 #     ('&' 를 대상 문자에서 제외했으므로 `>&…` 는 아예 매치되지 않는다)
-_REDIR = re.compile(r">>?\s*([^\s;|&<>]+)")
+#
+# `>` 앞 한 글자를 같이 붙잡아 두는 이유는 아래 _is_redirect_target 을 보라.
+_REDIR = re.compile(r"(.?)>>?\s*([^\s;|&<>=]+)")
+
+# `>` 는 리다이렉션 기호이기도 하지만 **거의 모든 언어의 비교 연산자**이기도 하다.
+# 그래서 코드를 실행하기만 하는 명령이 "남의 파일에 쓴다"로 차단되는 사고가 있었다(REQ-0009):
+#
+#   python3 -c "... if ch >= 0xE0: ..."   →  `>` 뒤의 `=` 를 대상 파일로 보고 차단
+#
+# 파일을 전혀 건드리지 않는 명령이 막히면 에이전트가 우회 습관을 들인다. 그게 이 구조에서
+# 가장 위험하다 — 오탐은 미탐보다 비싸다. 그래서 대상 토큰을 한 번 더 거른다.
+_OPERATOR_LEAD = set("-=<!+*/%&|>")  # ->  =>  <>  !>  +>  >>= … 앞글자가 이러면 연산자다
+
+
+def _is_redirect_target(lead, tok):
+    """`>` 뒤에 잡힌 토큰이 정말 '쓰기 대상 파일'인가.
+
+    걸러내는 것:
+      - 연산자의 일부  (`->`, `>=`, `=>`)  — 앞글자로 판별. `>=` 는 정규식에서 이미 제외
+      - 파일 이름 같지 않은 토큰 (`5`, `n`, `0xE0`) — 비교식의 우변이다
+
+    통과시키는 것: `out.txt`, `../a/b.log`, `cpp/x.cpp`, `~/tmp/z.md`
+    점이나 슬래시가 있어야 파일로 본다. 확장자 없는 `> outfile` 은 놓치지만,
+    이 훅은 선언대로 실수를 잡는 그물이지 샌드박스가 아니다 — 미탐 하나와
+    정상 코드 실행 차단을 맞바꾸지 않는다.
+    """
+    if lead in _OPERATOR_LEAD:
+        return False
+    tok = tok.strip("'\"()[]{},")
+    if not tok or not _PATHY.fullmatch(tok):
+        return False
+    return "/" in tok or "." in tok
 
 
 def check_bash(cmd, cwd, role, own):
@@ -232,7 +263,10 @@ def check_bash(cmd, cwd, role, own):
     #    명령줄 전체의 경로 토큰을 훑으면 `req.sh --files <남의경로> ... 2>&1` 같은
     #    정상 호출이 막힌다(실제로 겪은 오탐). 대상만 보면 그 오탐이 사라진다.
     for m in _REDIR.finditer(cmd):
-        verdict(m.group(1).strip("'\""), "출력 리다이렉션으로 남의 영역 파일에 쓴다")
+        lead, tok = m.group(1), m.group(2)
+        if not _is_redirect_target(lead, tok):
+            continue  # 비교 연산자이거나 파일 이름이 아니다 — REQ-0009
+        verdict(tok.strip("'\"()[]{},"), "출력 리다이렉션으로 남의 영역 파일에 쓴다")
 
     # 2) 낱말형 변조 명령(rm/mv/cp/sed -i …)은 대상을 특정하기 어렵다 →
     #    그런 명령이 실제로 있을 때만 경로 토큰을 전수 검사한다.
