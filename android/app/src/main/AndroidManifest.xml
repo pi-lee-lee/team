@@ -1,20 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- 계약 §8 — 카메라는 런타임 권한, 소켓 전송은 INTERNET. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      카메라가 없는 기기에도 설치는 되게 required="false" 로 둔다.
+      autofocus 까지 필수로 걸면 일부 기기에서 설치가 막힌다.
+    -->
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
+
     <application
         android:allowBackup="true"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.Light">
+        android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen"
+        android:usesCleartextTraffic="true">
 
+        <!--
+          기본은 가로다(REQ-0025 요구 1). 실행 중 방향은 OrientationPref 가 정하고,
+          여기 값은 첫 창이 뜰 때의 기본값이다.
+
+          ⚠ landscape/portrait 는 **센서를 보지 않는 값**이다. sensorLandscape·userLandscape·
+          fullSensor·unspecified 로 바꾸면 기기를 기울일 때 따라 돌아가 요구 3이 깨진다.
+        -->
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:screenOrientation="landscape">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!--
+          설정 입력 화면(계약 §6.1). 폰만으로 server.properties 를 고칠 수단이다.
+          목록에 뜰 필요가 없으므로 exported=false. 밝은 테마를 쓰는 이유는 입력 폼이라
+          프리뷰 화면의 전체화면 어두운 테마가 맞지 않아서다.
+        -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="@string/cfg_title"
+            android:screenOrientation="landscape"
+            android:theme="@android:style/Theme.Material.Light"
+            android:windowSoftInputMode="adjustResize" />
 
     </application>
 

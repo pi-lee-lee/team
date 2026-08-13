@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  가로 방향 메인 화면 (REQ-0026 재구성).
+
+  이전(REQ-0025)에는 프리뷰 왼쪽 / 컨트롤 오른쪽으로 나눴는데, 버튼 패널이 화면 폭의 39.3% 를
+  먹었다. 번호판을 겨누는 앱에서 피사체 공간을 그만큼 깎는 구성이라 좌우 분할을 버렸다.
+
+  지금 구조는 세로 레이아웃과 같은 원리다 — **프리뷰를 전체화면으로 깔고 그 위에 얹는다.**
+  다만 가로는 세로로 좁으므로 안내를 우상단에 모으고 버튼은 아래 한 줄로 눕힌다.
+
+  뷰 id 는 세로 레이아웃과 같은 이름을 쓴다(MainActivity 가 같은 코드를 쓴다).
+  인셋을 받는 컨테이너만 이름이 다르다 — 세로는 topPanel/bottomPanel, 가로는 infoPanel/buttonBar.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <!--
+      프리뷰는 화면 전체를 채운다. 오버레이의 quad 좌표 변환이 프리뷰와 같은 크기를 전제하므로
+      이 세 뷰는 항상 같은 크기여야 하고, 여기에는 인셋 여백을 주지 않는다.
+    -->
+    <androidx.camera.view.PreviewView
+        android:id="@+id/previewView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <ImageView
+        android:id="@+id/sampleImageView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#000000"
+        android:contentDescription="@string/sample_image_desc"
+        android:scaleType="fitCenter"
+        android:visibility="gone" />
+
+    <com.example.digitcam.OverlayView
+        android:id="@+id/overlayView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!--
+      우상단 안내. 배경은 반투명 스크림이다.
+      "투명"을 글자 그대로 받으면 밝은 장면에서 흰 글자가 사라진다 — 사용자 요구는 "불투명 패널이
+      화면을 가리지 마라" 이지 "읽을 수 없게 하라"가 아니다. 그래서 스크림(#B3000000)과
+      글자 그림자를 함께 쓴다. 둘 중 하나만으로는 밝은 벽면에서 흰 글자가 묻힌다.
+
+      폭은 내용에 맞추되 maxWidth 로 제한한다 — 화면 폭 전체로 늘어나면 오버레이의 의미가 없다.
+    -->
+    <LinearLayout
+        android:id="@+id/infoPanel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:background="#B3000000"
+        android:orientation="vertical"
+        android:padding="10dp">
+
+        <TextView
+            android:id="@+id/valueText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:maxWidth="380dp"
+            android:shadowColor="#FF000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="5"
+            android:text="@string/no_value"
+            android:textColor="#FFFFFF"
+            android:textSize="30sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/stateText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxWidth="380dp"
+            android:paddingTop="2dp"
+            android:shadowColor="#FF000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="4"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/metricText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxWidth="380dp"
+            android:shadowColor="#FF000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="4"
+            android:textColor="#CFD8DC"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/serverText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxWidth="380dp"
+            android:shadowColor="#FF000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="4"
+            android:textColor="#E0E0E0"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/noticeText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxWidth="380dp"
+            android:paddingTop="4dp"
+            android:shadowColor="#FF000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="4"
+            android:textColor="#FFD54F"
+            android:textSize="10sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!--
+      하단 버튼 바. 6개가 전부 보여야 한다(메뉴·오버플로 금지 — 사용자가 각 버튼 노출을 명시).
+
+      ⚠ 버튼은 **작아 보이게** 하되 터치 영역은 48dp 아래로 내리지 않는다.
+      layout_height=48dp 로 터치 높이를 고정하고, 글자 크기와 좌우 패딩만 줄여서 시각적으로
+      얇아 보이게 했다. 안 눌리는 작은 버튼은 개선이 아니라 고장이다.
+    -->
+    <LinearLayout
+        android:id="@+id/buttonBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#B3000000"
+        android:orientation="horizontal"
+        android:paddingLeft="6dp"
+        android:paddingTop="3dp"
+        android:paddingRight="6dp"
+        android:paddingBottom="3dp">
+
+        <Button
+            android:id="@+id/orientationButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_weight="1"
+            android:background="#73000000"
+            android:minWidth="48dp"
+            android:paddingLeft="2dp"
+            android:paddingRight="2dp"
+            android:text="@string/orientation_to_portrait"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/settingsButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1"
+            android:background="#73000000"
+            android:minWidth="48dp"
+            android:paddingLeft="2dp"
+            android:paddingRight="2dp"
+            android:text="@string/open_settings"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/reloadButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1.2"
+            android:background="#73000000"
+            android:minWidth="48dp"
+            android:paddingLeft="2dp"
+            android:paddingRight="2dp"
+            android:text="@string/reload_config_short"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/sampleButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="4dp"
+            android:layout_weight="1.2"
+            android:background="#73000000"
+            android:minWidth="48dp"
+            android:paddingLeft="2dp"
+            android:paddingRight="2dp"
+            android:text="@string/sample_mode_off"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/prevButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="4dp"
+            android:layout_weight="0.6"
+            android:background="#73000000"
+            android:minWidth="48dp"
+            android:text="@string/sample_prev"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/nextButton"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="4dp"
+            android:layout_weight="0.6"
+            android:background="#73000000"
+            android:minWidth="48dp"
+            android:text="@string/sample_next"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+</FrameLayout>

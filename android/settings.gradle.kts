@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "jnidemo"
+rootProject.name = "digitcam"
 include(":app")
