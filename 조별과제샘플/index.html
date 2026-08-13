@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>주차 관제 — 실시간 자리 현황</title>
+<!--
+  주차 관제 데모 (단일 파일 · 외부 의존성 없음)
+  근거 명세: docs/net/parking-protocol.md v1 (얼림)
+    §1   자리 ID / 인덱스 순서            §1.1 occupied×reserved 4조합
+    §5.3 서버→브라우저 snapshot / ack / error
+    §5.4 브라우저→서버 reserve / cancel
+    §8   예약 시퀀스와 낙관적 UI 롤백      §9.1 data_log.json 형태
+  명세와 이 파일이 어긋나면 명세가 이긴다.
+-->
+<style>
+  :root {
+    --bg:          #eef1f6;
+    --panel:       #ffffff;
+    --ink:         #1c2431;
+    --ink-dim:     #5c6779;
+    --line:        #d9dfe8;
+    --accent:      #2f6fed;
+
+    --free-bg:     #ffffff;
+    --free-line:   #22a06b;
+    --free-ink:    #14764d;
+
+    --resv-bg:     #fff8e6;
+    --resv-line:   #d99408;
+    --resv-ink:    #8a5d00;
+
+    --occ-bg:      #eceff4;
+    --occ-line:    #9aa4b4;
+    --occ-ink:     #55606f;
+
+    --done-bg:     #e8f3ff;
+    --done-line:   #2f6fed;
+    --done-ink:    #14448f;
+
+    --mine:        #7a3ff2;
+    --warn-bg:     #fdeaea;
+    --warn-line:   #d64545;
+    --warn-ink:    #9b2020;
+    --ok-ink:      #14764d;
+    --radius:      12px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:        #12161d;
+      --panel:     #1a2029;
+      --ink:       #e6ebf3;
+      --ink-dim:   #98a3b4;
+      --line:      #2b3441;
+      --accent:    #6c9bff;
+
+      --free-bg:   #16241d;
+      --free-line: #35c98a;
+      --free-ink:  #6fe0ae;
+
+      --resv-bg:   #2a2113;
+      --resv-line: #e0a83a;
+      --resv-ink:  #f3cd7c;
+
+      --occ-bg:    #202631;
+      --occ-line:  #59647a;
+      --occ-ink:   #9aa6b8;
+
+      --done-bg:   #16243d;
+      --done-line: #6c9bff;
+      --done-ink:  #a9c6ff;
+
+      --mine:      #b18cff;
+      --warn-bg:   #331a1a;
+      --warn-line: #e06a6a;
+      --warn-ink:  #ffb3b3;
+      --ok-ink:    #6fe0ae;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 18px;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.5;
+  }
+
+  .wrap { max-width: 1060px; margin: 0 auto; }
+
+  .topbar {
+    display: flex; flex-wrap: wrap; gap: 12px;
+    align-items: flex-end; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .topbar h1 { margin: 0; font-size: 24px; letter-spacing: -0.4px; }
+  .topbar .sub { margin: 2px 0 0; color: var(--ink-dim); font-size: 13px; }
+  .topbar__status { text-align: right; font-size: 13px; }
+  .conn { margin: 0; display: flex; align-items: center; gap: 7px; justify-content: flex-end; font-weight: 600; }
+  .who  { margin: 2px 0 0; color: var(--ink-dim); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--occ-line); flex: none; }
+  .dot--live { background: var(--free-line); }
+  .dot--file { background: var(--resv-line); }
+  .dot--down { background: var(--warn-line); }
+  .dot--demo { background: var(--mine); }
+
+  .banner {
+    margin: 0 0 12px; padding: 10px 14px;
+    border-radius: var(--radius); font-size: 14px; font-weight: 600;
+    border: 1px solid transparent;
+  }
+  .banner--warn { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn-ink); }
+  .banner--demo { background: var(--done-bg); border-color: var(--done-line); color: var(--done-ink); font-weight: 500; }
+
+  .demo-tools { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+  .demo-tools button {
+    font: inherit; font-size: 12.5px; padding: 6px 11px; cursor: pointer;
+    background: var(--panel); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 999px;
+  }
+  .demo-tools button:hover { border-color: var(--accent); color: var(--accent); }
+
+  main { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(230px, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 780px) { main { grid-template-columns: minmax(0, 1fr); } }
+
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+  section h2 { margin: 0 0 10px; font-size: 14px; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-dim); }
+  .side h2 + * { margin-bottom: 18px; }
+
+  .grid-head {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+    margin-bottom: 8px; font-size: 12px; font-weight: 700;
+    color: var(--ink-dim); text-align: center; letter-spacing: 1px;
+  }
+
+  /* 전선 순서(A1..A5,B1..B5)를 DOM 순서로 유지한 채 열 우선으로 배치한다.
+     행 우선(기본 흐름)이면 A1|A2 / A3|A4 … 로 어긋난다. */
+  .grid {
+    list-style: none; margin: 0; padding: 0;
+    display: grid;
+    grid-template-rows: repeat(5, minmax(0, 1fr));
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .tile {
+    width: 100%; height: 100%; min-height: 74px;
+    display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto;
+    column-gap: 10px; row-gap: 1px; align-items: center;
+    text-align: left; font: inherit; cursor: pointer;
+    padding: 10px 12px; border-radius: var(--radius);
+    border: 2px solid var(--occ-line); background: var(--occ-bg); color: var(--occ-ink);
+    transition: transform .08s ease, box-shadow .15s ease;
+  }
+  .tile:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .tile__id  { grid-row: 1 / span 2; font-size: 21px; font-weight: 800; letter-spacing: -.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .tile__state { font-size: 14px; font-weight: 700; }
+  .tile__meta  { font-size: 11.5px; opacity: .85; }
+
+  .tile[data-view="free"]     { background: var(--free-bg); border-color: var(--free-line); color: var(--free-ink); }
+  .tile[data-view="reserved"] { background: var(--resv-bg); border-color: var(--resv-line); color: var(--resv-ink); }
+  .tile[data-view="occupied"] { background: var(--occ-bg);  border-color: var(--occ-line);  color: var(--occ-ink); }
+  .tile[data-view="done"]     { background: var(--done-bg); border-color: var(--done-line); color: var(--done-ink); }
+  .tile[data-view="unknown"]  { background: var(--occ-bg);  border-color: var(--line); color: var(--ink-dim); border-style: dotted; }
+  .tile[data-view="pending"]  { border-style: dashed; border-color: var(--accent); color: var(--accent); background: var(--panel); animation: pulse 1.1s ease-in-out infinite; }
+  .tile[data-view="settled"]  { border-color: var(--free-line); color: var(--ok-ink); background: var(--free-bg); }
+
+  .tile[data-mine="1"] { box-shadow: inset 0 0 0 2px var(--mine); }
+  .tile[aria-disabled="true"] { cursor: not-allowed; }
+  .tile:not([aria-disabled="true"]):hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,.12); }
+
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .62; } }
+  @media (prefers-reduced-motion: reduce) { .tile { animation: none !important; transition: none; } }
+
+  .legend { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; font-size: 12px; color: var(--ink-dim); }
+  .legend li { display: flex; align-items: center; gap: 8px; }
+  .swatch { width: 13px; height: 13px; border-radius: 4px; border: 2px solid; flex: none; }
+  .swatch--free { background: var(--free-bg); border-color: var(--free-line); }
+  .swatch--resv { background: var(--resv-bg); border-color: var(--resv-line); }
+  .swatch--occ  { background: var(--occ-bg);  border-color: var(--occ-line); }
+  .swatch--done { background: var(--done-bg); border-color: var(--done-line); }
+  .swatch--mine { background: transparent;    border-color: var(--mine); }
+
+  dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
+  dt { color: var(--ink-dim); }
+  dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+
+  .messages { display: grid; gap: 6px; min-height: 24px; }
+  .msg { font-size: 13px; padding: 8px 10px; border-radius: 8px; border-left: 3px solid var(--line); background: var(--bg); }
+  .msg--ok   { border-left-color: var(--free-line); color: var(--ok-ink); }
+  .msg--err  { border-left-color: var(--warn-line); color: var(--warn-ink); }
+  .msg--info { border-left-color: var(--accent); }
+  .msg time { display: block; font-size: 11px; opacity: .7; }
+
+  dialog {
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--panel); color: var(--ink);
+    padding: 20px; max-width: 340px; box-shadow: 0 18px 50px rgba(0,0,0,.28);
+  }
+  dialog::backdrop { background: rgba(8,12,20,.5); }
+  dialog h2 { margin: 0 0 8px; font-size: 17px; text-transform: none; letter-spacing: 0; color: var(--ink); }
+  dialog p  { margin: 0 0 16px; font-size: 14px; color: var(--ink-dim); }
+  dialog menu { display: flex; gap: 8px; justify-content: flex-end; margin: 0; padding: 0; }
+  dialog button {
+    font: inherit; font-weight: 600; padding: 8px 16px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  }
+  dialog button[value="ok"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  dialog button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  footer { margin-top: 16px; font-size: 11.5px; color: var(--ink-dim); text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="topbar">
+    <div class="topbar__title">
+      <h1>주차 관제</h1>
+      <p class="sub">2열 5행 · 10칸 · 빈자리를 눌러 예약합니다</p>
+    </div>
+    <div class="topbar__status">
+      <p id="conn-status" class="conn" role="status" aria-live="polite">
+        <span class="dot" id="conn-dot" aria-hidden="true"></span>
+        <span id="conn-text">연결 준비 중…</span>
+      </p>
+      <p class="who">내 사용자 ID <span id="user-id" class="mono">-</span></p>
+    </div>
+  </header>
+
+  <p id="demo-banner" class="banner banner--demo" hidden></p>
+  <div id="demo-tools" class="demo-tools" hidden></div>
+  <p id="offline-banner" class="banner banner--warn" hidden></p>
+
+  <main>
+    <section aria-labelledby="grid-title">
+      <h2 id="grid-title">자리 현황</h2>
+      <div class="grid-head" aria-hidden="true"><span>열 A</span><span>열 B</span></div>
+      <ul id="grid" class="grid" role="list"></ul>
+
+      <ul class="legend" role="list">
+        <li><span class="swatch swatch--free" aria-hidden="true"></span>빈 자리 (occupied 0 · reserved 0) — 눌러서 예약</li>
+        <li><span class="swatch swatch--resv" aria-hidden="true"></span>예약됨, 차는 아직 (0 · 1)</li>
+        <li><span class="swatch swatch--occ"  aria-hidden="true"></span>예약 없이 주차됨 (1 · 0)</li>
+        <li><span class="swatch swatch--done" aria-hidden="true"></span>예약한 자리에 입차 완료 (1 · 1) — 정상 완료</li>
+        <li><span class="swatch swatch--mine" aria-hidden="true"></span>보라 테두리 = 내 예약</li>
+      </ul>
+    </section>
+
+    <section class="side" aria-labelledby="side-title">
+      <h2 id="side-title">장치 상태</h2>
+      <dl>
+        <dt>센서</dt>      <dd id="dev-online">-</dd>
+        <dt>장치 ID</dt>   <dd id="dev-id" class="mono">-</dd>
+        <dt>가동시간</dt>  <dd id="dev-uptime">-</dd>
+        <dt>seq</dt>       <dd id="dev-seq" class="mono">-</dd>
+        <dt>데이터 경로</dt><dd id="dev-source">-</dd>
+        <dt>마지막 갱신</dt><dd id="dev-age">-</dd>
+      </dl>
+
+      <h2 id="msg-title">알림</h2>
+      <div id="messages" class="messages" role="status" aria-live="polite" aria-labelledby="msg-title"></div>
+    </section>
+  </main>
+
+  <footer>docs/net/parking-protocol.md v1 기준 · WebSocket <span class="mono">ws://&lt;host&gt;:9900/ws</span> · 폴백 <span class="mono">data_log.json</span></footer>
+</div>
+
+<dialog id="confirm-dialog" aria-labelledby="confirm-title">
+  <form method="dialog">
+    <h2 id="confirm-title">예약하시겠습니까?</h2>
+    <p id="confirm-body"></p>
+    <menu>
+      <button value="cancel" type="submit">닫기</button>
+      <button value="ok" type="submit" autofocus>확인</button>
+    </menu>
+  </form>
+</dialog>
+
+<script>
+'use strict';
+
+/* ────────────────────────────────────────────────────────────────
+   0. 상수 — 명세에서 그대로 온 값들
+   ──────────────────────────────────────────────────────────────── */
+
+/** §1 전선 인덱스 0..9. 이 순서는 어디서도 뒤집지 않는다. */
+const SLOT_IDS = ['A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'B3', 'B4', 'B5'];
+
+const WS_PORT      = 9900;
+const WS_PATH      = '/ws';
+const LOG_FILE     = 'data_log.json';
+const POLL_MS      = 3000;    // 폴백 폴링 주기
+const STALE_MS     = 10000;   // 폴백에서 "센서 끊김(추정)" 으로 볼 나이 (§3.4 의 3.5초보다 넉넉히)
+const ACK_TIMEOUT  = 6000;    // §7.3 서버 최종 실패가 1500×3=4500ms → 그보다 넉넉하게
+const SETTLE_MS    = 6000;    // "확정됨" 표시를 스냅샷 없이도 걷어내는 안전장치
+const BACKOFF_MIN  = 500;
+const BACKOFF_MAX  = 15000;
+
+/** §2.4 A 프레임 / §5.3 ack 의 result */
+const RESULT_TEXT = {
+  0: '예약되었습니다',
+  1: '이미 주차된 자리입니다',
+  2: '이미 예약된 자리입니다',
+  3: '잘못된 요청입니다'
+};
+const CANCEL_RESULT_TEXT = {
+  0: '예약이 취소되었습니다',
+  1: '이미 주차된 자리입니다',
+  2: '이미 예약된 자리입니다',
+  3: '잘못된 요청입니다'
+};
+
+/** §5.3 error code */
+const ERROR_TEXT = {
+  device_offline: '센서가 연결되어 있지 않습니다',
+  ack_timeout:    '장치가 응답하지 않았습니다',
+  bad_request:    '잘못된 요청입니다',
+  rate_limited:   '요청이 너무 잦습니다. 잠시 후 다시 시도하세요'
+};
+
+/** §2.3 userid ::= 0*8(ALPHA / DIGIT / "_" / "-")
+    명세는 user_id 의 서버측 번역을 규정하지 않는다(§4.1 은 rid 에 대해서만 말한다).
+    전선까지 그대로 흐른다고 보고 전선 문법에 맞춰 좁게 생성한다. */
+const WIRE_USER_RE = /^[A-Za-z0-9_-]{1,8}$/;
+const RID_MAX      = 32;   // §4.1 브라우저 rid 는 최대 32자 불투명 문자열
+
+/* ────────────────────────────────────────────────────────────────
+   1. 명세 예제 (§5.3 / §9.1) — 데모 모드 전용 하드코딩
+   서버가 없을 때 렌더링을 먼저 검증하기 위한 것이고,
+   실제 경로에는 절대 섞이지 않는다.
+   ──────────────────────────────────────────────────────────────── */
+
+/** docs/net/parking-protocol.md §5.3 의 스냅샷 예제 그대로 */
+const DEMO_SNAPSHOT = {
+  type: 'snapshot',
+  ts: 1755100000000,
+  device: { online: true, device_id: 'P1', uptime: 3600, seq: 1234 },
+  slots: [
+    { id: 'A1', occupied: 0, reserved: 0, user_id: null,  reserved_at: null },
+    { id: 'A2', occupied: 1, reserved: 0, user_id: null,  reserved_at: null },
+    { id: 'A3', occupied: 1, reserved: 0, user_id: null,  reserved_at: null },
+    { id: 'A4', occupied: 0, reserved: 0, user_id: null,  reserved_at: null },
+    { id: 'A5', occupied: 1, reserved: 1, user_id: 'u17', reserved_at: 1755099000000 },
+    { id: 'B1', occupied: 0, reserved: 0, user_id: null,  reserved_at: null },
+    { id: 'B2', occupied: 0, reserved: 0, user_id: null,  reserved_at: null },
+    { id: 'B3', occupied: 0, reserved: 0, user_id: null,  reserved_at: null },
+    { id: 'B4', occupied: 1, reserved: 0, user_id: null,  reserved_at: null },
+    { id: 'B5', occupied: 1, reserved: 0, user_id: null,  reserved_at: null }
+  ]
+};
+
+/** docs/net/parking-protocol.md §9.1 의 data_log.json 형태 (배열, 최신이 0번) */
+const DEMO_FILE_LOG = [
+  {
+    ts: 1755100000000, device_id: 'P1', uptime: 3600, seq: 1234,
+    occupied: '0110100011', reserved: '0000100000',
+    slots: [
+      { id: 'A1', occupied: 0, reserved: 0 }, { id: 'A2', occupied: 1, reserved: 0 },
+      { id: 'A3', occupied: 1, reserved: 0 }, { id: 'A4', occupied: 0, reserved: 0 },
+      { id: 'A5', occupied: 1, reserved: 1 }, { id: 'B1', occupied: 0, reserved: 0 },
+      { id: 'B2', occupied: 0, reserved: 0 }, { id: 'B3', occupied: 0, reserved: 0 },
+      { id: 'B4', occupied: 1, reserved: 0 }, { id: 'B5', occupied: 1, reserved: 0 }
+    ]
+  },
+  { ts: 1755099999000, device_id: 'P1', uptime: 3599, seq: 1233, occupied: '0110100011', reserved: '0000100000', slots: [] }
+];
+
+/* ────────────────────────────────────────────────────────────────
+   2. 사용자 — 인증이 붙을 때 고칠 지점을 한 곳으로 모은다
+   ──────────────────────────────────────────────────────────────── */
+
+const USER_KEY = 'parking.user.v1';
+
+/** localStorage 는 file:// · 시크릿 모드 등에서 던질 수 있다. 전부 감싼다. */
+const safeStore = {
+  get(key) { try { return window.localStorage.getItem(key); } catch (e) { return null; } },
+  set(key, value) { try { window.localStorage.setItem(key, value); return true; } catch (e) { return false; } }
+};
+
+function randomToken(len, alphabet) {
+  const chars = alphabet || 'abcdefghijklmnopqrstuvwxyz0123456789';
+  let out = '';
+  const buf = new Uint8Array(len);
+  if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+    window.crypto.getRandomValues(buf);
+    for (let i = 0; i < len; i++) out += chars[buf[i] % chars.length];
+  } else {
+    for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return out;
+}
+
+/**
+ * 사용자 정보는 이 객체 하나뿐이다.
+ * 인증 체계가 생기면 여기(그리고 loadUser)만 고치면 되고,
+ * 화면 어디에도 소유 판정이 흩어져 있지 않다 — 판정은 isMine() 한 곳이다.
+ */
+function loadUser() {
+  const raw = safeStore.get(USER_KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.user_id === 'string' && WIRE_USER_RE.test(parsed.user_id)) {
+        return {
+          user_id:      parsed.user_id,
+          display_name: typeof parsed.display_name === 'string' ? parsed.display_name : '이 브라우저',
+          created_at:   typeof parsed.created_at === 'number' ? parsed.created_at : Date.now(),
+          auth:         null   // ← 인증이 붙으면 토큰/역할이 들어올 자리
+        };
+      }
+    } catch (e) { /* 손상된 값이면 새로 만든다 */ }
+  }
+  const fresh = {
+    user_id:      'u' + randomToken(7),   // 'u' + 7자 = 8자 (§2.3 상한)
+    display_name: '이 브라우저',
+    created_at:   Date.now(),
+    auth:         null
+  };
+  safeStore.set(USER_KEY, JSON.stringify(fresh));
+  return fresh;
+}
+
+const user = loadUser();
+
+/* ────────────────────────────────────────────────────────────────
+   3. 애플리케이션 상태
+   ──────────────────────────────────────────────────────────────── */
+
+const state = {
+  /** 정규화된 스냅샷. 서버 데이터는 여기에만 들어가고 절대 변조하지 않는다. */
+  snapshot: null,
+  /** 낙관적 UI 는 스냅샷을 건드리지 않고 별도 레이어에 쌓는다 → 롤백이 delete 한 줄. */
+  pending: new Map(),            // rid -> { rid, slot, action, status, timer, settleTimer }
+  link: 'connecting',            // 'connecting' | 'ws' | 'reconnecting' | 'nows' | 'demo'
+  reconnectAt: 0,
+  attempt: 0,
+  pollFailures: 0
+};
+
+let ridSeq = 0;
+function newRid() {
+  ridSeq += 1;
+  return ('r' + ridSeq + '-' + randomToken(6)).slice(0, RID_MAX);
+}
+
+function pendingForSlot(slot) {
+  for (const p of state.pending.values()) if (p.slot === slot) return p;
+  return null;
+}
+
+/** 소유 판정은 이 함수 하나가 전부다. */
+function isMine(slotUserId) {
+  return typeof slotUserId === 'string' && slotUserId === user.user_id;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   4. 정규화 — WS 경로와 파일 경로가 여기서 하나로 합류한다
+   ──────────────────────────────────────────────────────────────── */
+
+/**
+ * §5.3 모양의 스냅샷을 화면이 쓰는 형태로 정규화한다.
+ * source: 'ws' | 'file' | 'demo'
+ * device.online 은 boolean 또는 null(모름 — 파일 폴백에는 이 정보가 없다).
+ */
+function normalizeSnapshot(raw, source) {
+  const bySlot = new Map();
+  const rawSlots = (raw && Array.isArray(raw.slots)) ? raw.slots : [];
+  for (const s of rawSlots) if (s && typeof s.id === 'string') bySlot.set(s.id, s);
+
+  const slots = SLOT_IDS.map(function (id) {
+    const s = bySlot.get(id) || {};
+    return {
+      id: id,
+      occupied: Number(s.occupied) === 1 ? 1 : 0,
+      reserved: Number(s.reserved) === 1 ? 1 : 0,
+      // §5.3 은 키가 항상 있다고 보장하지만 값이 null 일 수 있다.
+      // §9.1(파일)에는 키 자체가 없다 → 둘 다 null 로 수렴시킨다.
+      user_id:     (typeof s.user_id === 'string' && s.user_id.length) ? s.user_id : null,
+      reserved_at: typeof s.reserved_at === 'number' ? s.reserved_at : null,
+      known: bySlot.has(id)
+    };
+  });
+
+  const dev = (raw && raw.device) ? raw.device : {};
+  return {
+    source: source,
+    ts: typeof raw.ts === 'number' ? raw.ts : null,
+    receivedAt: Date.now(),
+    device: {
+      online:    typeof dev.online === 'boolean' ? dev.online : null,
+      device_id: typeof dev.device_id === 'string' ? dev.device_id : null,
+      uptime:    typeof dev.uptime === 'number' ? dev.uptime : null,
+      seq:       typeof dev.seq === 'number' ? dev.seq : null
+    },
+    slots: slots
+  };
+}
+
+/**
+ * §9.1 data_log.json (JSON 배열, 0번이 최신) → §5.3 스냅샷 모양.
+ * 줄 단위 파싱이 아니다. 유효한 JSON 배열 하나로 읽는다.
+ */
+function snapshotFromLog(logArray) {
+  if (!Array.isArray(logArray) || logArray.length === 0) return null;
+  const latest = logArray[0];
+  if (!latest || typeof latest !== 'object') return null;
+  return {
+    type: 'snapshot',
+    ts: latest.ts,
+    device: {
+      // 파일에는 online 정보가 없다. 지어내지 않고 null(모름) 로 둔다.
+      online: null,
+      device_id: latest.device_id,
+      uptime: latest.uptime,
+      seq: latest.seq
+    },
+    slots: Array.isArray(latest.slots) ? latest.slots : []
+  };
+}
+
+/** 두 경로 모두 이 함수 하나만 호출한다. 화면을 바꾸는 입구는 여기뿐이다. */
+function applySnapshot(raw, source) {
+  const snap = normalizeSnapshot(raw, source);
+  state.snapshot = snap;
+  reconcilePending(snap);
+  render();
+}
+
+/** 스냅샷이 이미 요청 결과를 반영했다면 낙관적 표시를 걷는다(ack 유실 대비). */
+function reconcilePending(snap) {
+  const bySlot = new Map(snap.slots.map(function (s) { return [s.id, s]; }));
+  for (const p of Array.from(state.pending.values())) {
+    const s = bySlot.get(p.slot);
+    if (!s) continue;
+    const satisfied = (p.action === 'reserve')
+      ? (s.reserved === 1 && (s.user_id === null || isMine(s.user_id)))
+      : (s.reserved === 0);
+    if (satisfied) clearPending(p.rid);
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   5. 화면 — 타일은 한 번만 만들고 이후에는 내용만 갱신한다
+      (재생성하면 포커스가 날아간다)
+   ──────────────────────────────────────────────────────────────── */
+
+const el = {
+  grid:        document.getElementById('grid'),
+  connText:    document.getElementById('conn-text'),
+  connDot:     document.getElementById('conn-dot'),
+  userId:      document.getElementById('user-id'),
+  offline:     document.getElementById('offline-banner'),
+  demoBanner:  document.getElementById('demo-banner'),
+  demoTools:   document.getElementById('demo-tools'),
+  devOnline:   document.getElementById('dev-online'),
+  devId:       document.getElementById('dev-id'),
+  devUptime:   document.getElementById('dev-uptime'),
+  devSeq:      document.getElementById('dev-seq'),
+  devSource:   document.getElementById('dev-source'),
+  devAge:      document.getElementById('dev-age'),
+  messages:    document.getElementById('messages'),
+  dialog:      document.getElementById('confirm-dialog'),
+  dialogTitle: document.getElementById('confirm-title'),
+  dialogBody:  document.getElementById('confirm-body')
+};
+
+const tiles = new Map();   // slotId -> { button, id, stateText, metaText }
+
+function buildGrid() {
+  for (const id of SLOT_IDS) {
+    const li = document.createElement('li');
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'tile';
+    btn.dataset.slot = id;
+
+    const idEl = document.createElement('span');
+    idEl.className = 'tile__id';
+    idEl.textContent = id;
+
+    const stateEl = document.createElement('span');
+    stateEl.className = 'tile__state';
+    stateEl.textContent = '상태 미상';
+
+    const metaEl = document.createElement('span');
+    metaEl.className = 'tile__meta';
+    metaEl.textContent = '연결 대기 중';
+
+    btn.appendChild(idEl);
+    btn.appendChild(stateEl);
+    btn.appendChild(metaEl);
+    li.appendChild(btn);
+    el.grid.appendChild(li);
+
+    tiles.set(id, { button: btn, stateText: stateEl, metaText: metaEl });
+  }
+}
+
+/**
+ * 예약/취소를 시도할 수 있는 경로인가 — 판단 근거는 **연결 상태(link)** 다.
+ * §5.4 의 reserve/cancel 은 WebSocket 경로에만 있으므로 WS 가 없으면 보낼 곳이 없다.
+ *
+ * 스냅샷의 출처(source)로 판단하면 안 된다: WS 가 다시 붙어도 서버가 다음 스냅샷을
+ * push 할 때까지 source 는 'file' 로 남아 있어(§5.3 은 "변화가 있을 때" push 라고만 한다)
+ * 조용한 주차장에서는 연결된 채로 영원히 예약 불가가 된다.
+ * 격자가 조금 낡은 채로 보내는 것은 §7.2 가 이미 상정한다 — 최종 판정은 ACK 다.
+ */
+function canAct() {
+  return state.link === 'ws' || state.link === 'demo';
+}
+
+function actionBlockedReason() {
+  if (state.snapshot && state.snapshot.source === 'file') return '파일 폴백 상태입니다. 예약은 서버 연결이 회복된 뒤에 가능합니다';
+  if (state.link === 'nows') return '파일(file://)로 직접 열려 있어 예약할 수 없습니다. 서버(9900)로 접속하세요';
+  if (state.link === 'reconnecting' || state.link === 'connecting') return '서버에 연결되어 있지 않아 예약할 수 없습니다';
+  return '지금은 예약할 수 없습니다';
+}
+
+function blockedMetaText() {
+  return (state.snapshot && state.snapshot.source === 'file') ? '예약 불가 (파일 폴백)' : '예약 불가 (연결 없음)';
+}
+
+/**
+ * 자리 하나의 표시 방식을 정한다.
+ * view: free | reserved | occupied | done | pending | settled | unknown
+ * 4조합은 색·문구·동작이 모두 다르다(색만으로 구분하지 않는다).
+ */
+function tileView(slot) {
+  const p = pendingForSlot(slot.id);
+  if (p) {
+    if (p.status === 'confirmed') {
+      return {
+        view: 'settled', mine: true, disabled: true,
+        state: p.action === 'reserve' ? '예약 확정됨' : '취소 확정됨',
+        meta: '서버 반영 대기 중'
+      };
+    }
+    return {
+      view: 'pending', mine: true, disabled: true,
+      state: p.action === 'reserve' ? '요청됨…' : '취소 요청됨…',
+      meta: '아직 확정이 아닙니다',
+      reason: '요청을 처리하는 중입니다'
+    };
+  }
+
+  if (!state.snapshot || !slot.known) {
+    return { view: 'unknown', mine: false, disabled: true, state: '상태 미상', meta: '데이터 없음', reason: '아직 상태를 받지 못했습니다' };
+  }
+
+  const mine = isMine(slot.user_id);
+  const ownerText = slot.user_id === null ? '소유자 정보 없음' : (mine ? '내 예약' : '예약자 ' + slot.user_id);
+  const deviceDown = state.snapshot.device.online === false;
+
+  // (1,1) 예약한 자리에 입차 — 이 시스템의 정상 완료 상태다. (1,0) 과 뭉개지 않는다.
+  if (slot.occupied === 1 && slot.reserved === 1) {
+    return { view: 'done', mine: mine, disabled: true, state: '사용 중 (입차 완료)', meta: ownerText, reason: '이미 입차한 자리입니다' };
+  }
+  // (1,0) 예약 없이 주차됨
+  if (slot.occupied === 1) {
+    return { view: 'occupied', mine: false, disabled: true, state: '사용 중', meta: '예약 없이 주차됨', reason: '이미 주차된 자리입니다' };
+  }
+  // (0,1) 예약됐고 차는 아직
+  if (slot.reserved === 1) {
+    if (mine && canAct() && !deviceDown) {
+      return { view: 'reserved', mine: true, disabled: false, state: '내 예약', meta: '눌러서 예약 취소', action: 'cancel' };
+    }
+    return {
+      view: 'reserved', mine: mine, disabled: true, state: '예약됨 (입차 전)', meta: ownerText,
+      reason: mine ? actionBlockedReason() : '다른 사용자가 예약한 자리입니다'
+    };
+  }
+  // (0,0) 빈 자리
+  if (deviceDown) {
+    return { view: 'free', mine: false, disabled: true, state: '빈 자리', meta: '센서 끊김 — 예약 불가', reason: ERROR_TEXT.device_offline };
+  }
+  if (!canAct()) {
+    return { view: 'free', mine: false, disabled: true, state: '빈 자리', meta: blockedMetaText(), reason: actionBlockedReason() };
+  }
+  return { view: 'free', mine: false, disabled: false, state: '빈 자리', meta: '눌러서 예약', action: 'reserve' };
+}
+
+function render() {
+  renderConnection();
+  renderDevice();
+
+  const slots = state.snapshot ? state.snapshot.slots : SLOT_IDS.map(function (id) {
+    return { id: id, occupied: 0, reserved: 0, user_id: null, reserved_at: null, known: false };
+  });
+
+  for (const slot of slots) {
+    const t = tiles.get(slot.id);
+    if (!t) continue;
+    const v = tileView(slot);
+    t.button.dataset.view = v.view;
+    t.button.dataset.mine = v.mine ? '1' : '0';
+    t.button.dataset.action = v.action || '';
+    t.button.dataset.reason = v.reason || '';
+    t.button.setAttribute('aria-disabled', v.disabled ? 'true' : 'false');
+    t.stateText.textContent = v.state;
+    t.metaText.textContent = v.meta;
+  }
+}
+
+function renderConnection() {
+  let text = '연결 준비 중…';
+  let dot = 'dot';
+  const src = state.snapshot ? state.snapshot.source : null;
+
+  if (state.link === 'demo') {
+    text = '데모 모드 (서버 없음)';
+    dot = 'dot dot--demo';
+  } else if (state.link === 'ws') {
+    text = 'WebSocket 연결됨';
+    dot = 'dot dot--live';
+  } else if (src === 'file') {
+    text = '파일 폴백 (data_log.json)';
+    dot = 'dot dot--file';
+  } else if (state.link === 'nows') {
+    text = 'WebSocket 미사용 (file:// 로 열림)';
+    dot = 'dot dot--down';
+  } else if (state.link === 'reconnecting') {
+    const left = Math.max(0, Math.round((state.reconnectAt - Date.now()) / 1000));
+    text = '연결 끊김 — ' + left + '초 후 재연결 시도 (' + state.attempt + '회)';
+    dot = 'dot dot--down';
+  }
+  el.connText.textContent = text;
+  el.connDot.className = dot;
+
+  const down = !!(state.snapshot && state.snapshot.device.online === false);
+  const staleFile = !!(state.snapshot && state.snapshot.source === 'file' && state.snapshot.ts !== null
+                       && (Date.now() - state.snapshot.ts) > STALE_MS);
+  if (down) {
+    el.offline.hidden = false;
+    el.offline.textContent = '⚠ 센서 끊김 — 아래 격자는 실시간이 아니라 마지막으로 알던 값입니다';
+  } else if (staleFile) {
+    el.offline.hidden = false;
+    el.offline.textContent = '⚠ 센서 끊김(추정) — 파일의 마지막 기록이 오래되었습니다. 격자는 마지막으로 알던 값입니다';
+  } else {
+    el.offline.hidden = true;
+    el.offline.textContent = '';
+  }
+}
+
+function fmtUptime(sec) {
+  if (typeof sec !== 'number' || !isFinite(sec)) return '-';
+  const s = Math.max(0, Math.floor(sec));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+  return h + '시간 ' + m + '분 ' + r + '초';
+}
+
+function renderDevice() {
+  const snap = state.snapshot;
+  if (!snap) {
+    el.devOnline.textContent = '-';
+    el.devId.textContent = '-';
+    el.devUptime.textContent = '-';
+    el.devSeq.textContent = '-';
+    el.devSource.textContent = '-';
+    el.devAge.textContent = '-';
+    return;
+  }
+  const online = snap.device.online;
+  el.devOnline.textContent = online === true ? '연결됨' : (online === false ? '끊김' : '알 수 없음 (파일에는 이 정보가 없음)');
+  el.devId.textContent     = snap.device.device_id === null ? '-' : snap.device.device_id;
+  el.devUptime.textContent = fmtUptime(snap.device.uptime);
+  el.devSeq.textContent    = snap.device.seq === null ? '-' : String(snap.device.seq);
+  el.devSource.textContent = snap.source === 'ws' ? 'WebSocket push'
+                           : snap.source === 'file' ? 'data_log.json 폴링 (폴백)'
+                           : '데모 (하드코딩 예제)';
+  renderAge();
+}
+
+function renderAge() {
+  const snap = state.snapshot;
+  if (!snap) { el.devAge.textContent = '-'; return; }
+  const secLocal = Math.max(0, Math.round((Date.now() - snap.receivedAt) / 1000));
+  let text = secLocal + '초 전 수신';
+  if (snap.ts !== null) {
+    // ts 는 서버 시계다. 브라우저 시계와 어긋날 수 있으므로 참고값으로만 표시한다.
+    const secStamp = Math.round((Date.now() - snap.ts) / 1000);
+    text += ' · 기록 시각 기준 ' + secStamp + '초 전';
+  }
+  el.devAge.textContent = text;
+}
+
+let msgCount = 0;
+function showMessage(text, kind) {
+  const box = document.createElement('div');
+  box.className = 'msg msg--' + (kind || 'info');
+  const line = document.createElement('span');
+  line.textContent = text;                     // 서버·사용자 문자열은 항상 textContent
+  const stamp = document.createElement('time');
+  const now = new Date();
+  stamp.textContent = now.toLocaleTimeString('ko-KR');
+  box.appendChild(line);
+  box.appendChild(stamp);
+  el.messages.insertBefore(box, el.messages.firstChild);
+  msgCount += 1;
+  while (el.messages.children.length > 5) el.messages.removeChild(el.messages.lastChild);
+  window.setTimeout(function () { if (box.parentNode) box.parentNode.removeChild(box); }, 12000);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   6. 예약 / 취소 — 낙관적 UI 와 롤백 (§8)
+   ──────────────────────────────────────────────────────────────── */
+
+function markPending(rid, slot, action) {
+  const entry = {
+    rid: rid, slot: slot, action: action, status: 'requested',
+    timer: window.setTimeout(function () { onSelfTimeout(rid); }, ACK_TIMEOUT),
+    settleTimer: 0
+  };
+  state.pending.set(rid, entry);
+  render();
+}
+
+function clearPending(rid) {
+  const p = state.pending.get(rid);
+  if (!p) return;
+  if (p.timer) window.clearTimeout(p.timer);
+  if (p.settleTimer) window.clearTimeout(p.settleTimer);
+  state.pending.delete(rid);
+}
+
+function rollback(rid, message) {
+  const p = state.pending.get(rid);
+  clearPending(rid);
+  if (message) showMessage((p ? p.slot + ' · ' : '') + message, 'err');
+  render();
+}
+
+/** ACK 가 영원히 안 와도 "요청됨"으로 남지 않게 하는 자체 타임아웃 */
+function onSelfTimeout(rid) {
+  const p = state.pending.get(rid);
+  if (!p) return;
+  rollback(rid, '응답이 없어 요청을 되돌렸습니다 (자체 타임아웃 ' + (ACK_TIMEOUT / 1000) + '초)');
+}
+
+function confirmDialog(title, body) {
+  return new Promise(function (resolve) {
+    const dlg = el.dialog;
+    if (!dlg || typeof dlg.showModal !== 'function') {
+      resolve(window.confirm(title + '\n' + body));
+      return;
+    }
+    el.dialogTitle.textContent = title;
+    el.dialogBody.textContent = body;
+    dlg.returnValue = '';
+    function onClose() {
+      dlg.removeEventListener('close', onClose);
+      resolve(dlg.returnValue === 'ok');
+    }
+    dlg.addEventListener('close', onClose);
+    dlg.showModal();
+  });
+}
+
+async function requestReserve(slotId) {
+  const ok = await confirmDialog('예약하시겠습니까?', slotId + ' 자리를 예약합니다. 확인을 누르면 서버로 예약 요청을 보냅니다.');
+  if (!ok) return;
+
+  // 대화상자를 여는 동안 상태가 바뀌었을 수 있다.
+  const slot = currentSlot(slotId);
+  if (!slot || tileView(slot).action !== 'reserve') {
+    showMessage(slotId + ' · 그 사이 자리 상태가 바뀌어 예약하지 않았습니다', 'err');
+    return;
+  }
+  const rid = newRid();
+  markPending(rid, slotId, 'reserve');
+  transport.send({ type: 'reserve', slot: slotId, user_id: user.user_id, rid: rid });
+}
+
+async function requestCancel(slotId) {
+  const ok = await confirmDialog('예약을 취소하시겠습니까?', slotId + ' 자리의 내 예약을 취소합니다.');
+  if (!ok) return;
+
+  const slot = currentSlot(slotId);
+  if (!slot || tileView(slot).action !== 'cancel') {
+    showMessage(slotId + ' · 그 사이 자리 상태가 바뀌어 취소하지 않았습니다', 'err');
+    return;
+  }
+  const rid = newRid();
+  markPending(rid, slotId, 'cancel');
+  transport.send({ type: 'cancel', slot: slotId, rid: rid });
+}
+
+function currentSlot(slotId) {
+  if (!state.snapshot) return null;
+  return state.snapshot.slots.find(function (s) { return s.id === slotId; }) || null;
+}
+
+el.grid.addEventListener('click', function (event) {
+  const btn = event.target.closest('.tile');
+  if (!btn) return;
+  const slotId = btn.dataset.slot;
+
+  // aria-disabled 는 클릭을 막지 않는다(막으면 키보드/스크린리더 사용자가
+  // 4조합 중 3개에 아예 도달하지 못한다). 대신 이유를 알려 준다.
+  if (btn.getAttribute('aria-disabled') === 'true') {
+    showMessage(slotId + ' · ' + (btn.dataset.reason || '지금은 선택할 수 없습니다'), 'info');
+    return;
+  }
+  if (btn.dataset.action === 'reserve') requestReserve(slotId);
+  else if (btn.dataset.action === 'cancel') requestCancel(slotId);
+});
+
+/* ────────────────────────────────────────────────────────────────
+   7. 서버 메시지 처리 (§5.3)
+   ──────────────────────────────────────────────────────────────── */
+
+function handleServerMessage(msg) {
+  if (!msg || typeof msg !== 'object') return;
+
+  if (msg.type === 'snapshot') {
+    applySnapshot(msg, state.link === 'demo' ? 'demo' : 'ws');
+    return;
+  }
+
+  if (msg.type === 'ack') {
+    const p = state.pending.get(msg.rid);
+    const result = Number(msg.result);
+    const table = (p && p.action === 'cancel') ? CANCEL_RESULT_TEXT : RESULT_TEXT;
+    const text = Object.prototype.hasOwnProperty.call(table, result)
+      ? table[result]
+      : (typeof msg.message === 'string' ? msg.message : '알 수 없는 응답입니다');
+
+    if (!p) { showMessage((msg.slot || '') + ' ' + text, result === 0 ? 'ok' : 'err'); return; }
+
+    if (result === 0) {
+      if (p.timer) window.clearTimeout(p.timer);
+      p.timer = 0;
+      p.status = 'confirmed';
+      // 스냅샷이 곧 따라온다. 안 와도 "확정됨"이 화면에 눌러앉지 않게 안전장치를 건다.
+      p.settleTimer = window.setTimeout(function () { clearPending(p.rid); render(); }, SETTLE_MS);
+      showMessage(p.slot + ' · ' + text, 'ok');
+      render();
+    } else {
+      rollback(p.rid, text);
+    }
+    return;
+  }
+
+  if (msg.type === 'error') {
+    const code = typeof msg.code === 'string' ? msg.code : '';
+    const text = ERROR_TEXT[code] || (typeof msg.message === 'string' ? msg.message : '오류가 발생했습니다');
+    if (msg.rid && state.pending.has(msg.rid)) rollback(msg.rid, text);
+    else showMessage(text, 'err');
+    return;
+  }
+  // 모르는 type 은 조용히 무시한다.
+}
+
+/* ────────────────────────────────────────────────────────────────
+   8. 전송 계층 — WebSocket(주) / data_log.json 폴링(예비) / 데모
+   ──────────────────────────────────────────────────────────────── */
+
+const transport = {
+  ws: null,
+  pollTimer: 0,
+  reconnectTimer: 0,
+  demo: null,
+
+  start(demoMode) {
+    if (demoMode) { this.demo = createDemoTransport(); state.link = 'demo'; this.demo.start(); render(); return; }
+
+    // file:// 에서는 location.hostname 이 비어 ws://:9900 이 SyntaxError 를 던진다.
+    if (window.location.protocol === 'file:') {
+      state.link = 'nows';           // 재연결을 하지 않는다 — "N초 후 재시도"라고 말하면 거짓말이다
+      state.attempt = 0;
+      showMessage('file:// 로 열려 있어 WebSocket 을 시도하지 않습니다. 서버(9900)로 접속해 주세요. 데모는 ?demo=1', 'info');
+      this.startPolling();
+      render();
+      return;
+    }
+    this.startPolling();     // 연결될 때까지는 예비 경로가 화면을 채운다
+    this.connect();
+  },
+
+  connect() {
+    const host = window.location.hostname || 'localhost';
+    const url = 'ws://' + host + ':' + WS_PORT + WS_PATH;
+    let sock;
+    try {
+      sock = new WebSocket(url);
+    } catch (e) {
+      this.scheduleReconnect();
+      return;
+    }
+    this.ws = sock;
+
+    sock.onopen = () => {
+      state.link = 'ws';
+      state.attempt = 0;
+      this.stopPolling();
+      showMessage('서버에 연결되었습니다', 'ok');
+      render();
+    };
+
+    sock.onmessage = (event) => {
+      let msg = null;
+      try { msg = JSON.parse(event.data); } catch (e) { return; }
+      handleServerMessage(msg);
+    };
+
+    sock.onerror = () => { /* onclose 가 이어서 온다 */ };
+
+    sock.onclose = () => {
+      if (this.ws !== sock) return;
+      this.ws = null;
+      if (state.link === 'ws') showMessage('서버 연결이 끊겼습니다. 파일 폴백으로 전환합니다', 'err');
+      state.link = 'reconnecting';
+      this.startPolling();
+      this.scheduleReconnect();
+      render();
+    };
+  },
+
+  /** 지수 백오프 + 지터 */
+  scheduleReconnect() {
+    state.attempt += 1;
+    const base = Math.min(BACKOFF_MAX, BACKOFF_MIN * Math.pow(1.7, state.attempt - 1));
+    const delay = Math.round(base * (0.85 + Math.random() * 0.3));
+    state.reconnectAt = Date.now() + delay;
+    state.link = 'reconnecting';
+    if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = window.setTimeout(() => { this.connect(); }, delay);
+    render();
+  },
+
+  startPolling() {
+    if (this.pollTimer) return;
+    this.pollOnce();
+    this.pollTimer = window.setInterval(() => { this.pollOnce(); }, POLL_MS);
+  },
+
+  stopPolling() {
+    if (!this.pollTimer) return;
+    window.clearInterval(this.pollTimer);
+    this.pollTimer = 0;
+  },
+
+  pollOnce() {
+    fetch(LOG_FILE + '?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();          // §9.1 은 유효한 JSON 배열이다. 줄 단위 파싱이 아니다.
+      })
+      .then((log) => {
+        const raw = snapshotFromLog(log);
+        if (!raw) throw new Error('빈 로그');
+        state.pollFailures = 0;
+        if (state.link === 'ws') return;     // 그 사이 WS 가 살아났으면 덮어쓰지 않는다
+        applySnapshot(raw, 'file');          // ← WS 와 같은 함수로 합류한다
+      })
+      .catch((err) => {
+        state.pollFailures += 1;
+        if (state.pollFailures === 1) {
+          showMessage('예비 경로(data_log.json)도 읽지 못했습니다: ' + err.message, 'err');
+        }
+      });
+  },
+
+  send(payload) {
+    if (state.link === 'demo' && this.demo) { this.demo.send(payload); return; }
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(payload));
+      return;
+    }
+    // 전송 경로가 없으면 낙관적 표시를 즉시 되돌린다.
+    if (payload && payload.rid) rollback(payload.rid, '서버에 연결되어 있지 않아 요청을 보내지 못했습니다');
+  }
+};
+
+/* ────────────────────────────────────────────────────────────────
+   9. 데모 모드 (?demo=1) — 서버 없이 렌더링과 예약 흐름을 검증한다
+      실제 경로에는 아무 영향이 없다.
+   ──────────────────────────────────────────────────────────────── */
+
+function createDemoTransport() {
+  // §5.3 예제를 복사해서 데모 상태로 쓴다(원본은 건드리지 않는다).
+  let slots = DEMO_SNAPSHOT.slots.map(function (s) { return Object.assign({}, s); });
+  let seq = DEMO_SNAPSHOT.device.seq;
+  let online = true;
+  let nextFailure = null;      // 다음 예약에 강제로 넣을 result
+  let dropNextAck = false;
+
+  function push() {
+    seq += 1;
+    handleServerMessage({
+      type: 'snapshot',
+      ts: Date.now(),
+      device: { online: online, device_id: 'P1', uptime: 3600 + (seq - DEMO_SNAPSHOT.device.seq), seq: seq },
+      slots: slots.map(function (s) { return Object.assign({}, s); })
+    });
+  }
+
+  function find(id) { return slots.find(function (s) { return s.id === id; }); }
+
+  return {
+    start() {
+      window.setTimeout(function () {
+        handleServerMessage(JSON.parse(JSON.stringify(DEMO_SNAPSHOT)));
+        showMessage('§5.3 예제 스냅샷을 적용했습니다 (A5 는 occupied=1, reserved=1 인 정상 완료 상태)', 'info');
+      }, 200);
+    },
+
+    send(payload) {
+      window.setTimeout(function () {
+        const s = find(payload.slot);
+        if (dropNextAck) {
+          dropNextAck = false;
+          showMessage('데모: 이번 요청은 ACK 를 보내지 않습니다. 자체 타임아웃 롤백을 확인하세요', 'info');
+          return;                                  // 응답 없음 → 자체 타임아웃이 롤백한다
+        }
+        let result = 0;
+        if (nextFailure !== null) { result = nextFailure; nextFailure = null; }
+        else if (!s) result = 3;
+        else if (payload.type === 'reserve' && s.occupied === 1) result = 1;
+        else if (payload.type === 'reserve' && s.reserved === 1) result = 2;
+
+        handleServerMessage({ type: 'ack', rid: payload.rid, slot: payload.slot, result: result, message: '' });
+        if (result !== 0 || !s) return;
+
+        if (payload.type === 'reserve') {
+          s.reserved = 1; s.user_id = user.user_id; s.reserved_at = Date.now();
+          push();
+          // 2.5초 뒤 그 자리에 차가 들어온다 → (1,1) 정상 완료 조합이 화면에 나타난다.
+          window.setTimeout(function () {
+            if (s.reserved === 1) { s.occupied = 1; push(); showMessage(s.id + ' 에 차가 들어왔습니다 (occupied=1, reserved=1)', 'ok'); }
+          }, 2500);
+        } else {
+          s.reserved = 0; s.user_id = null; s.reserved_at = null;
+          push();
+        }
+      }, 500);
+    },
+
+    tools: {
+      resetSnapshot() {
+        slots = DEMO_SNAPSHOT.slots.map(function (s) { return Object.assign({}, s); });
+        online = true;
+        state.link = 'demo';
+        applySnapshot(JSON.parse(JSON.stringify(DEMO_SNAPSHOT)), 'demo');
+        showMessage('§5.3 예제 스냅샷으로 되돌렸습니다', 'info');
+      },
+      fileFallback() {
+        // §9.1 형태 배열 → 같은 정규화 함수 → 같은 렌더 함수를 탄다.
+        // 실제 폴백은 WS 가 죽었을 때만 생기므로 연결 상태도 같이 낮춘다(안 그러면 데모에서만 눌린다).
+        state.link = 'reconnecting';
+        const raw = snapshotFromLog(JSON.parse(JSON.stringify(DEMO_FILE_LOG)));
+        applySnapshot(raw, 'file');
+        showMessage('§9.1 data_log.json 형태를 같은 렌더 경로로 통과시켰습니다 (소유자 정보 없음 · 예약 불가)', 'info');
+      },
+      sensorDown() {
+        online = false;
+        state.link = 'demo';
+        push();
+        showMessage('device.online=false 로 밀어 넣었습니다', 'info');
+      },
+      failNext() { nextFailure = 2; showMessage('데모: 다음 예약은 result=2(이미 예약됨)로 응답합니다', 'info'); },
+      dropNext() { dropNextAck = true; showMessage('데모: 다음 예약은 무응답 처리합니다', 'info'); }
+    }
+  };
+}
+
+function buildDemoTools(tools) {
+  const buttons = [
+    ['§5.3 스냅샷 다시 적용', tools.resetSnapshot],
+    ['§9.1 파일 폴백 경로', tools.fileFallback],
+    ['센서 끊김(online=false)', tools.sensorDown],
+    ['다음 예약 → 실패(result=2)', tools.failNext],
+    ['다음 예약 → 무응답', tools.dropNext]
+  ];
+  for (const pair of buttons) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = pair[0];
+    b.addEventListener('click', pair[1]);
+    el.demoTools.appendChild(b);
+  }
+  el.demoTools.hidden = false;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   10. 부팅
+   ──────────────────────────────────────────────────────────────── */
+
+(function boot() {
+  buildGrid();
+  el.userId.textContent = user.user_id;
+
+  const params = new URLSearchParams(window.location.search);
+  const demoMode = params.get('demo') === '1';
+
+  if (demoMode) {
+    el.demoBanner.hidden = false;
+    el.demoBanner.textContent = '데모 모드 — 서버 없이 명세(docs/net/parking-protocol.md §5.3 / §9.1)의 예제를 하드코딩해 렌더링합니다. 실제 데이터가 아닙니다.';
+  }
+
+  render();
+  transport.start(demoMode);
+  if (demoMode) buildDemoTools(transport.demo.tools);
+
+  // 재연결 카운트다운과 "N초 전"을 흐르게 한다.
+  window.setInterval(function () {
+    renderAge();
+    if (state.link === 'reconnecting') renderConnection();
+  }, 1000);
+})();
+</script>
+</body>
+</html>
