@@ -34,7 +34,15 @@ team/bin/
    → **환경변수로 역할을 식별하려던 설계는 여기서 죽는다.** 대신 훅 입력에 항상 들어오는
    `session_id` 를 `.claude/team/registry.json` 으로 역할에 매핑한다.
 
-4. **PreToolUse 훅의 `exit 2` 는 도구 호출을 실제로 실패시킨다.**
+4. **git 저장소에서는 백그라운드 세션의 Edit/Write 가 기본적으로 차단된다.**
+   `worktree.bgIsolation` 기본값이 `"worktree"` 라서, bg 세션은 `EnterWorktree` 를 부르기 전까지
+   공유 체크아웃을 못 고친다. `git init` 을 한 순간 팀 전체가 파일을 못 쓰게 됐다(실제로 겪음).
+   → 이 팀은 **의도적으로 공유 체크아웃을 함께 편집한다.** 조율 수단이 worktree 가 아니라
+   파일 소유권이기 때문이다. 각자 격리된 사본에서 일하면 cpp 가 고친 JNI 를 android 가 볼 수 없다.
+   그래서 `.claude/settings.json` 에 `"worktree": {"bgIsolation": "none"}` 을 명시했다.
+   **이 줄을 지우면 팀이 조용히 마비된다.**
+
+5. **PreToolUse 훅의 `exit 2` 는 도구 호출을 실제로 실패시킨다.**
    `acceptEdits` 모드에서 확인했다(허용 파일은 써지고 차단 파일은 만들어지지 않았다).
    훅은 권한 시스템과 별개 계층이라 권한 모드를 올려도 소유권 집행은 살아 있다.
 
