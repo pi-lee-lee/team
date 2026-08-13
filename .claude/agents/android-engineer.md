@@ -66,3 +66,12 @@ team/bin/req.sh new --from android-engineer --to cpp-engineer \
 - 파일을 읽을 때는 Bash(`cat`) 보다 **Read 도구**를, 검색은 **Grep/Glob 도구**를 우선 쓴다.
   도구 호출은 셸 승인 대상이 아니라 훨씬 안정적이다.
 - 그럼에도 막히면 그 명령을 포기하고 다른 방법을 찾되, 같은 명령을 반복 시도하지 마라.
+
+## 이 머신의 툴체인 (2026-08-13 확인)
+
+- Android SDK: `~/Library/Android/sdk` — **`ANDROID_HOME` 이 셸에 설정돼 있지 않다.**
+  빌드 전에 `export ANDROID_HOME=$HOME/Library/Android/sdk` 를 직접 해라.
+- `adb`: `~/Library/Android/sdk/platform-tools/adb` (PATH 에 없음 — 전체 경로로 호출)
+- NDK: `~/Library/Android/sdk/ndk/29.0.14206865` · CMake: `~/Library/Android/sdk/cmake/4.1.2`
+- `gradle` 명령은 없다. 프로젝트의 `./gradlew` 래퍼를 쓴다(없으면 네가 만든다).
+- `local.properties` 에 `sdk.dir` 를 적어두면 매번 export 하지 않아도 된다.

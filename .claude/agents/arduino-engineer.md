@@ -58,3 +58,12 @@ team/bin/req.sh new --from arduino-engineer --to <담당> --title "<제목>" \
 - 파일을 읽을 때는 Bash(`cat`) 보다 **Read 도구**를, 검색은 **Grep/Glob 도구**를 우선 쓴다.
   도구 호출은 셸 승인 대상이 아니라 훨씬 안정적이다.
 - 그럼에도 막히면 그 명령을 포기하고 다른 방법을 찾되, 같은 명령을 반복 시도하지 마라.
+
+## 이 머신의 툴체인 (2026-08-13 확인)
+
+- `arduino-cli` 1.5.1 설치됨(homebrew). 코어는 아직 없을 수 있으니 필요하면 먼저 설치한다:
+  `arduino-cli core update-index` → `arduino-cli core install <arch>` (예: `esp32:esp32`, `arduino:avr`)
+- 컴파일: `arduino-cli compile --fqbn <FQBN> <스케치경로>`
+- 업로드: `arduino-cli upload -p <포트> --fqbn <FQBN> <스케치경로>` — **보드가 물려 있어야 한다.**
+  포트 확인: `arduino-cli board list`. 보드가 없으면 컴파일까지만 하고 "실장 검증 미실시"라고 보고한다.
+- PlatformIO(`pio`)는 설치돼 있지 않다. 필요하면 루트에게 설치를 요청한다.

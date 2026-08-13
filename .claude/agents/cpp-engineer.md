@@ -68,3 +68,12 @@ team/bin/req.sh new --from cpp-engineer --to <담당> \
 - 파일을 읽을 때는 Bash(`cat`) 보다 **Read 도구**를, 검색은 **Grep/Glob 도구**를 우선 쓴다.
   도구 호출은 셸 승인 대상이 아니라 훨씬 안정적이다.
 - 그럼에도 막히면 그 명령을 포기하고 다른 방법을 찾되, 같은 명령을 반복 시도하지 마라.
+
+## 이 머신의 툴체인 (2026-08-13 확인)
+
+- 호스트 C/C++: `clang++`/`g++`(Apple), `cmake`(homebrew), `make` 사용 가능.
+- **Android NDK: `~/Library/Android/sdk/ndk/29.0.14206865`** — JNI 를 실제로 빌드할 수 있다.
+  NDK CMake 툴체인: `$NDK/build/cmake/android.toolchain.cmake`
+- Android 쪽 CMake: `~/Library/Android/sdk/cmake/4.1.2/bin/cmake`
+- JNI 헤더 생성이 필요하면 `javac -h` 를 쓴다(`java` 는 `/usr/bin/java` 에 있다).
+- 빌드를 돌리지 않았으면 "빌드 통과"라고 쓰지 마라. 이제 NDK 가 있으므로 돌릴 수 있다.
