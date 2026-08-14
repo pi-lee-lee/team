@@ -377,8 +377,41 @@ static bool          netOnline = false;
 static uint8_t       netStep = 0;
 static unsigned long netStepAt = 0;
 static uint16_t      netStepWait = 500;
-static const uint8_t NET_STEP_N = 5;
-static const uint16_t NET_WAIT[NET_STEP_N] = { 2500, 800, 9000, 800, 5000 };
+// 0~4 는 부팅 순서, 5 는 **복구 전용**이다(부팅 때는 지나가지 않는다).
+enum {
+  NET_RST = 0, NET_CWMODE, NET_CWJAP, NET_CIPMUX, NET_CIPSTART,
+  NET_CIPCLOSE,                       // 복구 전용 — 낡은 소켓을 닫는다(REQ-0051)
+  NET_STEP_COUNT
+};
+static const uint16_t NET_WAIT[NET_STEP_COUNT] = { 2500, 800, 9000, 800, 5000, 800 };
+
+// ─────────────────────────────────────────────────────────────────────────
+// 복구 사다리 상태 (REQ-0051)
+//
+// 실기 증상: 끊긴 뒤 `ALREADY CONNECTED` 만 무한 반복되고 연결이 안 된다. 원인은
+// **CIPSTART 로는 ESP 의 낡은 소켓을 지울 수 없다**는 것이다. ESP 는 죽은 소켓을 아직
+// 열려 있다고 믿고 CIPSTART 에 `ALREADY CONNECTED` 로 답하고, 그걸 온라인으로 받으면
+//   goOffline → CIPSTART → ALREADY → online → 3회 실패 → goOffline → …
+// 로 영원히 돈다. 감지(REQ-0049)는 맞았고 **복구가 반쪽이었다.**
+//
+// 그래서 사다리를 만든다: **CIPCLOSE → (CLOSED) → CIPSTART → 안 되면 AT+RST.**
+//
+// staleSocket: "ESP 가 낡은 소켓을 붙들고 있다고 의심한다". 전송 실패로 오프라인이 될 때 선다.
+//   이 플래그가 서 있는 동안의 `ALREADY CONNECTED` 는 **"붙어 있다"가 아니라 정반대 신호**이므로
+//   온라인으로 올리지 않는다. 실제 `CONNECT` 나 `CLOSED` 에서 내린다.
+//   ⚠ 플래그가 없을 때(=초기 접속 경합)의 `ALREADY CONNECTED` 는 진짜로 "이미 붙었다"는 뜻이라
+//     그대로 온라인으로 받고 **캐시도 비우지 않는다**(REQ-0035 [18]-4 불변식).
+//
+// CLOSE_ATTEMPT_LIMIT = 3 의 근거:
+//   CIPCLOSE 는 **모듈 로컬 동작**이라 네트워크 왕복이 없다 — 정상 모듈이면 대기 창(800ms)
+//   안에 반드시 응답한다. 즉 한 번 실패는 `busy p...` 같은 일시적 사정일 수 있지만
+//   **세 번 연속 로컬 명령이 안 먹으면 그건 AT 계층 자체가 꼬인 것**이고, 그때 올바른
+//   대응은 재시도가 아니라 모듈 리셋이다. 1회는 너무 이르고(일시적 busy 하나로 14초 RST 사이클),
+//   더 크게 잡으면 무한 루프 시간만 길어진다. 3회면 약 2.5초 안에 사다리를 다 올라간다.
+// ─────────────────────────────────────────────────────────────────────────
+static bool    staleSocket = false;
+static uint8_t closeAttempts = 0;
+static const uint8_t CLOSE_ATTEMPT_LIMIT = 3;
 
 // 무엇을 보냈는지 찍는다(REQ-0042 3순위). 이게 없으면 5초마다 CIPSTART 를 재시도하는지조차
 // 로그로 확인할 수 없다.
@@ -397,6 +430,7 @@ static void netSendStep(uint8_t s) {
     case 3: wifi.print(F("AT+CIPMUX=0\r\n"));   DBG_NET("3", "CIPMUX=0"); break;
     case 4: wifi.print(F("AT+CIPSTART=\"TCP\",\"" SERVER_IP "\"," SERVER_PORT "\r\n"));
                                                 DBG_NET("4", "CIPSTART"); break;
+    case 5: wifi.print(F("AT+CIPCLOSE\r\n"));   DBG_NET("5", "CIPCLOSE (낡은 소켓 닫기)"); break;
     default: break;
   }
 }
@@ -529,21 +563,34 @@ static void pumpSerialRaw(void) {
 static const uint8_t SEND_FAIL_LIMIT = 3;
 static uint8_t       sendFailStreak = 0;
 
-static void goOffline(void) {
-#if DEBUG
-  Serial.print(F("[NET] 전송 "));
-  Serial.print(sendFailStreak);
-  Serial.println(F("회 연속 실패 → 오프라인 전환, 재접속 시도"));
-#endif
+// 소켓 복구 진입 — **전송이 안 되는 것을 이유로 오프라인이 되는 모든 경로**가 여기를 통과해야 한다.
+// (연속 실패 카운터 / `link is not valid` 둘 다.) 한 곳이라도 CIPSTART 로 바로 가면
+// 그 경로에서 REQ-0051 의 무한 루프가 되살아난다.
+static void startSocketRecovery(void) {
   netOnline = false;
   sendFailStreak = 0;
   // ⚠ 여기서 멱등 캐시를 비우지 않는다. 이 판정은 **추정**이고, 링크가 실은 살아 있었다면
   //   재시도에 ALREADY CONNECTED 가 와서 그대로 복귀한다 — 그 경우 캐시를 비웠다면
   //   살아 있는 연결의 멱등성(REQ-0035 [18]-4)이 깨진다.
   //   캐시는 실제 연결 생명주기 신호인 CLOSED / CONNECT 에서만 비운다(REQ-0036).
-  netStep = 4;                       // CIPSTART 부터 다시
+
+  // ★ REQ-0051: **CIPSTART 가 아니라 CIPCLOSE 부터** 간다.
+  //   CIPSTART 는 ESP 의 낡은 소켓을 절대 못 지운다 — ALREADY CONNECTED 만 돌아온다.
+  //   닫히면 ESP 가 CLOSED 를 내고, 그건 기존 경로가 이미 올바르게 처리한다
+  //   (오프라인 확정 + 캐시 비움 + CIPSTART 재시도) → **정상 생명주기 신호에 다시 올라탄다.**
+  staleSocket = true;
+  netStep = NET_CIPCLOSE;
   netStepAt = millis();
-  netStepWait = 1000;
+  netStepWait = 0;                   // 즉시 닫기를 시도한다
+}
+
+static void goOffline(void) {
+#if DEBUG
+  Serial.print(F("[NET] 전송 "));
+  Serial.print(sendFailStreak);
+  Serial.println(F("회 연속 실패 → 오프라인 전환. 낡은 소켓부터 닫는다(CIPCLOSE)"));
+#endif
+  startSocketRecovery();
 }
 
 // 실패를 세는 곳은 **sendLine() 한 곳뿐이다.** 수신된 오류 문구로도 세면 한 번의 실패가
@@ -924,15 +971,35 @@ static void handleLine(char* s) {
   //   그건 **기존 연결이 그대로 살아 있다**는 응답이다(서버도 그대로다). netTick() 이 CIPSTART 를
   //   5초마다 재시도하므로, 여기서 비우면 살아 있는 연결의 멱등성이 재시도마다 깨진다.
   // ─────────────────────────────────────────────────────────────────────────
-  if (strstr(s, "ALREADY CONNECT")) {                                 // 새 연결이 아니다 → 캐시 유지
-    netOnline = true;
+  if (strstr(s, "ALREADY CONNECT")) {
+    // ★ REQ-0051: 이 응답의 의미가 **상황에 따라 정반대**다. 둘을 갈라야 한다.
+    if (staleSocket) {
+      // 전송 실패로 오프라인이 된 뒤라면 "붙어 있다"가 아니라
+      // **"ESP 가 낡은 소켓을 붙들고 있다"** 는 신호다. 온라인으로 올리면 무한 루프가 된다.
 #if DEBUG
-    Serial.println(F("[NET] online (ALREADY CONNECTED)"));
+      Serial.println(F("[NET] ALREADY CONNECTED — 낡은 소켓 의심 중이므로 믿지 않는다 → CIPCLOSE"));
+#endif
+      netStep = NET_CIPCLOSE;
+      netStepAt = millis();
+      netStepWait = 0;
+      return;
+    }
+    // 낡은 소켓 의심이 없을 때 = **초기 접속 경합.** CIPSTART 가 두 번 나가고 첫 번째가
+    // 실제로 성공한 경우라 진짜로 "이미 붙었다"는 뜻이다. 여기서는 그대로 온라인으로 받고
+    // **캐시를 비우지 않는다** — 새 연결이 아니므로(REQ-0035 [18]-4 불변식).
+    netOnline = true;
+    sendFailStreak = 0;
+    closeAttempts = 0;
+#if DEBUG
+    Serial.println(F("[NET] online (ALREADY CONNECTED · 초기 경합)"));
 #endif
     return;
   }
   if (isConnectLine(s)) {
     netOnline = true;
+    sendFailStreak = 0;
+    staleSocket = false;               // 진짜로 새로 붙었다 — 낡은 소켓이 아니다
+    closeAttempts = 0;
     cacheClear();
 #if DEBUG
     Serial.println(F("[NET] online (CONNECT) + 캐시 비움"));
@@ -942,8 +1009,11 @@ static void handleLine(char* s) {
   if (strstr(s, "CLOSED")) {
     netOnline = false;
     sendFailStreak = 0;
+    // 닫혔다는 통보다 — 낡은 소켓 의심이 해소됐다. 사다리도 내려온다.
+    staleSocket = false;
+    closeAttempts = 0;
     cacheClear();                     // ★ 주 방어선 — 위 주석 참조
-    netStep = 4; netStepAt = millis(); netStepWait = 1000;   // CIPSTART 만 다시
+    netStep = NET_CIPSTART; netStepAt = millis(); netStepWait = 1000;   // CIPSTART 만 다시
     return;
   }
 
@@ -962,11 +1032,10 @@ static void handleLine(char* s) {
   if (netOnline) {
     if (strstr(s, "link is not valid")) {
 #if DEBUG
-      Serial.println(F("[NET] link is not valid → 즉시 오프라인"));
+      Serial.println(F("[NET] link is not valid → 즉시 오프라인, 낡은 소켓 닫기(CIPCLOSE)"));
 #endif
-      netOnline = false;
-      sendFailStreak = 0;
-      netStep = 4; netStepAt = millis(); netStepWait = 1000;
+      // ★ 여기도 CIPSTART 로 바로 가면 REQ-0051 의 무한 루프에 빠진다 — 같은 복구 경로를 탄다.
+      startSocketRecovery();
       return;
     }
     if (strstr(s, "SEND FAIL") || strstr(s, "ERROR") || strstr(s, "busy")) {
@@ -1016,20 +1085,51 @@ static void drainPending(void) {
 // ─────────────────────────────────────────────────────────────────────────
 // 주기 처리
 // ─────────────────────────────────────────────────────────────────────────
+// 복구 사다리(REQ-0051):
+//   전송 실패 → CIPCLOSE → (CLOSED 오면 정상 경로) → CIPSTART
+//              → 그래도 ALREADY CONNECTED 만 오면 다시 CIPCLOSE
+//              → CIPCLOSE 3회가 안 먹으면 **AT+RST 로 올라가 전체 초기화**
+// 마지막 층이 없으면 또 무한 루프가 된다.
 static void netTick(unsigned long now) {
   if (netOnline) return;
   if (now - netStepAt < netStepWait) return;
 
-  if (netStep < NET_STEP_N) {
-    netSendStep(netStep);
-    netStepWait = NET_WAIT[netStep];
-    netStepAt = now;
-    netStep++;
-    return;
-  }
-  netStep = 4;                                   // CIPSTART 부터 다시 시도
+  uint8_t sent = netStep;
+  netSendStep(sent);
   netStepAt = now;
-  netStepWait = 0;
+  netStepWait = NET_WAIT[sent];
+
+  switch (sent) {
+    case NET_CIPCLOSE:
+      closeAttempts++;
+      if (closeAttempts >= CLOSE_ATTEMPT_LIMIT) {
+        // 로컬 명령이 세 번 연속 안 먹었다 = AT 계층이 꼬였다 → 사다리 상승
+#if DEBUG
+        Serial.print(F("[NET] CIPCLOSE "));
+        Serial.print(closeAttempts);
+        Serial.println(F("회 실패 → AT+RST 로 전체 초기화(사다리 상승)"));
+#endif
+        netStep = NET_RST;
+        staleSocket = false;         // RST 가 모듈 상태를 통째로 지운다
+        closeAttempts = 0;
+        netStepWait = 200;           // 곧 RST 를 쏜다
+      } else {
+        // CLOSED 가 오면 handleLine 이 CIPSTART 로 보낸다.
+        // 안 오더라도 **CIPSTART 로 넘어가는 길은 남겨 둔다**(닫힘 통보가 없는 모듈도 있다).
+        netStep = NET_CIPSTART;
+      }
+      break;
+
+    case NET_CIPSTART:
+      // 응답(CONNECT / ALREADY CONNECTED / CLOSED)은 handleLine 이 처리한다.
+      // 아무 응답도 안 오면: 낡은 소켓 의심 중이면 닫기부터, 아니면 다시 CIPSTART.
+      netStep = staleSocket ? (uint8_t)NET_CIPCLOSE : (uint8_t)NET_CIPSTART;
+      break;
+
+    default:
+      netStep = (uint8_t)(sent + 1);   // 부팅 순서 진행 (RST→CWMODE→CWJAP→CIPMUX→CIPSTART)
+      break;
+  }
 }
 
 static void sensorTick(void) {

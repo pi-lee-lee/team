@@ -46,6 +46,19 @@ class SoftwareSerial {
   bool refusePrompt = false;
   std::string refuseReply = "ERROR\r\n";   // 실제 문구는 미확정 — 필요하면 바꿔 시험한다
 
+  // ★ 낡은 소켓을 붙든 모듈 흉내 (REQ-0051): 실기의 무한 루프 증상을 그대로 만든다.
+  //   true 면 CIPSTART 에 ALREADY CONNECTED 로 답하고, **CIPCLOSE 도 안 먹는다**(CLOSED 안 옴).
+  //   AT+RST 를 받으면 모듈이 초기화되므로 이 상태가 풀린다 — 사다리 최상층이 실제로 듣는지 본다.
+  bool stickySocket = false;
+
+  // 보낸 AT 명령 기록 — 시험이 "CIPCLOSE 가 나갔는가"를 직접 확인할 수 있어야 한다
+  std::vector<std::string> atLog;
+  size_t countAt(const std::string& needle) const {
+    size_t n = 0;
+    for (const std::string& c : atLog) if (c.find(needle) != std::string::npos) n++;
+    return n;
+  }
+
  private:
   std::deque<char> rx;
   std::string atLine;          // 조립 중인 AT 명령
@@ -71,6 +84,7 @@ class SoftwareSerial {
       std::string cmd = atLine.substr(0, atLine.size() - 2);
       atLine.clear();
       if (traceAt) printf("        [esp<-] %s\n", cmd.c_str());
+      atLog.push_back(cmd);
       if (cmd.compare(0, 11, "AT+CIPSEND=") == 0) {
         if (refusePrompt) {
           reply(refuseReply);          // '>' 를 주지 않는다 → 스케치의 waitForPrompt 가 타임아웃
@@ -79,7 +93,14 @@ class SoftwareSerial {
           reply("OK\r\n> ");
         }
       } else if (cmd.compare(0, 12, "AT+CIPSTART=") == 0) {
-        reply("OK\r\nCONNECT\r\n");
+        // 낡은 소켓을 붙들고 있으면 새 연결을 만들지 않고 ALREADY CONNECTED 만 돌려준다
+        reply(stickySocket ? "ALREADY CONNECTED\r\n" : "OK\r\nCONNECT\r\n");
+      } else if (cmd == "AT+CIPCLOSE") {
+        // 꼬인 모듈은 로컬 명령인 CIPCLOSE 조차 처리하지 못한다 → CLOSED 가 안 온다
+        reply(stickySocket ? "ERROR\r\n" : "CLOSED\r\nOK\r\n");
+      } else if (cmd == "AT+RST") {
+        stickySocket = false;          // 모듈 초기화 = 낡은 소켓 상태가 풀린다
+        reply("OK\r\nready\r\n");
       } else {
         reply("OK\r\n");
       }

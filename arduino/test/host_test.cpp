@@ -118,6 +118,13 @@ static void freezeAllSims() {
 // 하필 창 안에서 하트비트가 터지면 "즉시 전송 덕분에 나갔다"고 **잘못 통과**한다.
 static bool alignToHeartbeat(int maxIter = 4000);
 
+// AT 로그에서 그 명령이 처음 나온 위치. 없으면 SIZE_MAX.
+static size_t firstAtIndex(const std::string& needle) {
+  for (size_t i = 0; i < wifi.atLog.size(); i++)
+    if (wifi.atLog[i].find(needle) != std::string::npos) return i;
+  return SIZE_MAX;
+}
+
 static size_t countStatusLines() {
   size_t n = 0;
   for (const std::string& l : wifi.sentLines) if (!l.empty() && l[0] == 'S') n++;
@@ -693,7 +700,9 @@ int main() {
            (int)netOnline, netStep, seqBefore, seqNo, countStatusLines() - sBefore);
     ok(!netOnline, "연속 실패로 오프라인이 됐다 — CLOSED 통보 없이도 알아챈다");
     ok(seqNo == seqBefore, "못 나간 프레임은 seq 를 소비하지 않았다 (실기의 seq 고정과 같은 성질)");
-    ok(netStep == 4, "CIPSTART 재시도 단계로 들어갔다");
+    // REQ-0051 로 바뀐 부분: 예전엔 곧장 CIPSTART(4)로 갔는데, 그게 무한 루프의 원인이었다.
+    // 이제 **CIPCLOSE(5) 부터** 간다 — 자세한 검증은 [30]~[32].
+    ok(netStep == NET_CIPCLOSE, "복구가 CIPCLOSE 단계부터 시작한다 (CIPSTART 가 아니다)");
 
     // 링크가 살아나면 스스로 복귀한다
     wifi.refusePrompt = false;
@@ -740,10 +749,18 @@ int main() {
     ok(Serial.out.find("송신 오류 응답") != std::string::npos, "그래도 로그에는 남는다");
 
     // link is not valid 는 즉시 오프라인
+    wifi.atLog.clear();
     wifi.deliver("link is not valid\r\n");
     spin(3);
     ok(!netOnline, "link is not valid → 즉시 오프라인 (모듈이 링크 무효를 명시했다)");
-    ok(netStep == 4, "CIPSTART 재시도 단계로 들어갔다");
+
+    // REQ-0051: 이 경로도 CIPSTART 로 바로 가면 무한 루프에 빠진다 → 같은 복구 사다리를 탄다.
+    // ⚠ 순간 상태(netStep/staleSocket)로 단언하면 안 된다 — CIPCLOSE 가 즉시 나가고
+    //   CLOSED 가 바로 와서 이미 다음 단계로 넘어가 있다. **AT 로그의 순서**로 봐야 한다.
+    spinMs(300);
+    printf("        AT 로그 선두: %s\n", wifi.atLog.empty() ? "(없음)" : wifi.atLog[0].c_str());
+    ok(!wifi.atLog.empty() && wifi.atLog[0].find("AT+CIPCLOSE") != std::string::npos,
+       "★ 복구의 첫 명령이 CIPCLOSE 다 (CIPSTART 앞에 나간다)");
     ok(spinUntilOnline(20000), "복귀한다");
   }
 
@@ -760,7 +777,89 @@ int main() {
     ok(spinUntilOnline(20000), "복귀한다");
   }
 
-  printf("\n[29] 모든 전선 라인이 문법·체크섬을 만족하는가 (누적 %zu줄)\n", wifi.sentLines.size());
+  printf("\n[30] ★ 복구가 CIPCLOSE 부터 간다 (REQ-0051 ①)\n");
+  {
+    ok(spinUntilOnline(20000), "온라인 (사전 조건)");
+    sendFailStreak = 0;
+    wifi.atLog.clear();
+
+    wifi.refusePrompt = true;                       // 전송이 실패한다
+    for (int i = 0; i < 4000 && netOnline; i++) loop();
+    ok(!netOnline, "연속 실패로 오프라인이 됐다");
+    // ★ 핵심: CIPSTART 만 나가면 안 된다. CIPCLOSE 가 먼저 나가야 한다.
+    spinMs(300);
+    printf("        AT 로그: CIPCLOSE %zu회, CIPSTART %zu회\n",
+           wifi.countAt("AT+CIPCLOSE"), wifi.countAt("AT+CIPSTART"));
+    ok(wifi.countAt("AT+CIPCLOSE") >= 1, "★ CIPCLOSE 가 나갔다 (CIPSTART 만이 아니다)");
+    // 기준 1 의 실제 요구는 **순서**다: CIPCLOSE 가 CIPSTART 보다 먼저 나가야 한다.
+    // (로그 선두는 실패한 AT+CIPSEND 들이라 atLog[0] 로 볼 수 없다.)
+    printf("        첫 CIPCLOSE 위치=%zu, 첫 CIPSTART 위치=%zu\n",
+           firstAtIndex("AT+CIPCLOSE"), firstAtIndex("AT+CIPSTART"));
+    ok(firstAtIndex("AT+CIPCLOSE") < firstAtIndex("AT+CIPSTART"),
+       "★ CIPCLOSE 가 CIPSTART 보다 먼저 나갔다 (기준 1)");
+
+    // CIPCLOSE 가 먹으면 CLOSED 가 오고 정상 재접속으로 이어진다 (stickySocket=false 라 먹는다)
+    wifi.refusePrompt = false;
+    ok(spinUntilOnline(20000), "CIPCLOSE → CLOSED → CIPSTART → 재접속 성공");
+    ok(!staleSocket, "재접속되면 낡은 소켓 의심이 해소된다");
+  }
+
+  printf("\n[31] ★ ALREADY CONNECTED 만 반복되는 상황에서 무한 루프에 빠지지 않는다 (REQ-0051 ②③)\n");
+  {
+    ok(spinUntilOnline(20000), "온라인 (사전 조건)");
+    sendFailStreak = 0;
+    wifi.atLog.clear();
+
+    // 실기 증상 그대로: 전송 실패 + 모듈이 낡은 소켓을 붙들고 CIPCLOSE 도 안 먹는다
+    wifi.refusePrompt = true;
+    wifi.stickySocket = true;
+
+    // 사다리를 끝까지 올라가는지 본다. 무한 루프면 AT+RST 가 영원히 안 나온다.
+    unsigned long t0 = g_millis;
+    for (int i = 0; i < 60000 && wifi.countAt("AT+RST") == 0; i++) loop();
+    printf("        %lums 만에: CIPCLOSE %zu회, CIPSTART %zu회, AT+RST %zu회\n",
+           g_millis - t0, wifi.countAt("AT+CIPCLOSE"), wifi.countAt("AT+CIPSTART"),
+           wifi.countAt("AT+RST"));
+    ok(wifi.countAt("AT+RST") >= 1, "★ 사다리가 AT+RST 까지 올라갔다 — 무한 루프에 빠지지 않는다");
+    ok(wifi.countAt("AT+CIPCLOSE") >= CLOSE_ATTEMPT_LIMIT,
+       "CIPCLOSE 를 한계(3회)까지 시도한 뒤 올라갔다");
+    ok(!netOnline, "그 사이 ALREADY CONNECTED 를 온라인으로 받아들이지 않았다");
+
+    // AT+RST 가 모듈을 풀었으므로, 링크만 살아나면 정상 복귀한다
+    wifi.refusePrompt = false;
+    ok(spinUntilOnline(30000), "RST 후 부팅 순서를 다시 타고 재접속한다");
+    printf("        복귀 후 AT 로그: CWJAP %zu회 (RST 뒤 부팅 순서를 다시 탄 증거)\n",
+           wifi.countAt("AT+CWJAP"));
+    ok(wifi.countAt("AT+CWJAP") >= 1, "RST 뒤 CWJAP 부터 다시 진행했다");
+  }
+
+  printf("\n[32] 초기 접속 경합의 ALREADY CONNECTED 는 여전히 온라인 + 캐시 유지 (REQ-0035 [18]-4 회귀)\n");
+  {
+    ok(spinUntilOnline(20000), "온라인 (사전 조건)");
+    // 캐시에 항목을 넣는다
+    deliverIPD("T,150,A,??,-," + xorCk("T,150,A,??,-,"));
+    spin(200);
+    ok(cacheCount > 0, "캐시에 항목이 있다 (사전 조건)");
+
+    // 낡은 소켓 의심이 **없는** 상태에서 ALREADY CONNECTED 가 오는 경우 = 초기 경합
+    netOnline = false;
+    staleSocket = false;
+    wifi.deliver("ALREADY CONNECTED\r\n");
+    spin(5);
+    ok(netOnline, "★ 초기 경합의 ALREADY CONNECTED 는 여전히 온라인으로 받는다");
+    ok(cacheCount > 0, "★ 그리고 캐시를 비우지 않는다 (REQ-0035 [18]-4 불변식 유지)");
+
+    // 반대로 낡은 소켓 의심 중이면 온라인으로 올리지 않는다
+    netOnline = false;
+    staleSocket = true;
+    wifi.deliver("ALREADY CONNECTED\r\n");
+    spin(5);
+    ok(!netOnline, "★ 낡은 소켓 의심 중의 ALREADY CONNECTED 는 믿지 않는다");
+    staleSocket = false;
+    ok(spinUntilOnline(20000), "복귀한다");
+  }
+
+  printf("\n[33] 모든 전선 라인이 문법·체크섬을 만족하는가 (누적 %zu줄)\n", wifi.sentLines.size());
   int bad = 0;
   for (const std::string& l : wifi.sentLines) {
     if (l.size() + 1 > 64) { bad++; continue; }                 // §2.1-6
