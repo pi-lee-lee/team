@@ -81,6 +81,10 @@
 
   * { box-sizing: border-box; }
 
+  /* display 를 지정하는 클래스가 [hidden] 을 이겨 버리는 사고를 막는다
+     (UA 의 [hidden]{display:none} 은 작성자 스타일보다 약하다) */
+  [hidden] { display: none !important; }
+
   body {
     margin: 0;
     padding: 18px;
@@ -187,6 +191,10 @@
   .swatch--occ  { background: var(--occ-bg);  border-color: var(--occ-line); }
   .swatch--done { background: var(--done-bg); border-color: var(--done-line); }
   .swatch--mine { background: transparent;    border-color: var(--mine); }
+  .swatch--inject {
+    border-color: #c0392b; border-style: dashed;
+    background-image: repeating-linear-gradient(45deg, rgba(192,57,43,.5) 0 3px, rgba(192,57,43,0) 3px 6px);
+  }
 
   dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
   dt { color: var(--ink-dim); }
@@ -216,6 +224,71 @@
   dialog button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
   footer { margin-top: 16px; font-size: 11.5px; color: var(--ink-dim); text-align: center; }
+
+  /* ── 테스트 모드 (§12A) ─────────────────────────────────────────
+     반전 구조의 사고는 "켠 줄 모르고 가짜 값을 실측으로 읽는 것"이다(§12A.6).
+     그래서 무장 중에는 화면 전체 테두리 + 배너 + 칸별 표시가 동시에 걸린다.
+     배지 하나로는 부족하다는 것이 명세의 요구다. */
+  .test-frame {
+    position: fixed; inset: 0; z-index: 90; pointer-events: none; display: none;
+    border: 9px solid transparent;
+    border-image: repeating-linear-gradient(45deg,
+      #c0392b 0 14px, #2b2b2b 14px 28px) 9;
+  }
+  body.is-armed .test-frame { display: block; }
+  body.is-armed { padding-bottom: 26px; }
+
+  .banner--test {
+    background: repeating-linear-gradient(45deg,
+      rgba(192,57,43,.14) 0 12px, rgba(192,57,43,.05) 12px 24px);
+    border-color: #c0392b; color: var(--warn-ink);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  }
+  .banner--test strong { font-size: 15px; }
+  .banner--test .banner__sub { font-weight: 500; font-size: 13px; opacity: .95; }
+
+  /* 주입된 칸: 4조합 색을 덮지 않고 빗금과 깃발을 겹친다(직교 축) */
+  .tile[data-injected="1"] {
+    background-image: repeating-linear-gradient(45deg,
+      rgba(192,57,43,.20) 0 7px, rgba(192,57,43,0) 7px 14px);
+    border-style: dashed;
+  }
+  .tile__flag {
+    grid-column: 2; justify-self: start;
+    font-size: 10.5px; font-weight: 800; letter-spacing: .4px;
+    padding: 1px 6px; border-radius: 999px; margin-top: 2px;
+    background: #c0392b; color: #fff;
+  }
+  .tile__flag[hidden] { display: none; }
+
+  .inject { display: none; gap: 4px; }
+  body.is-armed .inject { display: flex; }
+  .inject button {
+    flex: 1; font: inherit; font-size: 11px; font-weight: 700; padding: 4px 2px;
+    border: 1px solid var(--line); border-radius: 7px;
+    background: var(--panel); color: var(--ink-dim); cursor: pointer;
+  }
+  .inject button:hover { border-color: #c0392b; color: #c0392b; }
+  .inject button[aria-pressed="true"] { background: #c0392b; border-color: #c0392b; color: #fff; }
+  .inject button[aria-disabled="true"] { opacity: .45; cursor: not-allowed; }
+  .inject button:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+
+  .slot { display: flex; flex-direction: column; gap: 5px; }
+  .slot .tile { flex: 1; }
+
+  .test-panel { display: grid; gap: 8px; font-size: 13px; }
+  .test-panel__state { font-weight: 700; }
+  .test-panel__state[data-armed="1"] { color: #c0392b; }
+  .test-panel__state[data-armed="0"] { color: var(--ok-ink); }
+  .test-panel__state[data-armed="?"] { color: var(--ink-dim); }
+  .test-toggle {
+    font: inherit; font-weight: 700; padding: 9px 12px; border-radius: 9px; cursor: pointer;
+    border: 2px solid var(--line); background: var(--panel); color: var(--ink);
+  }
+  .test-toggle[aria-pressed="true"] { background: #c0392b; border-color: #c0392b; color: #fff; }
+  .test-toggle[aria-disabled="true"] { opacity: .5; cursor: not-allowed; }
+  .test-toggle:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .test-note { font-size: 11.5px; color: var(--ink-dim); margin: 0; }
 </style>
 </head>
 <body>
@@ -238,6 +311,7 @@
   <p id="demo-banner" class="banner banner--demo" hidden></p>
   <div id="demo-tools" class="demo-tools" hidden></div>
   <p id="offline-banner" class="banner banner--warn" hidden></p>
+  <p id="test-banner" class="banner banner--test" role="status" aria-live="polite" hidden></p>
 
   <main>
     <section aria-labelledby="grid-title">
@@ -251,6 +325,7 @@
         <li><span class="swatch swatch--occ"  aria-hidden="true"></span>예약 없이 주차됨 (1 · 0)</li>
         <li><span class="swatch swatch--done" aria-hidden="true"></span>예약한 자리에 입차 완료 (1 · 1) — 정상 완료</li>
         <li><span class="swatch swatch--mine" aria-hidden="true"></span>보라 테두리 = 내 예약</li>
+        <li><span class="swatch swatch--inject" aria-hidden="true"></span>빨간 빗금 + ⚑주입값 = 테스트 모드로 주입된 가짜 점유값</li>
       </ul>
     </section>
 
@@ -265,13 +340,26 @@
         <dt>마지막 갱신</dt><dd id="dev-age">-</dd>
       </dl>
 
+      <h2 id="test-title">테스트 모드</h2>
+      <div class="test-panel">
+        <button id="test-toggle" type="button" class="test-toggle" aria-pressed="false">테스트 모드 켜기</button>
+        <p id="test-state" class="test-panel__state" data-armed="0">해제됨</p>
+        <p id="test-hint" class="test-note"></p>
+        <p class="test-note">
+          센서가 없는 동안 <strong>이 화면이 점유값을 주입</strong>합니다(§12A). 무장하면 칸마다
+          빈자리/주차/원래대로 버튼이 생깁니다. 예약 상태는 주입 대상이 아닙니다 — 정상 예약 경로로 만드세요.
+        </p>
+      </div>
+
       <h2 id="msg-title">알림</h2>
       <div id="messages" class="messages" role="status" aria-live="polite" aria-labelledby="msg-title"></div>
     </section>
   </main>
 
-  <footer>docs/net/parking-protocol.md v1 기준 · WebSocket <span class="mono">ws://&lt;host&gt;:9900/ws</span> · 폴백 <span class="mono">data_log.json</span></footer>
+  <footer>docs/net/parking-protocol.md v1.2 기준 · WebSocket <span class="mono">ws://&lt;host&gt;:9900/ws</span> · 폴백 <span class="mono">data_log.json</span></footer>
 </div>
+
+<div class="test-frame" aria-hidden="true"></div>
 
 <dialog id="confirm-dialog" aria-labelledby="confirm-title">
   <form method="dialog">
@@ -318,6 +406,15 @@ const CANCEL_RESULT_TEXT = {
   3: '잘못된 요청입니다'
 };
 
+/** §5.4 테스트 모드 ack 의 result. 4 = 무장하지 않은 채 S/X 가 왔다(§12A.2) */
+const TEST_RESULT_TEXT = {
+  0: '적용되었습니다',
+  1: '이미 주차된 자리입니다',
+  2: '이미 예약된 자리입니다',
+  3: '잘못된 자리 또는 값입니다',
+  4: '테스트 모드가 무장되어 있지 않습니다'
+};
+
 /** §5.3 error code */
 const ERROR_TEXT = {
   device_offline: '센서가 연결되어 있지 않습니다',
@@ -338,22 +435,23 @@ const RID_MAX      = 32;   // §4.1 브라우저 rid 는 최대 32자 불투명 
    실제 경로에는 절대 섞이지 않는다.
    ──────────────────────────────────────────────────────────────── */
 
-/** docs/net/parking-protocol.md §5.3 의 스냅샷 예제 그대로 */
+/** docs/net/parking-protocol.md §5.3 의 스냅샷 예제 그대로 (v1.2 / 개정 3 형태) */
 const DEMO_SNAPSHOT = {
   type: 'snapshot',
   ts: 1755100000000,
   device: { online: true, device_id: 'P1', uptime: 3600, seq: 1234 },
+  test_mode: { armed: false, override_count: 0 },
   slots: [
-    { id: 'A1', occupied: 0, reserved: 0, user_id: null,  reserved_at: null },
-    { id: 'A2', occupied: 1, reserved: 0, user_id: null,  reserved_at: null },
-    { id: 'A3', occupied: 1, reserved: 0, user_id: null,  reserved_at: null },
-    { id: 'A4', occupied: 0, reserved: 0, user_id: null,  reserved_at: null },
-    { id: 'A5', occupied: 1, reserved: 1, user_id: 'u17', reserved_at: 1755099000000 },
-    { id: 'B1', occupied: 0, reserved: 0, user_id: null,  reserved_at: null },
-    { id: 'B2', occupied: 0, reserved: 0, user_id: null,  reserved_at: null },
-    { id: 'B3', occupied: 0, reserved: 0, user_id: null,  reserved_at: null },
-    { id: 'B4', occupied: 1, reserved: 0, user_id: null,  reserved_at: null },
-    { id: 'B5', occupied: 1, reserved: 0, user_id: null,  reserved_at: null }
+    { id: 'A1', occupied: 0, reserved: 0, user_id: null,  reserved_at: null,          overridden: 0 },
+    { id: 'A2', occupied: 1, reserved: 0, user_id: null,  reserved_at: null,          overridden: 0 },
+    { id: 'A3', occupied: 1, reserved: 0, user_id: null,  reserved_at: null,          overridden: 0 },
+    { id: 'A4', occupied: 0, reserved: 0, user_id: null,  reserved_at: null,          overridden: 0 },
+    { id: 'A5', occupied: 1, reserved: 1, user_id: 'u17', reserved_at: 1755099000000, overridden: 0 },
+    { id: 'B1', occupied: 0, reserved: 0, user_id: null,  reserved_at: null,          overridden: 0 },
+    { id: 'B2', occupied: 0, reserved: 0, user_id: null,  reserved_at: null,          overridden: 0 },
+    { id: 'B3', occupied: 0, reserved: 0, user_id: null,  reserved_at: null,          overridden: 0 },
+    { id: 'B4', occupied: 1, reserved: 0, user_id: null,  reserved_at: null,          overridden: 0 },
+    { id: 'B5', occupied: 1, reserved: 0, user_id: null,  reserved_at: null,          overridden: 0 }
   ]
 };
 
@@ -439,6 +537,16 @@ const state = {
   snapshot: null,
   /** 낙관적 UI 는 스냅샷을 건드리지 않고 별도 레이어에 쌓는다 → 롤백이 delete 한 줄. */
   pending: new Map(),            // rid -> { rid, slot, action, status, timer, settleTimer }
+
+  /**
+   * 테스트 모드 요청은 **낙관적 UI 를 쓰지 않는다**(§12A.4).
+   * 여기 담기는 것은 "보냈다"는 사실뿐이고, 무장 여부·주입 여부는 절대 여기서 읽지 않는다.
+   * 예약의 pending 과 성격이 다르다 — 그쪽은 화면을 미리 바꾸지만 이쪽은 안내 문구만 바꾼다.
+   */
+  testPending: new Map(),        // rid -> { rid, kind, slot, timer }
+  /** WS 로 마지막에 확인한 무장 상태. 파일 폴백에는 이 정보가 없어(§9.1) 그때 참고값으로만 쓴다. */
+  lastKnownArmed: null,          // true | false | null(한 번도 모름)
+  lastKnownArmedAt: 0,
   link: 'connecting',            // 'connecting' | 'ws' | 'reconnecting' | 'nows' | 'demo'
   reconnectAt: 0,
   attempt: 0,
@@ -485,13 +593,31 @@ function normalizeSnapshot(raw, source) {
       // §9.1(파일)에는 키 자체가 없다 → 둘 다 null 로 수렴시킨다.
       user_id:     (typeof s.user_id === 'string' && s.user_id.length) ? s.user_id : null,
       reserved_at: typeof s.reserved_at === 'number' ? s.reserved_at : null,
+      // §5.3 개정 3: 이 칸의 occupied 가 주입된 값인가. 파일 폴백에는 이 키가 없다.
+      overridden:  Number(s.overridden) === 1 ? 1 : 0,
       known: bySlot.has(id)
     };
   });
 
   const dev = (raw && raw.device) ? raw.device : {};
+
+  /**
+   * §12A.4 — 무장 여부의 **유일한 진실은 여기**다. 그 출처는 아두이노가 매 프레임 보내는
+   * `tmask` 이고, 서버의 기억도 브라우저의 토글 조작도 아니다.
+   * 토글을 눌렀다고 armed 로 치면, 해제 ACK 를 놓쳤을 때 "화면은 해제, 값은 계속 가짜"가 된다.
+   * 파일 폴백(§9.1)에는 이 필드 자체가 없으므로 null(모름)이다 — false 로 단정하지 않는다.
+   */
+  const tm = (raw && raw.test_mode) ? raw.test_mode : null;
+  const armed = (source === 'file') ? null : (tm ? tm.armed === true : false);
+
   return {
     source: source,
+    test_mode: {
+      armed: armed,
+      override_count: (armed === true && tm && typeof tm.override_count === 'number')
+        ? tm.override_count
+        : slots.filter(function (s) { return s.overridden === 1; }).length
+    },
     ts: typeof raw.ts === 'number' ? raw.ts : null,
     receivedAt: Date.now(),
     device: {
@@ -530,6 +656,12 @@ function snapshotFromLog(logArray) {
 function applySnapshot(raw, source) {
   const snap = normalizeSnapshot(raw, source);
   state.snapshot = snap;
+  // 무장 여부를 알 수 있는 경로(WS·데모)에서만 기록해 둔다. 폴백에서는 이 값을
+  // "마지막으로 알던 값"으로만 인용하고, 현재 상태라고 말하지 않는다.
+  if (snap.test_mode.armed !== null) {
+    state.lastKnownArmed = snap.test_mode.armed;
+    state.lastKnownArmedAt = Date.now();
+  }
   reconcilePending(snap);
   render();
 }
@@ -569,14 +701,19 @@ const el = {
   messages:    document.getElementById('messages'),
   dialog:      document.getElementById('confirm-dialog'),
   dialogTitle: document.getElementById('confirm-title'),
-  dialogBody:  document.getElementById('confirm-body')
+  dialogBody:  document.getElementById('confirm-body'),
+  testBanner:  document.getElementById('test-banner'),
+  testToggle:  document.getElementById('test-toggle'),
+  testState:   document.getElementById('test-state'),
+  testHint:    document.getElementById('test-hint')
 };
 
-const tiles = new Map();   // slotId -> { button, id, stateText, metaText }
+const tiles = new Map();   // slotId -> { button, stateText, metaText, flag, inject{set1,set0,clear} }
 
 function buildGrid() {
   for (const id of SLOT_IDS) {
     const li = document.createElement('li');
+    li.className = 'slot';
 
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -595,13 +732,47 @@ function buildGrid() {
     metaEl.className = 'tile__meta';
     metaEl.textContent = '연결 대기 중';
 
+    // 주입된 칸임을 그 칸 안에서도 말한다(§12A.6). 빗금과 함께 두 겹으로 표시한다.
+    const flagEl = document.createElement('span');
+    flagEl.className = 'tile__flag';
+    flagEl.textContent = '⚑ 주입값';
+    flagEl.hidden = true;
+
     btn.appendChild(idEl);
     btn.appendChild(stateEl);
     btn.appendChild(metaEl);
+    btn.appendChild(flagEl);
     li.appendChild(btn);
+
+    // 칸별 주입 조작 — 무장 중에만 보인다(CSS: body.is-armed .inject).
+    // 버튼 중첩은 불가하므로 타일 버튼의 형제로 둔다.
+    const inject = document.createElement('div');
+    inject.className = 'inject';
+    inject.setAttribute('role', 'group');
+    inject.setAttribute('aria-label', id + ' 센서값 주입');
+
+    const mk = (label, action, title) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.title = title;
+      b.dataset.slot = id;
+      b.dataset.inject = action;
+      inject.appendChild(b);
+      return b;
+    };
+    // 주입 대상은 occupied 뿐이다(§12A.5). reserved 를 넣는 버튼은 만들지 않는다.
+    const bFree = mk('빈자리', 'set0', id + ' 을 빈자리(occupied=0)로 주입');
+    const bOcc  = mk('주차',   'set1', id + ' 을 주차(occupied=1)로 주입');
+    const bClr  = mk('원래대로', 'clear', id + ' 의 주입을 해제하고 원래 센서값으로');
+
+    li.appendChild(inject);
     el.grid.appendChild(li);
 
-    tiles.set(id, { button: btn, stateText: stateEl, metaText: metaEl });
+    tiles.set(id, {
+      button: btn, stateText: stateEl, metaText: metaEl, flag: flagEl,
+      inject: { set0: bFree, set1: bOcc, clear: bClr }
+    });
   }
 }
 
@@ -691,9 +862,11 @@ function tileView(slot) {
 function render() {
   renderConnection();
   renderDevice();
+  renderTestMode();
 
+  const armed = isArmed();
   const slots = state.snapshot ? state.snapshot.slots : SLOT_IDS.map(function (id) {
-    return { id: id, occupied: 0, reserved: 0, user_id: null, reserved_at: null, known: false };
+    return { id: id, occupied: 0, reserved: 0, user_id: null, reserved_at: null, overridden: 0, known: false };
   });
 
   for (const slot of slots) {
@@ -707,7 +880,88 @@ function render() {
     t.button.setAttribute('aria-disabled', v.disabled ? 'true' : 'false');
     t.stateText.textContent = v.state;
     t.metaText.textContent = v.meta;
+
+    // 주입 표시 — 스냅샷의 칸별 overridden 이 유일한 근거다(§12A.6).
+    const injected = armed && slot.overridden === 1;
+    t.button.dataset.injected = injected ? '1' : '0';
+    t.flag.hidden = !injected;
+
+    // 주입 버튼: 현재 주입값과 일치하는 쪽을 눌린 상태로 보여 준다.
+    const pressed0 = injected && slot.occupied === 0;
+    const pressed1 = injected && slot.occupied === 1;
+    t.inject.set0.setAttribute('aria-pressed', pressed0 ? 'true' : 'false');
+    t.inject.set1.setAttribute('aria-pressed', pressed1 ? 'true' : 'false');
+    t.inject.clear.setAttribute('aria-disabled', injected ? 'false' : 'true');
   }
+}
+
+/** 무장 여부의 유일한 판단 지점. 스냅샷만 본다 — 토글 상태도 ACK 도 보지 않는다(§12A.4). */
+function isArmed() {
+  return !!(state.snapshot && state.snapshot.test_mode.armed === true);
+}
+
+function renderTestMode() {
+  const snap = state.snapshot;
+  const armed = isArmed();
+  const unknown = !!(snap && snap.test_mode.armed === null);
+  const count = snap ? snap.test_mode.override_count : 0;
+  const busy = state.testPending.size > 0;
+
+  document.body.classList.toggle('is-armed', armed);
+
+  // 전역 배너 — 무장 중이면 화면 어디를 봐도 걸리게 둔다.
+  if (armed) {
+    el.testBanner.hidden = false;
+    el.testBanner.textContent = '';
+    const strong = document.createElement('strong');
+    strong.textContent = '⚠ 테스트 모드 무장됨 — 지금 보이는 점유 상태는 진짜가 아닐 수 있습니다';
+    const sub = document.createElement('span');
+    sub.className = 'banner__sub';
+    sub.textContent = '주입된 칸 ' + count + '개 · 빗금 친 칸이 주입값입니다. 이 화면의 값을 실측으로 보고하지 마세요.';
+    el.testBanner.appendChild(strong);
+    el.testBanner.appendChild(sub);
+  } else if (unknown && state.lastKnownArmed === true) {
+    // 폴백에는 test_mode 가 없다(§9.1). 마지막으로 알던 값이 "무장"이면 조용히 넘어가지 않는다.
+    el.testBanner.hidden = false;
+    el.testBanner.textContent = '';
+    const strong = document.createElement('strong');
+    strong.textContent = '⚠ 테스트 모드가 켜져 있었습니다 — 지금은 확인할 수 없습니다';
+    const sub = document.createElement('span');
+    sub.className = 'banner__sub';
+    sub.textContent = '파일 폴백(data_log.json)에는 무장 여부가 담기지 않습니다. 값이 주입값일 수 있습니다.';
+    el.testBanner.appendChild(strong);
+    el.testBanner.appendChild(sub);
+  } else {
+    el.testBanner.hidden = true;
+    el.testBanner.textContent = '';
+  }
+
+  // 토글 — aria-pressed 도 스냅샷을 따른다. 누른 사실이 아니라 장치 상태를 표시하는 버튼이다.
+  el.testToggle.setAttribute('aria-pressed', armed ? 'true' : 'false');
+  el.testToggle.textContent = armed ? '테스트 모드 끄기' : '테스트 모드 켜기';
+  const canSend = canAct();
+  el.testToggle.setAttribute('aria-disabled', canSend ? 'false' : 'true');
+
+  if (unknown) {
+    el.testState.dataset.armed = '?';
+    el.testState.textContent = '알 수 없음 (파일 폴백에는 무장 여부가 없습니다)';
+  } else if (armed) {
+    el.testState.dataset.armed = '1';
+    el.testState.textContent = '무장됨 · 주입된 칸 ' + count + '개';
+  } else {
+    el.testState.dataset.armed = '0';
+    el.testState.textContent = snap ? '해제됨' : '상태 미상';
+  }
+
+  let hint = '';
+  if (busy) {
+    hint = '요청을 보냈습니다 — 확정은 다음 스냅샷의 test_mode 로 판단합니다.';
+  } else if (!canSend) {
+    hint = actionBlockedReason();
+  } else if (state.snapshot && state.snapshot.device.online === false) {
+    hint = '장치가 연결되어 있지 않아 요청이 거절될 수 있습니다 (센서 끊김은 테스트 모드로 해결되지 않습니다).';
+  }
+  el.testHint.textContent = hint;
 }
 
 function renderConnection() {
@@ -739,8 +993,11 @@ function renderConnection() {
   const staleFile = !!(state.snapshot && state.snapshot.source === 'file' && state.snapshot.ts !== null
                        && (Date.now() - state.snapshot.ts) > STALE_MS);
   if (down) {
+    // §12A.7 — 이 상태의 원인은 "칸마다 센서가 없다"가 아니라 장치가 서버에 연결되지 않은 것이다.
+    // 테스트 모드로 고쳐지지 않는다는 점을 문구에서 구분한다.
     el.offline.hidden = false;
-    el.offline.textContent = '⚠ 센서 끊김 — 아래 격자는 실시간이 아니라 마지막으로 알던 값입니다';
+    el.offline.textContent = '⚠ 센서 끊김 (장치 미연결) — 아래 격자는 실시간이 아니라 마지막으로 알던 값입니다. '
+      + '테스트 모드로는 해결되지 않습니다: 아두이노나 net/fake_arduino.py 가 서버에 붙어야 합니다.';
   } else if (staleFile) {
     el.offline.hidden = false;
     el.offline.textContent = '⚠ 센서 끊김(추정) — 파일의 마지막 기록이 오래되었습니다. 격자는 마지막으로 알던 값입니다';
@@ -893,6 +1150,70 @@ async function requestCancel(slotId) {
   transport.send({ type: 'cancel', slot: slotId, rid: rid });
 }
 
+/* ── 테스트 모드 전송 (§5.4 / §12A) ───────────────────────────────
+   여기서는 화면 상태를 **절대** 미리 바꾸지 않는다. 요청은 요청일 뿐이고
+   무장·주입의 진실은 다음 스냅샷이다(§12A.4). 예약과 다른 점이 이것이다. */
+
+const TEST_KIND_LABEL = {
+  test_arm:     '테스트 모드 켜기',
+  test_disarm:  '테스트 모드 끄기',
+  test_set:     '센서값 주입',
+  test_clear:   '주입 해제'
+};
+
+function sendTest(kind, slot, occupied) {
+  if (!canAct()) { showMessage(actionBlockedReason(), 'err'); return; }
+
+  const rid = newRid();
+  const payload = { type: kind, rid: rid };
+  if (slot) payload.slot = slot;
+  if (kind === 'test_set') payload.occupied = occupied;
+
+  state.testPending.set(rid, {
+    rid: rid, kind: kind, slot: slot || null,
+    // ACK 가 안 와도 안내 문구가 영원히 남지 않게 한다. 화면 상태는 어차피 안 바꿨으므로
+    // 되돌릴 것이 없다 — 지우는 것은 "보내는 중" 표시뿐이다.
+    timer: window.setTimeout(function () { clearTestPending(rid, true); }, ACK_TIMEOUT)
+  });
+  transport.send(payload);
+  render();
+}
+
+function clearTestPending(rid, timedOut) {
+  const p = state.testPending.get(rid);
+  if (!p) return;
+  if (p.timer) window.clearTimeout(p.timer);
+  state.testPending.delete(rid);
+  if (timedOut) {
+    showMessage((TEST_KIND_LABEL[p.kind] || '테스트 요청') + ' — 응답이 없습니다 (자체 타임아웃 '
+      + (ACK_TIMEOUT / 1000) + '초). 화면 상태는 바꾸지 않았습니다.', 'err');
+  }
+  render();
+}
+
+el.testToggle.addEventListener('click', function () {
+  if (el.testToggle.getAttribute('aria-disabled') === 'true') {
+    showMessage(actionBlockedReason(), 'info');
+    return;
+  }
+  // 현재 무장 여부는 스냅샷에서 읽는다. 토글이 자기 상태를 들고 있지 않다.
+  sendTest(isArmed() ? 'test_disarm' : 'test_arm', null, null);
+});
+
+el.grid.addEventListener('click', function (event) {
+  const btn = event.target.closest('.inject button');
+  if (!btn) return;
+  const slot = btn.dataset.slot;
+  const action = btn.dataset.inject;
+  if (btn.getAttribute('aria-disabled') === 'true') {
+    /* 타일 핸들러는 closest('.tile') 로 걸러지므로 여기서 막을 필요가 없다 */
+    showMessage(slot + ' · 주입된 값이 없어 해제할 것이 없습니다', 'info');
+    return;
+  }
+  if (action === 'clear') sendTest('test_clear', slot, null);
+  else sendTest('test_set', slot, action === 'set1' ? 1 : 0);
+});
+
 function currentSlot(slotId) {
   if (!state.snapshot) return null;
   return state.snapshot.slots.find(function (s) { return s.id === slotId; }) || null;
@@ -926,6 +1247,19 @@ function handleServerMessage(msg) {
   }
 
   if (msg.type === 'ack') {
+    // 테스트 모드 ACK — "명령이 처리됐다"일 뿐이다. 여기서 무장/주입 상태를 바꾸지 않는다(§12A.4).
+    const tp = state.testPending.get(msg.rid);
+    if (tp) {
+      const r = Number(msg.result);
+      const text = Object.prototype.hasOwnProperty.call(TEST_RESULT_TEXT, r)
+        ? TEST_RESULT_TEXT[r]
+        : (typeof msg.message === 'string' ? msg.message : '알 수 없는 응답입니다');
+      clearTestPending(tp.rid, false);
+      showMessage((tp.slot ? tp.slot + ' · ' : '') + (TEST_KIND_LABEL[tp.kind] || '테스트 요청') + ' — ' + text
+        + (r === 0 ? ' (실제 반영 여부는 다음 스냅샷으로 확인합니다)' : ''), r === 0 ? 'ok' : 'err');
+      return;
+    }
+
     const p = state.pending.get(msg.rid);
     const result = Number(msg.result);
     const table = (p && p.action === 'cancel') ? CANCEL_RESULT_TEXT : RESULT_TEXT;
@@ -952,7 +1286,12 @@ function handleServerMessage(msg) {
   if (msg.type === 'error') {
     const code = typeof msg.code === 'string' ? msg.code : '';
     const text = ERROR_TEXT[code] || (typeof msg.message === 'string' ? msg.message : '오류가 발생했습니다');
-    if (msg.rid && state.pending.has(msg.rid)) rollback(msg.rid, text);
+    if (msg.rid && state.testPending.has(msg.rid)) {
+      const tp = state.testPending.get(msg.rid);
+      clearTestPending(msg.rid, false);
+      showMessage((TEST_KIND_LABEL[tp.kind] || '테스트 요청') + ' — ' + text, 'err');
+    }
+    else if (msg.rid && state.pending.has(msg.rid)) rollback(msg.rid, text);
     else showMessage(text, 'err');
     return;
   }
@@ -1075,8 +1414,19 @@ const transport = {
       this.ws.send(JSON.stringify(payload));
       return;
     }
-    // 전송 경로가 없으면 낙관적 표시를 즉시 되돌린다.
-    if (payload && payload.rid) rollback(payload.rid, '서버에 연결되어 있지 않아 요청을 보내지 못했습니다');
+    // 전송 경로가 없으면 즉시 정리한다.
+    // 예약은 낙관적 표시를 되돌리고(rollback), 테스트 요청은 되돌릴 화면 상태가 없으므로
+    // "보내는 중" 표시만 걷는다. 여기서 testPending 을 안 걷으면 6초 뒤 자체 타임아웃이
+    // 같은 실패를 두 번 알린다.
+    if (payload && payload.rid) {
+      const failText = '서버에 연결되어 있지 않아 요청을 보내지 못했습니다';
+      if (state.testPending.has(payload.rid)) {
+        clearTestPending(payload.rid, false);
+        showMessage(failText, 'err');
+      } else {
+        rollback(payload.rid, failText);
+      }
+    }
   }
 };
 
@@ -1093,17 +1443,71 @@ function createDemoTransport() {
   let nextFailure = null;      // 다음 예약에 강제로 넣을 result
   let dropNextAck = false;
 
+  // 데모 장치가 들고 있는 테스트 모드 상태(§12A.4 의 tmask 를 흉내낸다).
+  // 이것이 스냅샷에 실려야만 화면이 무장으로 보인다 — ACK 만으로는 절대 안 보인다.
+  let armed = false;
+  let lieNextArm = false;      // ACK 는 성공인데 tmask 는 반영 안 된 상황을 재현
+  const baseOccupied = {};     // 주입 해제 시 돌아갈 원래 센서값
+  DEMO_SNAPSHOT.slots.forEach(function (s) { baseOccupied[s.id] = s.occupied; });
+
   function push() {
     seq += 1;
     handleServerMessage({
       type: 'snapshot',
       ts: Date.now(),
       device: { online: online, device_id: 'P1', uptime: 3600 + (seq - DEMO_SNAPSHOT.device.seq), seq: seq },
-      slots: slots.map(function (s) { return Object.assign({}, s); })
+      test_mode: {
+        armed: armed,
+        override_count: armed ? slots.filter(function (s) { return s.overridden === 1; }).length : 0
+      },
+      slots: slots.map(function (s) {
+        const copy = Object.assign({}, s);
+        copy.overridden = armed ? (s.overridden === 1 ? 1 : 0) : 0;
+        return copy;
+      })
     });
   }
 
   function find(id) { return slots.find(function (s) { return s.id === id; }); }
+
+  /** 테스트 명령 처리 — ACK 와 스냅샷을 분리해서 보낸다(§5.4 / §12A.4) */
+  function handleTest(payload) {
+    const s = payload.slot ? find(payload.slot) : null;
+    let result = 0;
+
+    if (payload.type === 'test_set' || payload.type === 'test_clear') {
+      if (!armed) result = 4;                                   // §12A.2 — 무장 안 됐으면 거절
+      else if (!s) result = 3;
+      else if (payload.type === 'test_set' && payload.occupied !== 0 && payload.occupied !== 1) result = 3;
+    }
+
+    handleServerMessage({
+      type: 'ack', rid: payload.rid,
+      slot: payload.slot || null, result: result, message: ''
+    });
+    if (result !== 0) return;
+
+    if (payload.type === 'test_arm') {
+      if (lieNextArm) {
+        // ACK 는 성공이라고 답했지만 장치는 무장하지 않았다.
+        // 화면이 ACK 를 믿는다면 여기서 "무장됨"으로 보일 것이다 — 보이면 안 된다.
+        lieNextArm = false;
+        showMessage('데모: 무장 ACK 는 성공으로 보냈지만 tmask 에는 반영하지 않았습니다. 화면이 무장으로 보이면 §12A.4 위반입니다.', 'info');
+        push();
+        return;
+      }
+      armed = true;
+    } else if (payload.type === 'test_disarm') {
+      // §12A.2 — 해제하면 모든 오버라이드가 한 번에 사라지고 원래 소스로 돌아간다.
+      armed = false;
+      slots.forEach(function (x) { x.overridden = 0; x.occupied = baseOccupied[x.id]; });
+    } else if (payload.type === 'test_set') {
+      s.overridden = 1; s.occupied = payload.occupied;
+    } else if (payload.type === 'test_clear') {
+      s.overridden = 0; s.occupied = baseOccupied[s.id];
+    }
+    push();
+  }
 
   return {
     start() {
@@ -1114,6 +1518,10 @@ function createDemoTransport() {
     },
 
     send(payload) {
+      if (payload.type && payload.type.indexOf('test_') === 0) {
+        window.setTimeout(function () { handleTest(payload); }, 400);
+        return;
+      }
       window.setTimeout(function () {
         const s = find(payload.slot);
         if (dropNextAck) {
@@ -1148,6 +1556,7 @@ function createDemoTransport() {
       resetSnapshot() {
         slots = DEMO_SNAPSHOT.slots.map(function (s) { return Object.assign({}, s); });
         online = true;
+        armed = false;
         state.link = 'demo';
         applySnapshot(JSON.parse(JSON.stringify(DEMO_SNAPSHOT)), 'demo');
         showMessage('§5.3 예제 스냅샷으로 되돌렸습니다', 'info');
@@ -1167,7 +1576,11 @@ function createDemoTransport() {
         showMessage('device.online=false 로 밀어 넣었습니다', 'info');
       },
       failNext() { nextFailure = 2; showMessage('데모: 다음 예약은 result=2(이미 예약됨)로 응답합니다', 'info'); },
-      dropNext() { dropNextAck = true; showMessage('데모: 다음 예약은 무응답 처리합니다', 'info'); }
+      dropNext() { dropNextAck = true; showMessage('데모: 다음 예약은 무응답 처리합니다', 'info'); },
+      lieArm() {
+        lieNextArm = true;
+        showMessage('데모: 다음 무장 요청은 ACK 만 성공으로 답하고 장치는 무장하지 않습니다. 화면이 속는지 보세요.', 'info');
+      }
     }
   };
 }
@@ -1178,7 +1591,8 @@ function buildDemoTools(tools) {
     ['§9.1 파일 폴백 경로', tools.fileFallback],
     ['센서 끊김(online=false)', tools.sensorDown],
     ['다음 예약 → 실패(result=2)', tools.failNext],
-    ['다음 예약 → 무응답', tools.dropNext]
+    ['다음 예약 → 무응답', tools.dropNext],
+    ['다음 무장 → ACK 만 성공(tmask 미반영)', tools.lieArm]
   ];
   for (const pair of buttons) {
     const b = document.createElement('button');

@@ -21,6 +21,7 @@
  */
 
 #include <SoftwareSerial.h>
+#include <avr/pgmspace.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -104,9 +105,140 @@ static void simAdvance(uint8_t i) {
   simLastChangeAt = now;
 }
 
-// ★ 실제 센서로 교체할 유일한 지점 ★
-//   예) return digitalRead(SLOT_PIN[i]) ? 1 : 0;
+// ─────────────────────────────────────────────────────────────────────────
+// 실물 센서 배선 — 핀 배정과 그 근거
+//
+// Uno 에서 쓸 수 없는 핀:
+//   D0, D1  : USB 시리얼(하드웨어 UART). 여기에 물리면 업로드·디버그 출력이 깨진다
+//   D7, D8  : SoftwareSerial 로 ESP-01 과 통신 중 (PIN_ESP_RX / PIN_ESP_TX)
+//   D13     : 온보드 LED 가 저항+LED 로 GND 쪽으로 약하게 당긴다.
+//             INPUT_PULLUP(내부 20~50kΩ)과 분압이 되어 HIGH 가 확실히 안 읽힌다.
+//             "가끔 점유로 읽히는" 최악의 고장이 되므로 처음부터 뺀다
+//   A4, A5  : Uno 의 I2C(SDA/SCL). 지금 I2C 를 안 쓰더라도 여기를 채우면
+//             나중에 I2C 장치(디스플레이 등)를 붙일 길이 막힌다. 비워 둔다
+//
+// 남는 디지털 핀은 D2~D6, D9~D12 로 **아홉 개뿐**이라 10번째 칸은 아날로그를 디지털로 쓴다.
+//   → B5 에 A0 을 배정했다. A0~A5 는 디지털 입출력으로 그대로 쓸 수 있다(A0 == 14).
+//   ⚠ 헷갈리기 쉬운 지점: 여기서 말하는 **핀 `A0`** 은 **자리 `A1`~`A5`** 와 아무 상관이 없다.
+//      자리 이름과 아날로그 핀 이름이 우연히 같은 글자를 쓴다. 자리 `A0` 은 존재하지 않는다.
+//   난수 시드는 A1 에서 뽑는다(아래 setup()). 어디에도 안 물린 핀이라 노이즈가 필요하다 —
+//   그래서 A1 은 자리에 배정하지 않았다.
+//
+// 참고: D10~D12 는 SPI(SS/MOSI/MISO)다. 지금은 안 쓰지만 SD 카드·이더넷 실드를 붙이려면
+//       그 세 칸을 다른 핀으로 옮겨야 한다. 옮길 때는 아래 표 한 줄씩만 고치면 된다.
+// ─────────────────────────────────────────────────────────────────────────
+static const uint8_t SLOT_PIN[SLOT_N] PROGMEM = {
+  2,  3,  4,  5,  6,      // 인덱스 0..4 = A1 A2 A3 A4 A5
+  9, 10, 11, 12, A0       // 인덱스 5..9 = B1 B2 B3 B4 B5   (B5 만 아날로그 핀)
+};
+static inline uint8_t slotPin(uint8_t i) { return pgm_read_byte(&SLOT_PIN[i]); }
+
+// 센서 극성. INPUT_PULLUP 을 쓰므로 "차량 감지 시 접점이 GND 로 당기는" 형식을 기본으로 본다.
+// 반대 극성 센서(감지 시 HIGH)면 이 값만 0 으로 바꾸면 된다.
+#define SENSOR_ACTIVE_LOW 1
+
+// 칸별 센서 소스. 비트 i 가 1 이면 그 칸은 실물(REAL), 0 이면 시뮬(SIM).
+// **실제 설치는 10칸이 한꺼번에 되지 않는다.** 배선이 끝난 칸만 1 로 올리면
+// 나머지는 그대로 시뮬로 돈다. 예) A1·A2·B3 만 배선했다면 → 0x0083
+//   (A1=bit0, A2=bit1, A3=bit2, A4=bit3, A5=bit4, B1=bit5 … B5=bit9)
+#ifndef SLOT_SRC_DEFAULT
+#define SLOT_SRC_DEFAULT 0x0000      // 기본: 센서가 아직 하나도 없으므로 10칸 전부 시뮬
+#endif
+static uint16_t srcReal = SLOT_SRC_DEFAULT;
+
+static uint8_t readRealSensor(uint8_t i) {
+  uint8_t raw = digitalRead(slotPin(i));
+#if SENSOR_ACTIVE_LOW
+  return (raw == LOW) ? 1 : 0;
+#else
+  return (raw == HIGH) ? 1 : 0;
+#endif
+}
+
+// 그 칸을 실물로 돌리기로 했으면 입력 모드를 잡아 준다. setup() 과 소스 변경 시에 부른다.
+static void applySlotPinMode(uint8_t i) {
+  if (srcReal & ((uint16_t)1 << i)) pinMode(slotPin(i), INPUT_PULLUP);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// 수동 오버라이드 — 칸별. 활성 소스(REAL/SIM)보다 **우선**한다.
+//
+// ⚠ 지금 이 함수들을 부르는 곳은 **아무 데도 없다. 그것이 의도다.**
+//    오버라이드를 설정하는 제어는 브라우저에서 전선(TCP)을 타고 내려올 예정이고,
+//    그건 프로토콜 개정이라 docs/net/parking-protocol.md 가 먼저 얼어야 한다(REQ-0028).
+//    여기 있는 것은 **그릇**이다 — 명세가 확정되면 수신 처리부가 이 함수들을 부르면 된다.
+//    USB 시리얼 콘솔로 만들지 않은 이유: 같은 상태를 건드리는 제어 경로가 둘이면 어긋난다(REQ-0027 정정).
+//
+// static 이 아니라 전역으로 둔 이유: 호출자가 아직 없어서 static 이면 -Wunused-function 이 뜬다.
+// 전역이면 링커의 --gc-sections 가 최종 이미지에서 빼 주므로 지금은 플래시도 먹지 않는다.
+// ─────────────────────────────────────────────────────────────────────────
+static uint16_t ovrActive = 0;   // 비트 i = 이 칸에 값을 강제하고 있다  ( = S 프레임의 tmask)
+static uint16_t ovrValue  = 0;   // 비트 i = 강제할 값 (ovrActive 가 1 일 때만 의미 있다)
+
+// 테스트 모드 무장 여부 (§12A.2). 무장 중일 때만 칸별 주입(T,...,S,..)이 먹는다.
+// **재부팅하면 해제 상태로 시작한다** — 예약(§7.4)과 정반대로 서버가 재하달하지 않는다(§12A.3).
+// 가짜 값이 재부팅 뒤 되살아나는 것이 더 위험하기 때문이다.
+static bool testArmed = false;
+
+void slotOverrideSet(uint8_t i, uint8_t value) {
+  if (i >= SLOT_N) return;
+  uint16_t bit = (uint16_t)1 << i;
+  ovrActive |= bit;
+  if (value) ovrValue |= bit; else ovrValue &= (uint16_t)~bit;
+}
+
+void slotOverrideClear(uint8_t i) {
+  if (i >= SLOT_N) return;
+  uint16_t bit = (uint16_t)1 << i;
+  ovrActive &= (uint16_t)~bit;
+  ovrValue  &= (uint16_t)~bit;
+}
+
+void slotOverrideClearAll(void) {
+  ovrActive = 0;
+  ovrValue  = 0;
+}
+
+// 칸별 소스 전환. REAL 로 바꿀 때 입력 모드까지 같이 잡는다.
+void slotSourceSet(uint8_t i, uint8_t useReal) {
+  if (i >= SLOT_N) return;
+  uint16_t bit = (uint16_t)1 << i;
+  if (useReal) { srcReal |= bit; applySlotPinMode(i); }
+  else         { srcReal &= (uint16_t)~bit; }
+}
+
+/* ── ★ 센서가 도착했을 때 무엇을 하면 되는가 (6개월 뒤에 읽을 사람에게) ★ ──────
+ * 1. 위 SLOT_PIN[] 표에서 그 칸의 핀을 확인하고, 센서 접점을 그 핀과 GND 사이에 문다.
+ *    INPUT_PULLUP 을 쓰므로 "차량이 있으면 GND 로 당긴다" 형식이면 배선은 그것으로 끝이다.
+ *    극성이 반대인 센서면 위의 SENSOR_ACTIVE_LOW 를 0 으로 바꾼다.
+ * 2. **배선을 끝낸 칸의 비트만** SLOT_SRC_DEFAULT 에 올린다(A1=bit0 … B5=bit9).
+ *    나머지 칸은 그대로 시뮬로 돈다 — 10칸을 한꺼번에 배선할 필요가 없다.
+ *    예) A1·A2·B3 세 칸만 배선했다면 `#define SLOT_SRC_DEFAULT 0x0083`.
+ * 3. 다시 올리고 시리얼 모니터(115200)의 `[TX] S,...` 줄에서 그 칸 비트를 본다.
+ *    센서를 손으로 가려 보며 해당 자리의 0/1 이 따라 바뀌면 배선이 맞은 것이다.
+ *    (자리 순서는 §1 대로 왼쪽 끝이 A1 이다.)
+ * 4. 차 없이 상태를 만들어 봐야 하면 **브라우저 화면의 테스트 모드**를 쓴다. 전선으로 T 프레임이 내려온다:
+ *      T,<rid>,A,??,-        무장 (이걸 먼저 해야 주입이 먹는다 — §12A.2)
+ *      T,<rid>,S,<slot>,<0|1>  그 칸 occupied 를 주입
+ *      T,<rid>,X,<slot>,-    그 칸만 원래 소스로
+ *      T,<rid>,D,??,-        해제 (전 칸 오버라이드가 한 번에 사라진다)
+ *    무장 중에는 S 프레임에 tmask 필드가 붙어 "이 값은 주입된 것"임을 서버·화면에 알린다.
+ *    ⚠ 벤치에서 코드로 직접 부를 거면 slotOverrideSet(i,1) 만으로는 **아무 일도 일어나지 않는다.**
+ *      testArmed 도 같이 세워야 한다 — 해제 상태에서는 주입이 적용되지 않는다(§12A.2).
+ * 5. **readSlotSensor() 본문은 고치지 마라.** 층이 이미 나뉘어 있어서 고칠 이유가 없고,
+ *    고치면 차 없이 시험할 수단을 그 순간 잃는다(이 구조를 만든 이유가 그것이다).
+ */
+
+// ★ 센서값의 단일 진입점 — 시그니처와 호출부는 바뀌지 않는다 ★
+//   우선순위: 수동 오버라이드 > 칸별 소스(실물 / 시뮬)
 uint8_t readSlotSensor(uint8_t i) {
+  // §12A.2 "무장 중일 때만 칸별 주입이 적용된다" — testArmed 를 여기서 한 번 더 본다.
+  // 실사용에서는 중복이다(T,S 가 무장 검사를 하고 T,D 가 전 칸을 지운다). 그래도 두는 이유:
+  // 해제 상태에서 주입값이 occupied 에 실리면 **tmask 가 안 붙은 채로** 전선에 나간다.
+  // 그러면 서버·화면은 그 값을 실측으로 믿는다 — §12A.6 이 막으려는 바로 그 사고다.
+  // 여기서 막으면 "해제 = 현실로 복귀"가 ClearAll 호출에 기대지 않고 구조적으로 성립한다.
+  if (testArmed && (ovrActive & ((uint16_t)1 << i))) return (uint8_t)((ovrValue >> i) & 1);
+  if (srcReal & ((uint16_t)1 << i)) return readRealSensor(i);
   simAdvance(i);
   return (uint8_t)((simOcc >> i) & 1);
 }
@@ -144,6 +276,17 @@ static int8_t cacheFind(uint16_t rid) {
   for (uint8_t k = 0; k < cacheCount; k++) if (cache[k].rid == rid) return (int8_t)k;
   return -1;
 }
+// REQ-0032 판정 (a): **새 TCP 연결이 맺어지면 캐시를 비운다.**
+// wire_rid 는 서버가 발급하고 서버 재시작 시 1부터 다시 시작한다. 아두이노는 재부팅하지 않았으므로
+// 옛 세션의 rid 가 캐시에 남아 새 서버의 1,2,3… 과 충돌하고, 최대 8개 명령이 "재수신"으로 삼켜진다.
+// 가장 나쁜 점은 result=0 이라 **성공으로 보인다**는 것이다 — 타임아웃도 오류도 안 난다.
+// 비워도 잃는 것이 없다: §7.3 재전송(1500ms·2회)은 전부 살아 있는 연결 위에서 끝나고,
+// 연결이 끊기면 §7.4 가 새 wire_rid 로 재하달한다. rid 를 가로질러 재전송이 이어지는 경로가 없다.
+static void cacheClear(void) {
+  cacheHead = 0;
+  cacheCount = 0;
+}
+
 static void cachePut(uint16_t rid, char s0, char s1, uint8_t result) {
   cache[cacheHead].rid = rid;
   cache[cacheHead].slot[0] = s0;
@@ -162,6 +305,11 @@ static unsigned long lastSendEndAt = 0;
 static uint16_t      sentOcc = 0xFFFF, sentRes = 0xFFFF;  // 아직 아무것도 안 보냈다는 표시
 static bool          changePending = false;
 static unsigned long changeAt = 0;
+
+// tmask 도 변화 감지에 넣는다(REQ-0035 ②). 실제 tmask 는 10비트뿐이라 0xFFFF 를
+// "필드 없음(=해제)" 표식으로 쓸 수 있다 — 어떤 실제 값과도 겹치지 않는다.
+static const uint16_t TMASK_ABSENT = 0xFFFF;
+static uint16_t       sentTmask = 0xFFFE;   // 실제 값·ABSENT 어느 쪽과도 다른 초기값
 
 // ─────────────────────────────────────────────────────────────────────────
 // 접속 상태 기계 (논블로킹 — loop() 를 막지 않는다)
@@ -303,15 +451,32 @@ static void bitsToStr(uint16_t mask, char* out11) {
   out11[SLOT_N] = '\0';
 }
 
+// buf[64] 인 근거 (§2.1-6 · §2.5):
+//   전선 한 줄은 LF 포함 최대 64B → 문자열은 63자 + NUL = 64. 즉 이 버퍼가 규격 상한과 정확히 같다.
+//   실제 최장은 tmask 를 실은 S 프레임이고, devid 8자 기준 61B(LF 포함) = 60자 + NUL = **61바이트**.
+//   → 여유 3바이트. 우리 devid 는 "P1"(2자)이라 실제로는 55B(LF 포함)까지만 나간다.
+//   넘칠 일은 없지만 snprintf 반환값을 검사해 넘치면 프레임을 버린다(잘린 줄을 내보내지 않는다).
 static bool sendStatus(void) {
   char buf[64];
   char occ[SLOT_N + 1], res[SLOT_N + 1];
   bitsToStr(occMask, occ);
   bitsToStr(resMask, res);
 
-  int n = snprintf(buf, sizeof(buf), "S,%u,%s,%s,%lu,%s,",
-                   (unsigned int)seqNo, occ, res,
-                   (unsigned long)(millis() / 1000UL), DEVICE_ID);
+  int n;
+  if (testArmed) {
+    // §2.4 tmask — 무장 중에만 붙는 선택 필드. 각 비트 = 그 칸의 occupied 가 주입된 값인가.
+    // occupied 에는 주입값이 이미 반영돼 있고, tmask 는 "그게 진짜인가"만 알려준다.
+    char tm[SLOT_N + 1];
+    bitsToStr(ovrActive, tm);
+    n = snprintf(buf, sizeof(buf), "S,%u,%s,%s,%lu,%s,%s,",
+                 (unsigned int)seqNo, occ, res,
+                 (unsigned long)(millis() / 1000UL), DEVICE_ID, tm);
+  } else {
+    // 해제 상태면 필드를 통째로 생략한다(옛 형식과 같다 — §2.4 "필드 없음 = 해제").
+    n = snprintf(buf, sizeof(buf), "S,%u,%s,%s,%lu,%s,",
+                 (unsigned int)seqNo, occ, res,
+                 (unsigned long)(millis() / 1000UL), DEVICE_ID);
+  }
   if (n <= 0 || (unsigned)n + 3 > sizeof(buf)) return false;
   appendChecksum(buf, (uint8_t)n);
   return sendLine(buf);
@@ -358,14 +523,67 @@ static uint8_t splitFields(char* s, char* out[], uint8_t maxF) {
   return n;
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// T — 테스트 모드 제어 (§2.4 / §12A, 개정 3). 필드: T,rid,top,slot,tval,cksum
+//   top=A 무장 · D 해제(전 칸 소멸) · S 주입 · X 그 칸만 해제
+// 결과를 (s0,s1,result) 로 돌려준다. 호출자가 ACK 를 만들고 멱등 캐시에 넣는다.
+// ─────────────────────────────────────────────────────────────────────────
+static void processTest(char* f[], char* s0, char* s1, uint8_t* result) {
+  *s0 = '?';                        // A/D 의 ACK 는 slot 이 ?? 다. 오류일 때도 ?? 다
+  *s1 = '?';
+
+  char top = f[2][0];
+  if (f[2][1] != '\0') { *result = 3; return; }          // top 은 한 글자
+
+  if (top == 'A' || top == 'D') {
+    if (top == 'A') {
+      testArmed = true;
+    } else {
+      // §12A.2 "현실로 복귀"는 하나의 동작이어야 한다 — 칸마다 따로 풀게 만들지 않는다
+      testArmed = false;
+      slotOverrideClearAll();
+    }
+    *result = 0;
+    return;
+  }
+
+  if (top != 'S' && top != 'X') { *result = 3; return; }  // 모르는 top
+
+  // 여기부터 S / X — 자리 ID 가 필요하다
+  const char* slotTok = f[3];
+  const char* tval    = f[4];
+  uint8_t idx = (strlen(slotTok) == 2) ? slotIndexOf(slotTok[0], slotTok[1]) : 0xFF;
+  if (idx == 0xFF) { *result = 3; return; }               // slot 은 ?? 로 남는다
+
+  // 값 검사를 무장 검사보다 **먼저** 한다. 깨진 프레임은 장치 상태와 무관하게 깨진 프레임이다.
+  if (top == 'S' && ((tval[0] != '0' && tval[0] != '1') || tval[1] != '\0')) {
+    *result = 3;                                          // slot 은 ?? 로 남는다 (§2.4 result=3 규칙)
+    return;
+  }
+
+  // 프레임이 성립했으므로 이제 ACK 에 그 자리를 담는다
+  *s0 = slotCol(idx);
+  *s1 = slotRow(idx);
+
+  // §12A.2 무장하지 않은 채 S/X 가 오면 조용히 무시하지 않고 result=4 로 거절한다
+  if (!testArmed) { *result = 4; return; }
+
+  if (top == 'S') slotOverrideSet(idx, (uint8_t)(tval[0] - '0'));
+  else            slotOverrideClear(idx);
+  *result = 0;
+}
+
 static void processCommand(char* cand) {
-  char*   f[6];
-  uint8_t nf = splitFields(cand, f, 6);
+  char*   f[7];
+  uint8_t nf = splitFields(cand, f, 7);
   if (nf == 0xFF) return;
 
   char type = f[0][0];
-  //  R,rid,slot,userid,cksum  (5)   /   C,rid,slot,cksum  (4)
-  uint8_t want = (type == 'R') ? 5 : 4;
+  //  R,rid,slot,userid,cksum (5) / C,rid,slot,cksum (4) / T,rid,top,slot,tval,cksum (6)
+  uint8_t want;
+  if      (type == 'R') want = 5;
+  else if (type == 'T') want = 6;
+  else                  want = 4;
 
   uint16_t rid;
   if (nf < 3 || !parseU16(f[1], &rid)) return;   // rid 를 모르면 ACK 를 만들 수 없다 → 버린다
@@ -380,12 +598,30 @@ static void processCommand(char* cand) {
     return;
   }
 
-  const char* slotTok = f[2];
-  uint8_t idx = 0xFF;
-  if (nf == want && strlen(slotTok) == 2) idx = slotIndexOf(slotTok[0], slotTok[1]);
-
   uint8_t result;
   char s0, s1;
+
+  if (nf != want) {
+    // 필드 개수가 안 맞으면 해석 불가 — 타입과 무관하게 result=3
+    s0 = '?'; s1 = '?'; result = 3;
+#if DEBUG
+    Serial.print(F("[BAD FIELDS] rid=")); Serial.println(rid);
+#endif
+    cachePut(rid, s0, s1, result);
+    sendAck(rid, s0, s1, result);
+    return;
+  }
+
+  if (type == 'T') {
+    processTest(f, &s0, &s1, &result);
+    cachePut(rid, s0, s1, result);       // §4.2 멱등은 T 에도 그대로 적용된다
+    sendAck(rid, s0, s1, result);
+    return;
+  }
+
+  // ── 여기부터 R / C ──
+  const char* slotTok = f[2];
+  uint8_t idx = (strlen(slotTok) == 2) ? slotIndexOf(slotTok[0], slotTok[1]) : 0xFF;
 
   if (idx == 0xFF) {
     // §2.4 result=3 — 잘못된 자리 ID / 해석 불가.
@@ -434,10 +670,32 @@ static void handleLine(char* s) {
 #endif
     return;
   }
-  if (strstr(s, "ALREADY CONNECT")) { netOnline = true;  return; }
-  if (strcmp(s, "CONNECT") == 0)    { netOnline = true;  return; }
+  // ── 멱등 캐시를 비우는 지점이 아래 **두 곳**이다. 중복처럼 보이지만 지우지 마라. ──────
+  //
+  // 지켜야 할 성질: 서버가 재시작하면 wire_rid 가 1부터 다시 시작하므로, 옛 세션의 rid 가
+  // 캐시에 남아 있으면 새 서버의 명령이 "재수신"으로 삼켜진다. 그것도 result=0 이라
+  // **성공으로 보인다** — 오류도 타임아웃도 안 난다(REQ-0032).
+  //
+  // 왜 CLOSED 가 주 방어선인가:
+  //   재접속은 netOnline==false 를 요구하고(netTick 첫 줄), netOnline 이 런타임에 false 가 되는
+  //   곳은 아래 CLOSED 분기 하나뿐이다. 즉 **재접속이 실제로 일어났다면 CLOSED 는 반드시
+  //   탐지된 것이다.** CLOSED 문구가 틀리면 재접속 자체가 안 되므로(= 눈에 보이는 고장)
+  //   스테일 캐시가 생길 조건이 애초에 만들어지지 않는다.
+  //
+  // 왜 CONNECT 쪽도 남기는가:
+  //   부팅 후 첫 연결은 CLOSED 를 거치지 않는다(그때 캐시는 어차피 비어 있지만 무해하다).
+  //   그리고 이중 방어다 — 한쪽 문구 가정이 깨져도 다른 쪽이 받는다.
+  //   비우는 비용은 정수 두 개를 0 으로 되돌리는 것뿐이라 중복이 손해가 아니다.
+  //
+  // 왜 ALREADY CONNECTED 에서는 비우면 안 되는가:
+  //   그건 **기존 연결이 그대로 살아 있다**는 응답이다(서버도 그대로다). netTick() 이 CIPSTART 를
+  //   5초마다 재시도하므로, 여기서 비우면 살아 있는 연결의 멱등성이 재시도마다 깨진다.
+  // ─────────────────────────────────────────────────────────────────────────
+  if (strstr(s, "ALREADY CONNECT")) { netOnline = true;  return; }   // 새 연결이 아니다 → 캐시 유지
+  if (strcmp(s, "CONNECT") == 0)    { netOnline = true;  cacheClear();  return; }
   if (strstr(s, "CLOSED")) {
     netOnline = false;
+    cacheClear();                     // ★ 주 방어선 — 위 주석 참조
     netStep = 4; netStepAt = millis(); netStepWait = 1000;   // CIPSTART 만 다시
     return;
   }
@@ -455,7 +713,8 @@ static void handleLine(char* s) {
   if (len == 0 || len > 63) return;                    // §2.1 한 줄 최대 64바이트(LF 포함)
 
   // (c) 3단계 — 타입 문자. 모르는 타입은 조용히 버린다(§2.1-7)
-  if (cand[0] != 'R' && cand[0] != 'C') return;
+  //     T 는 개정 3 에서 추가됐다. R/C 와 **같은 파서**를 탄다 — 따로 만들지 않는다(§2.4)
+  if (cand[0] != 'R' && cand[0] != 'C' && cand[0] != 'T') return;
 
   // (d) 4단계 — 체크섬. AT 잡음이 우연히 R 로 시작해도 여기서 걸린다
   if (!checksumOk(cand, len)) {
@@ -501,7 +760,13 @@ static void sensorTick(void) {
 }
 
 static void statusTick(unsigned long now) {
-  bool changed = (occMask != sentOcc) || (resMask != sentRes);
+  // §12A.4 무장 여부의 진실은 tmask 다. 그래서 tmask 변화도 occupied/reserved 와 **같은 경로**로
+  // 즉시 전송을 트리거해야 한다. 안 그러면 무장 직후 최대 1초 동안 화면이 무장 사실을 모르고,
+  // 그 사이에 주입이 들어오면 **주입값이 경고 없이 그려지는 프레임**이 생긴다(§12A.6 위반).
+  // 비용은 사실상 0 이다 — 무장·해제·주입은 사람이 누르는 드문 사건이라 전송 횟수가 늘지 않는다.
+  uint16_t tmaskNow = testArmed ? ovrActive : TMASK_ABSENT;
+
+  bool changed = (occMask != sentOcc) || (resMask != sentRes) || (tmaskNow != sentTmask);
   if (changed && !changePending) { changePending = true; changeAt = now; }
   if (!changed) changePending = false;
 
@@ -511,7 +776,7 @@ static void statusTick(unsigned long now) {
   bool debounced    = changePending && ((long)(now - changeAt) >= (long)DEBOUNCE_MS);
   if (!netOnline || !(heartbeatDue || debounced)) return;
 
-  uint16_t occSnap = occMask, resSnap = resMask;
+  uint16_t occSnap = occMask, resSnap = resMask, tmaskSnap = tmaskNow;
   bool ok = sendStatus();
 
   lastStatusAt = millis();          // §3.4 어떤 이유로든 S 를 보내면 타이머 리셋 (타이머는 하나)
@@ -519,6 +784,7 @@ static void statusTick(unsigned long now) {
     seqNo++;                        // 나가지 못한 프레임은 번호를 소비하지 않는다
     sentOcc = occSnap;
     sentRes = resSnap;
+    sentTmask = tmaskSnap;
     changePending = false;
   } else {
     changeAt = lastStatusAt + SEND_FAIL_BACKOFF_MS - DEBOUNCE_MS;   // 실패 후 재시도 간격 확보
@@ -530,7 +796,17 @@ void setup() {
   Serial.begin(115200);
   wifi.begin(9600);                 // §3.3 AT+UART_DEF 로 보율을 바꾸지 않는다
 
-  randomSeed((unsigned long)analogRead(A0) ^ micros());
+  // 시드는 A1 에서 뽑는다 — 어디에도 안 물린 핀이라야 노이즈가 나온다.
+  // (A0 은 자리 B5 의 센서 입력으로 배정했으므로 쓰면 안 된다.)
+  randomSeed((unsigned long)analogRead(A1) ^ micros());
+
+  // 실물로 지정된 칸만 입력 모드를 잡는다. 시뮬 칸의 핀은 건드리지 않는다.
+  for (uint8_t i = 0; i < SLOT_N; i++) applySlotPinMode(i);
+
+  // §12A.3 재부팅하면 테스트 오버라이드는 사라진다 — 서버가 재하달하지 않는다(예약과 정반대).
+  // 전역이라 어차피 0 이지만, "여기서 버린다"는 것을 코드로 남겨 둔다.
+  testArmed = false;
+  slotOverrideClearAll();
 
   // 시작 시 몇 칸은 차 있는 편이 주차장답다: A2, A3, B4
   simOcc = (uint16_t)((1U << 1) | (1U << 2) | (1U << 8));

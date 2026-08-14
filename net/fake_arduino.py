@@ -73,10 +73,15 @@ class FakeArduino:
         """재부팅. 명세 §7.4 가 감지해야 하는 것: seq 0 복귀, uptime 0 복귀, 예약 소실."""
         self.seq = 0
         self.boot_ts = time.time()
+        # self.occupied 는 **센서(또는 시뮬)의 원래 값**이다.
+        # 테스트 모드가 무장 중이면 self.override 가 칸별로 이 값을 가린다(§12A).
         if getattr(self.args, "start_empty", False):
             self.occupied = [0] * len(SLOTS)
         else:
             self.occupied = [random.randint(0, 1) for _ in SLOTS]
+        # 테스트 모드는 재부팅하면 사라진다 — 예약(§7.4)과 정반대다(§12A.3).
+        self.armed = False
+        self.override = [None] * len(SLOTS)   # None = 주입 없음, 0/1 = 주입값
         self.reserved = [0] * len(SLOTS)      # 재부팅하면 예약이 사라진다 — 이게 §7.4 의 이유
         self.ack_cache = []                   # [(rid, slot, result)] 최근 8건
         self.sched = []                       # [(발동시각, 자리index, occupied값)] 입출차 예약
@@ -89,10 +94,31 @@ class FakeArduino:
     def bits(self, arr):
         return "".join(str(b) for b in arr)
 
+    def eff_occupied(self):
+        """전선에 실어 보낼 occupied — 무장 중이면 주입값이 원래 값을 가린다(§12A)."""
+        out = []
+        for i in range(len(SLOTS)):
+            if self.armed and self.override[i] is not None:
+                out.append(self.override[i])
+            else:
+                out.append(self.occupied[i])
+        return out
+
+    def tmask(self):
+        """§2.4 — 해제면 '-', 무장이면 칸별 '주입됨' 비트열."""
+        if not self.armed:
+            return "-"
+        return "".join("1" if self.override[i] is not None else "0" for i in range(len(SLOTS)))
+
     def status_line(self):
-        p = "S,%d,%s,%s,%d,%s," % (
-            self.seq, self.bits(self.occupied), self.bits(self.reserved),
+        p = "S,%d,%s,%s,%d,%s" % (
+            self.seq, self.bits(self.eff_occupied()), self.bits(self.reserved),
             self.uptime(), self.args.devid)
+        # --legacy-frame 이면 tmask 를 빼고 옛 6필드 형태로 보낸다.
+        # 수신 측이 §2.1 규칙 8(선택 필드 부재 허용)을 지키는지 시험하기 위한 것이다.
+        if not self.args.legacy_frame:
+            p += "," + self.tmask()
+        p += ","
         self.seq = (self.seq + 1) & 0xFFFF
         return build(p)
 
@@ -146,6 +172,53 @@ class FakeArduino:
         self.remember(rid, slot, result)
         return (slot, result)
 
+    def handle_test(self, rid, op, slot, tval):
+        """§2.4 `T` 처리. (ack_slot, result) 반환.
+
+        무장/해제는 slot 이 "??" 이고, 주입/해제는 자리 ID 다.
+        멱등 캐시는 R/C 와 공유한다 — 재전송이 두 번 적용되면 안 되는 것은 여기도 같다.
+        """
+        hit = self.cached(rid)
+        if hit is not None:
+            say("=", "rid %s 재수신 → 멱등 캐시 적중, 재적용 없이 같은 ACK %s" % (rid, hit))
+            return hit
+
+        if op == "A":
+            self.armed = True
+            say("*", "테스트 모드 **무장**")
+            res = ("??", 0)
+        elif op == "D":
+            n = sum(1 for v in self.override if v is not None)
+            self.armed = False
+            self.override = [None] * len(SLOTS)     # 해제하면 전 칸이 한 번에 원래 소스로(§12A.2)
+            say("*", "테스트 모드 **해제** — 오버라이드 %d칸 소멸" % n)
+            res = ("??", 0)
+        elif op in ("S", "X"):
+            if slot not in SLOTS:
+                res = ("??", 3)
+            elif not self.armed:
+                # 무장하지 않았으면 조용히 무시하지 않고 명시적으로 거절한다(§12A.2)
+                say("!", "무장 안 된 상태에서 %s — result=4 로 거절" % op)
+                res = (slot, 4)
+            else:
+                i = SLOTS.index(slot)
+                if op == "S":
+                    if tval not in ("0", "1"):
+                        res = (slot, 3)
+                    else:
+                        self.override[i] = int(tval)
+                        say("*", "%s 주입 occupied=%s (원래값 %d)" % (slot, tval, self.occupied[i]))
+                        res = (slot, 0)
+                else:
+                    self.override[i] = None
+                    say("*", "%s 오버라이드 해제 → 원래값 %d 로 복귀" % (slot, self.occupied[i]))
+                    res = (slot, 0)
+        else:
+            res = ("??", 3)
+
+        self.remember(rid, res[0], res[1])
+        return res
+
     # --- 연결 -------------------------------------------------------------
     def run(self):
         while True:
@@ -161,8 +234,16 @@ class FakeArduino:
     def session(self):
         s = socket.create_connection((self.args.host, self.args.port), timeout=5)
         s.settimeout(0.2)
-        say("+", "서버 접속 %s:%d (uptime=%d, seq=%d)"
-            % (self.args.host, self.args.port, self.uptime(), self.seq))
+        # 명세 §4.2 — **새 연결에서 멱등 캐시를 비운다.**
+        # wire_rid 는 서버가 발급하고 서버가 재시작하면 1부터 다시 시작한다. 캐시를 들고 있으면
+        # 새 서버의 rid 1,2,3… 이 옛 세션의 것과 충돌해 **새 명령이 "재수신"으로 삼켜지고
+        # result=0(성공)으로 응답된다** — 실패가 성공으로 보이는 종류라 로그 없이는 못 찾는다.
+        # 비워도 잃는 보호가 없다: §7.3 재전송은 살아 있는 한 연결 안에서만 일어나고,
+        # 끊기면 §7.4 가 새 rid 로 재하달한다.
+        n = len(self.ack_cache)
+        self.ack_cache = []
+        say("+", "서버 접속 %s:%d (uptime=%d, seq=%d) · 멱등 캐시 비움(%d건)"
+            % (self.args.host, self.args.port, self.uptime(), self.seq, n))
 
         buf = bytearray()
         last_beat = 0.0
@@ -197,7 +278,8 @@ class FakeArduino:
                 next_change = now + random.uniform(3, 7)
 
             # --- 전송 규칙(§3.4): 변화 즉시 + 1Hz 하트비트, 타이머는 하나
-            bits_now = (self.bits(self.occupied), self.bits(self.reserved))
+            # 전선에 나갈 값 기준으로 변화를 본다 — 주입/무장도 즉시 한 프레임을 유발해야 한다.
+            bits_now = (self.bits(self.eff_occupied()), self.bits(self.reserved), self.tmask())
             changed = last_bits is not None and bits_now != last_bits
             if changed or now - last_beat >= self.args.interval:
                 line = self.status_line()
@@ -253,17 +335,23 @@ class FakeArduino:
             say("!", "체크섬 불일치 — 버림 (명세 §6.2)")
             return
         kind = f[0]
-        if kind not in ("R", "C"):
+        if kind not in ("R", "C", "T"):
             say("!", "모르는 타입 '%s' — 조용히 버림" % kind)
             return
         try:
             rid = f[1]
-            slot = f[2]
+            if kind == "T":
+                op, slot, tval = f[2], f[3], f[4]
+            else:
+                slot = f[2]
         except IndexError:
             say("!", "필드 부족 — 버림")
             return
 
-        slot, result = self.handle_request(kind, rid, slot)
+        if kind == "T":
+            slot, result = self.handle_test(rid, op, slot, tval)
+        else:
+            slot, result = self.handle_request(kind, rid, slot)
         ack = build("A,%s,%s,%d," % (rid, slot, result))
 
         # --- ACK 유실 (§6.3 의 결과를 재현). 예약은 이미 반영된 뒤에 버린다 —
@@ -295,6 +383,9 @@ def main():
                     help="입차 후 N초 뒤 출차시킨다. 이 출차(occupied 1→0)가 예약 은퇴를 발동시킨다")
     ap.add_argument("--start-empty", action="store_true",
                     help="모든 자리를 빈 상태로 시작(은퇴 시험 시 예약 가능한 자리 확보)")
+    ap.add_argument("--legacy-frame", action="store_true",
+                    help="tmask 없이 옛 6필드 S 프레임을 보낸다. 수신 측이 선택 필드 부재를 "
+                         "견디는지(명세 §2.1 규칙 8) 시험용")
     ap.add_argument("--seed", type=int, default=None, help="난수 시드(재현용)")
     a = ap.parse_args()
     if a.seed is not None:

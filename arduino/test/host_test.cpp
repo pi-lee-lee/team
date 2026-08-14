@@ -1,0 +1,502 @@
+// client.ino 를 호스트에서 그대로 컴파일해 돌리는 회귀 테스트.
+//
+//   빌드/실행:  bash arduino/test/run.sh      (실행 비트를 세우지 않았으므로 bash 로 부른다)
+//
+// 왜: 이 프로젝트에는 아두이노 보드가 없다. 그런데 client.ino 에는 상태 기계,
+// 줄 파서, 멱등 캐시, 3중 센서 소스가 들어 있어 "읽어서 확인"만으로는 회귀를 못 잡는다.
+// (실제로 백오프 언더플로 버그를 읽기로만 잡았는데, 그건 운이 좋았던 것이다.)
+//
+// ⚠ 이 테스트가 검증하지 않는 것:
+//   - 타이밍. millis() 는 호출마다 1ms 씩 흐르는 가짜 시계다(스핀 루프를 끝내기 위해).
+//     "1Hz 하트비트"가 정확히 1000ms 인지는 여기서 확인되지 않는다.
+//   - 실기 하드웨어. SoftwareSerial 의 송신 중 수신 유실(§6.3), ESP-01 의 실제 AT 응답
+//     문구와 지연, 전기적 문제는 보드에서만 드러난다.
+//   검증하는 것은 **무엇이 어떤 순서로 일어나는가**와 **전선에 나가는 바이트**다.
+
+#include "Arduino.h"
+#include "SoftwareSerial.h"
+
+#include <string>
+#include <vector>
+#include <cstdio>
+
+// ── 스텁 전역 실체 ──────────────────────────────────────────────────────
+unsigned long g_millis = 0;
+bool          g_clockAutoAdvance = true;
+uint8_t       g_pinLevel[24];
+uint8_t       g_pinMode[24];
+HostSerial    Serial;
+
+// 스케치를 통째로 끌어온다. static 들까지 같은 TU 에 들어와 직접 들여다볼 수 있다.
+#include "../../조별과제샘플/client.ino"
+
+// ── 테스트 유틸 ────────────────────────────────────────────────────────
+static int g_pass = 0, g_fail = 0;
+
+static void ok(bool cond, const std::string& what) {
+  if (cond) { g_pass++; printf("  PASS  %s\n", what.c_str()); }
+  else      { g_fail++; printf("  FAIL  %s\n", what.c_str()); }
+}
+
+static void spin(int iterations) {
+  for (int i = 0; i < iterations; i++) loop();
+}
+
+// 가짜 시계는 loop() 한 번에 10ms 남짓 흐른다(millis() 호출 횟수에 비례).
+// 접속 상태 기계는 CWJAP 대기만 9초라 넉넉히 돌려야 한다 — 고정 횟수 대신 조건으로 기다린다.
+static bool spinUntilOnline(int maxIter) {
+  for (int i = 0; i < maxIter && !netOnline; i++) loop();
+  return netOnline;
+}
+
+// 마지막으로 전선에 나간 S 프레임
+static std::string lastStatus() {
+  for (int i = (int)wifi.sentLines.size() - 1; i >= 0; i--)
+    if (!wifi.sentLines[i].empty() && wifi.sentLines[i][0] == 'S') return wifi.sentLines[i];
+  return "";
+}
+static std::string lastAck() {
+  for (int i = (int)wifi.sentLines.size() - 1; i >= 0; i--)
+    if (!wifi.sentLines[i].empty() && wifi.sentLines[i][0] == 'A') return wifi.sentLines[i];
+  return "";
+}
+
+// S 프레임의 occupied 비트열(3번째 필드)을 꺼낸다
+static std::string occField(const std::string& s) {
+  size_t a = s.find(','); if (a == std::string::npos) return "";
+  size_t b = s.find(',', a + 1); if (b == std::string::npos) return "";
+  size_t c = s.find(',', b + 1); if (c == std::string::npos) return "";
+  return s.substr(b + 1, c - b - 1);
+}
+
+// 명세 §2.2 체크섬을 테스트 쪽에서 **독립적으로** 다시 계산한다
+static std::string xorCk(const std::string& prefix) {
+  unsigned x = 0;
+  for (unsigned char ch : prefix) x ^= ch;
+  char b[4]; snprintf(b, sizeof b, "%02X", x & 0xFF);
+  return b;
+}
+static bool checksumSelfConsistent(const std::string& line) {
+  size_t cut = line.rfind(',');
+  if (cut == std::string::npos) return false;
+  return xorCk(line.substr(0, cut + 1)) == line.substr(cut + 1);
+}
+
+// 그 칸의 시뮬 값을 0 으로 고정한다 — simAdvance 가 다시 건드리지 못하게 마감을 멀리 민다.
+// 이걸 안 하면 "오버라이드로 1 이 됐다"와 "시뮬이 마침 1 이었다"를 구별할 수 없다.
+static void pinSimLow(uint8_t i) {
+  simOcc &= (uint16_t)~((uint16_t)1 << i);
+  simNextAt[i] = g_millis + 10000000UL;
+}
+
+static std::vector<std::string> splitLine(const std::string& s) {
+  std::vector<std::string> out;
+  size_t start = 0;
+  for (size_t i = 0; i <= s.size(); i++) {
+    if (i == s.size() || s[i] == ',') { out.push_back(s.substr(start, i - start)); start = i + 1; }
+  }
+  return out;
+}
+
+// S 프레임의 tmask. 필드가 없으면 "" 를 돌려준다(= 테스트 모드 해제).
+//   있음: S,seq,occ,res,uptime,devid,tmask,cksum  (8필드)
+//   없음: S,seq,occ,res,uptime,devid,cksum        (7필드)
+static std::string tmaskField(const std::string& s) {
+  std::vector<std::string> f = splitLine(s);
+  return (f.size() == 8) ? f[6] : "";
+}
+
+// 모든 칸의 시뮬을 얼린다 — 시뮬이 제멋대로 바뀌면 "무엇이 전송을 촉발했는가"를 가릴 수 없다.
+static void freezeAllSims() {
+  for (uint8_t i = 0; i < SLOT_N; i++) pinSimLow(i);
+}
+
+// 하트비트가 **막 나간 직후**로 정렬한다. lastStatusAt 은 전송할 때마다 리셋되므로,
+// S 가 하나 나오는 순간까지 돌리면 다음 하트비트까지 꼬박 1000ms 가 남는다.
+// 이게 없으면 관측 창을 열었을 때 하트비트까지 얼마 남았는지가 임의라,
+// 하필 창 안에서 하트비트가 터지면 "즉시 전송 덕분에 나갔다"고 **잘못 통과**한다.
+static bool alignToHeartbeat(int maxIter = 4000);
+
+static size_t countStatusLines() {
+  size_t n = 0;
+  for (const std::string& l : wifi.sentLines) if (!l.empty() && l[0] == 'S') n++;
+  return n;
+}
+
+static bool alignToHeartbeat(int maxIter) {
+  size_t n0 = countStatusLines();
+  for (int i = 0; i < maxIter; i++) {
+    loop();
+    if (countStatusLines() != n0) return true;
+  }
+  return false;
+}
+
+static void deliverIPD(const std::string& payload) {
+  char hdr[32];
+  snprintf(hdr, sizeof hdr, "+IPD,%u:", (unsigned)(payload.size() + 1));
+  wifi.deliver(std::string(hdr) + payload + "\n");
+}
+
+// ── 시나리오 ────────────────────────────────────────────────────────────
+int main() {
+  for (int i = 0; i < 24; i++) { g_pinLevel[i] = HIGH; g_pinMode[i] = INPUT; }
+  Serial.echoToStdout = false;          // 스케치의 디버그 출력은 삼킨다
+
+  printf("\n=== client.ino 호스트 회귀 테스트 ===\n");
+
+  setup();
+  bool online = spinUntilOnline(20000);  // AT+RST~CWJAP~CIPSTART 가 다 지나야 한다
+  spin(400);
+
+  printf("\n[1] 접속과 상태 프레임\n");
+  printf("        가상시각 %lums 에 접속 성립\n", g_millis);
+  ok(online, "CONNECT 를 받아 netOnline 이 켜진다");
+  ok(!lastStatus().empty(), "S 프레임이 전선에 나갔다");
+  ok(checksumSelfConsistent(lastStatus()),
+     "S 프레임 체크섬이 독립 계산과 일치: " + lastStatus());
+
+  printf("\n[2] ★ 칸별 오버라이드가 다음 S 프레임에 반영되는가 (완료기준 핵심)\n");
+  slotOverrideClearAll();
+  // §12A.2 주입은 무장 중에만 적용된다. [2]~[9] 는 오버라이드 층 자체를 보는 시험이라
+  // 무장 상태로 둔다(실사용에서는 T,A 가 켠다). 해제 상태의 거동은 [11] 에서 따로 본다.
+  testArmed = true;
+  // ⚠ 밑에 깔린 소스를 **0 으로 못 박고** 나서 1 을 강제해야 의미가 있다.
+  //    가상 시계가 빨리 흘러 시뮬이 거의 모든 칸을 채워 두므로, 그냥 1 을 강제하면
+  //    오버라이드가 no-op 이어도 시뮬 때문에 1 이 읽혀 테스트가 통과해 버린다.
+  pinSimLow(2);
+  spin(200);
+  ok(occField(lastStatus())[2] == '0', "먼저: 오버라이드 없이 A3 는 0 이다 (밑바닥 확인)");
+  slotOverrideSet(2, 1);                // A3 = 인덱스 2 를 강제 점유
+  spin(400);
+  std::string s1 = lastStatus();
+  std::string occ1 = occField(s1);
+  printf("        S = %s   (occupied=%s)\n", s1.c_str(), occ1.c_str());
+  ok(occ1.size() == 10 && occ1[2] == '1', "A3(인덱스 2) 강제 점유 → occupied 비트 2 가 1");
+  ok(checksumSelfConsistent(s1), "그 S 프레임의 체크섬도 맞다");
+
+  slotOverrideSet(2, 0);                // 같은 칸을 강제 '비움' 으로
+  spin(400);
+  std::string occ2 = occField(lastStatus());
+  printf("        S = %s   (occupied=%s)\n", lastStatus().c_str(), occ2.c_str());
+  ok(occ2.size() == 10 && occ2[2] == '0', "A3 강제 해제(0) → occupied 비트 2 가 0");
+
+  printf("\n[3] 오버라이드는 칸별이다 — 다른 칸은 영향받지 않는다\n");
+  slotOverrideClearAll();
+  pinSimLow(8);                         // B4 — 이웃. 오버라이드를 걸지 않는다
+  pinSimLow(9);                         // B5 — 여기만 강제한다
+  spin(200);
+  std::string occPre = occField(lastStatus());
+  ok(occPre[8] == '0' && occPre[9] == '0', "먼저: B4·B5 둘 다 0 이다 (밑바닥 확인)");
+  slotOverrideSet(9, 1);                // B5 = 인덱스 9 만
+  spin(400);
+  std::string occ3 = occField(lastStatus());
+  printf("        occupied=%s   (B4=%c, B5=%c)\n", occ3.c_str(), occ3[8], occ3[9]);
+  ok(occ3.size() == 10 && occ3[9] == '1', "B5(인덱스 9) 가 1 로 강제된다");
+  ok(occ3.size() == 10 && occ3[8] == '0', "옆칸 B4(인덱스 8) 는 0 그대로다 — 칸별이다");
+
+  printf("\n[4] 소스 REAL — 핀을 LOW 로 당기면 점유로 읽힌다 (SENSOR_ACTIVE_LOW)\n");
+  slotOverrideClearAll();
+  slotSourceSet(0, 1);                              // A1 을 실물 소스로
+  ok(g_pinMode[slotPin(0)] == INPUT_PULLUP, "A1 의 핀이 INPUT_PULLUP 으로 잡힌다");
+  g_pinLevel[slotPin(0)] = LOW;                     // 차량 있음
+  spin(400);
+  std::string occ4 = occField(lastStatus());
+  printf("        A1 핀=%u LOW → occupied=%s\n", (unsigned)slotPin(0), occ4.c_str());
+  ok(occ4.size() == 10 && occ4[0] == '1', "실물 소스가 LOW 를 점유(1)로 읽는다");
+
+  g_pinLevel[slotPin(0)] = HIGH;                    // 차량 없음
+  spin(400);
+  std::string occ5 = occField(lastStatus());
+  ok(occ5.size() == 10 && occ5[0] == '0', "HIGH 는 비어 있음(0)으로 읽는다");
+
+  printf("\n[5] 우선순위 — 오버라이드가 실물 소스를 이긴다\n");
+  g_pinLevel[slotPin(0)] = HIGH;                    // 실물은 '비어 있음'
+  slotOverrideSet(0, 1);                            // 그런데 강제로 점유
+  spin(400);
+  std::string occ6 = occField(lastStatus());
+  printf("        실물=HIGH(0) 인데 오버라이드=1 → occupied=%s\n", occ6.c_str());
+  ok(occ6.size() == 10 && occ6[0] == '1', "오버라이드가 실물보다 우선한다");
+
+  slotOverrideClear(0);                             // 오버라이드만 풀면 실물로 복귀
+  spin(400);
+  std::string occ7 = occField(lastStatus());
+  ok(occ7.size() == 10 && occ7[0] == '0', "오버라이드 해제 → 실물 값(0)으로 복귀");
+  slotSourceSet(0, 0);
+
+  printf("\n[6] 수신 경로 — +IPD → 예약 → ACK (명세 §6.2 / §8.1)\n");
+  slotOverrideClearAll();
+  // B3(인덱스 7) 를 **비어 있는 상태로 고정**한다. 시뮬이 마침 그 칸에 차를 넣어 두면
+  // 명세 §2.4 대로 result=1(이미 점유) 이 나오는 것이 정답이라 예약 성공 경로를 못 본다.
+  slotOverrideSet(7, 0);
+  spin(200);
+  size_t before = wifi.sentLines.size();
+  deliverIPD("R,42,B3,u17,56");                     // 명세 §8.1 의 그 줄
+  spin(200);
+  std::string ack = lastAck();
+  printf("        ACK = %s\n", ack.c_str());
+  ok(ack == "A,42,B3,0,06", "R,42,B3,u17,56 → A,42,B3,0,06 (명세 §8.1 과 바이트 일치)");
+  ok((resMask & (1u << 7)) != 0, "B3(인덱스 7) 의 reserved 비트가 켜졌다");
+  (void)before;
+
+  printf("\n[7] rid 멱등 — 같은 rid 재수신 시 재적용 없이 같은 ACK (§4.2)\n");
+  uint16_t resBefore = resMask;
+  deliverIPD("R,42,B3,u17,56");                     // 똑같은 줄을 한 번 더
+  spin(200);
+  ok(lastAck() == "A,42,B3,0,06", "같은 ACK 를 그대로 다시 낸다");
+  ok(resMask == resBefore, "상태를 다시 적용하지 않는다");
+
+  printf("\n[8] 체크섬이 틀린 줄은 버린다 (§2.2 / §6.2 4단계)\n");
+  std::string ackBefore = lastAck();
+  deliverIPD("R,77,A4,u1,00");                      // 00 은 틀린 체크섬
+  spin(200);
+  ok(lastAck() == ackBefore, "체크섬 불일치 줄은 ACK 를 만들지 않는다");
+
+  // 문자열 안의 ??' 는 트라이그래프로 해석되므로 물음표 하나를 escape 한다
+  printf("\n[9] 잘못된 자리 ID → slot='?\?', ACK 생략 없음 (REQ-0020 ②)\n");
+  deliverIPD(std::string("C,55,ZZ,") + xorCk("C,55,ZZ,"));
+  spin(200);
+  printf("        ACK = %s\n", lastAck().c_str());
+  ok(lastAck().find(",??,3,") != std::string::npos, "slot 이 ?? 이고 result=3 인 ACK 가 나간다");
+  ok(checksumSelfConsistent(lastAck()), "그 ACK 의 체크섬도 맞다");
+
+  printf("\n[10] 명세 §2.5 의 T/tmask 공표 예제를 내 체크섬 계산이 재현하는가\n");
+  {
+    const char* spec[][1] = {
+      {"T,50,A,??,-,11"}, {"T,51,D,??,-,15"}, {"T,52,S,A3,1,6F"}, {"T,54,X,A3,-,7E"},
+      {"A,50,??,0,74"},   {"A,52,A3,0,04"},   {"A,52,A3,4,00"},
+      {"S,1236,0110100011,0000100000,3602,P1,-,32"},
+      {"S,1234,0110100011,0000100000,3600,P1,0000000000,1F"},
+      {"S,65535,1111111111,1111111111,4294967,DEVICE12,1111111111,67"},
+    };
+    int mism = 0;
+    for (auto& row : spec) {
+      std::string l = row[0];
+      if (!checksumSelfConsistent(l)) { printf("        MISMATCH %s\n", l.c_str()); mism++; }
+    }
+    ok(mism == 0, "명세의 T/ACK/tmask 예제 10줄 전부 체크섬 일치");
+    // 최장 S 프레임(devid 8자, tmask 포함)이 규격 상한 안에 있는지
+    std::string longest = "S,65535,1111111111,1111111111,4294967,DEVICE12,1111111111,67";
+    printf("        최장 S = %zu바이트(LF 포함) / 상한 64\n", longest.size() + 1);
+    ok(longest.size() + 1 == 61, "최장 S 프레임은 61B — 송신 버퍼 char buf[64] 안에 들어간다");
+  }
+
+  printf("\n[11] 해제 상태 — 주입은 적용되지 않고 S/X 는 result=4 로 거절된다 (§12A.2)\n");
+  // 실사용의 해제 상태를 재현한다: T,D 가 무장을 끄고 전 칸 오버라이드를 지운다.
+  testArmed = false;
+  slotOverrideClearAll();
+  spin(200);
+  ok(!testArmed, "해제 상태다 (부팅 직후도 이 상태 — §12A.3)");
+  ok(tmaskField(lastStatus()).empty(), "해제 중 S 에는 tmask 필드가 없다");
+
+  // ★ 안전 방향: 해제 중에는 오버라이드가 남아 있어도 occupied 에 실리면 안 된다.
+  //   실리면 tmask 없이 가짜 값이 전선에 나가고, 화면은 그걸 실측으로 믿는다(§12A.6).
+  pinSimLow(4);                                        // A5 밑바닥 0
+  slotOverrideSet(4, 1);                               // 해제 중인데 강제로 1
+  spin(300);
+  printf("        해제 중 오버라이드 → occupied=%s  tmask=%s\n",
+         occField(lastStatus()).c_str(), tmaskField(lastStatus()).c_str());
+  ok(occField(lastStatus())[4] == '0', "해제 중 오버라이드는 occupied 에 실리지 않는다");
+  ok(tmaskField(lastStatus()).empty(), "그리고 tmask 도 여전히 없다");
+  slotOverrideClearAll();
+
+  std::string t60 = std::string("T,60,S,A3,1,") + xorCk("T,60,S,A3,1,");
+  deliverIPD(t60);
+  spin(200);
+  printf("        ACK = %s\n", lastAck().c_str());
+  ok(lastAck() == std::string("A,60,A3,4,") + xorCk("A,60,A3,4,"),
+     "무장 전 주입 → result=4 (" + lastAck() + ")");
+  ok(lastAck()[lastAck().size() - 3 - 1] == '4', "result 자리가 실제로 4 다");
+  ok(!testArmed, "거절됐으므로 여전히 해제 상태");
+
+  printf("\n[12] T 무장 → tmask 가 S 에 실린다\n");
+  deliverIPD("T,50,A,??,-,11");                       // 명세 §2.5 의 그 줄
+  spin(300);
+  printf("        ACK = %s\n", lastAck().c_str());
+  ok(lastAck() == "A,50,??,0,74", "무장 ACK 가 명세의 A,50,??,0,74 와 바이트 일치");
+  ok(testArmed, "무장 상태가 됐다");
+  printf("        S = %s\n", lastStatus().c_str());
+  ok(tmaskField(lastStatus()) == "0000000000", "무장 직후 tmask = 0000000000 (주입된 칸 없음)");
+
+  printf("\n[13] T 주입 — occupied 와 tmask 가 함께 바뀐다\n");
+  pinSimLow(2);                                        // A3 밑바닥을 0 으로 못 박는다
+  spin(200);
+  ok(occField(lastStatus())[2] == '0', "먼저: A3 는 0 이다 (밑바닥 확인)");
+  deliverIPD("T,52,S,A3,1,6F");                        // 명세 §2.5 의 그 줄
+  spin(300);
+  printf("        ACK = %s\n", lastAck().c_str());
+  printf("        S   = %s\n", lastStatus().c_str());
+  ok(lastAck() == "A,52,A3,0,04", "주입 ACK 가 명세의 A,52,A3,0,04 와 바이트 일치");
+  ok(occField(lastStatus())[2] == '1', "occupied 비트 2 가 1 (주입값이 이미 반영돼 있다)");
+  ok(tmaskField(lastStatus())[2] == '1', "tmask 비트 2 가 1 (그 값이 주입된 것임을 알린다)");
+  ok(tmaskField(lastStatus())[3] == '0', "건드리지 않은 A4 의 tmask 비트는 0");
+
+  printf("\n[14] T 멱등 — 같은 rid 재수신 시 재적용 없이 같은 ACK (§4.2)\n");
+  slotOverrideSet(3, 1);                               // 캐시 적중이면 이 값이 살아남아야 한다
+  spin(200);
+  uint16_t ovrBefore = ovrActive;
+  deliverIPD("T,52,S,A3,1,6F");                        // 같은 rid 52 를 한 번 더
+  spin(200);
+  ok(lastAck() == "A,52,A3,0,04", "같은 ACK 를 그대로 다시 낸다");
+  ok(ovrActive == ovrBefore, "상태를 다시 적용하지 않는다");
+
+  printf("\n[15] T,X — 그 칸만 원래 소스로 (§12A.2)\n");
+  deliverIPD("T,54,X,A3,-,7E");                        // 명세 §2.5 의 그 줄
+  spin(300);
+  printf("        ACK = %s   tmask=%s\n", lastAck().c_str(), tmaskField(lastStatus()).c_str());
+  ok(lastAck() == "A,54,A3,0,02", "X 의 ACK 는 그 자리를 담는다");
+  ok(tmaskField(lastStatus())[2] == '0', "A3 의 tmask 비트가 내려간다");
+  ok(tmaskField(lastStatus())[3] == '1', "다른 칸(A4) 오버라이드는 살아 있다 — 칸별이다");
+
+  printf("\n[16] T,D 해제 — 전 칸 오버라이드 소멸 + tmask 필드 자체가 사라진다\n");
+  deliverIPD("T,51,D,??,-,15");                        // 명세 §2.5 의 그 줄
+  spin(300);
+  printf("        ACK = %s\n", lastAck().c_str());
+  printf("        S   = %s\n", lastStatus().c_str());
+  ok(lastAck() == "A,51,??,0,75", "해제 ACK 는 slot 이 ?? 다");
+  ok(!testArmed, "해제 상태가 됐다");
+  ok(ovrActive == 0, "전 칸 오버라이드가 한 번에 사라졌다 (§12A.2)");
+  ok(tmaskField(lastStatus()).empty(), "해제되면 S 에서 tmask 필드가 통째로 빠진다(옛 형식)");
+
+  printf("\n[17] ★ tmask 가 바뀌면 하트비트를 기다리지 않고 즉시 나간다 (REQ-0035 ②)\n");
+  {
+    // 시뮬을 전부 얼려 occupied 가 스스로 바뀌지 못하게 한다 —
+    // 안 그러면 "시뮬이 바꿔서 나간 S" 를 "tmask 때문에 나간 S" 로 오독한다.
+    freezeAllSims();
+    testArmed = false;
+    slotOverrideClearAll();
+    spin(400);
+    // ★ 하트비트 직후로 정렬한다. 임의 지점에서 창을 열면 하트비트가 창 안에 들어와
+    //   즉시 전송이 없어도 통과해 버린다 — 그러면 이 시험은 아무것도 증명하지 않는다.
+    ok(alignToHeartbeat(), "하트비트 직후로 정렬했다 (다음 하트비트까지 ~1000ms 남는다)");
+
+    size_t sBefore  = countStatusLines();
+    unsigned long t0 = g_millis;
+    deliverIPD("T,70,A,??,-," + xorCk("T,70,A,??,-,"));   // 무장만. 주입은 없다
+    spin(30);                                   // 하트비트(1000ms) 보다 훨씬 짧게만 돌린다
+    unsigned long elapsed = g_millis - t0;
+    size_t sAfter = countStatusLines();
+
+    printf("        경과 %lums 동안 S 프레임 %zu개 추가, 마지막 tmask=\"%s\"\n",
+           elapsed, sAfter - sBefore, tmaskField(lastStatus()).c_str());
+    ok(elapsed < 1000, "관측 구간이 하트비트 주기보다 짧다 (즉시 전송이 아니면 못 나간다)");
+    ok(sAfter > sBefore, "무장만 했는데도 그 구간 안에 S 가 나갔다");
+    ok(tmaskField(lastStatus()) == "0000000000", "그 S 에 tmask 가 실려 있다");
+
+    // 해제도 같은 경로여야 한다 — occupied 는 하나도 안 바뀌는데 tmask 필드가 사라져야 한다
+    ok(alignToHeartbeat(), "해제 시험도 하트비트 직후로 정렬했다");
+    sBefore = countStatusLines();
+    t0 = g_millis;
+    deliverIPD("T,71,D,??,-," + xorCk("T,71,D,??,-,"));
+    spin(30);
+    printf("        해제: 경과 %lums, S %zu개 추가, tmask=\"%s\"\n",
+           g_millis - t0, countStatusLines() - sBefore, tmaskField(lastStatus()).c_str());
+    ok(g_millis - t0 < 1000 && countStatusLines() > sBefore, "해제도 즉시 전송된다");
+    ok(tmaskField(lastStatus()).empty(), "그 S 에서 tmask 필드가 빠져 있다");
+  }
+
+  printf("\n[18] ★ 새 TCP 연결에서 멱등 캐시가 비워진다 (REQ-0035 ① / REQ-0032 판정 a)\n");
+  {
+    // ⚠ rid 는 반드시 새 값을 써야 한다. 앞에서 쓴 rid(50 등)를 재사용하면 멱등 캐시가
+    //    정상 동작해서 무장 명령 자체가 삼켜진다 — 실제로 처음에 그렇게 짜서 5건이 실패했다.
+    deliverIPD("T,80,A,??,-," + xorCk("T,80,A,??,-,"));   // 다시 무장 (새 rid)
+    spin(200);
+    ok(testArmed, "rid 80 으로 무장됐다 (사전 조건)");
+    // rid 90 으로 A3 주입 → 캐시에 (90, A3, 0) 이 남는다
+    deliverIPD("T,90,S,A3,1," + xorCk("T,90,S,A3,1,"));
+    spin(200);
+    printf("        1) rid 90 최초    ACK = %s\n", lastAck().c_str());
+    ok(lastAck() == "A,90,A3,0," + xorCk("A,90,A3,0,"), "rid 90 이 A3 로 처리됐다");
+
+    // 같은 연결 안에서 같은 rid 로 **다른 명령**이 와도 캐시가 이긴다(= 재전송으로 본다)
+    deliverIPD("T,90,S,B2,1," + xorCk("T,90,S,B2,1,"));
+    spin(200);
+    printf("        2) 같은 연결 재전송 ACK = %s\n", lastAck().c_str());
+    ok(lastAck() == "A,90,A3,0," + xorCk("A,90,A3,0,"),
+       "같은 연결에서는 여전히 멱등 — 옛 ACK(A3)가 그대로 나온다 (완료기준 2)");
+
+    // 이제 새 TCP 연결이 맺어졌다고 알린다 (ESP-01 이 CONNECT 를 올린다)
+    wifi.deliver("CONNECT\r\n");
+    spin(50);
+    deliverIPD("T,90,S,B2,1," + xorCk("T,90,S,B2,1,"));
+    spin(200);
+    printf("        3) 새 연결 후      ACK = %s\n", lastAck().c_str());
+    ok(lastAck() == "A,90,B2,0," + xorCk("A,90,B2,0,"),
+       "새 연결 뒤에는 같은 rid 가 새 명령으로 처리된다 — B2 ACK 가 나온다 (완료기준 1)");
+    ok(tmaskField(lastStatus())[6] == '1', "실제로 B2(인덱스 6)에 주입이 적용됐다");
+
+    // ALREADY CONNECTED 는 새 연결이 아니다 → 캐시를 비우면 안 된다
+    deliverIPD("T,91,S,A4,1," + xorCk("T,91,S,A4,1,"));
+    spin(200);
+    wifi.deliver("ALREADY CONNECTED\r\n");
+    spin(50);
+    deliverIPD("T,91,S,B1,1," + xorCk("T,91,S,B1,1,"));
+    spin(200);
+    printf("        4) ALREADY CONNECTED 후 ACK = %s\n", lastAck().c_str());
+    ok(lastAck() == "A,91,A4,0," + xorCk("A,91,A4,0,"),
+       "ALREADY CONNECTED 로는 캐시가 비워지지 않는다 (기존 연결이 살아 있다)");
+  }
+
+  printf("\n[19] ★ CLOSED 만으로도 캐시가 비워진다 — CONNECT 문구에 기대지 않는다 (REQ-0036)\n");
+  {
+    // 사전 조건: 무장 + rid 를 하나 소비해 캐시에 넣는다
+    deliverIPD("T,100,A,??,-," + xorCk("T,100,A,??,-,"));
+    spin(200);
+    ok(testArmed, "rid 100 으로 무장됐다 (사전 조건)");
+    deliverIPD("T,101,S,A5,1," + xorCk("T,101,S,A5,1,"));
+    spin(200);
+    ok(lastAck() == "A,101,A5,0," + xorCk("A,101,A5,0,"), "rid 101 이 A5 로 처리됐다");
+
+    // 같은 연결에서는 캐시가 이긴다 (회귀 — 완료기준 3 의 짝)
+    deliverIPD("T,101,S,B4,1," + xorCk("T,101,S,B4,1,"));
+    spin(200);
+    ok(lastAck() == "A,101,A5,0," + xorCk("A,101,A5,0,"), "같은 연결에서는 여전히 멱등");
+
+    // ★ CLOSED 만 준다. CONNECT 는 **일부러 주지 않는다.**
+    //   가짜 ESP 는 CIPSTART 에 CONNECT 를 붙여 주므로, netTick 이 재시도하기 전에
+    //   바로 같은 rid 를 밀어 넣어 "CLOSED 하나만으로 비워졌는가"를 본다.
+    wifi.deliver("CLOSED\r\n");
+    spin(3);
+    ok(!netOnline, "CLOSED 로 오프라인이 됐다");
+    ok(cacheCount == 0, "CLOSED 시점에 이미 캐시가 비어 있다 — CONNECT 를 기다리지 않았다");
+  }
+
+  printf("\n[20] CLOSED→재접속 후 같은 rid 가 새 명령으로 처리된다\n");
+  {
+    // 가짜 ESP 가 CIPSTART 에 CONNECT 를 돌려주므로 재접속은 저절로 된다
+    ok(spinUntilOnline(20000), "재접속됐다");
+    // 재부팅이 아니라 재접속이므로 무장 상태는 스케치 안에서 유지된다(§12A.3 은 재부팅 이야기다)
+    deliverIPD("T,101,S,B4,1," + xorCk("T,101,S,B4,1,"));
+    spin(300);
+    printf("        재접속 후 rid 101 ACK = %s\n", lastAck().c_str());
+    ok(lastAck() == "A,101,B4,0," + xorCk("A,101,B4,0,"),
+       "같은 rid 101 이 새 명령(B4)으로 처리된다 — 캐시가 비워졌다");
+  }
+
+  printf("\n[21] ALREADY CONNECTED 로는 여전히 안 비워진다 (회귀 — 살아 있는 연결의 멱등성)\n");
+  {
+    deliverIPD("T,110,S,A1,1," + xorCk("T,110,S,A1,1,"));
+    spin(200);
+    ok(lastAck() == "A,110,A1,0," + xorCk("A,110,A1,0,"), "rid 110 이 A1 로 처리됐다");
+    wifi.deliver("ALREADY CONNECTED\r\n");
+    spin(50);
+    ok(cacheCount > 0, "ALREADY CONNECTED 로는 캐시가 비지 않는다");
+    deliverIPD("T,110,S,B1,1," + xorCk("T,110,S,B1,1,"));
+    spin(200);
+    printf("        ALREADY CONNECTED 후 ACK = %s\n", lastAck().c_str());
+    ok(lastAck() == "A,110,A1,0," + xorCk("A,110,A1,0,"),
+       "멱등이 유지된다 — netTick 의 5초 CIPSTART 재시도가 멱등성을 깨지 않는다");
+  }
+
+  printf("\n[22] 모든 전선 라인이 문법·체크섬을 만족하는가 (누적 %zu줄)\n", wifi.sentLines.size());
+  int bad = 0;
+  for (const std::string& l : wifi.sentLines) {
+    if (l.size() + 1 > 64) { bad++; continue; }                 // §2.1-6
+    if (l[0] != 'S' && l[0] != 'A') { bad++; continue; }
+    if (!checksumSelfConsistent(l)) bad++;
+  }
+  ok(bad == 0, "전 라인이 64바이트 이내 + 타입 S/A + 체크섬 일치");
+
+  printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
+  return g_fail == 0 ? 0 : 1;
+}

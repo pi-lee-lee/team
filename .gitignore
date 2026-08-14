@@ -48,3 +48,8 @@ learn/
 # 파이썬 검증 도구(net/*.py)의 바이트코드 캐시
 __pycache__/
 *.pyc
+
+# client.ino 를 호스트에서 그대로 돌리는 테스트 하네스(REQ-0027)의 빌드 산출물.
+# 소스(host_test.cpp, Arduino.h 대역, run.sh)는 추적한다 — 재현에 필요하다.
+arduino/test/host_test.bin
+arduino/test/*.dSYM/

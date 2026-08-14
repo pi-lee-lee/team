@@ -252,7 +252,8 @@ struct Pending {             // 아두이노에 내려보내고 ACK 를 기다�
     sock_t   ws_fd;          // 요청한 브라우저 (BAD_SOCK = 서버 자체 재동기화)
     std::string browser_rid;
     std::string slot, user_id;
-    char kind;               // 'R' | 'C'
+    char kind;               // 'R' | 'C' | 'T'
+    char top;                // kind=='T' 일 때의 op: 'A'|'D'|'S'|'X'
     long long sent_ms;
     int tries;
 };
@@ -284,10 +285,18 @@ struct Server {
     int  base_occ[10];
     bool base_valid;
 
+    // §12A 테스트 모드. **이 두 값의 출처는 S 프레임의 tmask 이지 서버의 기억이 아니다.**
+    // T 의 ACK 를 받았다고 무장됐다고 단정하면, 해제 ACK 를 놓쳤을 때 서버는 "해제됨"이라
+    // 믿고 화면은 가짜 값을 경고 없이 진짜로 표시한다 — §12A.6 이 막으려는 사고 자체다.
+    // tmask 를 진실로 삼으면 다음 프레임에서 저절로 맞춰진다(§12A.4).
+    bool test_armed;
+    int  test_ovr[10];        // 1 = 그 칸의 occupied 는 주입된 값
+    int  base_ovr[10];        // 직전 프레임의 오버라이드 비트 — 되돌림 판정용(§7.5-3)
+
     Server() : lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), ard(BAD_SOCK),
                ard_seen(false), ard_last_ms(0), ard_uptime(-1), ard_seq(-1),
-               ard_dev("?"), next_rid(1), base_valid(false) {
-        for (int i = 0; i < 10; i++) base_occ[i] = 0;
+               ard_dev("?"), next_rid(1), base_valid(false), test_armed(false) {
+        for (int i = 0; i < 10; i++) { base_occ[i] = 0; test_ovr[i] = 0; base_ovr[i] = 0; }
     }
 
     bool device_online() const {
@@ -372,7 +381,13 @@ struct Server {
           << ",\"device\":{\"online\":" << (device_online() ? "true" : "false")
           << ",\"device_id\":" << jstr(ard_dev)
           << ",\"uptime\":" << (ard_uptime < 0 ? 0 : ard_uptime)
-          << ",\"seq\":" << (ard_seq < 0 ? 0 : ard_seq) << "},\"slots\":[";
+          << ",\"seq\":" << (ard_seq < 0 ? 0 : ard_seq) << "}";
+        // §5.3 test_mode — 출처는 S 의 tmask 다(§12A.4). 서버가 T 를 보냈다는 사실이 아니다.
+        int novr = 0;
+        for (int i = 0; i < 10; i++) if (test_armed && test_ovr[i]) novr++;
+        o << ",\"test_mode\":{\"armed\":" << (test_armed ? "true" : "false")
+          << ",\"override_count\":" << novr << "}";
+        o << ",\"slots\":[";
         for (int i = 0; i < 10; i++) {
             if (i) o << ",";
             o << "{\"id\":\"" << SLOT_ID[i] << "\",\"occupied\":" << slots[i].occupied
@@ -380,6 +395,7 @@ struct Server {
             if (slots[i].user_id.empty()) o << "null"; else o << jstr(slots[i].user_id);
             o << ",\"reserved_at\":";
             if (slots[i].reserved_at == 0) o << "null"; else o << slots[i].reserved_at;
+            o << ",\"overridden\":" << ((test_armed && test_ovr[i]) ? 1 : 0);
             o << "}";
         }
         o << "]}";
@@ -393,14 +409,20 @@ struct Server {
           << ",\"code\":\"" << code << "\",\"message\":" << jstr(msg) << "}";
         if (fd != BAD_SOCK && conns.count(fd)) ws_send(fd, o.str());
     }
-    void send_ack(sock_t fd, const std::string& rid, const std::string& slot, int result) {
+    void send_ack(sock_t fd, const std::string& rid, const std::string& slot, int result,
+                  char kind = 'R') {
         const char* m = "예약되었습니다";
+        if (kind == 'T')      m = "테스트 값을 적용했습니다";
+        else if (kind == 'C') m = "예약을 취소했습니다";
         if (result == 1) m = "이미 주차된 자리입니다";
         else if (result == 2) m = "이미 예약된 자리입니다";
         else if (result == 3) m = "잘못된 요청입니다";
+        else if (result == 4) m = "테스트 모드가 꺼져 있습니다";
         std::ostringstream o;
-        o << "{\"type\":\"ack\",\"rid\":" << jstr(rid) << ",\"slot\":\"" << slot
-          << "\",\"result\":" << result << ",\"message\":" << jstr(m) << "}";
+        o << "{\"type\":\"ack\",\"rid\":" << jstr(rid) << ",\"slot\":";
+        // 무장/해제처럼 자리가 없는 응답은 null 이다 — 전선의 "??" 를 그대로 흘리지 않는다(§5.4).
+        if (slot.empty() || slot == "??") o << "null"; else o << "\"" << slot << "\"";
+        o << ",\"result\":" << result << ",\"message\":" << jstr(m) << "}";
         if (fd != BAD_SOCK && conns.count(fd)) ws_send(fd, o.str());   // 요청자에게만
     }
 
@@ -413,7 +435,10 @@ struct Server {
     }
     std::vector<std::string> log_entries;
     void write_log_if_changed() {
-        std::string key = bits(false) + "|" + bits(true);
+        // 테스트 상태도 키에 넣는다 — 안 넣으면 무장/주입이 파일에 반영되지 않고
+        // 폴백 화면이 낡은 "해제" 상태를 계속 보여 준다(개정 4 가 막으려는 바로 그 증상).
+        std::string key = bits(false) + "|" + bits(true) + "|" + (test_armed ? "A" : "-");
+        for (int i = 0; i < 10; i++) key += char('0' + ((test_armed && test_ovr[i]) ? 1 : 0));
         if (key == last_bits) return;            // §9.4 — 내용이 같으면 안 쓴다
         last_bits = key;
 
@@ -421,12 +446,22 @@ struct Server {
         e << "{\"ts\":" << epoch_ms() << ",\"device_id\":" << jstr(ard_dev)
           << ",\"uptime\":" << (ard_uptime < 0 ? 0 : ard_uptime)
           << ",\"seq\":" << (ard_seq < 0 ? 0 : ard_seq)
-          << ",\"occupied\":\"" << bits(false) << "\",\"reserved\":\"" << bits(true)
-          << "\",\"slots\":[";
+          << ",\"occupied\":\"" << bits(false) << "\",\"reserved\":\"" << bits(true) << "\"";
+        // §9.1(개정 4) — 무장 여부와 칸별 주입 표시를 **파일에도** 넣는다.
+        // WS 가 끊기면 브라우저는 이 파일로 폴백하는데, 이 두 필드가 없으면
+        // **폴백 화면이 주입값을 실측처럼 그린다** — §12A.6 이 폴백 경로에서만 깨지고 있었다.
+        {
+            int n = 0;
+            for (int i = 0; i < 10; i++) if (test_armed && test_ovr[i]) n++;
+            e << ",\"test_mode\":{\"armed\":" << (test_armed ? "true" : "false")
+              << ",\"override_count\":" << n << "}";
+        }
+        e << ",\"slots\":[";
         for (int i = 0; i < 10; i++) {
             if (i) e << ",";
             e << "{\"id\":\"" << SLOT_ID[i] << "\",\"occupied\":" << slots[i].occupied
-              << ",\"reserved\":" << slots[i].reserved << "}";
+              << ",\"reserved\":" << slots[i].reserved
+              << ",\"overridden\":" << ((test_armed && test_ovr[i]) ? 1 : 0) << "}";
         }
         e << "]}";
 
@@ -490,6 +525,27 @@ struct Server {
         send_ard(build_line(buf));
     }
 
+    // §2.4 `T` — 테스트 모드 제어. R/C 와 같은 pend 표·재전송·타임아웃을 그대로 탄다.
+    // Pending.user_id 를 tval 보관에 재사용하고, slot 에 "??" 가 들어갈 수 있다.
+    void dispatch_test(sock_t ws_fd, const std::string& brid,
+                       char op, const std::string& slot, const std::string& tval) {
+        uint16_t rid = next_rid++;
+        if (next_rid == 0) next_rid = 1;
+        Pending p;
+        p.wire_rid = rid; p.ws_fd = ws_fd; p.browser_rid = brid;
+        p.slot = slot; p.user_id = tval; p.kind = 'T';
+        p.top = op;
+        p.sent_ms = now_ms(); p.tries = 1;
+        pend[rid] = p;
+        send_ard(build_line(test_prefix(p)));
+    }
+    static std::string test_prefix(const Pending& p) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "T,%u,%c,%s,%s,",
+                 p.wire_rid, p.top, p.slot.c_str(), p.user_id.c_str());
+        return std::string(buf);
+    }
+
     // ---------- 타이머 (§7.3 재전송 / §3.4 offline)
     void tick() {
         long long t = now_ms();
@@ -506,11 +562,18 @@ struct Server {
             p.tries++;
             p.sent_ms = t;
             char buf[64];
-            if (p.kind == 'R') snprintf(buf, sizeof(buf), "R,%u,%s,%s,", p.wire_rid, p.slot.c_str(), p.user_id.c_str());
-            else               snprintf(buf, sizeof(buf), "C,%u,%s,", p.wire_rid, p.slot.c_str());
+            std::string line;
+            if (p.kind == 'T') line = test_prefix(p);      // 테스트도 같은 wire_rid 로 재전송
+            else if (p.kind == 'R') {
+                snprintf(buf, sizeof(buf), "R,%u,%s,%s,", p.wire_rid, p.slot.c_str(), p.user_id.c_str());
+                line = buf;
+            } else {
+                snprintf(buf, sizeof(buf), "C,%u,%s,", p.wire_rid, p.slot.c_str());
+                line = buf;
+            }
             logf("↻", "재전송 " + std::to_string(p.tries) + "/" + std::to_string(ACK_MAX_TRIES)
                       + " (같은 wire_rid=" + std::to_string(p.wire_rid) + ")");
-            send_ard(build_line(buf));
+            send_ard(build_line(line));
         }
         for (size_t i = 0; i < dead.size(); i++) pend.erase(dead[i]);
     }
@@ -564,6 +627,16 @@ struct Server {
             for (int i = 0; i < 10; i++)
                 occ[i] = (i < (int)f[2].size() && f[2][i] == '1') ? 1 : 0;
 
+            // §2.4 tmask — **선택 필드다. 없으면 해제로 본다**(§2.1 규칙 8, 옛 펌웨어 수용).
+            // f 는 체크섬을 뺀 필드들이므로 7번째(index 6)가 있으면 그것이 tmask 다.
+            int ovr[10];
+            bool armed = false;
+            for (int i = 0; i < 10; i++) ovr[i] = 0;
+            if (f.size() >= 7 && f[6] != "-" && f[6].size() >= 10) {
+                armed = true;
+                for (int i = 0; i < 10; i++) ovr[i] = (f[6][i] == '1') ? 1 : 0;
+            }
+
             if (reboot) resync_reservations("uptime/seq 역행");
 
             // §7.5 — occupied 1→0 이면 예약 소진.
@@ -571,15 +644,32 @@ struct Server {
             // 이걸 빼면 재부팅으로 occupied 가 초기화될 때 있지도 않은 1→0 전이가 잡혀
             // 방금 재하달한 예약을 그 자리에서 죽인다.
             if (base_valid && !reboot) {
-                for (int i = 0; i < 10; i++)
-                    if (base_occ[i] == 1 && occ[i] == 0 && slots[i].reserved == 1
-                        && !has_pending_for(SLOT_ID[i]))
-                        retire(i);
+                for (int i = 0; i < 10; i++) {
+                    if (!(base_occ[i] == 1 && occ[i] == 0)) continue;      // 1→0 전이가 아니면 무관
+                    if (slots[i].reserved != 1) continue;
+                    if (has_pending_for(SLOT_ID[i])) continue;
+                    // §7.5-3 **되돌림은 출차가 아니다.** 오버라이드 비트가 같이 1→0 이면
+                    // 가짜 값을 걷어낸 것이지 차가 빠진 게 아니다. 이 구분이 없으면
+                    // 해제(D) 한 번에 열 칸이 되돌아가면서 **예약이 통째로 은퇴한다.**
+                    if (base_ovr[i] == 1 && ovr[i] == 0) {
+                        logf("=", std::string("되돌림 감지 — ") + SLOT_ID[i]
+                                  + " 은퇴시키지 않는다(테스트 오버라이드 해제)");
+                        continue;
+                    }
+                    retire(i);
+                }
             } else {
                 logf("=", "은퇴 기준선 설정 — 이 프레임은 전이 판정을 건너뛴다");
             }
-            for (int i = 0; i < 10; i++) { base_occ[i] = occ[i]; slots[i].occupied = occ[i]; }
+            for (int i = 0; i < 10; i++) {
+                base_occ[i] = occ[i]; slots[i].occupied = occ[i];
+                base_ovr[i] = ovr[i]; test_ovr[i] = ovr[i];
+            }
             base_valid = true;
+            if (test_armed != armed)
+                logf("*", std::string("테스트 모드 ") + (armed ? "무장" : "해제")
+                          + " (출처: S 의 tmask)");
+            test_armed = armed;
 
             // reserved 는 서버가 durable owner 다(§7.4). 아두이노 값으로 덮지 않는다.
             // 다만 서버가 0 인데 아두이노가 1 이면 세계관이 갈라진 것이므로 C 를 다시 내려 맞춘다(§7.6).
@@ -608,7 +698,9 @@ struct Server {
             // **매핑표의 원래 자리**를 쓴다 — 상관 키는 rid 이고 원본은 서버가 들고 있다.
             if (slot == "??" || slot_index(slot) < 0) slot = p.slot;
             int idx = slot_index(slot);
-            if (result == 0 && idx >= 0) {
+            // **예약 상태를 건드리는 것은 R/C 뿐이다.** T 를 여기에 섞으면
+            // 테스트 주입 ACK 가 cancel 로 취급돼 **그 칸의 예약을 지워 버린다.**
+            if (result == 0 && idx >= 0 && (p.kind == 'R' || p.kind == 'C')) {
                 if (p.kind == 'R') {
                     slots[idx].reserved = 1;
                     slots[idx].user_id = p.user_id;
@@ -619,7 +711,9 @@ struct Server {
                     slots[idx].reserved_at = 0;
                 }
             }
-            if (p.ws_fd != BAD_SOCK) send_ack(p.ws_fd, p.browser_rid, slot, result);
+            // 테스트 결과는 여기서 상태에 반영하지 않는다 — 무장/오버라이드의 진실은
+            // 다음 S 프레임의 tmask 다(§12A.4). ACK 는 "명령이 처리됐다"까지만 말한다.
+            if (p.ws_fd != BAD_SOCK) send_ack(p.ws_fd, p.browser_rid, slot, result, p.kind);
             write_log_if_changed();
             push_snapshot();
         }
@@ -654,6 +748,35 @@ struct Server {
         std::string slot = jget(msg, "slot");
         std::string uid  = jget(msg, "user_id");
         if (uid == "null") uid.clear();
+
+        // ---- §12A 테스트 모드 (개정 3)
+        if (type == "test_arm" || type == "test_disarm" ||
+            type == "test_set" || type == "test_clear") {
+            if (!device_online()) {
+                send_err(fd, rid, "device_offline", "센서가 연결되어 있지 않습니다");
+                return;
+            }
+            char op = (type == "test_arm") ? 'A' : (type == "test_disarm") ? 'D'
+                    : (type == "test_set") ? 'S' : 'X';
+            std::string tslot = "??", tval = "-";
+            if (op == 'S' || op == 'X') {
+                if (slot_index(slot) < 0) {
+                    send_err(fd, rid, "bad_request", "그런 자리가 없습니다");
+                    return;
+                }
+                tslot = slot;
+                if (op == 'S') {
+                    std::string occ = jget(msg, "occupied");
+                    if (occ != "0" && occ != "1") {
+                        send_err(fd, rid, "bad_request", "occupied 는 0 또는 1 이어야 합니다");
+                        return;
+                    }
+                    tval = occ;
+                }
+            }
+            dispatch_test(fd, rid, op, tslot, tval);
+            return;
+        }
 
         if (type != "reserve" && type != "cancel") {
             send_err(fd, rid, "bad_request", "알 수 없는 요청입니다");
@@ -938,8 +1061,14 @@ static int selftest() {
         "S,65535,1111111111,1111111111,4294967,P1,31",
         "A,42,B3,0,06", "A,42,B3,2,04",
         "R,42,B3,u17,56", "R,7,A1,,15", "C,43,B3,19",
+        // v1.2 (개정 3) — tmask 가 붙은 S, 그리고 T 4종
+        "S,1236,0110100011,0000100000,3602,P1,-,32",
+        "S,1234,0110100011,0000100000,3600,P1,0000000000,1F",
+        "S,65535,1111111111,1111111111,4294967,DEVICE12,1111111111,67",
+        "A,42,??,3,74", "A,50,??,0,74", "A,52,A3,4,00",
+        "T,50,A,??,-,11", "T,51,D,??,-,15", "T,52,S,A3,1,6F", "T,54,X,A3,-,7E",
     };
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < 18; i++) {
         std::vector<std::string> f;
         bool ok = verify_line(L[i], f);
         std::cout << (ok ? "  ✓ " : "  ✗ ") << L[i] << "\n";
