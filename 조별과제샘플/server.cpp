@@ -95,6 +95,24 @@ static const int  SELECT_TICK_MS = 200;     // 타이머를 돌리기 위한 sel
 static const int  LOG_KEEP       = 2;       // §9.1 최신 2건
 static const uint64_t WS_MAX_FRAME = 64 * 1024;  // 클라이언트가 선언한 길이의 상한
 
+// 전송 타임아웃 (SO_SNDTIMEO). **지어낸 값이 아니다** — 명세의 숫자에서 끌어냈다:
+//
+//  · 아두이노 전선의 최대 프레임은 64바이트(§2.1)이고, 병목인 9600bps SoftwareSerial 에서
+//    AT 오버헤드까지 합쳐 한 프레임을 밀어내는 데 약 80ms 다(§3.1). 1000ms 는 그 12배 이상이라
+//    정상 링크에서 버스트(재하달 여러 건)가 몰려도 걸리지 않는다.
+//  · **§7.3 의 ACK 타임아웃 1500ms 보다 짧아야 한다.** 길면 send() 안에 갇혀 있는 동안
+//    재전송 타이머가 제 시각을 놓친다 — 타임아웃이 타임아웃을 망친다.
+//  · **§3.4 의 오프라인 판정 3500ms 보다 훨씬 짧아야 한다.** 길면 "아두이노가 죽었다"를
+//    알아채야 할 시간에 서버가 send() 안에서 멈춰 있는 셈이 된다.
+//
+// 즉 80ms ≪ 1000ms < 1500ms ≪ 3500ms.
+//
+// ⚠ 이 값은 `send_raw()` **한 번 전체**의 마감시각으로도 쓴다. `SO_SNDTIMEO` 는 `send()`
+// **한 호출**에만 걸리므로, 상대가 조금씩만 빼가면 루프가 계속 돌아 총 정지 시간이 얼마든지
+// 길어진다(실측: 1초 타임아웃인데 여러 번 호출하느라 1.93초). 그래서 둘 다 건다 —
+// 소켓 옵션은 한 호출을, 마감시각은 한 프레임 전체를 막는다.
+static const int SEND_TIMEOUT_MS = 1000;
+
 static const char* SLOT_ID[10] = {"A1","A2","A3","A4","A5","B1","B2","B3","B4","B5"};
 static const char* WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -347,23 +365,67 @@ struct Server {
         return true;
     }
 
+    // 모든 **접속된** 소켓에 전송 타임아웃을 건다.
+    // 이게 없으면 상대가 안 빼갈 때 send() 가 무한정 막히고, 단일 스레드라 **서버 전체가 선다.**
+    // 실제로 그렇게 죽었다 — 로그도 오류도 없이 멈춰서 단서가 0 이었다.
+    // select() 의 "읽기 준비"는 쓰기에 대해 아무것도 보장하지 않는다는 점이 핵심이다.
+    static void set_send_timeout(sock_t s) {
+#ifdef _WIN32
+        DWORD ms = (DWORD)SEND_TIMEOUT_MS;                  // 윈도우는 밀리초 DWORD
+        setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char*)&ms, sizeof(ms));
+#else
+        struct timeval tv;                                   // POSIX 는 timeval
+        tv.tv_sec  = SEND_TIMEOUT_MS / 1000;
+        tv.tv_usec = (SEND_TIMEOUT_MS % 1000) * 1000;
+        setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, (const char*)&tv, sizeof(tv));
+#endif
+    }
+
     // ---------- 송신 helper
-    void send_raw(sock_t fd, const char* p, size_t n) {
+    // 반환 false = 밀어 넣지 못했다(타임아웃 또는 오류) → **호출자가 그 연결을 끊어야 한다.**
+    // 부분 전송 뒤 타임아웃이면 전선에 **잘린 줄**이 남는다. 붙들고 있으면 상태가 어긋나므로 버린다.
+    bool send_raw(sock_t fd, const char* p, size_t n, const char* who) {
         size_t off = 0;
+        // **전체 마감시각을 따로 둔다.** SO_SNDTIMEO 는 `send()` **한 번**에 걸리는 것이지
+        // 이 루프 전체에 걸리는 것이 아니다. 상대가 아주 조금씩만 빼가면 매 호출이 조금씩
+        // 진전해 루프가 계속 돌고, 총 정지 시간은 얼마든지 길어진다(느린 클라이언트 정체).
+        // 실측으로 확인했다 — 1초 타임아웃인데 send() 를 여러 번 부르느라 1.93초가 걸렸다.
+        const long long deadline = now_ms() + SEND_TIMEOUT_MS;
         while (off < n) {                       // 부분 write 는 정상이다
+            if (now_ms() > deadline) {
+                char b[192];
+                snprintf(b, sizeof(b),
+                         "%s 로 전송이 %d ms 를 넘겼다 — %zu/%zu 바이트. 연결을 끊는다",
+                         who, SEND_TIMEOUT_MS, off, n);
+                logf("!", b);
+                return false;
+            }
             int w =
 #ifdef _WIN32
                 ::send(fd, p + off, (int)(n - off), 0);
 #else
                 (int)::send(fd, p + off, n - off, 0);
 #endif
-            if (w <= 0) return;
+            if (w <= 0) {
+                char b[192];
+                snprintf(b, sizeof(b),
+                         "%s 로 전송 실패 — %zu/%zu 바이트만 밀어넣음 (err %d). "
+                         "상대가 안 빼가는 것으로 보고 연결을 끊는다",
+                         who, off, n, sockerr());
+                logf("!", b);
+                return false;
+            }
             off += (size_t)w;
         }
+        return true;
     }
     void send_ard(const std::string& line) {
         if (ard == BAD_SOCK) return;
-        send_raw(ard, line.data(), line.size());
+        if (!send_raw(ard, line.data(), line.size(), "아두이노")) {
+            closesock(ard); ard = BAD_SOCK; ard_buf.clear();
+            push_snapshot();                    // 화면에 "센서 끊김"이 뜨게
+            return;
+        }
         logf("→ARD", line.substr(0, line.size() - 1));
     }
 
@@ -383,11 +445,22 @@ struct Server {
             for (int i = 7; i >= 0; i--) f += char((n >> (8*i)) & 0xFF);
         }
         f += payload;
-        send_raw(fd, f.data(), f.size());
+        // 실패하면 여기서 erase 하지 않는다 — broadcast 순회 중이면 반복자가 무효화된다
+        // (예전에 SIGSEGV 를 냈던 바로 그 실수다). 표시만 해 두고 루프 끝에서 거둔다.
+        if (!send_raw(fd, f.data(), f.size(), "WS 클라이언트")) dead.push_back(fd);
     }
     void ws_broadcast(const std::string& payload) {
         for (std::map<sock_t, Conn>::iterator it = conns.begin(); it != conns.end(); ++it)
             if (it->second.kind == Conn::WS) ws_send(it->first, payload);
+    }
+    std::vector<sock_t> dead;      // 전송 실패로 끊어야 할 연결. 루프 끝에서 거둔다
+    void reap_dead() {
+        for (size_t i = 0; i < dead.size(); i++) {
+            sock_t fd = dead[i];
+            if (conns.count(fd)) { closesock(fd); conns.erase(fd); logf("-WS", "전송 실패로 연결 종료"); }
+            if (phones.count(fd)) { closesock(fd); phones.erase(fd); }
+        }
+        dead.clear();
     }
 
     // ---------- JSON 만들기
@@ -928,7 +1001,7 @@ struct Server {
         // 경로 탈출 차단 — 데모여도 디렉터리를 서빙하는 코드에 이건 기본이다
         if (path.find("..") != std::string::npos || path.find('\\') != std::string::npos) {
             const char* r = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-            send_raw(fd, r, strlen(r));
+            send_raw(fd, r, strlen(r), "HTTP 클라이언트");
             return;
         }
         std::string fn = path.substr(1);
@@ -938,7 +1011,7 @@ struct Server {
         std::ifstream f(fn.c_str(), std::ios::binary);
         if (!f) {
             const char* r = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-            send_raw(fd, r, strlen(r));
+            send_raw(fd, r, strlen(r), "HTTP 클라이언트");
             return;
         }
         std::ostringstream ss; ss << f.rdbuf();
@@ -954,8 +1027,8 @@ struct Server {
           << "\r\nContent-Length: " << body.size()
           << "\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
         std::string head = h.str();
-        send_raw(fd, head.data(), head.size());
-        send_raw(fd, body.data(), body.size());
+        send_raw(fd, head.data(), head.size(), "HTTP 클라이언트");
+        send_raw(fd, body.data(), body.size(), "HTTP 클라이언트");
     }
     // 반환 false = 이 연결을 닫아라. **여기서 직접 erase 하지 않는다** —
     // 호출부가 conns 를 순회 중이라 안에서 지우면 반복자가 무효화된다(실제로 SIGSEGV 를 냈다).
@@ -975,7 +1048,7 @@ struct Server {
             std::string acc = ws_accept(key);
             std::string r = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n"
                             "Connection: Upgrade\r\nSec-WebSocket-Accept: " + acc + "\r\n\r\n";
-            send_raw(fd, r.data(), r.size());
+            send_raw(fd, r.data(), r.size(), "WS 업그레이드");
             c.kind = Conn::WS;
             logf("+WS", "업그레이드 완료");
             ws_send(fd, snapshot_json());          // 접속 즉시 현재 상태
@@ -1024,7 +1097,7 @@ struct Server {
                 // ping 페이로드는 125바이트 이하만 정상이다(제어 프레임 규칙). 넘으면 잘라 답한다.
                 if (payload.size() > 125) payload.resize(125);
                 std::string f; f += char(0x8A); f += char((unsigned char)payload.size()); f += payload;
-                send_raw(fd, f.data(), f.size());
+                send_raw(fd, f.data(), f.size(), "WS pong");
                 continue;
             }
             if (opcode == 0x1) on_ws_message(fd, payload);
@@ -1207,6 +1280,7 @@ struct Server {
                 if (FD_ISSET(lsn_ard, &rd)) {
                     sock_t c = accept(lsn_ard, NULL, NULL);
                     if (c != BAD_SOCK) {
+                        set_send_timeout(c);
                         if (ard != BAD_SOCK) { closesock(ard); conns.erase(ard); }
                         ard = c; ard_buf.clear();
                         logf("+ARD", "아두이노 접속");
@@ -1223,11 +1297,14 @@ struct Server {
                 }
                 if (FD_ISSET(lsn_http, &rd)) {
                     sock_t c = accept(lsn_http, NULL, NULL);
-                    if (c != BAD_SOCK) conns[c] = Conn();
+                    if (c != BAD_SOCK) { set_send_timeout(c); conns[c] = Conn(); }
                 }
                 if (FD_ISSET(lsn_phone, &rd)) {
                     sock_t c = accept(lsn_phone, NULL, NULL);
-                    if (c != BAD_SOCK) { phones[c] = std::string(); logf("+폰", "digitcam 접속"); }
+                    if (c != BAD_SOCK) {
+                        set_send_timeout(c);
+                        phones[c] = std::string(); logf("+폰", "digitcam 접속");
+                    }
                 }
                 // 폰 연결들 — 순회 중 map 을 건드리지 않도록 fd 를 먼저 모은다
                 {
@@ -1309,6 +1386,7 @@ struct Server {
                 }
             }
 
+            reap_dead();                              // 전송 실패로 표시된 연결을 여기서 정리
             tick();                                   // 소켓이 조용해도 매 주기 돈다
             if (was_online && !device_online()) {
                 logf("!", "아두이노 오프라인 판정(3.5초 무프레임)");
