@@ -85,8 +85,9 @@ static bool checksumSelfConsistent(const std::string& line) {
 // 그 칸의 시뮬 값을 0 으로 고정한다 — simAdvance 가 다시 건드리지 못하게 마감을 멀리 민다.
 // 이걸 안 하면 "오버라이드로 1 이 됐다"와 "시뮬이 마침 1 이었다"를 구별할 수 없다.
 static void pinSimLow(uint8_t i) {
+  // §12B.1 이후 시뮬은 자율 전진을 하지 않으므로 값만 내려 두면 그대로 유지된다.
+  // (예전에는 simNextAt 마감도 멀리 밀어야 했다 — 그 배열 자체가 사라졌다.)
   simOcc &= (uint16_t)~((uint16_t)1 << i);
-  simNextAt[i] = g_millis + 10000000UL;
 }
 
 static std::vector<std::string> splitLine(const std::string& s) {
@@ -121,6 +122,12 @@ static size_t countStatusLines() {
   size_t n = 0;
   for (const std::string& l : wifi.sentLines) if (!l.empty() && l[0] == 'S') n++;
   return n;
+}
+
+// 가상 시각 기준으로 ms 만큼 돌린다(루프 횟수가 아니라 시간으로 재야 하는 시험용).
+static void spinMs(unsigned long ms) {
+  unsigned long t0 = g_millis;
+  while (g_millis - t0 < ms) loop();
 }
 
 static bool alignToHeartbeat(int maxIter) {
@@ -579,7 +586,181 @@ int main() {
     ok(spinUntilOnline(20000), "시험 후 다시 온라인으로 복귀했다");
   }
 
-  printf("\n[24] 모든 전선 라인이 문법·체크섬을 만족하는가 (누적 %zu줄)\n", wifi.sentLines.size());
+  printf("\n[24] ★ 시뮬은 스스로 전진하지 않는다 — M 트리거만 민다 (§12B.1/.2, REQ-0047)\n");
+  {
+    testArmed = false;
+    slotOverrideClearAll();
+    for (uint8_t i = 0; i < SLOT_N; i++) slotSourceSet(i, 0);
+    resMask = 0;
+    ok(spinUntilOnline(20000), "온라인 상태다 (사전 조건)");
+
+    // (a) 자율 전진이 없다 — 이게 이번 변경의 핵심이다
+    uint16_t before = simOcc;
+    spinMs(120000);                                  // 가상시각 2분
+    printf("        트리거 없이 2분: simOcc %04X → %04X\n", before, simOcc);
+    ok(simOcc == before, "★ 트리거 없이는 시뮬이 한 비트도 바뀌지 않는다");
+
+    // (b) 명세 §2.5 의 M/ACK 예제 체크섬을 내 계산이 재현하는가
+    {
+      const char* spec[] = {"M,60,4B", "M,65535,7D", "A,60,A3,0,05", "A,60,??,5,72"};
+      int mism = 0;
+      for (const char* l : spec) if (!checksumSelfConsistent(l)) { printf("        MISMATCH %s\n", l); mism++; }
+      ok(mism == 0, "명세의 M/ACK 예제 4줄 체크섬 일치");
+    }
+
+    // (c) 트리거 한 번 = 한 칸만 바뀐다
+    uint16_t b1 = simOcc;
+    deliverIPD("M,60,4B");                           // 명세 §2.5 의 그 줄
+    spin(300);
+    int flipped = 0;
+    for (uint8_t i = 0; i < SLOT_N; i++) if (((simOcc >> i) & 1) != ((b1 >> i) & 1)) flipped++;
+    printf("        M,60 → simOcc %04X → %04X, ACK=%s\n", b1, simOcc, lastAck().c_str());
+    ok(flipped == 1, "★ 트리거 한 번에 정확히 한 칸만 바뀐다");
+    ok(lastAck()[0] == 'A' && lastAck().find(",0,") != std::string::npos, "ACK result=0");
+    // ACK 의 slot 이 실제로 바뀐 칸인가
+    uint8_t changedIdx = 0xFF;
+    for (uint8_t i = 0; i < SLOT_N; i++) if (((simOcc >> i) & 1) != ((b1 >> i) & 1)) changedIdx = i;
+    std::vector<std::string> af = splitLine(lastAck());
+    ok(af.size() == 5 && af[2] == std::string(1, slotCol(changedIdx)) + std::string(1, slotRow(changedIdx)),
+       "ACK 의 slot 이 실제로 바뀐 칸이다");
+
+    // (d) 멱등 — 같은 rid 재전송이 두 걸음이 되면 안 된다 (§12B.4)
+    uint16_t b2 = simOcc;
+    deliverIPD("M,60,4B");
+    spin(300);
+    printf("        같은 rid 재전송 → simOcc %04X (변화 없어야 함), ACK=%s\n", simOcc, lastAck().c_str());
+    ok(simOcc == b2, "★ 같은 rid 재전송은 두 걸음이 되지 않는다");
+
+    // (e) 예약된 빈칸을 우선 채운다 → occupied=1,reserved=1 도달 (§12B.2)
+    slotOverrideClearAll();
+    resMask = 0;
+    simOcc = 0;                                      // 전 칸 비움
+    resMask |= (uint16_t)1 << 7;                     // B3 예약
+    deliverIPD("M,61," + xorCk("M,61,"));
+    spin(300);
+    printf("        예약 B3 상태에서 M → occupied=%s reserved=%s ACK=%s\n",
+           occField(lastStatus()).c_str(), lastStatus().empty() ? "" : splitLine(lastStatus())[3].c_str(),
+           lastAck().c_str());
+    ok(((simOcc >> 7) & 1) == 1, "★ 예약된 빈칸 B3 이 먼저 채워졌다");
+    ok(occField(lastStatus())[7] == '1' && splitLine(lastStatus())[3][7] == '1',
+       "★ occupied=1, reserved=1 조합이 실제로 전선에 나갔다 (§1.1 마지막 행)");
+    ok(lastAck().find(",B3,0,") != std::string::npos, "ACK 이 B3 을 가리킨다");
+
+    // (f) tmask 는 시뮬 변화를 포함하지 않는다 (§12B.3)
+    ok(tmaskField(lastStatus()).empty(), "해제 상태라 tmask 필드 자체가 없다 — 시뮬 변화는 tmask 와 무관");
+
+    // (g) 무장 중에도 트리거가 먹는다 ← REQ-0043 잔재 제거의 회귀 방지 핵심
+    deliverIPD("T,140,A,??,-," + xorCk("T,140,A,??,-,"));
+    spin(300);
+    ok(testArmed, "무장됐다 (사전 조건)");
+    uint16_t b3 = simOcc;
+    deliverIPD("M,62," + xorCk("M,62,"));
+    spin(300);
+    printf("        무장 중 M → simOcc %04X → %04X, ACK=%s\n", b3, simOcc, lastAck().c_str());
+    ok(simOcc != b3, "★ 무장 중에도 트리거가 먹는다 (테스트 모드와 별개 — §12B.3)");
+    ok(tmaskField(lastStatus()) == "0000000000",
+       "★ 시뮬로 바뀐 칸은 tmask 에 들어가지 않는다 (주입이 아니다)");
+
+    // (h) 실물 칸은 트리거의 영향을 받지 않는다
+    deliverIPD("T,141,D,??,-," + xorCk("T,141,D,??,-,"));
+    spin(200);
+    for (uint8_t i = 0; i < SLOT_N; i++) slotSourceSet(i, 1);   // 전 칸 실물
+    resMask = 0;
+    uint16_t b4 = simOcc;
+    deliverIPD("M,63," + xorCk("M,63,"));
+    spin(300);
+    printf("        전 칸 실물 상태에서 M → ACK=%s\n", lastAck().c_str());
+    ok(simOcc == b4, "실물 칸은 트리거로 바뀌지 않는다");
+    ok(lastAck().find(",??,5,") != std::string::npos, "★ 바꿀 시뮬 칸이 없으면 result=5, slot=??");
+    for (uint8_t i = 0; i < SLOT_N; i++) slotSourceSet(i, 0);   // 원복
+  }
+
+  printf("\n[25] ★ 연속 전송 실패가 오프라인 전환을 일으킨다 (REQ-0049 ①)\n");
+  {
+    testArmed = false;
+    slotOverrideClearAll();
+    ok(spinUntilOnline(20000), "온라인 상태다 (사전 조건)");
+    sendFailStreak = 0;
+
+    // 죽은 링크 흉내: CIPSEND 에 '>' 가 오지 않는다 (실기의 seq 고정 증상과 같은 원인)
+    wifi.refusePrompt = true;
+    size_t sBefore = countStatusLines();
+    uint16_t seqBefore = seqNo;
+
+    // 3회 연속 실패까지 돌린다. 오프라인이 되면 statusTick 이 더는 보내지 않는다.
+    for (int i = 0; i < 4000 && netOnline; i++) loop();
+    printf("        실패 누적 후: netOnline=%d netStep=%u seq=%u→%u (S 프레임 %zu개 추가)\n",
+           (int)netOnline, netStep, seqBefore, seqNo, countStatusLines() - sBefore);
+    ok(!netOnline, "연속 실패로 오프라인이 됐다 — CLOSED 통보 없이도 알아챈다");
+    ok(seqNo == seqBefore, "못 나간 프레임은 seq 를 소비하지 않았다 (실기의 seq 고정과 같은 성질)");
+    ok(netStep == 4, "CIPSTART 재시도 단계로 들어갔다");
+
+    // 링크가 살아나면 스스로 복귀한다
+    wifi.refusePrompt = false;
+    ok(spinUntilOnline(20000), "링크가 살아나면 스스로 재접속한다");
+    size_t sAfter = countStatusLines();
+    // ⚠ 루프 횟수가 아니라 **가상 시간**으로 기다려야 한다. 가상 시계는 millis() 호출 수에
+    //   비례해 흐르는데, §12B.1 로 simAdvance() 가 사라지면서 루프당 호출이 크게 줄었다
+    //   → 같은 spin(400) 이 예전보다 훨씬 짧은 시간이 됐다(하트비트 1000ms 에 못 미친다).
+    spinMs(2500);
+    ok(countStatusLines() > sAfter, "복귀 후 다시 S 프레임을 보낸다");
+  }
+
+  printf("\n[26] 한 번 성공하면 카운터가 초기화된다 — 한두 번 실패로 끊지 않는다\n");
+  {
+    ok(spinUntilOnline(20000), "온라인 (사전 조건)");
+    sendFailStreak = 0;
+
+    // 실패 2회 → 아직 온라인이어야 한다
+    wifi.refusePrompt = true;
+    while (sendFailStreak < 2 && netOnline) loop();
+    printf("        실패 2회: streak=%u netOnline=%d\n", sendFailStreak, (int)netOnline);
+    ok(netOnline, "2회 실패로는 끊지 않는다 (한계는 3)");
+
+    // 한 번 성공시키면 0 으로 돌아간다
+    wifi.refusePrompt = false;
+    unsigned long t0 = g_millis;
+    while (sendFailStreak != 0 && g_millis - t0 < 5000) loop();
+    printf("        한 번 성공 후: streak=%u\n", sendFailStreak);
+    ok(sendFailStreak == 0, "성공하면 카운터가 0 으로 초기화된다");
+    ok(netOnline, "여전히 온라인이다");
+  }
+
+  printf("\n[27] link is not valid → 즉시 오프라인 / 그 밖 오류 문구는 로그만 (REQ-0049 ②)\n");
+  {
+    ok(spinUntilOnline(20000), "온라인 (사전 조건)");
+    sendFailStreak = 0;
+
+    // ERROR 는 세지 않는다 — 카운터를 건드리면 한 실패가 두 번 계수된다
+    Serial.out.clear();
+    wifi.deliver("ERROR\r\n");
+    spin(3);
+    ok(netOnline, "ERROR 하나로는 오프라인이 되지 않는다");
+    ok(sendFailStreak == 0, "ERROR 는 카운터를 올리지 않는다 (이중 계수 방지)");
+    ok(Serial.out.find("송신 오류 응답") != std::string::npos, "그래도 로그에는 남는다");
+
+    // link is not valid 는 즉시 오프라인
+    wifi.deliver("link is not valid\r\n");
+    spin(3);
+    ok(!netOnline, "link is not valid → 즉시 오프라인 (모듈이 링크 무효를 명시했다)");
+    ok(netStep == 4, "CIPSTART 재시도 단계로 들어갔다");
+    ok(spinUntilOnline(20000), "복귀한다");
+  }
+
+  printf("\n[28] CLOSED 경로 회귀 — 여전히 오프라인 + 캐시 비움\n");
+  {
+    ok(spinUntilOnline(20000), "온라인 (사전 조건)");
+    deliverIPD("T,130,A,??,-," + xorCk("T,130,A,??,-,"));
+    spin(200);
+    ok(cacheCount > 0, "캐시에 항목이 있다 (사전 조건)");
+    wifi.deliver("CLOSED\r\n");
+    spin(3);
+    ok(!netOnline, "CLOSED 로 오프라인이 된다");
+    ok(cacheCount == 0, "CLOSED 는 여전히 캐시를 비운다 (REQ-0036 회귀 없음)");
+    ok(spinUntilOnline(20000), "복귀한다");
+  }
+
+  printf("\n[29] 모든 전선 라인이 문법·체크섬을 만족하는가 (누적 %zu줄)\n", wifi.sentLines.size());
   int bad = 0;
   for (const std::string& l : wifi.sentLines) {
     if (l.size() + 1 > 64) { bad++; continue; }                 // §2.1-6

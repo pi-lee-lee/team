@@ -440,10 +440,14 @@ struct Server {
         const char* m = "예약되었습니다";
         if (kind == 'T')      m = "테스트 값을 적용했습니다";
         else if (kind == 'C') m = "예약을 취소했습니다";
+        else if (kind == 'M') m = "시뮬레이션 한 걸음 진행했습니다";
         if (result == 1) m = "이미 주차된 자리입니다";
         else if (result == 2) m = "이미 예약된 자리입니다";
         else if (result == 3) m = "잘못된 요청입니다";
         else if (result == 4) m = "테스트 모드가 꺼져 있습니다";
+        // result=5 는 **성공이 아니다.** 버튼을 눌렀는데 아무 일도 안 난 것을
+        // 화면이 성공으로 표시하면 안 되므로 값과 문구를 따로 둔다(§12B.4).
+        else if (result == 5) m = "바꿀 시뮬 자리가 없습니다";
         std::ostringstream o;
         o << "{\"type\":\"ack\",\"rid\":" << jstr(rid) << ",\"slot\":";
         // 무장/해제처럼 자리가 없는 응답은 null 이다 — 전선의 "??" 를 그대로 흘리지 않는다(§5.4).
@@ -576,6 +580,22 @@ struct Server {
         pend[rid] = p;
         send_ard(build_line(test_prefix(p)));
     }
+    // §12B — 시뮬레이터 한 걸음. **무장 여부로 막지 않는다**(테스트 모드와 별개).
+    void dispatch_sim(sock_t ws_fd, const std::string& brid) {
+        uint16_t rid = next_rid++;
+        if (next_rid == 0) next_rid = 1;
+        Pending p;
+        p.wire_rid = rid; p.ws_fd = ws_fd; p.browser_rid = brid;
+        p.kind = 'M'; p.top = 0;
+        p.sent_ms = now_ms(); p.tries = 1;
+        pend[rid] = p;
+        send_ard(build_line(sim_prefix(p)));
+    }
+    static std::string sim_prefix(const Pending& p) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "M,%u,", p.wire_rid);
+        return std::string(buf);
+    }
     static std::string test_prefix(const Pending& p) {
         char buf[64];
         snprintf(buf, sizeof(buf), "T,%u,%c,%s,%s,",
@@ -600,7 +620,8 @@ struct Server {
             p.sent_ms = t;
             char buf[64];
             std::string line;
-            if (p.kind == 'T') line = test_prefix(p);      // 테스트도 같은 wire_rid 로 재전송
+            if (p.kind == 'M') line = sim_prefix(p);       // 재전송이 두 걸음이 되면 안 된다(§12B.4)
+            else if (p.kind == 'T') line = test_prefix(p); // 테스트도 같은 wire_rid 로 재전송
             else if (p.kind == 'R') {
                 snprintf(buf, sizeof(buf), "R,%u,%s,%s,", p.wire_rid, p.slot.c_str(), p.user_id.c_str());
                 line = buf;
@@ -823,6 +844,17 @@ struct Server {
         std::string slot = jget(msg, "slot");
         std::string uid  = jget(msg, "user_id");
         if (uid == "null") uid.clear();
+
+        // ---- §12B 시뮬레이터 한 걸음 (개정 5)
+        // **무장 여부를 확인하지 않는다.** 테스트 모드와 별개라는 것이 이 기능의 요구다(§12B.3).
+        if (type == "sim_step") {
+            if (!device_online()) {
+                send_err(fd, rid, "device_offline", "센서가 연결되어 있지 않습니다");
+                return;
+            }
+            dispatch_sim(fd, rid);
+            return;
+        }
 
         // ---- §12A 테스트 모드 (개정 3)
         if (type == "test_arm" || type == "test_disarm" ||
@@ -1309,8 +1341,10 @@ static int selftest() {
         "S,65535,1111111111,1111111111,4294967,DEVICE12,1111111111,67",
         "A,42,??,3,74", "A,50,??,0,74", "A,52,A3,4,00",
         "T,50,A,??,-,11", "T,51,D,??,-,15", "T,52,S,A3,1,6F", "T,54,X,A3,-,7E",
+        // v1.4 (개정 5) — 시뮬 한 걸음
+        "M,60,4B", "M,65535,7D", "A,60,A3,0,05", "A,60,??,5,72",
     };
-    for (int i = 0; i < 18; i++) {
+    for (int i = 0; i < 22; i++) {
         std::vector<std::string> f;
         bool ok = verify_line(L[i], f);
         std::cout << (ok ? "  ✓ " : "  ✗ ") << L[i] << "\n";

@@ -71,39 +71,17 @@ static uint16_t resMask = 0;   // 예약 비트 (서버가 주인 — §7.4. R �
 // ─────────────────────────────────────────────────────────────────────────
 // 가상 센서 — 실물 센서가 오면 readSlotSensor() 본문만 바꾼다
 // ─────────────────────────────────────────────────────────────────────────
-static uint16_t      simOcc = 0;
-static unsigned long simNextAt[SLOT_N];
-static unsigned long simLastChangeAt = 0;
+// §12B.1 **자율 전진을 없앴다.** 센서가 배정되지 않은 칸은 트리거(M 프레임)를 받기 전까지
+// 값이 바뀌지 않는다. 예전에는 칸마다 타이머를 두고 알아서 뒤집었는데, 그 "주차장처럼 보이게"
+// 하려던 연출의 대가가 **실물 시험 불가**였다 — 화면 전환이 너무 빨라 한 칸을 고정해 놓고
+// 관찰하는 것 자체가 안 됐다. 보기 좋게 만들려던 것이 확인을 불가능하게 만들었다.
+//
+// 그래서 사라진 것: simNextAt[10](40바이트), simLastChangeAt, SIM_MIN_GAP_MS,
+//   SIM_OCC/EMPTY_MIN/MAX_MS, ARRIVE_MIN/MAX_MS, simAdvance(), simResume().
+//   `ARRIVE_*` 가 하던 일(예약된 칸에 차가 들어오게 만드는 것)은 §12B.2 의
+//   **"예약된 빈칸 우선"** 규칙이 대신한다 — 아래 simStep() 참조.
+static uint16_t simOcc = 0;
 
-static const uint16_t SIM_MIN_GAP_MS  = 1500;   // 동시에 여러 칸이 바뀌지 않게
-static const uint16_t SIM_OCC_MIN_MS  = 20000;  // 주차 후 머무는 시간
-static const uint16_t SIM_OCC_MAX_MS  = 60000;
-static const uint16_t SIM_EMPTY_MIN_MS= 8000;   // 빈 채로 있는 시간
-static const uint16_t SIM_EMPTY_MAX_MS= 25000;
-static const uint16_t ARRIVE_MIN_MS   = 4000;   // ★ 예약자 도착까지 — occupied=1,reserved=1 경로(§1.1)
-static const uint16_t ARRIVE_MAX_MS   = 12000;
-
-// 가상 센서 전용. 실물 센서로 바꾸면 이 함수는 통째로 사라진다.
-static void simAdvance(uint8_t i) {
-  unsigned long now = millis();
-  if ((long)(now - simNextAt[i]) < 0) return;                 // 아직 때가 아니다
-
-  // 10칸이 한꺼번에 바뀌면 주차장처럼 안 보인다 — 변화는 한 번에 하나씩
-  if (now - simLastChangeAt < SIM_MIN_GAP_MS) {
-    simNextAt[i] = now + SIM_MIN_GAP_MS;
-    return;
-  }
-
-  uint16_t bit = (uint16_t)1 << i;
-  if (simOcc & bit) {                                          // 차가 나간다
-    simOcc &= (uint16_t)~bit;
-    simNextAt[i] = now + (unsigned long)random(SIM_EMPTY_MIN_MS, SIM_EMPTY_MAX_MS);
-  } else {                                                     // 차가 들어온다
-    simOcc |= bit;
-    simNextAt[i] = now + (unsigned long)random(SIM_OCC_MIN_MS, SIM_OCC_MAX_MS);
-  }
-  simLastChangeAt = now;
-}
 
 // ─────────────────────────────────────────────────────────────────────────
 // 실물 센서 배선 — 핀 배정과 그 근거
@@ -207,6 +185,63 @@ void slotSourceSet(uint8_t i, uint8_t useReal) {
   else         { srcReal &= (uint16_t)~bit; }
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// 시뮬 한 걸음 (§12B.2) — M 프레임이 이걸 부른다
+//
+// 규칙: **트리거 한 번 = 시뮬 칸 하나의 occupied 를 뒤집는다.** 그 이상 바꾸지 않는다.
+//   여러 칸이 한꺼번에 바뀌면 "눌렀다 → 저 칸이 바뀌었다"의 1:1 대응이 깨져
+//   지금 문제(무엇이 언제 바뀌었는지 못 따라감)가 그대로 재현된다.
+//
+// 고르는 순서:
+//   1순위 — `reserved=1 ∧ occupied=0` 인 시뮬 칸을 **채운다(0→1)**.
+//           이게 `occupied=1 ∧ reserved=1`(§1.1 마지막 행 = 이 시스템이 성공한 모습)에
+//           도달하는 유일한 경로다. 순수 무작위면 평균 열 번쯤 눌러야 보이는데,
+//           **도달 가능하지만 사실상 안 보이는 상태는 도달 불가와 실질적으로 같다.**
+//   2순위 — 시뮬 칸 중 무작위로 하나를 뒤집는다.
+//   없으면 — 0xFF 를 돌려준다 → 호출자가 result=5 로 응답한다.
+//
+// ⚠ **후보에서 빼는 칸이 둘 있고, 두 번째는 내 판단이다:**
+//   (a) 실물 센서 칸(`srcReal`) — 명세가 명시했다. 진실이고 사람이 흔들 것이 아니다(§12B.3).
+//   (b) **지금 오버라이드가 먹고 있는 칸**(`testArmed && ovrActive`) — 명세에 없다.
+//       그 칸을 고르면 simOcc 는 바뀌는데 보고되는 occupied 는 오버라이드에 가려 안 바뀐다.
+//       ACK 는 "그 칸이 바뀌었다"고 말하는데 화면은 그대로 → §12B.2 의 1:1 대응이 깨진다.
+//       후보에서 빼면 후보의 simOcc 가 곧 보고되는 occupied 라 1순위 판정도 모호함이 없다.
+//       (전 시뮬 칸이 오버라이드 중이면 관측 가능한 변화가 없으므로 result=5 로 본다.)
+//       루트에게 명세 보완을 올려 둔다.
+// ─────────────────────────────────────────────────────────────────────────
+static bool simCandidate(uint8_t i) {
+  uint16_t bit = (uint16_t)1 << i;
+  if (srcReal & bit) return false;                       // (a) 실물 칸
+  if (testArmed && (ovrActive & bit)) return false;      // (b) 오버라이드가 가리는 칸
+  return true;
+}
+
+// 바뀐 칸 인덱스를 돌려준다. 바꿀 칸이 없으면 0xFF.
+static uint8_t simStep(void) {
+  // 1순위: 예약됐지만 비어 있는 시뮬 칸을 채운다
+  for (uint8_t i = 0; i < SLOT_N; i++) {
+    uint16_t bit = (uint16_t)1 << i;
+    if (!simCandidate(i)) continue;
+    if ((resMask & bit) && !(simOcc & bit)) {
+      simOcc |= bit;
+      return i;
+    }
+  }
+  // 2순위: 시뮬 칸 중 무작위 하나를 뒤집는다
+  uint8_t n = 0;
+  for (uint8_t i = 0; i < SLOT_N; i++) if (simCandidate(i)) n++;
+  if (n == 0) return 0xFF;
+  uint8_t pick = (uint8_t)random(0, n);
+  for (uint8_t i = 0; i < SLOT_N; i++) {
+    if (!simCandidate(i)) continue;
+    if (pick-- == 0) {
+      simOcc ^= (uint16_t)1 << i;
+      return i;
+    }
+  }
+  return 0xFF;                                           // 도달하지 않는다
+}
+
 /* ── ★ 센서가 도착했을 때 무엇을 하면 되는가 (6개월 뒤에 읽을 사람에게) ★ ──────
  * 1. 위 SLOT_PIN[] 표에서 그 칸의 핀을 확인하고, 센서 접점을 그 핀과 GND 사이에 문다.
  *    INPUT_PULLUP 을 쓰므로 "차량이 있으면 GND 로 당긴다" 형식이면 배선은 그것으로 끝이다.
@@ -238,8 +273,15 @@ uint8_t readSlotSensor(uint8_t i) {
   // 그러면 서버·화면은 그 값을 실측으로 믿는다 — §12A.6 이 막으려는 바로 그 사고다.
   // 여기서 막으면 "해제 = 현실로 복귀"가 ClearAll 호출에 기대지 않고 구조적으로 성립한다.
   if (testArmed && (ovrActive & ((uint16_t)1 << i))) return (uint8_t)((ovrValue >> i) & 1);
+
+  // 실물 센서 칸은 **무장 중에도 계속 읽는다.** 그건 진실이고 가릴 이유가 없다(REQ-0043).
+  // 그래서 "3칸 실물 + 7칸 시뮬" 상태로 무장하면 실물 3칸은 살아 움직이고 시뮬 7칸만 얼어붙는다.
   if (srcReal & ((uint16_t)1 << i)) return readRealSensor(i);
-  simAdvance(i);
+
+  // ★ 시뮬 칸은 **트리거(M 프레임)를 받을 때만** 바뀐다(§12B.1). 여기서는 그냥 읽는다.
+  //   무장 여부와 무관하다 — 시뮬 트리거는 테스트 모드와 별개다(§12B.3).
+  //   ⚠ 시뮬 값은 tmask 에 넣지 않는다. tmask 는 "S 로 주입된 값인가"를 말하는 것이고,
+  //     시뮬 값은 주입된 게 아니라 원래 시뮬이었던 값이 한 걸음 간 것이다(§12B.3).
   return (uint8_t)((simOcc >> i) & 1);
 }
 
@@ -463,6 +505,63 @@ static void pumpSerialRaw(void) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// 연결 사망 감지 (REQ-0049) — 통보가 안 올 때의 그물
+//
+// 실기 증상: 17분쯤 뒤 TCP 가 죽는데 아두이노가 모르고 계속 죽은 소켓에 쓴다.
+// 결정적 단서는 **아두이노가 seq 1734 를 반복 전송하고 서버는 1733 에서 멈춘 것**이었다.
+// `statusTick()` 은 성공했을 때만 seq 를 올리므로, 같은 seq 반복 = `sendStatus()` 가 계속 false
+// = `waitForPrompt()` 가 매번 타임아웃이라는 뜻이다. **실패는 이미 정확히 감지되고 있었고
+// 그 값을 버리고 있었을 뿐이다.**
+//
+// 구조적 원인: `netOnline = false` 가 되는 곳이 파일 전체에 `CLOSED` 하나뿐이었다.
+// 그 통보가 안 오면 netTick() 이 첫 줄에서 빠져 **재접속을 아예 시도하지 않는다.**
+//
+// ── N(연속 실패 한계)을 3 으로 정한 근거 ──
+// 명세 §3.4: **서버는 3.5초 무프레임이면 device.online=false 로 본다.**
+// 즉 서버가 이미 우리를 죽었다고 볼 시점이면 우리도 그렇게 봐야 한다. 실패 1회의 주기는:
+//   · 하트비트만 있을 때 : 대기 1000ms + 프롬프트 타임아웃 300ms  = 약 1300ms
+//   · 변화가 밀려 있을 때: 백오프  500ms + 프롬프트 타임아웃 300ms = 약  800ms
+// → 3회 연속이면 마지막 성공 프레임으로부터 **약 2.4초(변화 주도) ~ 3.9초(하트비트만)**.
+//   서버의 3.5초 판정을 정확히 걸치는 구간이다.
+//   2회(1.6~2.6초)는 서버가 아직 살아 있다고 보는 동안 링크를 스스로 끊는 것이고,
+//   4회(3.2~5.2초)는 서버가 이미 포기한 뒤에도 죽은 소켓에 계속 쓰는 것이다.
+// ─────────────────────────────────────────────────────────────────────────
+static const uint8_t SEND_FAIL_LIMIT = 3;
+static uint8_t       sendFailStreak = 0;
+
+static void goOffline(void) {
+#if DEBUG
+  Serial.print(F("[NET] 전송 "));
+  Serial.print(sendFailStreak);
+  Serial.println(F("회 연속 실패 → 오프라인 전환, 재접속 시도"));
+#endif
+  netOnline = false;
+  sendFailStreak = 0;
+  // ⚠ 여기서 멱등 캐시를 비우지 않는다. 이 판정은 **추정**이고, 링크가 실은 살아 있었다면
+  //   재시도에 ALREADY CONNECTED 가 와서 그대로 복귀한다 — 그 경우 캐시를 비웠다면
+  //   살아 있는 연결의 멱등성(REQ-0035 [18]-4)이 깨진다.
+  //   캐시는 실제 연결 생명주기 신호인 CLOSED / CONNECT 에서만 비운다(REQ-0036).
+  netStep = 4;                       // CIPSTART 부터 다시
+  netStepAt = millis();
+  netStepWait = 1000;
+}
+
+// 실패를 세는 곳은 **sendLine() 한 곳뿐이다.** 수신된 오류 문구로도 세면 한 번의 실패가
+// 두 번 계수되어(sendLine 이 false + 오류 줄 도착) N 이 사실상 절반이 된다. 그래서 아래
+// handleLine() 의 오류 문구 처리는 **세지 않고 로그만** 남긴다(link is not valid 는 예외).
+static void noteSendResult(bool ok) {
+  if (ok) { sendFailStreak = 0; return; }
+  if (sendFailStreak < 255) sendFailStreak++;
+#if DEBUG
+  Serial.print(F("[NET] 전송 실패 "));
+  Serial.print(sendFailStreak);
+  Serial.print('/');
+  Serial.println(SEND_FAIL_LIMIT);
+#endif
+  if (sendFailStreak >= SEND_FAIL_LIMIT) goOffline();
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // 송신 — AT+CIPSEND 뒤 '>' 프롬프트를 실제로 기다린다
 // ─────────────────────────────────────────────────────────────────────────
 static bool waitForPrompt(void) {
@@ -502,6 +601,9 @@ static bool sendLine(const char* line) {
   Serial.print(ok ? F("[TX] ") : F("[TX-DROP] "));
   Serial.println(line);
 #endif
+  // ★ REQ-0049: 이 결과가 유일한 연속 실패 신호다. 여기서만 센다.
+  //   goOffline() 이 netOnline 을 내릴 수 있으므로 inSend 를 내린 **뒤**에 부른다.
+  noteSendResult(ok);
   return ok;
 }
 
@@ -605,6 +707,8 @@ static void processTest(char* f[], char* s0, char* s1, uint8_t* result) {
       testArmed = false;
       slotOverrideClearAll();
     }
+    // ⚠ 무장/해제는 시뮬레이터에 아무 영향이 없다(§12B.3). 시뮬은 자율 전진을 하지 않으므로
+    //   멈출 것도 재개할 것도 없다. REQ-0043 의 "무장 중 시뮬 정지"는 여기서 사라졌다.
     *result = 0;
     return;
   }
@@ -641,10 +745,12 @@ static void processCommand(char* cand) {
   if (nf == 0xFF) return;
 
   char type = f[0][0];
-  //  R,rid,slot,userid,cksum (5) / C,rid,slot,cksum (4) / T,rid,top,slot,tval,cksum (6)
+  //  R,rid,slot,userid,cksum (5) / C,rid,slot,cksum (4)
+  //  T,rid,top,slot,tval,cksum (6) / M,rid,cksum (3)
   uint8_t want;
   if      (type == 'R') want = 5;
   else if (type == 'T') want = 6;
+  else if (type == 'M') want = 3;
   else                  want = 4;
 
   uint16_t rid;
@@ -681,6 +787,29 @@ static void processCommand(char* cand) {
     return;
   }
 
+  if (type == 'M') {
+    // §12B.4 시뮬 한 걸음. **무장 여부로 막지 않는다** — 테스트 모드와 별개다(§12B.3).
+    // 멱등이 특히 중요하다: 재전송이 새 걸음으로 처리되면 한 번 눌렀는데 두 칸이 바뀐다.
+    // (위쪽 cacheFind 가 이미 걸러 준다 — M 도 R/C/T 와 같은 기계장치를 탄다.)
+    uint8_t idx = simStep();
+    if (idx == 0xFF) {
+      s0 = '?'; s1 = '?'; result = 5;    // 바꿀 시뮬 칸이 없다
+#if DEBUG
+      Serial.println(F("[SIM] 바꿀 시뮬 칸이 없다 → result=5"));
+#endif
+    } else {
+      s0 = slotCol(idx); s1 = slotRow(idx); result = 0;
+#if DEBUG
+      Serial.print(F("[SIM] 한 걸음: ")); Serial.print(s0); Serial.print(s1);
+      Serial.print(F(" → occupied="));
+      Serial.println((simOcc >> idx) & 1);
+#endif
+    }
+    cachePut(rid, s0, s1, result);
+    sendAck(rid, s0, s1, result);
+    return;
+  }
+
   // ── 여기부터 R / C ──
   const char* slotTok = f[2];
   uint8_t idx = (strlen(slotTok) == 2) ? slotIndexOf(slotTok[0], slotTok[1]) : 0xFF;
@@ -708,8 +837,10 @@ static void processCommand(char* cand) {
       else {
         resMask |= bit;
         result = 0;
-        // ★ occupied=1,reserved=1 경로(§1.1 마지막 행): 예약이 잡히면 곧 그 차가 들어온다
-        simNextAt[idx] = millis() + (unsigned long)random(ARRIVE_MIN_MS, ARRIVE_MAX_MS);
+        // ★ occupied=1,reserved=1 경로(§1.1 마지막 행)는 이제 여기서 만들지 않는다.
+        //   예전에는 예약이 잡히면 몇 초 뒤 시뮬이 그 칸에 차를 넣었다(ARRIVE_*).
+        //   자율 전진이 없어졌으므로 §12B.2 의 **"예약된 빈칸 우선"** 규칙이 그 일을 한다 —
+        //   다음 시뮬 트리거가 이 칸을 가장 먼저 채운다. simStep() 1순위가 그것이다.
       }
     } else {                                            // 'C' — 취소
       resMask &= (uint16_t)~bit;                        // 예약을 끄는 유일한 경로 (§7.4)
@@ -810,9 +941,41 @@ static void handleLine(char* s) {
   }
   if (strstr(s, "CLOSED")) {
     netOnline = false;
+    sendFailStreak = 0;
     cacheClear();                     // ★ 주 방어선 — 위 주석 참조
     netStep = 4; netStepAt = millis(); netStepWait = 1000;   // CIPSTART 만 다시
     return;
+  }
+
+  // ── REQ-0049 ② 송신 오류 응답 (보조 경로) ────────────────────────────────
+  // 온라인 중에 우리가 보내는 AT 명령은 **`AT+CIPSEND=` 하나뿐**이다
+  // (netTick() 이 `if (netOnline) return;` 으로 시작하므로 온라인 중엔 다른 명령이 안 나간다).
+  // 따라서 **온라인 중에 오는 오류 응답은 반드시 CIPSEND 에 대한 것**이다 — 그래서 여기서
+  // 판정해도 "관계없는 AT 실패를 연결 문제로 오인"하는 사고가 구조적으로 생기지 않는다.
+  //
+  // 다만 세기는 하지 않는다(위 noteSendResult 주석의 이중 계수 문제). 처리를 둘로 나눈다:
+  //   · `link is not valid` → **즉시 오프라인.** 링크가 무효라고 모듈이 명시한 것이라 모호하지 않다
+  //   · `SEND FAIL` / `ERROR` / `busy`  → **로그만.** 이 송신이 실패했다는 뜻이지 링크가 죽었다는
+  //     확증은 아니다. 대응되는 sendLine() 실패가 이미 카운터를 올리고 있으므로 3회면 잡힌다.
+  //   ⚠ 실제 문구는 아직 추정이다. REQ-0042 의 [AT] 전체 로깅이 올라간 빌드에서 그 순간의
+  //     로그가 오면 어느 문구인지 확정하고 좁힐 수 있다.
+  if (netOnline) {
+    if (strstr(s, "link is not valid")) {
+#if DEBUG
+      Serial.println(F("[NET] link is not valid → 즉시 오프라인"));
+#endif
+      netOnline = false;
+      sendFailStreak = 0;
+      netStep = 4; netStepAt = millis(); netStepWait = 1000;
+      return;
+    }
+    if (strstr(s, "SEND FAIL") || strstr(s, "ERROR") || strstr(s, "busy")) {
+#if DEBUG
+      Serial.print(F("[NET] 송신 오류 응답(로그만, 카운터는 sendLine 이 센다): "));
+      Serial.println(s);
+#endif
+      return;
+    }
   }
 
   // (b) §6.2 2단계 — +IPD,<n>: 이 있으면 그 뒤부터가 후보
@@ -828,8 +991,9 @@ static void handleLine(char* s) {
   if (len == 0 || len > 63) return;                    // §2.1 한 줄 최대 64바이트(LF 포함)
 
   // (c) 3단계 — 타입 문자. 모르는 타입은 조용히 버린다(§2.1-7)
-  //     T 는 개정 3 에서 추가됐다. R/C 와 **같은 파서**를 탄다 — 따로 만들지 않는다(§2.4)
-  if (cand[0] != 'R' && cand[0] != 'C' && cand[0] != 'T') return;
+  //     T 는 개정 3, M 은 개정 5 에서 추가됐다.
+  //     둘 다 R/C 와 **같은 파서**를 탄다 — 따로 만들지 않는다(§2.4 · §12B.4)
+  if (cand[0] != 'R' && cand[0] != 'C' && cand[0] != 'T' && cand[0] != 'M') return;
 
   // (d) 4단계 — 체크섬. AT 잡음이 우연히 R 로 시작해도 여기서 걸린다
   if (!checksumOk(cand, len)) {
@@ -924,11 +1088,8 @@ void setup() {
   slotOverrideClearAll();
 
   // 시작 시 몇 칸은 차 있는 편이 주차장답다: A2, A3, B4
+  // 이 값은 **트리거를 받기 전까지 그대로 유지된다**(§12B.1 — 자율 전진 없음).
   simOcc = (uint16_t)((1U << 1) | (1U << 2) | (1U << 8));
-  for (uint8_t i = 0; i < SLOT_N; i++) {
-    simNextAt[i] = 3000UL + (unsigned long)i * 1700UL + (unsigned long)random(0, 1500);
-  }
-  simLastChangeAt = 0;
 
   netStep = 0;
   netStepAt = millis();

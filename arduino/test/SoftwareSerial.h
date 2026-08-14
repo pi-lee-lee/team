@@ -41,6 +41,11 @@ class SoftwareSerial {
   std::vector<std::string> sentLines;
   bool traceAt = false;
 
+  // ★ 죽은 링크 흉내 (REQ-0049): true 면 CIPSEND 에 '>' 를 주지 않고 오류만 돌려준다.
+  //   실기 증상(seq 고정 = waitForPrompt 매번 타임아웃)을 재현하는 스위치다.
+  bool refusePrompt = false;
+  std::string refuseReply = "ERROR\r\n";   // 실제 문구는 미확정 — 필요하면 바꿔 시험한다
+
  private:
   std::deque<char> rx;
   std::string atLine;          // 조립 중인 AT 명령
@@ -67,8 +72,12 @@ class SoftwareSerial {
       atLine.clear();
       if (traceAt) printf("        [esp<-] %s\n", cmd.c_str());
       if (cmd.compare(0, 11, "AT+CIPSEND=") == 0) {
-        pendingPayload = (size_t)atol(cmd.c_str() + 11);
-        reply("OK\r\n> ");
+        if (refusePrompt) {
+          reply(refuseReply);          // '>' 를 주지 않는다 → 스케치의 waitForPrompt 가 타임아웃
+        } else {
+          pendingPayload = (size_t)atol(cmd.c_str() + 11);
+          reply("OK\r\n> ");
+        }
       } else if (cmd.compare(0, 12, "AT+CIPSTART=") == 0) {
         reply("OK\r\nCONNECT\r\n");
       } else {

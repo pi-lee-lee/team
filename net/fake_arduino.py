@@ -92,6 +92,13 @@ class FakeArduino:
         # 테스트 모드는 재부팅하면 사라진다 — 예약(§7.4)과 정반대다(§12A.3).
         self.armed = False
         self.override = [None] * len(SLOTS)   # None = 주입 없음, 0/1 = 주입값
+        # 실물 센서가 배정된 칸(§12B.2). 여기 든 칸은 시뮬 트리거가 건드리지 않는다.
+        # 이 스크립트에 진짜 센서는 없지만, 그 규칙을 시험하려면 지정할 수 있어야 한다.
+        self.real = set()
+        for tok in (getattr(self.args, "real_slots", "") or "").split(","):
+            tok = tok.strip().upper()
+            if tok in SLOTS:
+                self.real.add(SLOTS.index(tok))
         self.reserved = [0] * len(SLOTS)      # 재부팅하면 예약이 사라진다 — 이게 §7.4 의 이유
         self.ack_cache = []                   # [(rid, slot, result)] 최근 8건
         self.sched = []                       # [(발동시각, 자리index, occupied값)] 입출차 예약
@@ -229,6 +236,49 @@ class FakeArduino:
         self.remember(rid, res[0], res[1])
         return res
 
+    def handle_simstep(self, rid):
+        """§12B — `M` 한 걸음. (ack_slot, result) 반환.
+
+        **칸 하나만** 바꾼다(§12B.2). 여러 칸을 바꾸면 무엇이 바뀌었는지 못 따라가고,
+        그게 자율 전진을 없앤 이유 자체였다.
+        """
+        hit = self.cached(rid)
+        if hit is not None:
+            # 재전송이 **두 걸음**이 되면 안 된다(§12B.4). 한 번 눌렀는데 두 칸이 바뀐다.
+            say("=", "rid %s 재수신 → 멱등 캐시 적중, 재적용 없이 같은 ACK %s" % (rid, hit))
+            return hit
+
+        # 후보에서 빼는 것 둘:
+        #  · 실물 센서가 배정된 칸 — 그건 진실이고 사람이 흔들 것이 아니다.
+        #  · **지금 오버라이드가 먹고 있는 칸**(§12B.2 개정 6) — 고르면 시뮬 값은 바뀌는데
+        #    보고되는 occupied 는 주입값에 가려 안 바뀐다. ACK 는 "바뀌었다"인데 화면은 그대로 —
+        #    "눌렀다 → 저 칸이 바뀌었다"는 1:1 대응이 깨진다.
+        cand = [i for i in range(len(SLOTS))
+                if i not in self.real
+                and not (self.armed and self.override[i] is not None)]
+        if not cand:
+            say("!", "바꿀 시뮬 칸이 없다 — result=5")
+            res = ("??", 5)
+            self.remember(rid, res[0], res[1])
+            return res
+
+        # 1순위: **예약됐지만 비어 있는 칸을 채운다**(§12B.2).
+        # 이게 없으면 occupied=1 ∧ reserved=1 (이 시스템의 성공 상태, §1.1)을
+        # 보려고 평균 열 번쯤 눌러야 한다 — 사실상 안 보이는 것과 같다.
+        waiting = [i for i in cand if self.reserved[i] == 1 and self.occupied[i] == 0]
+        if waiting:
+            i = random.choice(waiting)
+            self.occupied[i] = 1
+            say("*", "한 걸음: %s 예약된 빈칸에 입차 (occupied=1, reserved=1)" % SLOTS[i])
+        else:
+            i = random.choice(cand)
+            self.occupied[i] ^= 1
+            say("*", "한 걸음: %s occupied=%d" % (SLOTS[i], self.occupied[i]))
+
+        res = (SLOTS[i], 0)
+        self.remember(rid, res[0], res[1])
+        return res
+
     # --- 연결 -------------------------------------------------------------
     def run(self):
         while True:
@@ -272,20 +322,21 @@ class FakeArduino:
                 time.sleep(1.0)
                 return
 
-            # --- 예약해 둔 입차/출차 발동 (--arrive-sec)
-            due = [x for x in self.sched if now >= x[0]]
-            for t0, i, v in due:
-                self.sched.remove((t0, i, v))
-                if self.occupied[i] != v:
-                    self.occupied[i] = v
-                    say("~", "%s %s (occupied=%d)" % (SLOTS[i], "입차" if v else "출차", v))
-
-            # --- 가상 센서: 가끔 점유 상태를 바꾼다 → 변화 시 즉시 전송
-            if self.args.arrive_sec == 0 and now >= next_change:
-                i = random.randrange(len(SLOTS))
-                self.occupied[i] ^= 1
-                say("~", "가상 센서 변화: %s occupied=%d" % (SLOTS[i], self.occupied[i]))
-                next_change = now + random.uniform(3, 7)
+            # --- 명세 §12B.1: **시뮬레이터는 스스로 전진하지 않는다.**
+            # 예전에는 여기서 타이머로 칸을 뒤집었다. 그 자율 전진을 없앴다 —
+            # 화면 전환이 너무 빨라 무엇이 언제 바뀌었는지 따라갈 수 없어 시험이 불가능했다.
+            # 이제 값은 서버가 보낸 `M`(§12B.4)을 받을 때만 한 걸음 움직인다.
+            #
+            # 아래 --arrive-sec 은 **명세 밖의 시험 보조 장치**이고 기본으로 꺼져 있다.
+            # 예약 은퇴(§7.5) 경로를 시간으로 재현하려고 남겨 둔 것이지 시뮬레이터가 아니다.
+            if self.args.arrive_sec > 0:
+                due = [x for x in self.sched if now >= x[0]]
+                for t0, i, v in due:
+                    self.sched.remove((t0, i, v))
+                    if self.occupied[i] != v:
+                        self.occupied[i] = v
+                        say("~", "%s %s (occupied=%d) [--arrive-sec 시험 보조]"
+                            % (SLOTS[i], "입차" if v else "출차", v))
 
             # --- 전송 규칙(§3.4): 변화 즉시 + 1Hz 하트비트, 타이머는 하나
             # 전선에 나갈 값 기준으로 변화를 본다 — 주입/무장도 즉시 한 프레임을 유발해야 한다.
@@ -351,13 +402,15 @@ class FakeArduino:
             say("!", "체크섬 불일치 — 버림 (명세 §6.2)")
             return
         kind = f[0]
-        if kind not in ("R", "C", "T"):
+        if kind not in ("R", "C", "T", "M"):
             say("!", "모르는 타입 '%s' — 조용히 버림" % kind)
             return
         try:
             rid = f[1]
             if kind == "T":
                 op, slot, tval = f[2], f[3], f[4]
+            elif kind == "M":
+                slot = None                      # M 은 rid 뿐이다(§12B.4)
             else:
                 slot = f[2]
         except IndexError:
@@ -366,6 +419,8 @@ class FakeArduino:
 
         if kind == "T":
             slot, result = self.handle_test(rid, op, slot, tval)
+        elif kind == "M":
+            slot, result = self.handle_simstep(rid)
         else:
             slot, result = self.handle_request(kind, rid, slot)
         ack = build("A,%s,%s,%d," % (rid, slot, result))
@@ -399,6 +454,9 @@ def main():
                     help="입차 후 N초 뒤 출차시킨다. 이 출차(occupied 1→0)가 예약 은퇴를 발동시킨다")
     ap.add_argument("--start-empty", action="store_true",
                     help="모든 자리를 빈 상태로 시작(은퇴 시험 시 예약 가능한 자리 확보)")
+    ap.add_argument("--real-slots", default="",
+                    help="실물 센서가 배정된 칸(쉼표 구분, 예: A1,B5). "
+                         "시뮬 트리거(M)가 이 칸들을 건드리지 않는지 시험할 때 쓴다 (§12B.2)")
     ap.add_argument("--legacy-frame", action="store_true",
                     help="tmask 없이 옛 6필드 S 프레임을 보낸다. 수신 측이 선택 필드 부재를 "
                          "견디는지(명세 §2.1 규칙 8) 시험용")
