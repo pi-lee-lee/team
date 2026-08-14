@@ -41,9 +41,18 @@ def say(mark, text):
 
 
 def cksum(prefix):
-    """명세 §2.2 — 첫 바이트부터 체크섬 앞 쉼표까지(그 쉼표 포함)의 XOR, 대문자 2자리 hex."""
+    """명세 §2.2 — 첫 바이트부터 체크섬 앞 쉼표까지(그 쉼표 포함)의 XOR, 대문자 2자리 hex.
+
+    비 ASCII 가 섞이면 명세 §2.1(ASCII 전용) 위반이므로 None 을 돌려준다.
+    **여기서 예외를 던지면 장치가 죽는다** — 실제로 서버가 UTF-8 번호판을 전선에 실어 보낸
+    적이 있고 그때 이 스크립트가 죽었다. 진짜 아두이노라면 그냥 깨진 줄로 보고 버려야 한다.
+    """
+    try:
+        data = prefix.encode("ascii")
+    except UnicodeEncodeError:
+        return None
     x = 0
-    for b in prefix.encode("ascii"):
+    for b in data:
         x ^= b
     return "%02X" % x
 
@@ -58,7 +67,8 @@ def verify(line):
     cut = line.rfind(",")
     if cut < 0:
         return None
-    if cksum(line[:cut + 1]) != line[cut + 1:]:
+    want = cksum(line[:cut + 1])
+    if want is None or want != line[cut + 1:]:
         return None
     return line[:cut].split(",")
 
@@ -322,7 +332,13 @@ class FakeArduino:
                 if len(raw) + 1 > MAX_LINE:
                     say("!", "64바이트 초과 줄 — 버림")
                     continue
-                self.on_line(s, raw.decode("ascii", "replace"))
+                try:
+                    text = raw.decode("ascii")
+                except UnicodeDecodeError:
+                    # 명세 §2.1: 전선은 ASCII 전용이다. 비 ASCII 는 규약 위반이므로 버린다.
+                    say("!", "비 ASCII 바이트가 섞인 줄 — 버림 (%r)" % raw[:40])
+                    continue
+                self.on_line(s, text)
 
             if len(buf) > MAX_LINE:
                 say("!", "LF 없이 %d 바이트 — 버퍼 비움" % len(buf))

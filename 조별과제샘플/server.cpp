@@ -83,6 +83,10 @@
 // ---------------------------------------------------------------- 상수 (명세대로)
 static const int  PORT_ARDUINO   = 9991;
 static const int  PORT_HTTP      = 9900;
+static const int  PORT_PHONE     = 5500;    // digitcam 폰 수신 (docs/net/digitcam-protocol.md)
+// 폰 프레임은 JSON 이라 아두이노 라인(64B)보다 길다. digitcam 명세 §9 가 권하는 방어적 상한.
+static const size_t MAX_PHONE_LINE = 1024;
+static const size_t MAX_PLATE_BYTES = 32;   // 번호판 저장 상한(신형 10B, 여유 포함)
 static const int  MAX_LINE       = 64;      // §2.1
 static const int  ACK_TIMEOUT_MS = 1500;    // §7.3
 static const int  ACK_MAX_TRIES  = 3;       // 최초 + 재전송 2회
@@ -251,7 +255,8 @@ struct Pending {             // 아두이노에 내려보내고 ACK 를 기다�
     uint16_t wire_rid;
     sock_t   ws_fd;          // 요청한 브라우저 (BAD_SOCK = 서버 자체 재동기화)
     std::string browser_rid;
-    std::string slot, user_id;
+    std::string slot, user_id;   // user_id = **전선에 실제로 나간 값**(ASCII 0*8 또는 빈 값)
+    std::string plate;           // 서버가 보관할 원래 값(UTF-8 번호판 등). 전선에 안 나간다
     char kind;               // 'R' | 'C' | 'T'
     char top;                // kind=='T' 일 때의 op: 'A'|'D'|'S'|'X'
     long long sent_ms;
@@ -266,7 +271,8 @@ struct Conn {
 
 struct Server {
     Slot slots[10];
-    sock_t lsn_ard, lsn_http;
+    sock_t lsn_ard, lsn_http, lsn_phone;
+    std::map<sock_t, std::string> phones;   // 폰 연결 → 수신 버퍼 (연결마다 따로!)
     sock_t ard;                        // 아두이노 연결 (하나만)
     std::string ard_buf;
     bool  ard_seen;
@@ -293,7 +299,7 @@ struct Server {
     int  test_ovr[10];        // 1 = 그 칸의 occupied 는 주입된 값
     int  base_ovr[10];        // 직전 프레임의 오버라이드 비트 — 되돌림 판정용(§7.5-3)
 
-    Server() : lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), ard(BAD_SOCK),
+    Server() : lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK), ard(BAD_SOCK),
                ard_seen(false), ard_last_ms(0), ard_uptime(-1), ard_seq(-1),
                ard_dev("?"), next_rid(1), base_valid(false), test_armed(false) {
         for (int i = 0; i < 10; i++) { base_occ[i] = 0; test_ovr[i] = 0; base_ovr[i] = 0; }
@@ -306,6 +312,26 @@ struct Server {
         for (int i = 0; i < 10; i++) if (s == SLOT_ID[i]) return i;
         return -1;
     }
+    // ── 두 이름공간 (rid 를 §4.1 에서 나눈 것과 같은 구조) ─────────────────────
+    //   브라우저 ↔ 서버 · 서버 내부 저장 : **번호판 전체** (UTF-8, JSON 이라 자유)
+    //   서버 → 아두이노 (전선 userid)    : ASCII 0*8 (§2.3) — 못 담으면 **빈 값**
+    //
+    // 전선에 번호판을 태우려고 valid_userid() 를 느슨하게 만들면 REQ-0023 이 막은 버그
+    // (잘린 값이 체크섬과 함께 형식상 유효한 라인으로 나가는 것)가 되살아난다.
+    // 아두이노는 userid 를 쓰지 않는다(§2.4 — 무시해도 되지만 필드는 있어야 한다).
+    // 그래서 담을 수 없으면 그냥 비운다. 잃는 것이 없다.
+    static std::string wire_userid(const std::string& browser_user) {
+        return valid_userid(browser_user) ? browser_user : std::string();
+    }
+    // 브라우저 쪽 값은 UTF-8 이라 문자 집합을 강제하지 않는다. 다만 저장이 무한히 커지지
+    // 않게 길이만 막고, 제어문자는 거른다(로그·JSON 오염 방지).
+    static bool valid_browser_user(const std::string& u) {
+        if (u.size() > MAX_PLATE_BYTES) return false;
+        for (size_t i = 0; i < u.size(); i++)
+            if ((unsigned char)u[i] < 0x20) return false;
+        return true;
+    }
+
     // 명세 §2.3 `userid ::= 0*8( ALPHA / DIGIT / "_" / "-" )`
     // 검증하지 않으면 snprintf 가 조용히 잘라서 **형식상 유효하지만 내용이 잘린 라인**이 나간다.
     // 메모리 안전 문제는 없지만(잘린다) 64B 상한(§2.1)을 넘거나 엉뚱한 user_id 가 기록되고,
@@ -515,12 +541,18 @@ struct Server {
         if (next_rid == 0) next_rid = 1;
         Pending p;
         p.wire_rid = rid; p.ws_fd = ws_fd; p.browser_rid = brid;
-        p.slot = slot; p.user_id = uid; p.kind = kind;
+        p.slot = slot;
+        p.plate = uid;                       // 서버가 기억할 원본(번호판일 수 있다)
+        p.user_id = wire_userid(uid);        // 전선에 나갈 값 — ASCII 0*8 아니면 빈 값
+        p.kind = kind;
         p.sent_ms = now_ms(); p.tries = 1;
         pend[rid] = p;
 
         char buf[64];
-        if (kind == 'R') snprintf(buf, sizeof(buf), "R,%u,%s,%s,", rid, slot.c_str(), uid.c_str());
+        // **p.user_id 를 쓴다. 인자 uid 를 쓰면 안 된다** — uid 는 번호판일 수 있고
+        // 그러면 UTF-8 이 그대로 전선에 나가 §2.1(ASCII 전용)과 §2.3 을 위반한다.
+        // 실제로 그 버그를 냈다: `R,1,B2,980가4568,F7` 이 나가 아두이노가 죽었다.
+        if (kind == 'R') snprintf(buf, sizeof(buf), "R,%u,%s,%s,", rid, slot.c_str(), p.user_id.c_str());
         else             snprintf(buf, sizeof(buf), "C,%u,%s,", rid, slot.c_str());
         send_ard(build_line(buf));
     }
@@ -703,7 +735,9 @@ struct Server {
             if (result == 0 && idx >= 0 && (p.kind == 'R' || p.kind == 'C')) {
                 if (p.kind == 'R') {
                     slots[idx].reserved = 1;
-                    slots[idx].user_id = p.user_id;
+                    // 화면·스냅샷에는 **원본**을 보여 준다(번호판이면 번호판 그대로).
+                    // 전선에 나간 값(p.user_id)은 잘렸거나 비어 있을 수 있다.
+                    slots[idx].user_id = p.plate;
                     slots[idx].reserved_at = epoch_ms();
                 } else {
                     slots[idx].reserved = 0;
@@ -722,6 +756,18 @@ struct Server {
         }
     }
 
+    // 코드포인트를 UTF-8 로. digitcam 명세 §4.3 의 \uXXXX 복원에 쓴다.
+    static void utf8_append(std::string& o, unsigned cp) {
+        if (cp < 0x80) o += char(cp);
+        else if (cp < 0x800) {
+            o += char(0xC0 | (cp >> 6)); o += char(0x80 | (cp & 0x3F));
+        } else {
+            o += char(0xE0 | (cp >> 12));
+            o += char(0x80 | ((cp >> 6) & 0x3F));
+            o += char(0x80 | (cp & 0x3F));
+        }
+    }
+
     // ---------- 브라우저 → 서버 (§5.4)
     static std::string jget(const std::string& s, const char* key) {
         std::string pat = std::string("\"") + key + "\"";
@@ -733,7 +779,31 @@ struct Server {
         while (i < s.size() && (s[i]==' '||s[i]=='\t')) i++;
         if (i < s.size() && s[i] == '"') {
             i++; std::string o;
-            while (i < s.size() && s[i] != '"') { if (s[i]=='\\' && i+1<s.size()) i++; o += s[i++]; }
+            while (i < s.size() && s[i] != '"') {
+                if (s[i] == '\\' && i + 1 < s.size()) {
+                    char e = s[i+1];
+                    // digitcam 명세 §4.3: 한글을 원문 UTF-8 로 보내든 \uXXXX 로 보내든
+                    // **수신 측이 둘 다 복원**해야 한다. 이걸 안 하면 이스케이프로 보내는
+                    // 송신기에서 번호판이 "123가4568" 로 저장돼 매칭이 전부 빗나간다.
+                    if (e == 'u' && i + 5 < s.size()) {
+                        unsigned cp = 0; bool ok = true;
+                        for (int k = 0; k < 4; k++) {
+                            char c = s[i+2+k]; int v;
+                            if (c >= '0' && c <= '9') v = c - '0';
+                            else if (c >= 'a' && c <= 'f') v = c - 'a' + 10;
+                            else if (c >= 'A' && c <= 'F') v = c - 'A' + 10;
+                            else { ok = false; break; }
+                            cp = (cp << 4) | (unsigned)v;
+                        }
+                        if (ok) { utf8_append(o, cp); i += 6; continue; }
+                    }
+                    if (e == 'n') { o += '\n'; i += 2; continue; }
+                    if (e == 't') { o += '\t'; i += 2; continue; }
+                    if (e == 'r') { o += '\r'; i += 2; continue; }
+                    o += e; i += 2; continue;                 // \" \\ \/ 등
+                }
+                o += s[i++];
+            }
             return o;
         }
         std::string o;
@@ -786,10 +856,11 @@ struct Server {
             send_err(fd, rid, "bad_request", "그런 자리가 없습니다");
             return;
         }
-        if (!valid_userid(uid)) {                                  // §2.3 userid 문법
-            logf("!", "user_id 가 명세 범위를 벗어남(길이 " + std::to_string(uid.size()) + ") — 거절");
-            send_err(fd, rid, "bad_request",
-                     "user_id 는 영숫자·_·- 로 8자 이내여야 합니다");
+        // 브라우저 user_id 는 **번호판이 들어올 수 있으므로 UTF-8 을 허용한다.**
+        // 전선으로 나갈 값은 wire_userid() 가 따로 좁힌다 — 두 이름공간이다.
+        if (!valid_browser_user(uid)) {
+            logf("!", "user_id 가 너무 길거나 제어문자 포함(" + std::to_string(uid.size()) + "B) — 거절");
+            send_err(fd, rid, "bad_request", "user_id 가 너무 깁니다");
             return;
         }
         if (!device_online()) {                                   // §7.1
@@ -923,6 +994,107 @@ struct Server {
         }
     }
 
+    // ================= 폰(digitcam) 수신 · 번호판 매칭 =========================
+    // 수신부는 net/test_server.py 에서 들어왔다 — 바이트 버퍼에 모으고 LF 로 자른 뒤
+    // **그 다음에** 디코딩한다. 한글이 recv 경계에서 갈리기 때문이고, 그 파일이
+    // 그 경우를 실측으로 검증해 뒀다(digitcam 명세 §8.3, §10.6).
+    std::map<std::string, std::string> plate_slot;   // 번호판 → 배정된 자리
+
+    int find_slot_by_user(const std::string& plate) const {
+        for (int i = 0; i < 10; i++)
+            if (slots[i].reserved && slots[i].user_id == plate) return i;
+        return -1;
+    }
+    // 빈자리 선택 규칙: **§1 의 전선 인덱스 순서(A1..A5,B1..B5)에서 가장 앞.**
+    // 근거 — 결정적이라 같은 입력이면 항상 같은 결과가 나오고(재현 가능한 시험),
+    // 명세가 이미 정한 유일한 자리 순서라 새 순서를 발명하지 않는다.
+    // 입구에서 가까운 순 같은 물리 배치 기준은 **지금 아무도 갖고 있지 않다** —
+    // 배치도가 생기면 이 함수 하나만 바꾸면 된다.
+    int pick_free_slot() const {
+        for (int i = 0; i < 10; i++)
+            if (!slots[i].occupied && !slots[i].reserved) return i;
+        return -1;
+    }
+
+    void on_plate(const std::string& plate, const std::string& dev) {
+        logf("←폰", "번호판 " + plate + " (device=" + dev + ")");
+
+        // (1) 같은 번호판이 또 왔다 — 이미 배정된 자리가 살아 있으면 새 입차가 아니다.
+        //     fresh 는 상승 엣지지만 인식이 끊겼다 다시 잡히면 새 엣지가 뜬다.
+        //     **시간 창을 두지 않고 상태로 판정한다** — 타이머는 근거 없는 숫자를 만든다.
+        std::map<std::string, std::string>::iterator it = plate_slot.find(plate);
+        if (it != plate_slot.end()) {
+            int i = slot_index(it->second);
+            if (i >= 0 && slots[i].user_id == plate && (slots[i].reserved || slots[i].occupied)) {
+                logf("=", "중복 수신 — " + plate + " 는 이미 " + it->second
+                          + " 에 배정돼 있다. 새로 배정하지 않는다");
+                return;
+            }
+            plate_slot.erase(it);   // 그 사이 은퇴/취소됐다 → 다시 배정 가능
+        }
+
+        // (2) 이미 주차된 차의 번호판이 게이트에 나타났다.
+        //     오인식일 수도, 실제로 나갔다 다시 온 것일 수도 있다 — 서버는 구분할 수 없다.
+        //     **새 자리를 배정하지 않는다.** 배정하면 같은 차가 두 칸을 먹는다.
+        //     사람이 볼 수 있게 로그로 올린다.
+        for (int i = 0; i < 10; i++) {
+            if (slots[i].occupied && slots[i].user_id == plate) {
+                logf("!", "이미 주차된 번호판이 게이트에서 인식됨 — " + plate + " (" + SLOT_ID[i]
+                          + "). 오인식이거나 재진입이다. 새 배정 없음");
+                return;
+            }
+        }
+
+        // (3) 예약이 있으면 그 자리로 확정한다. 키는 번호판이다.
+        int i = find_slot_by_user(plate);
+        if (i >= 0) {
+            plate_slot[plate] = SLOT_ID[i];
+            logf("✓", "예약 확인 — " + plate + " → " + SLOT_ID[i] + " (안내 대상 자리)");
+            push_snapshot();
+            return;
+        }
+
+        // (4) 예약이 없으면 빈자리를 배정한다(사용자 요구: "안 하면 빈자리").
+        int f = pick_free_slot();
+        if (f < 0) {
+            // 조용히 지나가지 않는다. 브라우저로 올리려면 새 WS 메시지가 필요한데
+            // 그건 명세 변경이라 하지 않았다(REQ-0037 은 명세 무변경). 루트에 보고했다.
+            logf("!", "빈자리 없음 — " + plate + " 배정 실패. 차단기를 열 자리가 없다");
+            return;
+        }
+        if (!device_online()) {
+            logf("!", "아두이노 미연결 — " + plate + " 배정 보류(예약을 내릴 수 없다)");
+            return;
+        }
+        plate_slot[plate] = SLOT_ID[f];
+        logf("✓", "예약 없음 → 빈자리 배정 " + plate + " → " + SLOT_ID[f]);
+        dispatch('R', BAD_SOCK, "", SLOT_ID[f], plate);   // 예약의 주인은 서버다(§7.4)
+    }
+
+    void on_phone_line(const std::string& line) {
+        // digitcam 명세 §5: plain 모드는 번호판 문자열 한 줄, json 모드는 오브젝트 하나.
+        std::string plate, dev;
+        if (!line.empty() && line[0] == '{') {
+            plate = jget(line, "value");
+            dev = jget(line, "device");
+        } else {
+            plate = line;
+        }
+        if (plate.empty()) {
+            // §5.2 — 송신 측은 빈 값을 보내지 않지만 수신 측은 견딘다.
+            logf("!", "폰: 빈 값 — 무시");
+            return;
+        }
+        if (plate.size() > MAX_PLATE_BYTES) {
+            logf("!", "폰: 번호판이 너무 길다(" + std::to_string(plate.size()) + "B) — 무시");
+            return;
+        }
+        // **신뢰도 임계값을 두지 않는다.** 폰이 이미 min_confidence 로 걸렀고,
+        // conf 는 문자별 최소값이라 문자 수가 늘수록 낮아진다(digitcam 명세 §4.4 경고).
+        // 서버가 절대값으로 자르면 **긴 번호판만 유독 거절된다.**
+        on_plate(plate, dev.empty() ? std::string("?") : dev);
+    }
+
     // ---------- 소켓 준비
     sock_t listen_on(int port) {
         sock_t s = socket(AF_INET, SOCK_STREAM, 0);
@@ -940,11 +1112,13 @@ struct Server {
     }
 
     int run() {
-        lsn_ard  = listen_on(PORT_ARDUINO);
-        lsn_http = listen_on(PORT_HTTP);
-        if (lsn_ard == BAD_SOCK || lsn_http == BAD_SOCK) return 1;
+        lsn_ard   = listen_on(PORT_ARDUINO);
+        lsn_http  = listen_on(PORT_HTTP);
+        lsn_phone = listen_on(PORT_PHONE);
+        if (lsn_ard == BAD_SOCK || lsn_http == BAD_SOCK || lsn_phone == BAD_SOCK) return 1;
         std::cout << "주차 관제 서버 — 아두이노 TCP " << PORT_ARDUINO
-                  << " · HTTP/WS " << PORT_HTTP << "\n"
+                  << " · HTTP/WS " << PORT_HTTP
+                  << " · 폰(digitcam) " << PORT_PHONE << "\n"
                   << "명세: docs/net/parking-protocol.md\n"
                   << "-----------------------------------------------------------\n";
         std::cout.flush();
@@ -954,6 +1128,11 @@ struct Server {
             sock_t mx = 0;
             FD_SET(lsn_ard, &rd);  if (lsn_ard  > mx) mx = lsn_ard;
             FD_SET(lsn_http, &rd); if (lsn_http > mx) mx = lsn_http;
+            FD_SET(lsn_phone, &rd); if (lsn_phone > mx) mx = lsn_phone;
+            for (std::map<sock_t, std::string>::iterator it = phones.begin(); it != phones.end(); ++it) {
+                FD_SET(it->first, &rd);
+                if (it->first > mx) mx = it->first;
+            }
             if (ard != BAD_SOCK) { FD_SET(ard, &rd); if (ard > mx) mx = ard; }
             for (std::map<sock_t, Conn>::iterator it = conns.begin(); it != conns.end(); ++it) {
                 FD_SET(it->first, &rd);
@@ -987,6 +1166,43 @@ struct Server {
                 if (FD_ISSET(lsn_http, &rd)) {
                     sock_t c = accept(lsn_http, NULL, NULL);
                     if (c != BAD_SOCK) conns[c] = Conn();
+                }
+                if (FD_ISSET(lsn_phone, &rd)) {
+                    sock_t c = accept(lsn_phone, NULL, NULL);
+                    if (c != BAD_SOCK) { phones[c] = std::string(); logf("+폰", "digitcam 접속"); }
+                }
+                // 폰 연결들 — 순회 중 map 을 건드리지 않도록 fd 를 먼저 모은다
+                {
+                    std::vector<sock_t> pr, pdrop;
+                    for (std::map<sock_t, std::string>::iterator it = phones.begin(); it != phones.end(); ++it)
+                        if (FD_ISSET(it->first, &rd)) pr.push_back(it->first);
+                    for (size_t k = 0; k < pr.size(); k++) {
+                        sock_t fd = pr[k];
+                        char b[2048];
+                        int r = (int)recv(fd, b, sizeof(b), 0);
+                        if (r <= 0) { pdrop.push_back(fd); continue; }
+                        std::string& pb = phones[fd];
+                        pb.append(b, r);
+                        size_t i;
+                        while ((i = pb.find('\n')) != std::string::npos) {
+                            std::string line = pb.substr(0, i);
+                            pb.erase(0, i + 1);
+                            if (!line.empty() && line[line.size()-1] == '\r') line.erase(line.size()-1);
+                            if (!line.empty()) on_phone_line(line);
+                        }
+                        if (pb.size() > MAX_PHONE_LINE) {
+                            logf("!", "폰: LF 없이 상한 초과 — 버퍼 비움");
+                            pb.clear();
+                        }
+                    }
+                    for (size_t k = 0; k < pdrop.size(); k++) {
+                        // LF 없이 남은 조각은 완성된 줄이 아니다 — 값으로 쓰지도, 조용히 버리지도 않는다
+                        if (phones.count(pdrop[k]) && !phones[pdrop[k]].empty())
+                            logf("!", "폰 해제 — 미종단 잔여 "
+                                      + std::to_string(phones[pdrop[k]].size()) + "B 버림");
+                        else logf("-폰", "digitcam 연결 종료");
+                        closesock(pdrop[k]); phones.erase(pdrop[k]);
+                    }
                 }
                 if (ard != BAD_SOCK && FD_ISSET(ard, &rd)) {
                     char b[2048];
