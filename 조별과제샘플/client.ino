@@ -260,6 +260,23 @@ static bool    pendReady = false;
 static bool    inSend = false;         // 송신 중에는 줄을 처리하지 않고 미룬다(재진입 방지)
 
 // ─────────────────────────────────────────────────────────────────────────
+// 현장 진단 (REQ-0042) — "추측하기 전에 보이게 만든다"
+//
+// 실기에서 TCP 는 붙는데(서버에 +ARD) netOnline 이 안 켜지는 증상이 나왔다.
+// 그때 우리가 모르는 것은 셋 중 어느 것인가였다:
+//   (A) ESP→Uno 로 바이트가 아예 안 온다        → 배선/레벨/RX 핀 문제
+//   (B) 바이트는 오는데 줄이 안 끊긴다           → 줄 종단 문자가 예상과 다르다(LF 없음 등)
+//   (C) 줄은 오는데 접속 문구를 못 알아본다      → 판정 문자열 문제
+// 아래 세 카운터가 이 셋을 **로그 한 줄로 가른다.** 추측을 줄이는 것이 목적이다.
+// ─────────────────────────────────────────────────────────────────────────
+#if DEBUG
+static unsigned long dbgRxBytes  = 0;   // 시리얼에서 읽은 총 바이트 (A 를 가른다)
+static unsigned long dbgLineCnt  = 0;   // 완성된 줄 수            (B 를 가른다)
+static unsigned long dbgLastDiag = 0;
+static const uint16_t DIAG_PERIOD_MS = 3000;
+#endif
+
+// ─────────────────────────────────────────────────────────────────────────
 // rid 멱등 캐시 (§4.2) — 최근 8건, 결과까지 같이 들고 있는다
 // ─────────────────────────────────────────────────────────────────────────
 static const uint8_t CACHE_N = 8;
@@ -321,13 +338,23 @@ static uint16_t      netStepWait = 500;
 static const uint8_t NET_STEP_N = 5;
 static const uint16_t NET_WAIT[NET_STEP_N] = { 2500, 800, 9000, 800, 5000 };
 
+// 무엇을 보냈는지 찍는다(REQ-0042 3순위). 이게 없으면 5초마다 CIPSTART 를 재시도하는지조차
+// 로그로 확인할 수 없다.
+#if DEBUG
+#define DBG_NET(n, name) do { Serial.print(F("[NET] " n " " name)); Serial.println(); } while (0)
+#else
+#define DBG_NET(n, name) do {} while (0)
+#endif
+
 static void netSendStep(uint8_t s) {
   switch (s) {
-    case 0: wifi.print(F("AT+RST\r\n")); break;
-    case 1: wifi.print(F("AT+CWMODE=1\r\n")); break;
-    case 2: wifi.print(F("AT+CWJAP=\"" WIFI_SSID "\",\"" WIFI_PASS "\"\r\n")); break;
-    case 3: wifi.print(F("AT+CIPMUX=0\r\n")); break;
-    case 4: wifi.print(F("AT+CIPSTART=\"TCP\",\"" SERVER_IP "\"," SERVER_PORT "\r\n")); break;
+    case 0: wifi.print(F("AT+RST\r\n"));        DBG_NET("0", "RST");      break;
+    case 1: wifi.print(F("AT+CWMODE=1\r\n"));   DBG_NET("1", "CWMODE=1"); break;
+    case 2: wifi.print(F("AT+CWJAP=\"" WIFI_SSID "\",\"" WIFI_PASS "\"\r\n"));
+                                                DBG_NET("2", "CWJAP");    break;
+    case 3: wifi.print(F("AT+CIPMUX=0\r\n"));   DBG_NET("3", "CIPMUX=0"); break;
+    case 4: wifi.print(F("AT+CIPSTART=\"TCP\",\"" SERVER_IP "\"," SERVER_PORT "\r\n"));
+                                                DBG_NET("4", "CIPSTART"); break;
     default: break;
   }
 }
@@ -376,9 +403,44 @@ static bool checksumOk(const char* s, uint8_t len) {
 // ─────────────────────────────────────────────────────────────────────────
 static void handleLine(char* s);
 
+#if DEBUG
+// 줄을 **보이지 않는 문자까지 보이게** 찍는다. 눈으로 같아 보여도 뒤에 공백이나 다른 바이트가
+// 붙어 있으면 정확일치가 깨지므로, 인쇄 불가 문자는 \xHH 로 펴고 길이를 같이 낸다.
+//   예) [AT] "CONNECT" (7)      [AT] "CONNECT\x20" (8)   ← 이 둘은 다르다
+// (태그는 호출자가 먼저 찍는다 — F() 의 타입이 실기와 호스트 테스트에서 달라 인자로 못 넘긴다)
+static void dbgLine(const char* s, uint8_t n) {
+  Serial.print(F("\""));
+  for (uint8_t i = 0; i < n; i++) {
+    char c = s[i];
+    if (c >= 32 && c <= 126) {
+      Serial.print(c);
+    } else {
+      Serial.print(F("\\x"));
+      Serial.print(HEXD[((uint8_t)c) >> 4]);
+      Serial.print(HEXD[((uint8_t)c) & 0x0F]);
+    }
+  }
+  Serial.print(F("\" ("));
+  Serial.print(n);
+  Serial.println(')');
+}
+#endif
+
 static void feedRxChar(char c) {
+#if DEBUG
+  dbgRxBytes++;
+#endif
   if (c == '\n') {
-    if (rxOverflow || rxLen == 0) { rxLen = 0; rxOverflow = false; return; }
+    if (rxOverflow) {
+#if DEBUG
+      // 넘쳐서 버린 줄도 **버렸다는 사실이 보여야 한다.** 조용히 사라지면
+      // "아무것도 안 왔다"와 구분이 안 된다.
+      Serial.print(F("[DROP-OVF] 줄이 ")); Serial.print(RX_CAP);
+      Serial.println(F("바이트를 넘어 버렸다"));
+#endif
+      rxLen = 0; rxOverflow = false; return;
+    }
+    if (rxLen == 0) { return; }
     rxLine[rxLen] = '\0';
     uint8_t n = rxLen;
     rxLen = 0;                       // ★ 파싱 전에 먼저 비운다 — 아래에서 다시 채워질 수 있다
@@ -662,14 +724,54 @@ static void processCommand(char* cand) {
 // ─────────────────────────────────────────────────────────────────────────
 // 한 줄 처리 — §6.2 의 4단계
 // ─────────────────────────────────────────────────────────────────────────
-static void handleLine(char* s) {
-  // (a) 접속 상태 키워드. "WIFI CONNECTED" 를 TCP CONNECT 로 오인하지 않는다
-  if (strncmp(s, "WIFI", 4) == 0) {
-#if DEBUG
-    Serial.print(F("[AT] ")); Serial.println(s);
-#endif
-    return;
+// 대소문자 무시 n바이트 비교
+static bool eqNoCase(const char* a, const char* b, uint8_t n) {
+  for (uint8_t i = 0; i < n; i++) {
+    char x = a[i], y = b[i];
+    if (x >= 'a' && x <= 'z') x = (char)(x - 32);
+    if (y >= 'a' && y <= 'z') y = (char)(y - 32);
+    if (x != y) return false;
   }
+  return true;
+}
+
+// TCP 접속 성공 줄인가? (REQ-0042 2순위 — 판정을 넓히되 옛 버그는 되살리지 않는다)
+//
+// ⚠ **부분문자열 검색으로 되돌리지 마라.** 옛 원본은 원시 스트림에서 "CONNECT" 를 찾아서
+//    `WIFI CONNECTED` 안의 것에 걸렸다. 그건 와이파이 연결일 뿐 TCP 접속이 아니다 —
+//    그 오인 때문에 "붙지도 않았는데 online" 이 되고 프레임이 허공에 나간다.
+//    여기서는 (1) 호출 전에 WIFI 로 시작하는 줄을 걸러내고 (2) **길이를 정확히 맞춰** 판정한다.
+//    길이 검사가 핵심이다 — "CONNECTED"(9)는 "CONNECT"(7)와 길이가 달라 통과하지 못한다.
+//
+// 받아들이는 변형과 근거:
+//   "CONNECT"      표준 AT 펌웨어(ESP8266 AT ≥ 0.50)의 CIPSTART 성공 응답
+//   "Linked"       구형 AT 펌웨어(0.2x 대)가 같은 자리에서 내는 응답 — 대소문자 무시
+//   "<n>,CONNECT"  CIPMUX=1 형식의 링크ID 접두. 우리는 CIPMUX=0 이지만 모듈 상태가
+//                  남아 있을 수 있어 벗겨 준다
+//   앞뒤 공백/CR   모듈에 따라 붙어 온다
+static bool isConnectLine(const char* s) {
+  while (*s == ' ' || *s == '\t') s++;                       // 앞 공백
+  if (s[0] >= '0' && s[0] <= '4' && s[1] == ',') s += 2;     // "<링크ID>," 접두
+  uint8_t n = (uint8_t)strlen(s);
+  while (n > 0 && (s[n - 1] == ' ' || s[n - 1] == '\t' || s[n - 1] == '\r')) n--;  // 뒤 공백
+
+  if (n == 7 && eqNoCase(s, "CONNECT", 7)) return true;
+  if (n == 6 && eqNoCase(s, "LINKED",  6)) return true;
+  return false;
+}
+
+static void handleLine(char* s) {
+#if DEBUG
+  // ★ REQ-0042 1순위: **받은 줄을 전부 찍는다.** 예전에는 WIFI 로 시작하는 줄만 찍어서
+  //   모듈이 실제로 무엇을 응답하는지 아무도 볼 수 없었다.
+  dbgLineCnt++;
+  Serial.print(F("[AT] "));
+  dbgLine(s, (uint8_t)strlen(s));
+#endif
+
+  // (a) 접속 상태 키워드. "WIFI CONNECTED" 를 TCP CONNECT 로 오인하지 않는다.
+  //     ⚠ 이 제외는 되살리면 안 되는 버그를 막는 자리다 — 지우지 마라.
+  if (strncmp(s, "WIFI", 4) == 0) return;
   // ── 멱등 캐시를 비우는 지점이 아래 **두 곳**이다. 중복처럼 보이지만 지우지 마라. ──────
   //
   // 지켜야 할 성질: 서버가 재시작하면 wire_rid 가 1부터 다시 시작하므로, 옛 세션의 rid 가
@@ -691,8 +793,21 @@ static void handleLine(char* s) {
   //   그건 **기존 연결이 그대로 살아 있다**는 응답이다(서버도 그대로다). netTick() 이 CIPSTART 를
   //   5초마다 재시도하므로, 여기서 비우면 살아 있는 연결의 멱등성이 재시도마다 깨진다.
   // ─────────────────────────────────────────────────────────────────────────
-  if (strstr(s, "ALREADY CONNECT")) { netOnline = true;  return; }   // 새 연결이 아니다 → 캐시 유지
-  if (strcmp(s, "CONNECT") == 0)    { netOnline = true;  cacheClear();  return; }
+  if (strstr(s, "ALREADY CONNECT")) {                                 // 새 연결이 아니다 → 캐시 유지
+    netOnline = true;
+#if DEBUG
+    Serial.println(F("[NET] online (ALREADY CONNECTED)"));
+#endif
+    return;
+  }
+  if (isConnectLine(s)) {
+    netOnline = true;
+    cacheClear();
+#if DEBUG
+    Serial.println(F("[NET] online (CONNECT) + 캐시 비움"));
+#endif
+    return;
+  }
   if (strstr(s, "CLOSED")) {
     netOnline = false;
     cacheClear();                     // ★ 주 방어선 — 위 주석 참조
@@ -824,6 +939,24 @@ void setup() {
 #endif
 }
 
+#if DEBUG
+// 오프라인인 동안 3초마다 한 줄. **이 한 줄이 원인을 셋으로 가른다**(REQ-0042):
+//   rx=0                 → ESP→Uno 로 바이트가 아예 안 온다. 배선(D7)·레벨·모듈 전원을 봐라
+//   rx>0, lines=0        → 바이트는 오는데 줄이 안 끊긴다. 줄 종단이 LF 가 아닐 수 있다
+//   lines>0, online=0    → 줄은 오는데 접속 문구를 못 알아본다. [AT] 로그에서 실제 문구를 봐라
+// 셋 중 무엇인지 모르는 채로 고치면 또 빗나간다.
+static void diagTick(unsigned long now) {
+  if (netOnline) return;
+  if (now - dbgLastDiag < DIAG_PERIOD_MS) return;
+  dbgLastDiag = now;
+  Serial.print(F("[DIAG] offline step="));  Serial.print(netStep);
+  Serial.print(F(" rx="));                  Serial.print(dbgRxBytes);
+  Serial.print(F(" lines="));               Serial.print(dbgLineCnt);
+  Serial.print(F(" up="));                  Serial.print(now / 1000UL);
+  Serial.println(F("s"));
+}
+#endif
+
 void loop() {
   unsigned long now = millis();
   netTick(now);
@@ -831,4 +964,7 @@ void loop() {
   drainPending();
   sensorTick();
   statusTick(now);
+#if DEBUG
+  diagTick(now);
+#endif
 }

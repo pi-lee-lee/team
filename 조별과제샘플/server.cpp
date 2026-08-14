@@ -502,7 +502,12 @@ struct Server {
         }
         body += "]\n";
 
-        // tmp 에 다 쓰고 원자적으로 갈아끼운다 (§9.2). 잠금도 복사본도 필요 없다.
+        atomic_write_log(body);
+    }
+
+    // tmp 에 다 쓰고 원자적으로 갈아끼운다 (§9.2). 잠금도 복사본도 필요 없다.
+    // **쓰기 경로는 이것 하나다** — 기동 시 빈 배열을 만들 때도 이 함수를 쓴다.
+    void atomic_write_log(const std::string& body) {
         const char* tmp = "data_log.json.tmp";
         const char* dst = "data_log.json";
         {
@@ -1095,6 +1100,26 @@ struct Server {
         on_plate(plate, dev.empty() ? std::string("?") : dev);
     }
 
+    // 기동 시 data_log.json 이 없으면 **빈 배열로 만들어 둔다.**
+    //
+    // 왜: 서버는 §9.4 대로 상태가 바뀔 때만 파일을 쓴다. 아두이노가 안 붙으면 한 번도 안 쓴다.
+    // 그런데 화면은 WS 가 붙기 전부터 폴백 폴링을 돌리므로 **아무 문제 없는 첫 실행에서
+    // 404 를 받아 빨간 오류를 띄운다.** 이런 것이 쌓이면 진짜 오류를 무시하게 된다.
+    //
+    // `[]` 는 §9.1 형태에서 "아직 기록이 없다"를 정직하게 표현한다 —
+    // 없는 파일보다 낫고, 지어낸 값을 넣는 것보다도 낫다.
+    //
+    // **이미 있으면 절대 덮지 않는다.** 덮으면 재시작할 때마다 직전 2건이 날아간다.
+    void ensure_log_exists() {
+        std::ifstream f("data_log.json", std::ios::binary);
+        if (f.good()) {
+            logf("=", "data_log.json 이 이미 있다 — 그대로 둔다(직전 기록 보존)");
+            return;
+        }
+        atomic_write_log("[]\n");     // 쓰기 경로는 원자적 교체 하나뿐이다
+        logf("=", "data_log.json 이 없어 빈 배열로 만들었다");
+    }
+
     // ---------- 소켓 준비
     sock_t listen_on(int port) {
         sock_t s = socket(AF_INET, SOCK_STREAM, 0);
@@ -1122,6 +1147,7 @@ struct Server {
                   << "명세: docs/net/parking-protocol.md\n"
                   << "-----------------------------------------------------------\n";
         std::cout.flush();
+        ensure_log_exists();
 
         while (true) {
             fd_set rd; FD_ZERO(&rd);

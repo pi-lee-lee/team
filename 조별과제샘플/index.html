@@ -120,6 +120,9 @@
     border: 1px solid transparent;
   }
   .banner--warn { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn-ink); }
+  /* 진단이 아니라 사실을 전할 때. 빨갛게 만들지 않는다 — 정상 상태를 오류로 보이게 하면
+     사용자가 진짜 경고까지 흘려보낸다. */
+  .banner--note { background: var(--bg); border-color: var(--line); color: var(--ink-dim); font-weight: 500; }
   .banner--demo { background: var(--done-bg); border-color: var(--done-line); color: var(--done-ink); font-weight: 500; }
 
   .demo-tools { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
@@ -550,7 +553,9 @@ const state = {
   link: 'connecting',            // 'connecting' | 'ws' | 'reconnecting' | 'nows' | 'demo'
   reconnectAt: 0,
   attempt: 0,
-  pollFailures: 0
+  pollFailures: 0,
+  /** 폴백에 대해 마지막으로 알린 상태 종류. 같은 말을 폴링마다 반복하지 않기 위한 것이다. */
+  pollNotice: ''
 };
 
 let ridSeq = 0;
@@ -996,15 +1001,28 @@ function renderConnection() {
     // §12A.7 — 이 상태의 원인은 "칸마다 센서가 없다"가 아니라 장치가 서버에 연결되지 않은 것이다.
     // 테스트 모드로 고쳐지지 않는다는 점을 문구에서 구분한다.
     el.offline.hidden = false;
+    el.offline.className = 'banner banner--warn';
     el.offline.textContent = '⚠ 센서 끊김 (장치 미연결) — 아래 격자는 실시간이 아니라 마지막으로 알던 값입니다. '
       + '테스트 모드로는 해결되지 않습니다: 아두이노나 net/fake_arduino.py 가 서버에 붙어야 합니다.';
   } else if (staleFile) {
+    // 파일이 오래됐다는 것만으로 고장이라고 말하면 안 된다 — 서버는 **상태가 바뀔 때만** 쓴다(§9.4).
+    // 조용한 주차장에서는 몇 분 된 기록이 정상이다. 아는 것(기록 시각)만 말하고 진단은 하지 않는다.
     el.offline.hidden = false;
-    el.offline.textContent = '⚠ 센서 끊김(추정) — 파일의 마지막 기록이 오래되었습니다. 격자는 마지막으로 알던 값입니다';
+    el.offline.className = 'banner banner--note';
+    el.offline.textContent = '이 값은 파일에 기록된 ' + fmtAge(Date.now() - state.snapshot.ts)
+      + ' 전 상태입니다. 서버는 상태가 바뀔 때만 기록하므로(§9.4) 오래된 것 자체가 고장은 아닙니다 — 다만 실시간은 아닙니다.';
   } else {
     el.offline.hidden = true;
     el.offline.textContent = '';
   }
+}
+
+/** 밀리초를 사람이 읽는 경과시간으로. "22초" / "3분" / "2시간" */
+function fmtAge(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  if (s < 60) return s + '초';
+  if (s < 3600) return Math.round(s / 60) + '분';
+  return Math.round(s / 3600) + '시간';
 }
 
 function fmtUptime(sec) {
@@ -1339,6 +1357,7 @@ const transport = {
     sock.onopen = () => {
       state.link = 'ws';
       state.attempt = 0;
+      state.pollNotice = '';   // 연결 상태가 바뀌면 폴백 상황의 의미도 달라진다 → 다시 판단한다
       this.stopPolling();
       showMessage('서버에 연결되었습니다', 'ok');
       render();
@@ -1388,24 +1407,87 @@ const transport = {
   },
 
   pollOnce() {
+    let status = 0;
+    let classified = false;
+    const done = (kind, detail) => { classified = true; this.reportPoll(kind, detail); };
+
     fetch(LOG_FILE + '?t=' + Date.now(), { cache: 'no-store' })
       .then(function (res) {
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return res.json();          // §9.1 은 유효한 JSON 배열이다. 줄 단위 파싱이 아니다.
+        status = res.status;
+        return res.ok ? res.text() : null;
       })
-      .then((log) => {
+      .then((text) => {
+        // 본문을 직접 파싱한다. res.json() 을 쓰면 "파일 없음"과 "형식이 깨짐"이
+        // 같은 예외로 합쳐져 문구를 가를 수 없다.
+        if (text === null) { done(status === 404 ? 'missing' : 'http', 'HTTP ' + status); return; }
+
+        let log;
+        try { log = JSON.parse(text); }
+        catch (e) { done('parse', 'JSON 으로 읽히지 않습니다'); return; }
+        if (!Array.isArray(log)) { done('parse', '최상위가 배열이 아닙니다 (§9.1)'); return; }
+        if (log.length === 0)    { done('empty', ''); return; }   // 기록 0건은 정상 상태다
+
         const raw = snapshotFromLog(log);
-        if (!raw) throw new Error('빈 로그');
-        state.pollFailures = 0;
-        if (state.link === 'ws') return;     // 그 사이 WS 가 살아났으면 덮어쓰지 않는다
-        applySnapshot(raw, 'file');          // ← WS 와 같은 함수로 합류한다
+        if (!raw) { done('parse', '기록 형태가 §9.1 과 다릅니다'); return; }
+
+        done('ok', '');
+        if (state.link === 'ws') return;      // 그 사이 WS 가 살아났으면 덮어쓰지 않는다
+        applySnapshot(raw, 'file');           // ← WS 와 같은 함수로 합류한다
       })
       .catch((err) => {
-        state.pollFailures += 1;
-        if (state.pollFailures === 1) {
-          showMessage('예비 경로(data_log.json)도 읽지 못했습니다: ' + err.message, 'err');
-        }
+        // 분류가 끝난 뒤 터진 예외는 폴백 실패가 아니다. 네트워크 실패로 둔갑시키지 않는다.
+        if (classified) { console.error(err); return; }
+        this.reportPoll('network', (err && err.message) ? err.message : '요청 실패');
       });
+  },
+
+  /**
+   * 폴백 실패를 어떻게 알릴지 정한다.
+   *
+   * 핵심 판단: **지금 WS 가 살아 있는가.** 살아 있다면 폴백은 화면을 채우고 있지도 않으므로
+   * 파일이 아직 없는 것(404)은 갓 띄운 서버의 **정상 상태**다(서버는 상태가 바뀔 때만 쓴다, §9.4).
+   * 정상 상태를 빨간 오류로 보고하면 사용자가 오류 표시 자체를 안 믿게 되고,
+   * 그러면 §12A.6 의 테스트 모드 경고처럼 정말 봐야 할 것까지 흘려보낸다.
+   *
+   * 반대로 WS 도 죽고 폴백도 읽을 수 없으면 그건 **아무것도 모르는 상태**다. 크게 보여야 한다.
+   */
+  reportPoll(kind, detail) {
+    if (kind === 'ok') { state.pollNotice = ''; state.pollFailures = 0; return; }
+    state.pollFailures += 1;
+
+    // file:// 로 열린 경우는 부팅 때 이미 이유를 설명했다. 같은 말을 빨갛게 반복하지 않는다.
+    if (state.link === 'nows') return;
+
+    // 같은 말을 폴링마다(3초) 반복하지 않는다. 다만 **연결 상태가 달라지면 의미도 달라지므로**
+    // 열쇠에 연결 상태를 함께 넣는다. 재연결 실패가 반복돼도 열쇠가 그대로라 다시 뜨지 않는다.
+    const scope = state.link === 'ws' ? 'ws' : (state.link === 'connecting' ? 'connecting' : 'down');
+    const key = scope + ':' + kind;
+    if (state.pollNotice === key) return;
+    state.pollNotice = key;
+
+    // 첫 연결 시도가 아직 진행 중이면 폴백이 필요한 상황인지 **아직 모른다.**
+    // 여기서 빨간 것을 띄우면 곧 연결될 서버에서도 시작하자마자 고장처럼 보인다.
+    // 다음 폴링(3초 뒤)에는 link 가 ws 또는 reconnecting 으로 정해져 있다.
+    if (state.link === 'connecting') return;
+
+    if (state.link === 'ws') {
+      // 404·기록 0건은 정상 기동 구간의 모습이다 → 아무 말도 하지 않는다.
+      if (kind === 'missing' || kind === 'empty') return;
+      // 그 밖(형식 깨짐·5xx 등)은 알아 둘 값이 있지만 지금 화면에는 영향이 없다.
+      showMessage('예비 경로(data_log.json)에 문제가 있습니다: ' + detail
+        + ' — 지금은 WebSocket 으로 받고 있어 화면에는 영향이 없습니다.', 'info');
+      return;
+    }
+
+    if (kind === 'missing') {
+      showMessage('서버와 끊겼고 예비 파일(data_log.json)도 아직 없습니다 — 지금 표시할 상태가 없습니다.', 'err');
+    } else if (kind === 'empty') {
+      showMessage('서버와 끊겼고 예비 기록이 0건입니다 — 지금 표시할 상태가 없습니다.', 'err');
+    } else if (kind === 'parse') {
+      showMessage('예비 파일(data_log.json)을 해석할 수 없습니다: ' + detail, 'err');
+    } else {
+      showMessage('예비 경로(data_log.json)를 읽지 못했습니다: ' + detail, 'err');
+    }
   },
 
   send(payload) {

@@ -488,7 +488,98 @@ int main() {
        "멱등이 유지된다 — netTick 의 5초 CIPSTART 재시도가 멱등성을 깨지 않는다");
   }
 
-  printf("\n[22] 모든 전선 라인이 문법·체크섬을 만족하는가 (누적 %zu줄)\n", wifi.sentLines.size());
+  printf("\n[22] ★ 접속 판정 변형 — 넓히되 WIFI CONNECTED 오인은 되살리지 않는다 (REQ-0042)\n");
+  {
+    // 오프라인으로 되돌린 뒤 각 변형을 하나씩 시험한다.
+    struct Variant { const char* line; bool shouldConnect; const char* why; };
+    const Variant vs[] = {
+      {"CONNECT",           true,  "표준 AT 성공 응답"},
+      {"connect",           true,  "대소문자 무시"},
+      {"Linked",            true,  "구형 AT 펌웨어"},
+      {"LINKED",            true,  "구형 + 대문자"},
+      {"0,CONNECT",         true,  "CIPMUX 링크ID 접두"},
+      {"  CONNECT  ",       true,  "앞뒤 공백"},
+      {"ALREADY CONNECTED", true,  "이미 연결됨"},
+      // ↓ 여기부터는 **켜지면 안 된다**
+      {"WIFI CONNECTED",    false, "★ 와이파이 연결일 뿐 TCP 접속이 아니다 — 옛 버그"},
+      {"WIFI GOT IP",       false, "와이파이 단계"},
+      {"WIFI DISCONNECT",   false, "와이파이 끊김"},
+      {"CONNECTED",         false, "길이가 다르다(9) — CONNECT(7) 가 아니다"},
+      {"NO CONNECT",        false, "실패 응답인데 부분문자열로는 걸린다"},
+      {"CONNECT FAIL",      false, "실패 응답"},
+      {"OK",                false, "평범한 응답"},
+      {"busy p...",         false, "모듈 바쁨"},
+    };
+    int bad = 0;
+    for (const Variant& v : vs) {
+      netOnline = false;
+      wifi.deliver(std::string(v.line) + "\r\n");
+      spin(3);
+      bool got = netOnline;
+      if (got != v.shouldConnect) {
+        printf("        FAIL  \"%s\" → online=%d (기대 %d)  [%s]\n",
+               v.line, (int)got, (int)v.shouldConnect, v.why);
+        bad++;
+      } else {
+        printf("        ok    \"%-18s\" → online=%d   %s\n", v.line, (int)got, v.why);
+      }
+    }
+    ok(bad == 0, "접속 판정 변형 15종이 전부 기대대로 동작한다");
+
+    // 회귀 방지의 핵심을 따로 한 번 더 단언한다 — 이건 절대 통과하면 안 되는 줄이다
+    netOnline = false;
+    wifi.deliver("WIFI CONNECTED\r\n");
+    spin(3);
+    ok(!netOnline, "★ WIFI CONNECTED 는 여전히 netOnline 을 켜지 않는다 (되살리면 안 되는 버그)");
+
+    // 진단 카운터가 실제로 늘고 있는지 — 실기에서 이 값으로 원인을 가른다
+    ok(dbgRxBytes > 0 && dbgLineCnt > 0, "진단 카운터(rx/lines)가 집계되고 있다");
+
+    ok(spinUntilOnline(20000), "시험 후 다시 온라인으로 복귀했다");
+  }
+
+  printf("\n[23] 진단 로그 형식 — 보이지 않는 문자가 실제로 보이는가 (REQ-0042 1순위)\n");
+  {
+    netOnline = false;
+    Serial.out.clear();
+    wifi.deliver("CONNECT \x01\r\n");        // 뒤에 공백 + 제어문자가 붙은 경우
+    spin(3);
+    printf("        로그 그대로: %s", Serial.out.c_str());
+    ok(Serial.out.find("\\x01") != std::string::npos, "제어문자가 \\x01 로 펴져 보인다");
+    ok(Serial.out.find("(9)") != std::string::npos, "길이(9)가 같이 찍힌다");
+    ok(!netOnline,
+       "그 줄은 CONNECT 로 인정되지 않는다 — 그래서 로그가 필요하다(눈으로는 CONNECT 로 보인다)");
+
+    // 넘치는 줄도 버렸다는 사실이 남는가
+    netOnline = false;
+    Serial.out.clear();
+    wifi.deliver(std::string(90, 'X') + "\r\n");   // RX_CAP(72) 초과
+    spin(5);
+    ok(Serial.out.find("[DROP-OVF]") != std::string::npos,
+       "넘쳐서 버린 줄이 [DROP-OVF] 로 남는다 (조용히 사라지지 않는다)");
+
+    // 오프라인 진단 한 줄이 나오는가.
+    // ⚠ 가짜 ESP 는 CIPSTART 에 곧바로 CONNECT 를 돌려주므로 그냥 돌리면 오프라인 구간이
+    //   생기지 않는다 — netTick 의 다음 시도를 멀리 밀어 두고 관측한다.
+    netOnline = false;
+    netStepAt = g_millis;
+    netStepWait = 60000;
+    dbgLastDiag = 0;
+    Serial.out.clear();
+    spin(20);
+    size_t d = Serial.out.find("[DIAG]");
+    ok(d != std::string::npos, "오프라인 동안 [DIAG] 가 주기적으로 나온다");
+    if (d != std::string::npos) {
+      size_t e = Serial.out.find('\n', d);
+      if (e == std::string::npos) e = Serial.out.size();
+      printf("        %s\n", Serial.out.substr(d, e - d).c_str());
+    }
+
+    netStepWait = 0;                       // 원상복구 — 다시 접속되게 한다
+    ok(spinUntilOnline(20000), "시험 후 다시 온라인으로 복귀했다");
+  }
+
+  printf("\n[24] 모든 전선 라인이 문법·체크섬을 만족하는가 (누적 %zu줄)\n", wifi.sentLines.size());
   int bad = 0;
   for (const std::string& l : wifi.sentLines) {
     if (l.size() + 1 > 64) { bad++; continue; }                 // §2.1-6
