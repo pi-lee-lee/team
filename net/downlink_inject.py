@@ -127,16 +127,33 @@ class Injector:
             if o.get("rid") != rid:
                 continue                      # 다른 요청의 응답 — 흘린다
 
-            # ── 서버가 거절한 경우: **전선에 아무것도 안 나갔다**
+            # ── 서버가 error 를 준 경우
+            #
+            # 🔴 **error 라고 다 "안 나갔다"가 아니다. 코드마다 정반대다.**
+            #   · device_offline → 서버가 **전선에 안 내보냈다** → 미주입(분모에서 뺀다)
+            #   · ack_timeout   → 서버가 **3회 재전송까지 하고** ACK 를 못 받았다
+            #                     (server.cpp:1500, 재전송 경로 뒤) → **진짜 하행 실패**다.
+            #                     **분모에 넣고 D1/D2 후보로 센다.**
+            # 이 둘을 합치면 **가장 중요한 실패를 "시도 안 함"으로 지워 버린다.**
             if o.get("type") == "error":
                 code = o.get("code", "?")
-                self.n_not_injected += 1
                 if code == "device_offline":
+                    self.n_not_injected += 1
                     self.log("=", "미주입 %s — 장치 오프라인(서버가 전선에 안 내보냈다). "
                                   "🔴 이것은 하행 실패가 **아니다**. D1/D2 로 세지 마라" % rid)
-                else:
-                    self.log("!", "미주입 %s — 서버 거절 code=%s. 전선에 안 나갔다" % (rid, code))
-                return "not_injected"
+                    return "not_injected"
+                if code == "ack_timeout":
+                    self.n_timeout += 1
+                    self.log("!", "🔴 하행 실패 %s — ACK 타임아웃. **전선에는 나갔다"
+                                  "(서버가 3회 재전송했다)**. D1/D2 후보 — 분모에 넣어라. "
+                                  "②(시리얼 +IPD)가 있어야 D1 과 D2 가 갈린다" % rid)
+                    return "timeout"
+                # 모르는 코드는 **어느 칸으로도 밀지 않는다** — 합치면 그 순간 증거가 사라진다
+                self.n_error += 1
+                self.log("!", "🔴 알 수 없는 서버 거절 %s code=%s — **분류하지 않았다.** "
+                              "전선에 나갔는지 여부를 server.cpp 에서 확인하고 칸을 정해라"
+                         % (rid, code))
+                return "unknown"
 
             if o.get("type") == "ack":
                 result = o.get("result")
