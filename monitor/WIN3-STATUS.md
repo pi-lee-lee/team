@@ -1,15 +1,15 @@
-# 창2 현재 상태 — 2026-08-17 00:34:01 자동 생성
+# win3 현재 상태 — 2026-08-17 07:46:36 자동 생성
 
 > 🔴 **이것은 판정이 아니다.** 생존과 적재량을 보는 눈금이다.
-> 판정은 창을 닫고 동결 파서로 한다 — `monitor/HANDOFF-win2.md` 참조.
+> 판정은 창을 닫고 동결 파서로 한다 — `monitor/HANDOFF-win3.md` 참조.
 > ⚠ 아래 숫자는 전부 **누적값**이다(구간값 아님 · 원장 6.8).
 
 | 계측기 | 상태 |
 |---|---|
 | tap 프로세스 | 🟢 살아 있다 (pid 60080) |
 | 시리얼 로그 성장 | 🟢 자라는 중 |
-| 시리얼 마지막 줄 시각 | `00:34:01` |
-| 시리얼 크기 | 108,781 B · 2,406 줄 |
+| 시리얼 마지막 줄 시각 | `07:46:36` |
+| 시리얼 크기 | 4,494,475 B · 95,943 줄 |
 
 ## 시리얼 누계
 
@@ -18,26 +18,27 @@
 | `event` | 0 |
 | `banner` | 1 |
 | `resync` | 0 |
-| `drop` | 0 |
-| `skip` | 0 |
-| `okto` | 0 |
-| `busy` | 0 |
-| `tx` | 587 |
-| `sendok` | 587 |
-| `ipd` | 0 |
-| `ipfound` | 1 |
-| `cipstart_err` | 0 |
+| `drop` | 21 |
+| `skip` | 54 |
+| `okto` | 8 |
+| `busy` | 20 |
+| `tx` | 23,711 |
+| `sendok` | 23,710 |
+| `ipd` | 1 |
+| `ipfound` | 2 |
+| `cipstart_err` | 1 |
+| `stall` | 1 |
 
-펌웨어 `[CNT]` 마지막 줄: `up=660 drop=0 esprst=0 resync=0 sendfail=0 okto=0 skip=0 online=1`
+펌웨어 `[CNT]` 마지막 줄: `up=26522 drop=1 esprst=0 resync=0 sendfail=0 okto=8 skip=54 online=1`
 
 ## 서버 누계 (파일 전체 — 창 구간이 아니다)
 
 | 표지 | 누계 |
 |---|---|
-| `srv_accept` | 21 |
-| `srv_sframe` | 13,939 |
-| `srv_ack` | 8 |
-| `srv_down` | 8 |
+| `srv_accept` | 22 |
+| `srv_sframe` | 37,061 |
+| `srv_ack` | 9 |
+| `srv_down` | 9 |
 | `srv_offline` | 0 |
 
 ---

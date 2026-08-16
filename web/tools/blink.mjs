@@ -1,0 +1,191 @@
+/**
+ * 링크가 잠깐 끊기는 동안 **화면이 무엇을 하는가** — 진짜 크롬으로 잰다.
+ *
+ * 사전 등록: docs/web/FINDING-link-blink-2026-08-17.md §2 (재는 것을 관측 전에 정했다)
+ *
+ * 🔴 안전 규칙 — e2e.mjs 와 같다. 기본값 없음 · 운영 포트 거부.
+ *   운영에는 진짜 보드가 붙어 있고 그 자료가 지금 유일한 자료다.
+ *
+ * 사용: node web/tools/blink.mjs --port 10500 --case A --seconds 24
+ *       node web/tools/blink.mjs --port 10500 --case B --n 3
+ */
+import { launch, evaluate, waitFor, sleep } from './cdp.mjs';
+import { writeFileSync, mkdirSync } from 'node:fs';
+
+const argv = process.argv.slice(2);
+const arg = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
+const PORT = arg('--port', null);
+const CASE = arg('--case', 'A');
+const SECONDS = Number(arg('--seconds', 24));
+const N = Number(arg('--n', 3));
+const OUT = new URL('../artifacts/', import.meta.url);
+
+if (!PORT) { console.error('--port 를 반드시 줘라 (기본값 없음)'); process.exit(2); }
+const FORBIDDEN = ['9900', '9991', '5500'];
+if (FORBIDDEN.includes(String(PORT))) {
+  console.error('🔴 ' + PORT + ' 는 운영 포트다. 중단.');
+  process.exit(2);
+}
+const BASE = 'http://127.0.0.1:' + PORT + '/';
+mkdirSync(OUT, { recursive: true });
+
+/* 화면에서 한 번에 걷어 오는 것 — M1~M7 전부. 사전 등록한 항목만 본다. */
+const SAMPLE = `(() => {
+  const s = (typeof state !== 'undefined' && state.snapshot) ? state.snapshot : null;
+  const d = s && s.device ? s.device : {};
+  const txt = (id) => { const e = document.getElementById(id); return e ? e.textContent.trim() : '(없음)'; };
+  return {
+    t: Date.now(),
+    online: (d.online === undefined ? null : d.online),
+    lf: (d.last_frame_ts === undefined ? null : d.last_frame_ts),
+    age: (typeof d.last_frame_ts === 'number') ? (Date.now() - d.last_frame_ts) : null,
+    link: (typeof state !== 'undefined') ? state.link : null,
+    conn: txt('conn-text'),
+    banner: txt('slots-banner'),
+    devOnline: txt('dev-online'),
+    devFrame: txt('dev-frame'),
+    tiles: [...document.querySelectorAll('.tile')].map(b =>
+      (b.dataset.slot || '?') + ':' + b.querySelector('.tile__state').textContent.trim()
+      + '/' + b.getAttribute('aria-disabled')),
+    dialogOpen: !!(document.getElementById('confirm-dialog') || {}).open,
+    msg: txt('messages').replace(/\\s+/g, ' ').slice(-200)
+  };
+})()`;
+
+async function goto(client, url) {
+  await client.send('Page.navigate', { url });
+  await waitFor(client,
+    `document.readyState === 'complete' && !!document.getElementById('conn-text') && !!document.querySelector('.tile')`,
+    { what: '문서 준비 (' + url + ')', timeout: 15000 });
+}
+
+async function click(client, selector) {
+  const box = await evaluate(client, `(() => {
+    const e = document.querySelector(${JSON.stringify(selector)});
+    if (!e) return null;
+    e.scrollIntoView({block:'center'});
+    const r = e.getBoundingClientRect();
+    return { x: r.left + r.width/2, y: r.top + r.height/2, w: r.width, h: r.height };
+  })()`);
+  if (!box) throw new Error('선택자를 찾지 못했다: ' + selector);
+  if (box.w === 0 || box.h === 0) throw new Error('크기 0: ' + selector);
+  const p = { x: Math.round(box.x), y: Math.round(box.y), button: 'left', clickCount: 1 };
+  await client.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...p });
+  await client.send('Input.dispatchMouseEvent', { type: 'mousePressed', ...p });
+  await client.send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...p });
+}
+
+/** 두 표본에서 **사전 등록한 항목만** 골라 비교한다(본 뒤에 항목을 늘리지 않는다). */
+const KEYS = ['online', 'conn', 'banner', 'devOnline', 'tiles', 'msg'];
+function diff(a, b) {
+  const out = [];
+  for (const k of KEYS) {
+    const x = JSON.stringify(a[k]), y = JSON.stringify(b[k]);
+    if (x !== y) out.push({ key: k, from: a[k], to: b[k] });
+  }
+  return out;
+}
+
+const log = [];
+const say = (s) => { console.log(s); log.push(s); };
+
+const client = await launch({ headless: true });
+try {
+  await client.send('Page.enable');
+  await client.send('Runtime.enable');
+
+  await goto(client, BASE + 'index.html');
+  await waitFor(client, `document.getElementById('conn-text').textContent.includes('WebSocket')`,
+                { what: 'WS 연결', timeout: 20000 });
+
+  /* 붙은 곳이 진짜 그 포트인지 — 운영으로 새지 않았음을 스스로 증명한다 */
+  const wsUrl = await evaluate(client, `(transport.ws && transport.ws.url) || '(없음)'`);
+  say('WS = ' + wsUrl);
+  if (!String(wsUrl).includes(':' + PORT + '/')) throw new Error('🔴 대상이 아닌 곳에 붙었다: ' + wsUrl);
+
+  const base = await evaluate(client, SAMPLE);
+  say('기준선: online=' + base.online + ' link=' + base.link + ' conn=' + JSON.stringify(base.conn));
+
+  if (CASE === 'A') {
+    /* A. 조작 없이 끊김 — 사람이 아무것도 안 하는 동안 화면이 스스로 무엇을 하는가.
+       fake 가 8초 주기로 알아서 끊으므로 우리는 250ms 마다 표본만 뜬다. */
+    say('\n[A] 조작 없이 ' + SECONDS + '초 관찰 (250ms 표본)');
+    const samples = [];
+    const t0 = Date.now();
+    while (Date.now() - t0 < SECONDS * 1000) {
+      samples.push(await evaluate(client, SAMPLE));
+      await sleep(250);
+    }
+    const ages = samples.map(s => s.age).filter(v => typeof v === 'number');
+    const changes = [];
+    for (let i = 1; i < samples.length; i++) {
+      const d = diff(samples[i - 1], samples[i]);
+      if (d.length) changes.push({ atMs: samples[i].t - t0, d });
+    }
+    say('표본 ' + samples.length + '개 · last_frame_ts 나이 최대 ' + Math.max(...ages) + 'ms · 최소 ' + Math.min(...ages) + 'ms');
+    say('침묵 흔적(나이 1500ms 초과 표본) = ' + ages.filter(v => v > 1500).length + '개');
+    say('online=false 표본 = ' + samples.filter(s => s.online === false).length + '개');
+    say('사전 등록 항목의 변화 = ' + changes.length + '건');
+    for (const c of changes.slice(0, 12)) say('  · +' + c.atMs + 'ms ' + JSON.stringify(c.d).slice(0, 300));
+    writeFileSync(new URL('blink-A.json', OUT), JSON.stringify({ port: PORT, samples }, null, 2));
+    say('원자료 web/artifacts/blink-A.json');
+  }
+
+  if (CASE === 'B') {
+    /* B. 대화상자가 열려 있는 동안 끊김 → 끊긴 채로 확인을 누른다.
+       예측(사전 등록): online=false 면 requestReserve() 가 확인 뒤 재검사에서 걸러
+       "그 사이 자리 상태가 바뀌어 예약하지 않았습니다" 가 뜬다. */
+    for (let i = 1; i <= N; i++) {
+      say('\n[B' + i + '] 대화상자를 연 채 끊김을 기다린다');
+      const free = await evaluate(client, `(() => {
+        const b = [...document.querySelectorAll('.tile')].find(x =>
+          /빈 자리/.test(x.querySelector('.tile__state').textContent) && x.getAttribute('aria-disabled') !== 'true');
+        return b ? b.dataset.slot : null; })()`);
+      if (!free) { say('  누를 수 있는 빈 자리가 없다 — 건너뛴다'); break; }
+      await click(client, `.tile[data-slot="${free}"]`);
+      await waitFor(client, `!!document.getElementById('confirm-dialog').open`, { what: '대화상자', timeout: 5000 });
+      say('  ' + free + ' 대화상자 열림. 침묵/오프라인 구간을 기다린다(최대 20초)');
+
+      /* 끊김의 한가운데에서 누른다. online=false 가 최우선, 없으면 프레임 침묵(나이>1200ms) */
+      const t0 = Date.now();
+      let hit = null;
+      while (Date.now() - t0 < 20000) {
+        const s = await evaluate(client, SAMPLE);
+        if (s.online === false) { hit = { why: 'online=false', s }; break; }
+        if (typeof s.age === 'number' && s.age > 1200) { hit = { why: '프레임 침묵 ' + s.age + 'ms', s }; break; }
+        await sleep(150);
+      }
+      if (!hit) { say('  🔴 20초 안에 끊김 구간을 못 잡았다 — 이 회차는 무효'); await click(client, '#confirm-dialog button[value="cancel"]').catch(() => {}); continue; }
+      say('  끊김 포착: ' + hit.why + ' → 지금 확인을 누른다');
+
+      await click(client, '#confirm-dialog button[value="ok"]');
+      await sleep(1200);
+      const after = await evaluate(client, SAMPLE);
+      const tile = (after.tiles.find(t => t.startsWith(free + ':')) || '(없음)');
+      say('  결과 칸  = ' + tile);
+      say('  결과 문구 = ' + JSON.stringify(after.msg.slice(-140)));
+      say('  online 은 그때 ' + hit.s.online + ' 였다');
+
+      /* 상태를 남기지 않는다 — 예약이 잡혔으면 취소까지 하고 끝낸다 */
+      if (/내 예약/.test(tile)) {
+        await sleep(1500);
+        await click(client, `.tile[data-slot="${free}"]`).catch(() => {});
+        await waitFor(client, `!!document.getElementById('confirm-dialog').open`, { timeout: 4000, what: '취소 대화상자' }).catch(() => {});
+        await click(client, '#confirm-dialog button[value="ok"]').catch(() => {});
+        await sleep(1200);
+        const back = await evaluate(client, SAMPLE);
+        say('  정리: ' + (back.tiles.find(t => t.startsWith(free + ':')) || '(없음)'));
+      }
+    }
+  }
+
+  const end = await evaluate(client, SAMPLE);
+  say('\n종료 시점: online=' + end.online + ' conn=' + JSON.stringify(end.conn));
+  writeFileSync(new URL('blink-' + CASE + '.log', OUT), log.join('\n'));
+} catch (e) {
+  say('💥 ' + e.message);
+  writeFileSync(new URL('blink-' + CASE + '.log', OUT), log.join('\n'));
+  process.exitCode = 1;
+} finally {
+  await client.close();
+}
