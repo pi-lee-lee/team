@@ -1703,6 +1703,32 @@ function staleNote() {
        + ' 전에 받은 값이고 그 뒤로 확인되지 않았습니다 — 지금은 다를 수 있습니다.';
 }
 
+/**
+ * 확인을 누른 **뒤** 재검사에서 걸렀을 때, **왜 걸렀는지**를 말한다.
+ *
+ * 🔴 2026-08-17 (docs/web/FINDING-link-blink-2026-08-17.md §3.3 · 실측 3/3)
+ * 전에는 이유가 무엇이든 한 문장이었다 — "그 사이 자리 상태가 바뀌어".
+ * 그런데 **장치 링크가 3.5초 이상 끊기면**(`OFFLINE_MS`) 빈 자리도 `action` 이 없어져
+ * 여기로 떨어진다. 그때 저 문장은 **거짓**이다. 자리 상태는 그대로이고 링크가 끊긴 것이다.
+ *
+ * 왜 문구가 중요한가: 실제 피해는 예약이 안 된 것이 아니라(다시 누르면 된다)
+ * **읽는 사람이 엉뚱한 곳을 본다**는 것이다. "누가 먼저 채갔나"로 읽으면 자리 목록을 뒤지고,
+ * 진짜 원인인 장치 링크는 아무도 안 본다. 링크는 **스스로 복구되므로**(실측 3/3)
+ * "잠시 뒤 다시" 가 사실이기도 하다.
+ *
+ * ⚠ 동작은 안 바꾼다. 장치가 끊긴 동안 명령을 안 보내는 것은 옳다 — 보내도 못 간다.
+ */
+function afterConfirmBlockedText(slotId, verb) {
+  const deviceDown = !!(state.snapshot && state.snapshot.device.online === false);
+  // 받침이 있으면 '을', 없으면 '를'. ('예약을' / '취소를' — 안 가르면 "취소을"이 뜬다)
+  const last = verb.charCodeAt(verb.length - 1) - 0xAC00;
+  const eul = (last >= 0 && last < 11172 && last % 28 !== 0) ? '을' : '를';
+  return slotId + ' · ' + (deviceDown
+    ? '장치 연결이 끊겨 ' + verb + eul + ' 보내지 않았습니다 — 자리 상태는 그대로입니다. '
+      + '연결은 대개 몇 초 안에 스스로 복구되니 잠시 뒤 다시 눌러 주세요'
+    : '그 사이 자리 상태가 바뀌어 ' + verb + '하지 않았습니다');
+}
+
 async function requestReserve(slotId) {
   const ok = await confirmDialog('예약하시겠습니까?',
     slotId + ' 자리를 예약합니다. 확인을 누르면 서버로 예약 요청을 보냅니다.' + staleNote());
@@ -1711,7 +1737,7 @@ async function requestReserve(slotId) {
   // 대화상자를 여는 동안 상태가 바뀌었을 수 있다.
   const slot = currentSlot(slotId);
   if (!slot || tileView(slot).action !== 'reserve') {
-    showMessage(slotId + ' · 그 사이 자리 상태가 바뀌어 예약하지 않았습니다', 'err');
+    showMessage(afterConfirmBlockedText(slotId, '예약'), 'err');
     return;
   }
   const rid = newRid();
@@ -1726,7 +1752,9 @@ async function requestCancel(slotId) {
 
   const slot = currentSlot(slotId);
   if (!slot || tileView(slot).action !== 'cancel') {
-    showMessage(slotId + ' · 그 사이 자리 상태가 바뀌어 취소하지 않았습니다', 'err');
+    // 예약과 같은 이유로 여기도 갈린다 — 내 예약의 취소도 deviceDown 이면 action 이 없어진다
+    // (tileView 의 `mine && canAct() && !deviceDown`). 문구가 하나면 여기서도 거짓말을 한다.
+    showMessage(afterConfirmBlockedText(slotId, '취소'), 'err');
     return;
   }
   const rid = newRid();
