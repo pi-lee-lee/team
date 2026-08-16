@@ -31,6 +31,18 @@ TS = re.compile(rb"^(\d\d):(\d\d):(\d\d)\s")
 #   기전 B 가 말하는 배너는 **ESP 모듈**의 것: `[System Ready, Vendor:www.ai-thinker.com]`.
 #   둘을 헷갈리면 "배너 1건" 만 잡히고 리셋을 통째로 놓친다(실제로 그랬다).
 BANNER = b"System Ready"
+
+# 🔴 2026-08-17 08:3x — **가비지는 한 종류가 아니라 둘이다**(arduino 가 자기 판독을 정정).
+#   ① 부트 ROM  : 74880bps 출력을 9600 으로 읽은 것. **손상이 아니다.** 모든 부팅에 뜬다
+#                 (우리 DTR 포함). 안정된 앵커가 있다 — `@\xF9` (그리고 뒤에 `\x89:\x97`).
+#                 실측 예: `bB\xD6\x86@\xF9Pc\xE2\xFER\x89:\x97…`
+#                 ⚠ 앞 바이트는 `\x86` 도 `\x84` 도 나온다(표본화가 매번 다르다).
+#                   그래서 앵커를 `86 40 F9` 로 잡으면 놓친다 — **`@\xF9` 로 잡는다.**
+#   ② 진짜 UART 비트 손상 : 앵커가 **없다.** 에코가 한 비트에서 어긋나고 프레이밍이 깨진다.
+#                 실측 예(19:29:32, 기대 `AT+CIFSR`): `AT+CHU\x94Q\xA9BR\xD4%\xD5`
+#                 → `0x49`(I) → `0x48`(H) **단일 비트**.
+#   🔴 **한 칸으로 세면 둘이 섞인다.** ①은 사건이 아니고 ②는 사건이다.
+BOOT_ANCHOR = b"@\\xF9"      # 로그가 이스케이프 텍스트라 `\xF9` 는 문자 4개다
 WINDOW_S = 30          # 배너 앞 몇 초까지 훑을 것인가
 MIN_LEN = 8
 BAD_NUM, BAD_DEN = 3, 10   # 비인쇄 비율 문턱 = 3/10
@@ -65,7 +77,11 @@ def scan(path: str):
                 #   그래서 `\xNN` 조각 수를 센다.
                 esc = p.count(b"\\x")
                 is_garb = len(p) >= MIN_LEN and esc * BAD_DEN >= (len(p) // 4) * BAD_NUM and esc >= 3
-                rows.append((sec(m[1], m[2], m[3]), "GARB" if is_garb else "at"))
+                if is_garb:
+                    kind = "BOOTROM" if BOOT_ANCHOR in p else "CORRUPT"
+                else:
+                    kind = "at"
+                rows.append((sec(m[1], m[2], m[3]), kind))
     return rows, nlines
 
 
@@ -80,30 +96,43 @@ def main() -> int:
             print(f"\n== {path} — 없음")
             continue
         banners = [t for t, k in rows if k == "BANNER"]
-        garbs = [t for t, k in rows if k == "GARB"]
+        boots = [t for t, k in rows if k == "BOOTROM"]
+        corrs = [t for t, k in rows if k == "CORRUPT"]
+        garbs = sorted(boots + corrs)
         print(f"\n== {path}")
         # 🔴 `0` 규약(zeroguard) — 분모와 표지를 같이 찍는다.
         #   이 도구는 표지를 세 번 틀리고도 조용히 `0건` 을 냈다(원장 7.43). 그래서 여기가 필수다.
         print("   " + z("배너", len(banners), nlines, BANNER.decode()))
-        print("   " + z("가비지 줄", len(garbs), nlines, r'[AT] "…\xNN…"'))
+        print("   " + z("① 부트ROM(사건 아님 · 모든 부팅에 뜬다)", len(boots), nlines, "앵커 @\\xF9"))
+        print("   " + z("② UART 손상(사건 후보 · 앵커 없음)", len(corrs), nlines, "앵커 없는 이스케이프 뭉치"))
         print("   " + calib("배너 탐지", len(banners)))
         leads = []
+        cleads = []
         for bt in banners:
             pre = [g for g in garbs if 0 <= bt - g <= WINDOW_S]
-            if pre:
-                lead = bt - min(pre)
+            pc = [g for g in corrs if 0 <= bt - g <= WINDOW_S]
+            lead = bt - min(pre) if pre else None
+            if lead is not None:
                 leads.append(lead)
-                print(f"   배너 {hms(bt)}  ← 가비지 {len(pre)}건 · 최대 선행 **{lead}s**")
-            else:
-                print(f"   배너 {hms(bt)}  ← 가비지 없음")
+            ctxt = ""
+            if pc:
+                cl = bt - min(pc)
+                cleads.append(cl)
+                ctxt = f"  · 🔴 **② 손상 선행 {cl}s**({len(pc)}건)"
+            print(f"   배너 {hms(bt)}  ← 가비지 {len(pre)}건"
+                  f"{f' · 최대 선행 {lead}s' if lead is not None else ' (없음)'}{ctxt}")
         # 배너와 짝이 없는 가비지 = 리셋 아닌 곳에서도 뜨는가
         orphan = [g for g in garbs if not any(0 <= bt - g <= WINDOW_S for bt in banners)]
         print(f"   ⚠ 배너와 짝 없는 가비지: **{len(orphan)}건**"
               f"{'  → 가비지 단독은 리셋의 증거가 아니다' if orphan else ''}")
         if orphan[:5]:
             print("      예:", " ".join(hms(t) for t in orphan[:5]))
+        if cleads:
+            print(f"\n   🔴 **② UART 손상**이 배너에 선행: {sorted(cleads)} 초"
+                  f" — {'일정하다' if len(set(cleads)) == 1 else '**흩어진다**'}"
+                  f" ({len(cleads)}/{len(banners)} 배너에서 관측)")
         if leads:
-            print(f"   선행 시간: 최소 {min(leads)}s · 최대 {max(leads)}s · "
+            print(f"   ①+② 합쳐서: 최소 {min(leads)}s · 최대 {max(leads)}s · "
                   f"{'일정하다 → 일괄 보정 가능' if min(leads) == max(leads) else '🔴 들쭉날쭉 → 건별로 봐라'}")
     print("\n## 읽는 법")
     print("  · **짝 없는 가비지가 있으면 가비지 단독은 판별자가 될 수 없다**(배너와 같은 함정).")

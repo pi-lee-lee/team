@@ -18,6 +18,7 @@ const PORT = arg('--port', null);
 const CASE = arg('--case', 'A');
 const SECONDS = Number(arg('--seconds', 24));
 const N = Number(arg('--n', 3));
+const TRIGGER = arg('--trigger', 'offline');   // offline | silence — B 에서 언제 확인을 누를 것인가
 const OUT = new URL('../artifacts/', import.meta.url);
 
 if (!PORT) { console.error('--port 를 반드시 줘라 (기본값 없음)'); process.exit(2); }
@@ -137,6 +138,11 @@ try {
        "그 사이 자리 상태가 바뀌어 예약하지 않았습니다" 가 뜬다. */
     for (let i = 1; i <= N; i++) {
       say('\n[B' + i + '] 대화상자를 연 채 끊김을 기다린다');
+      /* ⚠ 먼저 **연결된 순간**을 기다린다. online=false 인 동안에는 빈 자리가 전부 잠겨
+         (§3.2) 대화상자를 열 수조차 없다 — 1회차에서 실제로 그래서 건너뛰었다.
+         "끊긴 채로 확인을 누른다"를 재려면 **누를 때는 붙어 있어야** 한다. */
+      await waitFor(client, `(typeof state !== 'undefined' && state.snapshot && state.snapshot.device.online === true)`,
+                    { what: '장치 연결 복귀', timeout: 30000 });
       const free = await evaluate(client, `(() => {
         const b = [...document.querySelectorAll('.tile')].find(x =>
           /빈 자리/.test(x.querySelector('.tile__state').textContent) && x.getAttribute('aria-disabled') !== 'true');
@@ -149,10 +155,13 @@ try {
       /* 끊김의 한가운데에서 누른다. online=false 가 최우선, 없으면 프레임 침묵(나이>1200ms) */
       const t0 = Date.now();
       let hit = null;
-      while (Date.now() - t0 < 20000) {
+      while (Date.now() - t0 < 30000) {
         const s = await evaluate(client, SAMPLE);
-        if (s.online === false) { hit = { why: 'online=false', s }; break; }
-        if (typeof s.age === 'number' && s.age > 1200) { hit = { why: '프레임 침묵 ' + s.age + 'ms', s }; break; }
+        /* 🔴 방아쇠를 인자로 고정한다. 섞으면 안 된다 —
+           `--mute-for 6` 에서는 프레임 침묵이 3.5초 **먼저** 오므로, 침묵을 방아쇠로 두면
+           online 이 아직 true 인 순간에 눌러 버리고 그건 ② 를 한 번 더 재는 것이다. */
+        if (TRIGGER === 'offline' && s.online === false) { hit = { why: 'online=false', s }; break; }
+        if (TRIGGER === 'silence' && typeof s.age === 'number' && s.age > 1200) { hit = { why: '프레임 침묵 ' + s.age + 'ms', s }; break; }
         await sleep(150);
       }
       if (!hit) { say('  🔴 20초 안에 끊김 구간을 못 잡았다 — 이 회차는 무효'); await click(client, '#confirm-dialog button[value="cancel"]').catch(() => {}); continue; }

@@ -1,4 +1,4 @@
-# win4 현재 상태 — 2026-08-17 08:20:37 자동 생성
+# win4 현재 상태 — 2026-08-17 08:25:37 자동 생성
 
 > 🔴 **이것은 판정이 아니다.** 생존과 적재량을 보는 눈금이다.
 > 판정은 창을 닫고 동결 파서로 한다 — `monitor/HANDOFF-win4.md` 참조.
@@ -8,8 +8,8 @@
 |---|---|
 | tap 프로세스 | 🟢 살아 있다 (pid 53235) |
 | 시리얼 로그 성장 | 🟢 자라는 중 |
-| 시리얼 마지막 줄 시각 | `08:20:36` |
-| 시리얼 크기 | 286,223 B · 6,263 줄 |
+| 시리얼 마지막 줄 시각 | `08:25:37` |
+| 시리얼 크기 | 336,343 B · 7,346 줄 |
 
 ## 시리얼 누계 — 🔴 **로그 줄 수다. 펌웨어 `[CNT]` 계수기가 아니다**
 
@@ -24,25 +24,25 @@
 | `zeroip` | 1 | `"0.0.0.0"` |
 | `txresync` | 3 | `[TX-RESYNC]` |
 | `txdrop` | 5 | `[TX-DROP]` |
-| `txwait_skip` | 2 | `이번 주기는 건너뛴다` |
+| `txwait_skip` | 3 | `이번 주기는 건너뛴다` |
 | `txwait_okto` | 1 | `상한 초과` |
 | `busy` | 2 | `"busy ` |
-| `tx` | 1,531 | `[TX] ` |
-| `sendok` | 1,531 | `"SEND OK"` |
-| `ipd` | 0  ⚠ 훑은 줄 6,263 | `+IPD,` |
+| `tx` | 1,799 | `[TX] ` |
+| `sendok` | 1,799 | `"SEND OK"` |
+| `ipd` | 0  ⚠ 훑은 줄 7,346 | `+IPD,` |
 | `connect` | 2 | `online (CONNECT)` |
 | `ipfound` | 2 | `★ IP 확보` |
-| `cipstart_err` | 0  ⚠ 훑은 줄 6,263 | `Unlink` |
-| `stall` | 0  ⚠ 훑은 줄 6,263 | `★ 정지 감지` |
+| `cipstart_err` | 0  ⚠ 훑은 줄 7,346 | `Unlink` |
+| `stall` | 0  ⚠ 훑은 줄 7,346 | `★ 정지 감지` |
 
-펌웨어 `[CNT]` 마지막 줄: `up=1680 drop=1 esprst=1 resync=3 sendfail=0 okto=1 skip=2 online=1`
+펌웨어 `[CNT]` 마지막 줄: `up=1980 drop=1 esprst=1 resync=3 sendfail=0 okto=1 skip=3 online=1`
 
 ## 서버 누계 (파일 전체 — 창 구간이 아니다)
 
 | 표지 | 누계 |
 |---|---|
 | `srv_accept` | 25 |
-| `srv_sframe` | 38,850 |
+| `srv_sframe` | 39,117 |
 | `srv_ack` | 9 |
 | `srv_down` | 12 |
 | `srv_offline` | 0 |
