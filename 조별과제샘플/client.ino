@@ -1073,6 +1073,28 @@ static void ladderFail(uint8_t why) {
 static const uint8_t SEND_FAIL_LIMIT = 3;
 static uint8_t       sendFailStreak = 0;
 
+// ── 살아있음(liveness) 불변식 (REQ-0116) ─────────────────────────────────────
+// **실패 모드를 세지 않고 결과를 본다: "온라인이라면서 T초 동안 한 줄도 못 내보냈으면 끊는다."**
+//
+// 왜 이 형태인가 — 오늘 하루에 원인이 세 번 옮겨 다녔다(프롬프트 제한시간 → `busy` → ?).
+// 실패 종류마다 카운터를 다는 방식은 **아는 실패만** 막는다. 그런데 오늘 배운 것은
+// **모르는 실패가 더 많다**는 쪽이다. 그래서 이유를 묻지 않는 불변식을 둔다 —
+// `busy` 든 `ERROR` 든 침묵이든 **아직 이름이 없는 무엇이든** 여기에 걸린다.
+//
+// ⚠ 이 불변식이 없으면 REQ-0116 의 "busy 를 세지 않는다"가 **조용한 영구 정지**를 만든다:
+//   busy 만 계속 오면 연속 실패 카운터가 영원히 3에 도달하지 않아 회복 경로가 사라진다.
+//   고치기 전에는 (엉뚱한 이유였지만) 3초 만에 끊고 다시 붙었다. 그 길을 되살리는 것이다.
+//
+// T = 10초의 근거: 서버의 무프레임 판정(§3.4, 3.5초)과 기존 3연속 실패 경로(약 3초)보다
+//   **확실히 길어서** 평범한 문제는 그쪽이 먼저 잡고, 무한 정지보다는 **확실히 짧다.**
+//   ⚠ 이 값은 보수적 **기본값**이다 — A 구간의 `busy` 연속 런 분포가 나오면 근거를 붙여 다듬는다.
+static const uint16_t TX_STALL_MS = 10000;
+static uint32_t      lastTxOkAt   = 0;     // 마지막으로 **실제로 나간** 프레임의 시각
+// 아래 셋은 **진단 전용이다. 제어에 쓰지 않는다.**
+// 불변식이 발동했을 때 "무엇 때문에 못 나갔나"를 로그로 남기려는 것뿐이다 —
+// 원인별로 따로 끊는 제어 경로를 만들면 그게 다시 "아는 실패만 막는" 구조가 된다.
+static uint8_t       stallBusy = 0, stallTimeout = 0, stallReject = 0;
+
 // 프롬프트를 놓쳐 스트림을 강제 복구한 횟수(아래 sendLine 참조).
 // ★ 이 숫자는 **서버의 `버린줄(모름)` 카운터와 짝을 이룬다.** 더미 줄 하나가 서버에서 한 번
 //   버려지므로 둘이 맞아떨어져야 정상이다. 어긋나면 다른 원인이 더 있다는 뜻이다.
@@ -1275,6 +1297,16 @@ static bool sendLine(const char* line) {
   //     — 그래서 `noteSendResult(true)` 가 아니라 **호출 자체를 건너뛴다.**
   //   `ERROR`(PROMPT_REJECT)는 그대로 센다. 명령이 실제로 거부된 것이고 링크 이상일 수 있다.
   if (pr != PROMPT_BUSY) noteSendResult(ok);
+
+  // ★ REQ-0116 살아있음 불변식의 기준점 갱신.
+  //   `lastTxOkAt` 은 **실제로 나간** 프레임에서만 갱신된다 — `busy` 를 안 세는 것과 달리
+  //   여기서는 `busy` 도 "못 나갔다"로 취급한다. 세는 것과 나간 것은 다른 문제다.
+  if (ok) {
+    lastTxOkAt = millis();
+    stallBusy = stallTimeout = stallReject = 0;
+  } else if (pr == PROMPT_BUSY)   { if (stallBusy    < 255) stallBusy++;    }
+    else if (pr == PROMPT_REJECT) { if (stallReject  < 255) stallReject++;  }
+    else                          { if (stallTimeout < 255) stallTimeout++; }
   return ok;
 }
 
@@ -1875,6 +1907,7 @@ static void handleLine(char* s) {
     // **캐시를 비우지 않는다** — 새 연결이 아니므로(REQ-0035 [18]-4 불변식).
     netOnline = true;
     onlineSince = millis();            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
+    lastTxOkAt  = millis();            // ★ 살아있음 불변식의 출발점 — 붙자마자 발동하지 않게 한다
     sendFailStreak = 0;
     closeAttempts = 0;
 #if DEBUG
@@ -1885,6 +1918,7 @@ static void handleLine(char* s) {
   if (isConnectLine(s)) {
     netOnline = true;
     onlineSince = millis();            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
+    lastTxOkAt  = millis();            // ★ 살아있음 불변식의 출발점 — 붙자마자 발동하지 않게 한다
     sendFailStreak = 0;
     staleSocket = false;               // 진짜로 새로 붙었다 — 낡은 소켓이 아니다
     closeAttempts = 0;
@@ -2130,6 +2164,28 @@ static void statusTick(unsigned long now) {
   // changeAt 은 전송 실패 시 **미래 시각**으로 밀린다. unsigned 뺄셈으로 비교하면
   // 언더플로로 곧장 참이 되어 백오프가 통째로 무력화된다 → 부호 있는 비교로 본다.
   bool debounced    = changePending && ((long)(now - changeAt) >= (long)DEBOUNCE_MS);
+
+  // ★ REQ-0116 — 살아있음 불변식. **이유를 묻지 않는다.**
+  //   "온라인이라면서 TX_STALL_MS 동안 한 줄도 못 내보냈다"면 그 자체로 링크 이상이다.
+  //   `busy`·`ERROR`·침묵·**아직 이름 없는 무엇**이든 전부 여기에 걸린다.
+  //   ⚠ 아래 조기 반환(`return`)보다 **앞**에 있어야 한다. 뒤에 두면 하트비트가 뜨지 않는
+  //     순간에는 검사가 건너뛰어져, 정작 아무것도 못 보내는 상황에서 발동하지 못한다.
+  if (netOnline && (uint32_t)(now - lastTxOkAt) >= TX_STALL_MS) {
+#if DEBUG
+    // 원인은 **진단으로만** 남긴다 — 원인별 제어 경로를 만들면 다시 "아는 실패만" 막게 된다.
+    Serial.print(F("[NET] ★ 정지 감지: "));
+    Serial.print((unsigned long)(now - lastTxOkAt));
+    Serial.print(F("ms 동안 한 줄도 못 나갔다 (busy "));
+    Serial.print(stallBusy);
+    Serial.print(F(" / 무응답 ")); Serial.print(stallTimeout);
+    Serial.print(F(" / 거부 "));   Serial.print(stallReject);
+    Serial.println(F(") → 링크를 다시 세운다"));
+#endif
+    stallBusy = stallTimeout = stallReject = 0;
+    startSocketRecovery();             // netOnline 을 내리고 CIPCLOSE 사다리로 간다
+    return;
+  }
+
   if (!netOnline || !(heartbeatDue || debounced)) return;
 
   uint16_t occSnap = occMask, resSnap = resMask, tmaskSnap = tmaskNow;

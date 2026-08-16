@@ -9,6 +9,9 @@
 #   req.sh new --from <나> --to <상대> --title "<제목>" [--files a,b] [--parent REQ-0003]
 #              [--body-file <경로>] [--why "<이유>"] [--accept "<완료 기준>"]
 #              ⚠ 본문은 --body-file 을 써라. --body 는 셸 치환이 실행된다(2026-08-16 사고)
+#   req.sh notice --from <나> --title "<제목>" --body-file <경로> [--files a,b]
+#              ← **통보**. 지시받지 않고 스스로 한 일을 루트에 알린다. 승인을 받는 게 아니다.
+#                미결로 쌓이지 않고(status: notice) 원장에만 남는다.
 #   req.sh progress <ID> --by <에이전트> --note "<지금 무엇을 하고 있나>"   ← 상태는 안 바꾼다
 #   req.sh list [--to X] [--from X] [--status open|claimed|done|rejected] [--all]
 #   req.sh path <REQ-0007>          # md 파일 절대경로
@@ -123,6 +126,69 @@ cmd_new() {
   echo "  예) to: \"$to\", message: \"[$id] 요청 발행. requests/open/$id.md 를 읽고 처리하라.\""
 }
 
+# 통보 — 지시받지 않고 스스로 한 일을 루트에 알린다.
+#
+# 왜 `new` 로 하지 않는가: `new` 는 **상대에게 일을 시키는 것**이라 미결로 쌓이고
+# 루트가 하나씩 닫아야 한다. 통보는 시키는 게 아니라 알리는 것이므로 닫을 일이 없다.
+# 그렇다고 말로만 전하면 세션이 죽는 순간 사라진다 — 그래서 파일로 남기되 미결이 아니다.
+# (status: notice → `req.sh list` 기본 목록과 team-status 의 OPEN 에 안 뜬다)
+cmd_notice() {
+  local from="" title="" body="" files=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --from) from="$2"; shift 2;;
+      --title) title="$2"; shift 2;;
+      --files) files="$2"; shift 2;;
+      --body-file) [ -f "$2" ] || die "파일이 없다: $2"; body="$(cat "$2")"; shift 2;;
+      --body) die "--body 는 셸 치환이 실행된다(2026-08-16 사고). --body-file 을 써라";;
+      *) die "알 수 없는 옵션: $1";;
+    esac
+  done
+  [ -n "$from" ] && [ -n "$title" ] || die 'notice 에는 --from --title 이 필요하다'
+  [ -n "$body" ] || die '--body-file 이 필요하다 — 무엇을 왜 했는지 없으면 통보가 아니다'
+
+  local id day dir f files_yaml
+  id="$(alloc_id)"; day="$(today)"; dir="$REQ_DIR/$day"
+  mkdir -p "$dir" || die "요청 폴더를 만들 수 없다"
+  f="$dir/$id-$from-notice-$(slug "$title").md"
+
+  files_yaml="[]"
+  if [ -n "$files" ]; then
+    files_yaml="[$(printf '%s' "$files" | sed -e 's/ *, */", "/g' -e 's/^/"/' -e 's/$/"/')]"
+  fi
+
+  {
+    echo "---"
+    echo "id: $id"
+    echo "title: $title"
+    echo "from: $from"
+    echo "to: root"
+    echo "status: notice"
+    echo "created: $(now_iso)"
+    echo "updated: $(now_iso)"
+    echo "files: $files_yaml"
+    echo "parent: none"
+    echo "---"
+    echo
+    echo "# $id · [통보] $title"
+    echo
+    echo "**통보자** \`$from\` → **루트**"
+    echo
+    echo "> 지시받지 않고 스스로 한 일이다. **승인을 구하는 것이 아니라 알리는 것**이고,"
+    echo "> 루트는 닫지 않는다. 이 파일이 이 작업의 유일한 기록이다."
+    echo
+    echo "$body"
+  } >"$f" || die "통보 파일을 쓸 수 없다: $f"
+
+  index_append "통보" "$id" "$from" "root" "$title"
+
+  echo "$id"
+  echo "$f"
+  echo
+  echo "다음: SendMessage 로 루트에 포인터만 보내라."
+  echo "  예) to: \"root\", message: \"[$id] 통보. requests/$day/$(basename "$f") 를 읽어라. 승인 불필요.\""
+}
+
 cmd_list() {
   local ft="" ff="" fs="" all=0
   while [ $# -gt 0 ]; do
@@ -177,8 +243,9 @@ transit() {
 }
 
 case "${1:-}" in
-  new)   shift; cmd_new "$@";;
-  list)  shift; cmd_list "$@";;
+  new)    shift; cmd_new "$@";;
+  notice) shift; cmd_notice "$@";;
+  list)   shift; cmd_list "$@";;
   path)  shift; req_file "${1:-}" || die "그런 요청이 없다: ${1:-}";;
   show)  shift; f="$(req_file "${1:-}")" || die "그런 요청이 없다: ${1:-}"; cat "$f";;
   claim)
