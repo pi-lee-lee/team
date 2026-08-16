@@ -155,6 +155,23 @@ class Injector:
                  % (rid, self.a.ack_timeout))
         return "timeout"
 
+    def _wait_with_heartbeat(self, total):
+        """첫 주입까지 기다리면서 주기적으로 살아 있음을 남긴다."""
+        if total <= 0:
+            return
+        beat = self.a.heartbeat
+        waited = 0.0
+        first_at = time.strftime("%Y-%m-%d %H:%M:%S",
+                                 time.localtime(time.time() + total))
+        self.log("*", "대기 %.0f초 — 첫 주입 예정 %s (그때까지 %.0f초마다 살아있음을 찍는다)"
+                 % (total, first_at, beat))
+        while waited < total:
+            chunk = min(beat, total - waited)
+            time.sleep(chunk)
+            waited += chunk
+            if waited < total:
+                self.log("·", "대기 중 — 남은 %.0f초 (첫 주입 %s)" % (total - waited, first_at))
+
     def run(self):
         self.log("*", "하행 주입 시작 — 주기 %.0f초 · 첫 주입까지 %.0f초 대기 · slot=%s · 마감 %.0f초"
                  % (self.a.interval, self.a.start_delay, self.a.slot, self.a.ack_timeout))
@@ -162,7 +179,12 @@ class Injector:
 
         # 서버 기동 유예(SERVER_START_GRACE_S=90)를 피한다. 그 안의 하행은
         # monitor 집계에서 제외되므로 **넣어도 안 세어진다** — A 의 유일한 1건이 그랬다.
-        time.sleep(self.a.start_delay)
+        #
+        # 🔴 **대기 중에도 살아 있다는 것을 로그로 말한다.**
+        # 무주입 기준선 국면 때문에 이 대기가 1시간이 될 수 있는데, 그동안 로그가 조용하면
+        # **죽은 것과 기다리는 것이 구별되지 않는다.** 그러면 국면 2 가 조용히 시작 안 되고,
+        # 아침에는 그것이 "하행 미실행(D3)"과 똑같이 보인다 — 원장 §5.2 의 그 자리다.
+        self._wait_with_heartbeat(self.a.start_delay)
 
         i = 0
         next_at = time.time()
@@ -228,6 +250,8 @@ def main():
     ap.add_argument("--ack-timeout", type=float, default=30.0,
                     help="ACK 마감(초). monitor 짝짓기 시한과 같은 30초")
     ap.add_argument("--count", type=int, default=0, help="주입 횟수(0=무한)")
+    ap.add_argument("--heartbeat", type=float, default=300.0,
+                    help="첫 주입 대기 중 살아있음을 찍는 주기(초). 기본 300")
     ap.add_argument("--log", default=None, help="주입 기록 파일 경로(append)")
     a = ap.parse_args()
 
