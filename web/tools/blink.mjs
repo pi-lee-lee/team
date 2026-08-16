@@ -48,6 +48,9 @@ const SAMPLE = `(() => {
     tiles: [...document.querySelectorAll('.tile')].map(b =>
       (b.dataset.slot || '?') + ':' + b.querySelector('.tile__state').textContent.trim()
       + '/' + b.getAttribute('aria-disabled')),
+    /* 사용자가 실제로 읽는 줄. 상태 문구는 "빈 자리" 그대로라 이 줄이 없으면
+       "화면이 뭐라고 말하는가"에 답할 수 없다. */
+    meta1: (() => { const b = document.querySelector('.tile'); const m = b && b.querySelector('.tile__meta'); return m ? m.textContent.trim() : '(없음)'; })(),
     dialogOpen: !!(document.getElementById('confirm-dialog') || {}).open,
     msg: txt('messages').replace(/\\s+/g, ' ').slice(-200)
   };
