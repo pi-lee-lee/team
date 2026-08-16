@@ -59,7 +59,13 @@ RE_SESS_OPEN = re.compile(r"^\+ARD .*세션#(\d+)")
 RE_SESS_CLOSE = re.compile(
     r"^-ARD 세션#(\d+) 종료\((.*)\) — 지속 (\d+):(\d+):(\d+) · 프레임 (\d+)"
 )
-RE_OFFLINE = re.compile(r"^! 아두이노 오프라인 판정\((\d+)ms")
+# ⚠ 이름 전환 대비 — 구/신 이름을 **동시에** 받는다 (socket-engineer 와 합의, logfmt=4 예정)
+#
+# 이 칸이 실제로 재는 것은 "N ms 동안 프레임이 안 왔다"이고, "장치가 오프라인이다"는 추론이다.
+# 그래서 이름이 `오프라인 판정` → `무프레임 판정` 으로 바뀐다.
+# **내 도구가 먼저 양쪽을 받고, 그 다음에 서버가 바뀐다.** 순서를 뒤집으면 그 순간 판정이 끊긴다.
+# 과거 로그(옛 이름)도 계속 읽혀야 하므로 신 이름으로 갈아치우지 않고 **둘 다 남긴다.**
+RE_OFFLINE = re.compile(r"^! 아두이노 (?:오프라인|무프레임) 판정\((\d+)ms")
 RE_RECOVER = re.compile(r"^= 아두이노 온라인 복귀(?: — 복구 ([\d.]+)초\((.+)\))?")
 RE_SRV_START = re.compile(r"^⏱ 소크 관측 시작")
 RE_SRV_STOP = re.compile(r"^▣ 소크 종료")
@@ -562,7 +568,8 @@ def fmt_md(stats, expect_map, meta, notes, baseline_name):
         ("uptime 역행(원수)", "uptime_regressions", "uptime_regressions"),
         ("  └ 팀이 만든 리셋", "uptime_regressions_team", None),
         ("  └ **자발 후보**", "uptime_regressions_spont", "uptime_regressions_spont"),
-        ("오프라인 판정", "offline_events", "offline_events"),
+        # 표시 이름은 관측을 그대로 부른다. JSON 키(offline_events)는 호환을 위해 유지한다.
+        ("무프레임 판정(구 '오프라인')", "offline_events", "offline_events"),
         ("복구 건수", "recover_n", None),
         ("복구 중앙(초)", "recover_median_s", None),
         ("복구 최악(초)", "recover_max_s", None),

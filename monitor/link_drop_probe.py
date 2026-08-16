@@ -189,7 +189,7 @@ def main() -> int:
         print("   ACCEPT시각   첫프레임   uptime   직전 60초 서버 이벤트")
         for t, ft, up in alive[:20]:
             pre = [s for tt, s in ev if 0 < (t - tt).total_seconds() <= 60
-                   and any(k in s for k in ("회수", "종료", "errno", "오프라인"))]
+                   and any(k in s for k in ("회수", "종료", "errno", "오프라인", "무프레임"))]
             tag = "; ".join(x[:46] for x in pre[-2:]) or "(없음)"
             print(f"   {t.strftime('%m-%d %H:%M:%S')}  +{(ft-t).total_seconds():>4.0f}s  {up:>6}   {tag}")
 
@@ -209,7 +209,7 @@ def main() -> int:
         ("TCP 리셋 errno=54", count("errno=54")),
         ("keepalive errno=60", count("errno=60")),
         ("id 미상 마감", count("id 미상 소켓 마감")),
-        ("오프라인 판정", count("오프라인 판정")),
+        ("무프레임 판정(구 오프라인)", count("오프라인 판정", "무프레임 판정")),
     ]
     for name, n in rows:
         print(f"   {name:24} {n:>5}")

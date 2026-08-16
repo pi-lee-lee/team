@@ -73,7 +73,7 @@ def parse():
             out.append((ts, "SESS_OPEN", {"raw": rest[:70]}))
         elif "-ARD" in rest:
             out.append((ts, "SESS_CLOSE", {"raw": rest[:70]}))
-        elif "오프라인 판정" in rest:
+        elif ("오프라인 판정" in rest or "무프레임 판정" in rest):   # 구/신 이름 동시 수용
             out.append((ts, "OFFLINE", {}))
         elif "▣ 소크 종료" in rest:
             out.append((ts, "SRV_STOP", {"raw": rest[:60]}))

@@ -354,3 +354,10 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T17:43:22+0900 | 발행 | REQ-0118 | root → socket-engineer | 서버 구조 작업 재개 — 잃은 계획서 복구 · (A) 재부팅 오보 결함 · 리팩터링 단계 C |
 | 2026-08-16T17:44:00+0900 | 착수 | REQ-0118 | socket-engineer → socket-engineer | 서버 구조 작업 재개 — 잃은 계획서 복구 · (A) 재부팅 오보 결함 · 리팩터링 단계 C |
 | 2026-08-16T17:46:49+0900 | 진행 | REQ-0118 | socket-engineer → socket-engineer | 서버 구조 작업 재개 — 잃은 계획서 복구 · (A) 재부팅 오보 결함 · 리팩터링 단계 C — 0번 완료: plan-windows-and-mapping.md 복구(Write 원문 + Bash 수정 2·3 순서대로 적용, fix1 은 계획서 미변경이라 제외) — server_seam.h:85 의 §5.7 포인터가 다시 유효하다. REQ-0096 단계 C 기록도 docs/net/refactor-stage-c-recovered.md 로 복구(이음매 5곳을 현재 파일에서 재확인). 다음 (A) 착수 |
+| 2026-08-16T17:54:28+0900 | 진행 | REQ-0118 | socket-engineer → socket-engineer | 서버 구조 작업 재개 — 잃은 계획서 복구 · (A) 재부팅 오보 결함 · 리팩터링 단계 C — (A)+(F) 완료·배포. pid 75781 · 17:53:07 · logfmt=3. 재연결내역(재부팅/링크재접속/미상) 과 승격전버림 카운터 추가 — 둘 다 순수 추가, 기존 칸 의미 불변. 시험에서 양방향 분류 검증(uptime 12→1 재부팅 / 203→206 링크재접속). 지표 이름 정정과 단계 C 는 별도 교체로 분리. 다음: 단계 C |
+| 2026-08-16T17:55:34+0900 | 발행 | REQ-0119 | root → arduino-engineer | 도메인 원장 개설 — 오늘 확정된 것을 docs/arduino/LEDGER.md 에 심어라 |
+| 2026-08-16T17:55:35+0900 | 발행 | REQ-0120 | root → socket-engineer | 도메인 원장 개설 — 오늘 확정된 것을 docs/net/LEDGER.md 에 심어라 |
+| 2026-08-16T17:55:35+0900 | 발행 | REQ-0121 | root → monitor-engineer | 도메인 원장 개설 — 오늘 확정된 것을 monitor/LEDGER.md 에 심어라 |
+| 2026-08-16T17:56:36+0900 | 착수 | REQ-0120 | socket-engineer → socket-engineer | 도메인 원장 개설 — 오늘 확정된 것을 docs/net/LEDGER.md 에 심어라 |
+| 2026-08-16T17:56:47+0900 | 착수 | REQ-0119 | arduino-engineer → arduino-engineer | 도메인 원장 개설 — 오늘 확정된 것을 docs/arduino/LEDGER.md 에 심어라 |
+| 2026-08-16T17:56:57+0900 | 착수 | REQ-0121 | monitor-engineer → monitor-engineer | 도메인 원장 개설 — 오늘 확정된 것을 monitor/LEDGER.md 에 심어라 |
