@@ -3,9 +3,9 @@ id: REQ-0115
 title: 🔴 하행이 0건이다 — 미실행이지 건강이 아니다. 서버에서 내려 실제 도달을 재라 (지금 칩은 EspLink 아님)
 from: root
 to: socket-engineer
-status: open
+status: claimed
 created: 2026-08-16T17:20:54+0900
-updated: 2026-08-16T17:20:54+0900
+updated: 2026-08-16T17:21:33+0900
 files: ["조별과제샘플/server.cpp"]
 parent: none
 ---
