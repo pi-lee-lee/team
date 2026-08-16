@@ -217,6 +217,7 @@ static const size_t MAX_UNKNOWN_SOCKS = MAX_ARD_NODES;   // id 없는 소켓이 
 
 static const char* SLOT_ID[10] = {"A1","A2","A3","A4","A5","B1","B2","B3","B4","B5"};
 #include "server_device.h"   // 디바이스 계층 잎 유틸 (REQ-0096 A): SHA-1·base64·ws_accept·체크섬
+#include "server_seam.h"     // 이음매 계약 (REQ-0096 B→C): DeviceEvent / DeviceCommand
 
 // 타이머 전용 — 상대 시각 (윈도우: 부팅 후 경과)
 static long long now_ms() {
@@ -544,6 +545,15 @@ struct Server {
     long long xs_reconnect_reboot;   // 재연결인데 uptime 이 되감김 = 진짜 재부팅
     long long xs_reconnect_link;     // 재연결인데 uptime 이 이어짐 = 링크만 다시 선 것
     long long xs_reconnect_unknown;  // 기억이 없거나 장치가 달라 못 가른 것
+
+    // ── 이음매 큐 (REQ-0096 단계 C) ────────────────────────────────────────────
+    // 디바이스 계층이 도메인 함수를 **직접 부르지 않게** 하는 것이 이 단계의 목표다.
+    // "장치에서 이런 일이 있었다"만 담고, 그것이 무엇을 뜻하는지는 도메인이 정한다
+    // (`server_seam.h` 의 계약). 소비는 `run()` 루프 끝에서 한 번에 한다.
+    //
+    // ⚠ 단계 C 는 **한 종류씩** 옮긴다. 지금 옮긴 것은 `DEV_DISCONNECT` 뿐이고
+    // 나머지 호출은 아직 직접 호출로 남아 있다 — 중간 상태지만 **매 조각이 동작한다.**
+    std::vector<DeviceEvent> pending_events;
 
     std::map<sock_t, Conn> conns;      // HTTP/WS 클라이언트
     std::map<uint16_t, Pending> pend;
@@ -1118,7 +1128,9 @@ struct Server {
         if (!send_raw(ard, line.data(), line.size(), "아두이노")) {
             closesock(ard); ard = BAD_SOCK; ard_buf.clear();
             end_ard_session("송신 실패");        // 세션 장부를 여기서도 닫는다(REQ-0065)
-            push_snapshot();                    // 화면에 "센서 끊김"이 뜨게
+            // 단계 C: 직접 호출 → 이벤트. ⚠ **이 자리는 복구된 이음매 표에 없었다** —
+            // 표는 5곳이라 했지만 실제로는 여기가 여섯 번째다. 표를 지도로 믿지 마라.
+            emit_dev(DEV_DISCONNECT, park_dev, "송신 실패");
             return;
         }
         logf("→ARD", line.substr(0, line.size() - 1));
@@ -1196,6 +1208,55 @@ struct Server {
         return o.str();
     }
     void push_snapshot() { ws_broadcast(snapshot_json()); }
+
+    // ---------- 이음매: 디바이스 → 도메인 (REQ-0096 단계 C)
+    // **디바이스 계층은 이것만 부른다.** 무엇을 할지는 도메인이 정한다.
+    void emit_dev(uint8_t kind, const std::string& dev, const std::string& reason) {
+        DeviceEvent e;
+        seam_clear_event(&e);
+        e.kind = kind;
+        seam_set_dev(e.device_id, dev.c_str());
+        // reason 은 표시·기록용이라 잘려도 판정이 안 바뀐다. 다만 **잘렸다는 사실은 남긴다.**
+        size_t n = sizeof(e.reason) - 1;
+        if (reason.size() <= n) {
+            memcpy(e.reason, reason.c_str(), reason.size());
+            e.reason[reason.size()] = '\0';
+        } else {
+            memcpy(e.reason, reason.c_str(), n - 1);
+            e.reason[n - 1] = '~';          // 잘림 표시
+            e.reason[n] = '\0';
+        }
+        pending_events.push_back(e);
+    }
+
+    // 도메인이 이벤트를 소비한다. `run()` 루프 끝에서 한 번에 부른다.
+    // **여기서 하는 일이 옮기기 전의 직접 호출과 같아야 한다** — 단계 C 는 구조만 바꾸고
+    // 동작은 안 바꾼다. 같은 틱 안에서 소비하므로 지연도 없다(브라우저가 보는 것은 동일).
+    void drain_dev_events() {
+        if (pending_events.empty()) return;
+        bool need_snapshot = false, need_log = false;
+        for (size_t i = 0; i < pending_events.size(); i++) {
+            switch (pending_events[i].kind) {
+                case DEV_DISCONNECT:
+                    need_snapshot = true;   // 화면에 "센서 끊김"이 뜨게(옮기기 전과 동일)
+                    break;
+                case DEV_ONLINE:
+                case DEV_OFFLINE:
+                    // ⚠ 이 두 종류는 **파일 쓰기까지** 해야 한다(§9.4 개정 9).
+                    // 안 하면 장치가 조용할 때 `device.online` 이 영영 false 로 안 남는다 —
+                    // 필드가 가장 필요한 순간에 거짓말을 한다.
+                    need_log = true; need_snapshot = true;
+                    break;
+                default:
+                    break;                  // 아직 안 옮긴 종류 — 직접 호출이 담당한다
+            }
+        }
+        pending_events.clear();
+        // 한 틱에 여러 건이 겹쳐도 각각 한 번이면 된다(같은 내용을 두 번 보낼 이유가 없다).
+        // 순서는 옮기기 전과 같게 **기록 먼저, 그다음 화면**이다.
+        if (need_log) write_log_if_changed();
+        if (need_snapshot) push_snapshot();
+    }
 
     void send_err(sock_t fd, const std::string& rid, const char* code, const char* msg) {
         std::ostringstream o;
@@ -2185,7 +2246,7 @@ struct Server {
                         }
                         end_ard_session(why);
                         closesock(ard); ard = BAD_SOCK; ard_buf.clear();
-                        push_snapshot();
+                        emit_dev(DEV_DISCONNECT, park_dev, why);   // 단계 C
                     } else {
                         ard_buf.append(b, r);
                         size_t i;
@@ -2341,7 +2402,8 @@ struct Server {
                     // 한쪽만 고쳐지는 장부가 생긴다.
                     end_ard_session("유휴 마감 " + std::to_string(ARD_IDLE_CLOSE_MS / 1000) + "초");
                     closesock(ard); ard = BAD_SOCK; ard_buf.clear();
-                    push_snapshot();
+                    emit_dev(DEV_DISCONNECT, park_dev,             // 단계 C
+                             "유휴 마감 " + std::to_string(ARD_IDLE_CLOSE_MS / 1000) + "초");
                 }
             }
             // ---------- 온·오프라인 **엣지** 판정 (§3.4)
@@ -2391,13 +2453,20 @@ struct Server {
                     logf("!", "아두이노 오프라인 판정(" + std::to_string(OFFLINE_MS)
                               + "ms 무프레임) — 누적 " + std::to_string(offline_episodes) + "회");
                 }
-                // ⚠ **파일 쓰기를 여기서 반드시 부른다**(§9.4 개정 9). 다른 두 호출 지점은
+                // ⚠ **파일 쓰기를 여기서 반드시 해야 한다**(§9.4 개정 9). 다른 두 호출 지점은
                 // 둘 다 on_ard_line 안이라 **장치가 조용하면 아예 실행되지 않는다.**
                 // 이 줄이 없으면 `device.online` 은 키에 넣어도 영영 false 로 기록되지 못한다 —
                 // 필드가 **가장 필요한 순간에** 거짓말을 한다.
-                write_log_if_changed();
-                push_snapshot();
+                // 단계 C: 직접 호출 → 이벤트. **소비자가 같은 틱에 같은 일을 한다**(아래 drain).
+                emit_dev(now_online ? DEV_ONLINE : DEV_OFFLINE, park_dev,
+                         now_online ? "프레임 복귀" : "3.5초 무프레임");
             }
+
+            // ---------- 이음매 소비 (REQ-0096 단계 C)
+            // **같은 틱 안에서** 소비한다 — 디바이스가 이번 반복에 낸 이벤트는 이번 반복에
+            // 도메인이 처리한다. 다음 틱으로 미루면 최대 200ms 가 밀리고, 그건 옮기기 전과
+            // 다른 동작이다. 단계 C 는 구조만 바꾸고 동작은 안 바꾼다.
+            drain_dev_events();
 
             // 주기 보고 — **조용한 로그와 죽은 서버를 구별할 수 있게** 한다.
             // 이 줄이 없으면 "2시간 동안 아무 일 없었다"와 "1분 만에 멈췄다"가 같은 모양이다.

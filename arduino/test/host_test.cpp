@@ -27,8 +27,45 @@ uint8_t       g_pinLevel[24];
 uint8_t       g_pinMode[24];
 HostSerial    Serial;
 
+// ── AVR 전용 구문을 호스트에서 무해하게 만든다 (2026-08-16 추가) ────────────
+// 스케치가 REQ-0092 로 **리셋 원인 캡처**를 얻으면서 AVR 전용 것들이 들어왔고,
+// 그대로는 호스트에서 컴파일되지 않는다:
+//   · `__attribute__((section(".noinit")))` / `((naked, used, section(".init3")))`
+//     → mach-o 는 "세그먼트,섹션" 형식을 요구해서 거부한다
+//   · `MCUSR`·`PORF`·`EXTRF`·`BORF`·`WDRF` → AVR 레지스터/비트라 호스트에 없다
+//
+// ⚠ 반드시 **표준 헤더를 다 포함한 뒤** 여기서만 정의한다.
+//   `__attribute__` 를 먼저 지우면 시스템 헤더가 깨진다.
+//
+// ⚠ 이 스텁에서 `mcusrMirror` 는 그냥 0 인 전역이 된다 — 그리고 **그게 실기와 같다.**
+//   부트로더가 MCUSR 을 지우고 넘어오므로 실기에서도 0 이고, 그래서 부팅 로그가
+//   `리셋 원인: 불명` 을 찍는다. 즉 호스트에서도 같은 갈래를 탄다.
+#define __attribute__(x)
+static uint8_t MCUSR = 0;
+#define PORF  0
+#define EXTRF 1
+#define BORF  2
+#define WDRF  3
+#ifndef _BV
+#define _BV(bit) (1 << (bit))
+#endif
+
+// `ramProbe()` 가 쓰는 AVR 링커 심볼. 실기에서는 힙 시작 주소이고, 스택 포인터와의
+// 거리가 곧 미사용 RAM 이다. 호스트에는 그런 배치가 없으므로 **더미 하나를 둔다.**
+// ⚠ 그래서 호스트에서 나오는 `ramLow` 값은 **의미가 없다.** 이 테스트가 검증하는 것은
+//   "ramProbe 가 불렸는가/안 불렸는가"의 흐름이지 그 수치가 아니다.
+uint8_t __heap_start = 0;
+
 // 스케치를 통째로 끌어온다. static 들까지 같은 TU 에 들어와 직접 들여다볼 수 있다.
-#include "../../조별과제샘플/client.ino"
+//
+// ⚠ 경로를 `SKETCH_PATH` 로 뺀 이유 (2026-08-16): **두 판본을 같은 테스트로 돌려 비교**하기
+//   위해서다. 수정 뒤 실패가 나왔을 때 "내 수정 탓인가, 원래 그런가"를 가르려면
+//   **고치기 전 판본을 같은 하네스로 돌려 기준선을 잡는 것**이 유일한 방법이다.
+//   예: g++ -DSKETCH_PATH='"/tmp/base/client.ino"' ...
+#ifndef SKETCH_PATH
+#define SKETCH_PATH "../../조별과제샘플/client.ino"
+#endif
+#include SKETCH_PATH
 
 // ── 테스트 유틸 ────────────────────────────────────────────────────────
 static int g_pass = 0, g_fail = 0;
