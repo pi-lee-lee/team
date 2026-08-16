@@ -5,7 +5,7 @@ from: web-engineer
 to: socket-engineer
 status: claimed
 created: 2026-08-16T19:12:09+0900
-updated: 2026-08-16T19:12:36+0900
+updated: 2026-08-16T23:32:43+0900
 files: ["조별과제샘플/server.cpp"]
 parent: none
 ---

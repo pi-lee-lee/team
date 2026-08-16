@@ -3,9 +3,9 @@ id: REQ-0135
 title: 서버 구조 문서가 없다 — 한 장으로 쓰고 낡은 계획서에 폐기 표시해라
 from: root
 to: socket-engineer
-status: open
+status: claimed
 created: 2026-08-16T20:34:49+0900
-updated: 2026-08-16T20:34:49+0900
+updated: 2026-08-16T23:32:29+0900
 files: ["docs/net/refactor-stage-c-recovered.md"]
 parent: none
 ---
