@@ -76,6 +76,7 @@ def verify(line):
 class FakeArduino:
     def __init__(self, args):
         self.args = args
+        self._was_muted = False       # --mute-every 전이 로그용
         self.reset_state(first=True)
 
     # --- 상태 -------------------------------------------------------------
@@ -340,9 +341,32 @@ class FakeArduino:
 
             # --- 전송 규칙(§3.4): 변화 즉시 + 1Hz 하트비트, 타이머는 하나
             # 전선에 나갈 값 기준으로 변화를 본다 — 주입/무장도 즉시 한 프레임을 유발해야 한다.
+            # --- 침묵 흉내 (§ web REQ-0145 ②) — **소켓은 살려 두고 S 프레임만 멈춘다**
+            #
+            # 🔑 이것이 ①(연결 종료)과 **서버에서 정반대로 보이는** 이유:
+            #   ① 소켓이 닫히면 `ard = BAD_SOCK` → `device_online()` 이 **즉시 false**
+            #   ② 소켓이 살아 있으면 `OFFLINE_MS(3500)` 이 지나기 전까지 **true 유지**
+            #      (server.cpp:886 · 102)
+            # → **3.5초보다 짧은 침묵은 서버·화면에 아무 흔적도 안 남긴다.**
+            #   그 구간을 재려면 이 수단이 있어야 하고, 없으면 "못 쟀다"가 된다.
+            #
+            # ⚠ **이것은 명세 밖의 시험 보조 장치다**(--arrive-sec 과 같은 부류).
+            #   실물 ESP 가 어느 모양으로 끊기는지와 **무관하다** — 그 판정은 실측이 한다.
+            muted = False
+            if self.args.mute_every > 0:
+                phase = (now - session_start) % self.args.mute_every
+                if phase < self.args.mute_for:
+                    muted = True
+                    if not self._was_muted:
+                        say("!", "침묵 시작 %.1f초 — 소켓은 유지한다(서버는 %.1f초까지 온라인으로 본다)"
+                            % (self.args.mute_for, 3.5))
+                elif self._was_muted:
+                    say("*", "침묵 끝 — S 프레임 재개")
+                self._was_muted = muted
+
             bits_now = (self.bits(self.eff_occupied()), self.bits(self.reserved), self.tmask())
             changed = last_bits is not None and bits_now != last_bits
-            if changed or now - last_beat >= self.args.interval:
+            if not muted and (changed or now - last_beat >= self.args.interval):
                 line = self.status_line()
                 try:
                     s.sendall(line.encode("ascii"))
@@ -449,6 +473,12 @@ def main():
                          "가짜 장치가 운영에 붙는 것을 막으려는 것이다")
     ap.add_argument("--devid", default="P1", help="장치 ID (1~8자)")
     ap.add_argument("--interval", type=float, default=1.0, help="하트비트 주기 초 (기본 1.0 = 1Hz)")
+    ap.add_argument("--mute-every", type=float, default=0,
+                    help="N초마다 --mute-for 만큼 **소켓은 유지한 채 S 프레임만 멈춘다**(0=끔). "
+                         "연결 종료와 달리 서버는 3500ms 까지 온라인으로 본다 — "
+                         "그 구간의 화면 거동을 재는 용도")
+    ap.add_argument("--mute-for", type=float, default=2.0,
+                    help="침묵 길이 초 (기본 2.0). ⚠ 3.5 를 넘기면 서버가 오프라인으로 판정한다")
     ap.add_argument("--drop-rate", type=float, default=0.0,
                     help="ACK 를 이 확률로 유실시킨다 (0.0~1.0). 서버 재전송 경로 시험용")
     ap.add_argument("--reboot-after", type=float, default=0,
