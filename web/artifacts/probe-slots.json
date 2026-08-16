@@ -1,0 +1,467 @@
+[
+  {
+    "case": "control",
+    "title": "대조군 — 10칸 전부 실림",
+    "unknown": [],
+    "free": [
+      "A1",
+      "A4",
+      "B1",
+      "B2",
+      "B3"
+    ],
+    "banners": {
+      "offline": "",
+      "stale": "",
+      "conn": "연결 끊김 — 0초 후 재연결 시도 (0회)"
+    },
+    "tiles": [
+      {
+        "slot": "A1",
+        "view": "free",
+        "disabled": false,
+        "state": "빈 자리",
+        "meta": "예약 불가 (연결 없음)"
+      },
+      {
+        "slot": "A2",
+        "view": "occupied",
+        "disabled": false,
+        "state": "사용 중",
+        "meta": "예약 없이 주차됨"
+      },
+      {
+        "slot": "A3",
+        "view": "occupied",
+        "disabled": false,
+        "state": "사용 중",
+        "meta": "예약 없이 주차됨"
+      },
+      {
+        "slot": "A4",
+        "view": "free",
+        "disabled": false,
+        "state": "빈 자리",
+        "meta": "예약 불가 (연결 없음)"
+      },
+      {
+        "slot": "A5",
+        "view": "done",
+        "disabled": false,
+        "state": "사용 중 (입차 완료)",
+        "meta": "예약자 u17"
+      },
+      {
+        "slot": "B1",
+        "view": "free",
+        "disabled": false,
+        "state": "빈 자리",
+        "meta": "예약 불가 (연결 없음)"
+      },
+      {
+        "slot": "B2",
+        "view": "free",
+        "disabled": false,
+        "state": "빈 자리",
+        "meta": "예약 불가 (연결 없음)"
+      },
+      {
+        "slot": "B3",
+        "view": "free",
+        "disabled": false,
+        "state": "빈 자리",
+        "meta": "예약 불가 (연결 없음)"
+      },
+      {
+        "slot": "B4",
+        "view": "occupied",
+        "disabled": false,
+        "state": "사용 중",
+        "meta": "예약 없이 주차됨"
+      },
+      {
+        "slot": "B5",
+        "view": "occupied",
+        "disabled": false,
+        "state": "사용 중",
+        "meta": "예약 없이 주차됨"
+      }
+    ]
+  },
+  {
+    "case": "missing",
+    "title": "slots 키 자체가 없다",
+    "unknown": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "A5",
+      "B1",
+      "B2",
+      "B3",
+      "B4",
+      "B5"
+    ],
+    "free": [],
+    "banners": {
+      "offline": "",
+      "stale": "",
+      "conn": "연결 끊김 — 0초 후 재연결 시도 (0회)"
+    },
+    "tiles": [
+      {
+        "slot": "A1",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "A2",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "A3",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "A4",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "A5",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B1",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B2",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B3",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B4",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B5",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      }
+    ]
+  },
+  {
+    "case": "empty",
+    "title": "slots: [] (빈 배열)",
+    "unknown": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "A5",
+      "B1",
+      "B2",
+      "B3",
+      "B4",
+      "B5"
+    ],
+    "free": [],
+    "banners": {
+      "offline": "",
+      "stale": "",
+      "conn": "연결 끊김 — 0초 후 재연결 시도 (0회)"
+    },
+    "tiles": [
+      {
+        "slot": "A1",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "A2",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "A3",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "A4",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "A5",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B1",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B2",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B3",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B4",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B5",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      }
+    ]
+  },
+  {
+    "case": "partial",
+    "title": "10칸 중 3칸만 실림 (A1·A2·A3)",
+    "unknown": [
+      "A4",
+      "A5",
+      "B1",
+      "B2",
+      "B3",
+      "B4",
+      "B5"
+    ],
+    "free": [
+      "A2",
+      "A3"
+    ],
+    "banners": {
+      "offline": "",
+      "stale": "",
+      "conn": "연결 끊김 — 0초 후 재연결 시도 (0회)"
+    },
+    "tiles": [
+      {
+        "slot": "A1",
+        "view": "occupied",
+        "disabled": false,
+        "state": "사용 중",
+        "meta": "예약 없이 주차됨"
+      },
+      {
+        "slot": "A2",
+        "view": "free",
+        "disabled": false,
+        "state": "빈 자리",
+        "meta": "예약 불가 (연결 없음)"
+      },
+      {
+        "slot": "A3",
+        "view": "free",
+        "disabled": false,
+        "state": "빈 자리",
+        "meta": "예약 불가 (연결 없음)"
+      },
+      {
+        "slot": "A4",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "A5",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B1",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B2",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B3",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B4",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B5",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      }
+    ]
+  },
+  {
+    "case": "bits",
+    "title": "비트열은 있는데 slots 가 비었다",
+    "unknown": [
+      "A1",
+      "A2",
+      "A3",
+      "A4",
+      "A5",
+      "B1",
+      "B2",
+      "B3",
+      "B4",
+      "B5"
+    ],
+    "free": [],
+    "banners": {
+      "offline": "",
+      "stale": "",
+      "conn": "연결 끊김 — 0초 후 재연결 시도 (0회)"
+    },
+    "tiles": [
+      {
+        "slot": "A1",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "A2",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "A3",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "A4",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "A5",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B1",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B2",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B3",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B4",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      },
+      {
+        "slot": "B5",
+        "view": "unknown",
+        "disabled": false,
+        "state": "상태 미상",
+        "meta": "데이터 없음"
+      }
+    ]
+  }
+]

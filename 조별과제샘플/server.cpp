@@ -1189,7 +1189,20 @@ struct Server {
           << ",\"device\":{\"online\":" << (device_online() ? "true" : "false")
           << ",\"device_id\":" << jstr(ard_dev)
           << ",\"uptime\":" << (ard_uptime < 0 ? 0 : ard_uptime)
-          << ",\"seq\":" << (ard_seq < 0 ? 0 : ard_seq) << "}";
+          << ",\"seq\":" << (ard_seq < 0 ? 0 : ard_seq);
+        // §9.1 — **파일 폴백(`data_log.json`)과 같은 키·같은 단위·같은 정의**로 낸다(REQ-0132).
+        // 값은 `ard_last_epoch_ms` = **마지막 유효 S 프레임을 받은 서버 시각(epoch ms)** 이고,
+        // "스냅샷을 만든 시각"(위 `ts`)과 **다른 것**이다. 둘이 갈리는 게 신선도 표시의 요점이다.
+        //
+        // ⚠ 전에는 이 키가 **WS 에만 없고 파일에만 있었다.** 그래서 신선도 표시가
+        // **폴백일 때만 동작하고 정상 운영 중에는 영영 "알 수 없음"** 이었다 —
+        // 기능이 가장 필요한 경로에서만 빠져 있던 것이다(web-engineer 크롬 실측).
+        //
+        // 한 번도 프레임을 못 받았으면 **`null`** 이다. `0` 을 내보내면 화면이 그것을
+        // epoch 로 읽어 **1970년으로부터의 나이**를 그린다 — 누락보다 나쁘다.
+        o << ",\"last_frame_ts\":";
+        if (ard_last_epoch_ms > 0) o << ard_last_epoch_ms; else o << "null";
+        o << "}";
         // §5.3 test_mode — 출처는 S 의 tmask 다(§12A.4). 서버가 T 를 보냈다는 사실이 아니다.
         int novr = 0;
         for (int i = 0; i < 10; i++) if (test_armed && test_ovr[i]) novr++;
@@ -1340,7 +1353,13 @@ struct Server {
           // 실측처럼 그린다**(개정 4의 test_mode 누락과 같은 종류의 구멍이었다).
           // last_frame_ts 는 epoch 시각이고 "파일을 쓴 시각"이 아니다 — 둘이 갈리는 게 요점이다.
           << ",\"device\":{\"online\":" << (online_now ? "true" : "false")
-          << ",\"last_frame_ts\":" << ard_last_epoch_ms << "}"
+          // ⚠ 한 번도 프레임을 못 받았으면 `0` 이 아니라 **`null`** 이다(REQ-0132).
+          // `0` 은 epoch 로 읽히므로 화면이 **1970년으로부터의 나이**를 그린다.
+          // WS 스냅샷(`snapshot_json()`)과 **같은 규칙**이어야 한다 — 두 경로가 갈리면
+          // 폴백 여부에 따라 화면이 다른 말을 한다.
+          << ",\"last_frame_ts\":" << (ard_last_epoch_ms > 0
+                                       ? std::to_string(ard_last_epoch_ms) : std::string("null"))
+          << "}"
           << ",\"occupied\":\"" << bits(false) << "\",\"reserved\":\"" << bits(true) << "\"";
         // §9.1(개정 4) — 무장 여부와 칸별 주입 표시를 **파일에도** 넣는다.
         // WS 가 끊기면 브라우저는 이 파일로 폴백하는데, 이 두 필드가 없으면
@@ -1852,7 +1871,16 @@ struct Server {
         return v;
     }
     void serve_file(sock_t fd, std::string path) {
-        if (path == "/") path = "/index.html";
+        // 🔴 **쿼리를 가장 먼저 떼어낸다. 이 순서가 이 함수의 요점이다.**
+        // 전에는 `"/"` 판정이 앞에 있고 쿼리 제거가 뒤에 있어서 `GET /?demo=1` 이 404 였다:
+        //   `/?demo=1` 은 `"/"` 와 다르므로 index.html 로 **안 바뀌고**, 그 뒤 `?` 앞을 자르면
+        //   `fn` 이 **빈 문자열**이 되어 열기에 실패했다.
+        //   (web-engineer 가 크롬으로 실측 · REQ-0132. `/index.html?x` 는 200 인데 `/?x` 만 404 였다)
+        // **쿼리는 경로가 아니다.** 경로에 관한 어떤 판정보다도 앞에서 떼는 것이 맞고,
+        // 그래야 `/?x` · `/index.html?x` · `/data_log.json?t=…` 가 **한 규칙**으로 처리된다.
+        size_t q = path.find('?');
+        if (q != std::string::npos) path = path.substr(0, q);
+        if (path.empty() || path == "/") path = "/index.html";
         // 경로 탈출 차단 — 데모여도 디렉터리를 서빙하는 코드에 이건 기본이다
         if (path.find("..") != std::string::npos || path.find('\\') != std::string::npos) {
             const char* r = "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
@@ -1860,8 +1888,6 @@ struct Server {
             return;
         }
         std::string fn = path.substr(1);
-        size_t q = fn.find('?');
-        if (q != std::string::npos) fn = fn.substr(0, q);   // ?t=... 캐시버스터
 
         std::ifstream f(fn.c_str(), std::ios::binary);
         if (!f) {

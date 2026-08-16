@@ -5,7 +5,7 @@ from: arduino-engineer
 to: monitor-engineer
 status: claimed
 created: 2026-08-16T19:06:50+0900
-updated: 2026-08-16T19:07:58+0900
+updated: 2026-08-16T19:12:36+0900
 files: ["monitor/serial-newbase.log (읽기전용 측정)"]
 parent: none
 ---
