@@ -11,12 +11,34 @@
 ⚠ 이 계산은 **"우연으로 설명되는가"만 말한다.** 우연 범위라는 것이
    "개입이 원인이 아니다"의 증명은 아니다. 표본이 작으면 둘 다 못 가른다.
 
-사용: python3 monitor/coincidence.py            (값은 아래 상수를 고쳐 쓴다)
+사용:
+  python3 monitor/coincidence.py                       # A 창 기본값(재현용 · 아래 상수)
+  python3 monitor/coincidence.py <반경초> <창시작ISO> <창끝ISO> <개입파일> <사건파일>
+      개입파일·사건파일 = ISO 시각 한 줄에 하나. `#` 로 시작하는 줄과 빈 줄은 무시한다.
+
+⚠ **기본값(A 창)을 고치지 마라.** 인자 없이 돌리면 A 판정을 그대로 재현해야 한다 —
+   그것이 이 도구가 거짓말을 안 한다는 유일한 확인 수단이다(원장 2.6, 교정 먼저).
+
+🔴 창3 국면 2 용 반경은 **5초**다(루트 확정 2026-08-17 00:2x).
+   A 는 개입이 창의 16% 를 덮어 인과를 못 갈랐는데(p=0.161), 주입은 **순간 사건**이라
+   60건 × ±5초면 창의 약 1% 다. **몰리면 압도적이고 안 몰리면 무죄다.**
 """
 from __future__ import annotations
 
+import sys
 from datetime import datetime
 from math import comb
+
+
+def _load(path: str) -> list:
+    out = []
+    with open(path, encoding="utf-8") as f:
+        for ln in f:
+            ln = ln.strip()
+            if ln and not ln.startswith("#"):
+                out.append(ln)
+    return out
+
 
 WIN_START = datetime.fromisoformat("2026-08-16T17:53:07")
 WIN_END = datetime.fromisoformat("2026-08-16T21:04:50")
@@ -51,6 +73,20 @@ EVENTS = [
 
 
 def main() -> int:
+    global WIN_START, WIN_END, RADIUS, INTERVENTIONS, EVENTS
+    src = "A 창 기본값(내장 상수)"
+    if len(sys.argv) == 6:
+        RADIUS = int(sys.argv[1])
+        WIN_START = datetime.fromisoformat(sys.argv[2])
+        WIN_END = datetime.fromisoformat(sys.argv[3])
+        INTERVENTIONS = _load(sys.argv[4])
+        EVENTS = _load(sys.argv[5])
+        src = f"인자 — 개입 {sys.argv[4]} · 사건 {sys.argv[5]}"
+    elif len(sys.argv) != 1:
+        print(__doc__, file=sys.stderr)
+        return 2
+    print(f"# 입력: {src}")
+
     w0, w1 = WIN_START.timestamp(), WIN_END.timestamp()
     span = w1 - w0
     iv = [datetime.fromisoformat(s).timestamp() for s in INTERVENTIONS]
