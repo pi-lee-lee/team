@@ -347,3 +347,6 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T17:20:54+0900 | 발행 | REQ-0115 | root → socket-engineer | 🔴 하행이 0건이다 — 미실행이지 건강이 아니다. 서버에서 내려 실제 도달을 재라 (지금 칩은 EspLink 아님) |
 | 2026-08-16T17:21:33+0900 | 착수 | REQ-0115 | socket-engineer → socket-engineer | 🔴 하행이 0건이다 — 미실행이지 건강이 아니다. 서버에서 내려 실제 도달을 재라 (지금 칩은 EspLink 아님) |
 | 2026-08-16T17:22:45+0900 | 발행 | REQ-0116 | root → arduino-engineer | 자해를 멈춰라 1단계 — busy 를 실패로 세지 않는다 · 더미 주입 중단 (구현만, 플래싱 금지) |
+| 2026-08-16T17:25:29+0900 | 완료 | REQ-0115 | socket-engineer → socket-engineer | 🔴 하행이 0건이다 — 미실행이지 건강이 아니다. 서버에서 내려 실제 도달을 재라 (지금 칩은 EspLink 아님) |
+| 2026-08-16T17:27:05+0900 | 착수 | REQ-0116 | arduino-engineer → arduino-engineer | 자해를 멈춰라 1단계 — busy 를 실패로 세지 않는다 · 더미 주입 중단 (구현만, 플래싱 금지) |
+| 2026-08-16T17:28:01+0900 | 완료 | REQ-0116 | arduino-engineer → arduino-engineer | 자해를 멈춰라 1단계 — busy 를 실패로 세지 않는다 · 더미 주입 중단 (구현만, 플래싱 금지) |

@@ -1120,16 +1120,50 @@ static void noteSendResult(bool ok) {
 // ─────────────────────────────────────────────────────────────────────────
 // 송신 — AT+CIPSEND 뒤 '>' 프롬프트를 실제로 기다린다
 // ─────────────────────────────────────────────────────────────────────────
-static bool waitForPrompt(void) {
+// ── 프롬프트 대기 결과는 **셋이 아니라 넷**이다 (REQ-0116) ──
+// 예전에는 bool 이었다 — `>` 를 봤는가 아닌가. 그래서 **ESP 가 "지금 바쁘다"고 명시적으로
+// 답한 것**과 **아무 답도 없는 것**이 같은 값(false)으로 뭉개졌고, 둘 다 똑같이 실패로 세어
+// 3번이면 멀쩡한 소켓을 끊었다. 링크는 문제가 없는데 우리가 끊는 것 — **자해**였다.
+// (실측 2026-08-16: `busy s...` 거부가 `send_fail` 로 계상되는 것을 AT 로그로 확인)
+static const uint8_t PROMPT_OK      = 0;   // '>' 수신 — ESP 는 **데이터 모드**다
+static const uint8_t PROMPT_BUSY    = 1;   // "busy" — 거부됐다. ESP 는 **명령 모드**다
+static const uint8_t PROMPT_REJECT  = 2;   // "ERROR" — 거부됐다. ESP 는 **명령 모드**다
+static const uint8_t PROMPT_TIMEOUT = 3;   // 무응답 — **데이터 모드일 수 있다**(더미로 마감해야 한다)
+
+static inline char lowerAscii(char c) { return (c >= 'A' && c <= 'Z') ? (char)(c + 32) : c; }
+
+static bool waitForPromptIsReject(char c, uint8_t* mBusy, uint8_t* mErr, uint8_t* out) {
+  // ⚠ `pendLine` 을 보지 않고 **바이트 흐름에서 직접** 찾는 이유:
+  //   송신 중에는 완성된 줄이 pendLine 에 **첫 줄 하나만** 담기고 나머지는 버려진다
+  //   (feedRxChar). 앞선 줄이 자리를 차지하고 있으면 정작 이 CIPSEND 의 `busy` 응답이
+  //   버려져 못 본다. 그래서 기존 버퍼 의미를 건드리지 않고 여기서 따로 훑는다.
+  // ⚠ 대소문자를 가리지 않는 이유: 실측에서 `ERROR` 와 `Error` 가 **둘 다** 관측됐다.
+  static const char W_BUSY[] = "busy";
+  static const char W_ERR[]  = "error";
+  char lc = lowerAscii(c);
+
+  *mBusy = (lc == W_BUSY[*mBusy]) ? (uint8_t)(*mBusy + 1) : (uint8_t)(lc == W_BUSY[0] ? 1 : 0);
+  if (W_BUSY[*mBusy] == '\0') { *out = PROMPT_BUSY; return true; }
+
+  *mErr  = (lc == W_ERR[*mErr])  ? (uint8_t)(*mErr + 1)  : (uint8_t)(lc == W_ERR[0]  ? 1 : 0);
+  if (W_ERR[*mErr] == '\0')  { *out = PROMPT_REJECT; return true; }
+
+  return false;
+}
+
+static uint8_t waitForPrompt(void) {
   unsigned long t0 = millis();
+  uint8_t mBusy = 0, mErr = 0, verdict = PROMPT_TIMEOUT;
   while (millis() - t0 < PROMPT_TIMEOUT_MS) {
     while (wifi.available()) {
       char c = (char)wifi.read();
-      if (c == '>') return true;
+      if (c == '>') return PROMPT_OK;
       feedRxChar(c);                 // 대기 중 들어온 데이터도 버리지 않는다
+      // 거부가 확인되면 **더 기다리지 않는다.** 이 CIPSEND 에 `>` 는 오지 않는다.
+      if (waitForPromptIsReject(c, &mBusy, &mErr, &verdict)) return verdict;
     }
   }
-  return false;                      // 포기는 정상 동작이다 — 다음 하트비트가 곧 온다
+  return PROMPT_TIMEOUT;              // 포기는 정상 동작이다 — 다음 하트비트가 곧 온다
 }
 
 // line 은 LF 없는 문자열. LF 는 여기서 붙인다(전선 종단은 LF 하나 — §2.1)
@@ -1149,10 +1183,32 @@ static bool sendLine(const char* line) {
   wifi.print((unsigned int)(len + 1));                     // +1 = LF 도 전선에 나간다
   wifi.print(F("\r\n"));
 
-  bool ok = waitForPrompt();
+  uint8_t pr = waitForPrompt();
+  bool ok = (pr == PROMPT_OK);
   if (ok) {
     wifi.write((const uint8_t*)line, (size_t)len);
     wifi.write('\n');
+  } else if (pr != PROMPT_TIMEOUT) {
+    // ─────────────────────────────────────────────────────────────────────
+    // ★ REQ-0116 — **거부됐을 때는 더미를 넣지 않는다.**
+    //
+    // `busy`/`ERROR` 는 ESP 가 **명령을 받지 않았다는 확답**이다. 즉 ESP 는 **명령 모드**에
+    // 그대로 있고 **아무 바이트도 기다리지 않는다.** 여기에 더미를 쓰면 그 바이트가
+    // **AT 명령으로 해석되어** `ERROR` 를 낳고 스트림을 더 어지럽힌다.
+    // (실측 2026-08-16: `[AT] "#####…"` 가 **에코로 되돌아오고** 뒤에 `Error`/`busy s...` 가 붙었다.
+    //  `SEND OK` 는 한 번도 없었다 — 더미가 소켓이 아니라 AT 해석기로 갔다는 직접 증거다.)
+    //
+    // 더미는 **아래 PROMPT_TIMEOUT 갈래에서만 옳다.** 거기서는 ESP 가 데이터 모드에 있을
+    // 수 있어 약속한 길이를 채워야 하지만, 여기서는 채울 약속 자체가 없다.
+    // ─────────────────────────────────────────────────────────────────────
+#if DEBUG
+    if (pr == PROMPT_BUSY) {
+      // ★ 이 줄은 monitor 가 세는 지표다. `busy` 는 고장이 아니라 "나중에"라는 뜻이다.
+      Serial.println(F("[TX-BUSY] ESP 가 바쁘다(거부) — 실패로 세지 않는다. 다음 주기에 다시 보낸다"));
+    } else {
+      Serial.println(F("[TX-REJECT] CIPSEND 거부(ERROR) — 더미를 넣지 않는다"));
+    }
+#endif
   } else {
     // ─────────────────────────────────────────────────────────────────────
     // ★ REQ-0064 — **프롬프트를 놓쳤을 때 스트림 동기를 회복한다.**
@@ -1167,13 +1223,24 @@ static bool sendLine(const char* line) {
     // 고치는 방향은 타임아웃 상향이 **아니다.** 그건 증상만 늦출 뿐 같은 사슬이 남는다.
     // **약속한 길이만큼 버릴 바이트를 채워 진행 중인 CIPSEND 를 끝내고 명령 모드로 되돌린다.**
     //
-    // 채움 문자를 `#` 으로 고른 이유: 전선 프로토콜의 타입 문자(S·A·R·C·T·M) 어느 것도 아니라
-    // **서버가 반드시 버린다**(§2.1-7 모르는 타입은 조용히 버림). 우연히 유효 프레임으로
-    // 파싱될 가능성이 없다 — 체크섬 이전에 타입에서 걸린다.
+    // 채움 문자를 `#` 으로 고른 이유: 서버가 **반드시 버리는** 바이트라 우연히 유효 프레임으로
+    // 파싱될 가능성이 없다.
     //
-    // ⚠ ESP 가 실은 명령 모드였다면(CIPSEND 자체가 안 먹힌 경우) 이 바이트들은 AT 명령으로
-    //   해석돼 `ERROR` 한 줄을 낳는다. **무해하다.** 반대쪽(동기 어긋남)은 링크를 끊으므로
-    //   비대칭이 분명하다 — 채우는 쪽이 안전하다.
+    // ✏️ 2026-08-16 정정 — 예전에 여기 *"체크섬 이전에 **타입**에서 걸린다"* 고 적혀 있었는데
+    //   **사실과 반대다.** 서버의 검사 순서는 **길이(64B) → 체크섬 → 타입** 이고
+    //   (`server.cpp:906/1429/1541`, socket-engineer 확인), `###…` 은 쉼표가 없어
+    //   `verify_line()` 의 체크섬 단계에서 즉시 걸린다. **타입 검사까지 가지도 못한다.**
+    //   → 결론(반드시 버려진다)은 그대로지만 **근거가 틀렸었다.** 그리고 그 말은
+    //     **채움 문자를 무엇으로 고르든 들어가는 칸이 같다**는 뜻이다.
+    //   ⚠ 교훈: 이 주석은 **펌웨어가 서버 동작을 확인 없이 가정한 것**이었다.
+    //     남의 도메인 동작을 근거로 쓸 때는 그쪽에 확인하고 출처를 적어라.
+    //
+    // ⚠ ESP 가 실은 명령 모드였다면(CIPSEND 가 안 먹힌 경우) 이 바이트들은 AT 명령으로
+    //   해석된다. 예전 주석은 이것을 **"무해하다"** 고 단정했는데 **그것도 낙관이었다** —
+    //   실측에서 스트림이 더 엉키는 것이 관측됐다. 그래서 REQ-0116 부터는 **거부가 확인되면
+    //   아예 이 갈래로 오지 않는다**(위 PROMPT_BUSY/PROMPT_REJECT 처리).
+    //   여기 남은 것은 **정말로 아무 답이 없었던 경우**뿐이고, 그때는 ESP 가 데이터 모드일
+    //   수 있으므로 채우는 쪽이 여전히 안전하다.
     // ─────────────────────────────────────────────────────────────────────
     for (uint8_t i = 0; i < len; i++) wifi.write('#');
     wifi.write('\n');                                      // 합계 len+1 = 약속한 길이와 정확히 같다
@@ -1193,7 +1260,14 @@ static bool sendLine(const char* line) {
 #endif
   // ★ REQ-0049: 이 결과가 유일한 연속 실패 신호다. 여기서만 센다.
   //   goOffline() 이 netOnline 을 내릴 수 있으므로 inSend 를 내린 **뒤**에 부른다.
-  noteSendResult(ok);
+  //
+  // ★ REQ-0116: **`busy` 는 세지 않는다.** 연속 실패 카운터의 뜻은 "링크가 죽었을 것이다"인데,
+  //   `busy` 는 ESP 가 **살아서 응답한** 것이라 링크 상태에 대한 증거가 아니다. 그걸 세면
+  //   ESP 가 바쁜 몇 초 동안 3회가 채워져 **멀쩡한 소켓을 우리가 끊는다**(= 자해).
+  //   ⚠ 성공도 아니므로 **0 으로 되돌리지도 않는다.** 앞선 진짜 실패가 있었다면 그대로 남는다
+  //     — 그래서 `noteSendResult(true)` 가 아니라 **호출 자체를 건너뛴다.**
+  //   `ERROR`(PROMPT_REJECT)는 그대로 센다. 명령이 실제로 거부된 것이고 링크 이상일 수 있다.
+  if (pr != PROMPT_BUSY) noteSendResult(ok);
   return ok;
 }
 
