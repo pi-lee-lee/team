@@ -1188,6 +1188,41 @@ function tileView(slot) {
   return { view: 'free', mine: false, disabled: false, state: '빈 자리', meta: '눌러서 예약', action: 'reserve' };
 }
 
+/**
+ * 자리 데이터 결손을 **격자 위에서 한 번 더** 말한다.
+ *
+ * 왜 필요한가 (2026-08-16 실측):
+ * 칸마다는 이미 "상태 미상 / 데이터 없음"으로 정확히 갈린다 — `slot.known` 이 그 판단이고
+ * 결손 칸은 빈자리로 그려지지 **않는다**(측정: web/artifacts/probe-slots.json).
+ * 문제는 **그 말이 칸 안에만 있다**는 것이다. 10칸 중 3칸만 미상이면 나머지 7칸이
+ * 정상으로 보이므로 화면 전체는 멀쩡해 보인다. 시연에서 발표자는 그걸 못 알아챈다.
+ *
+ * 그래서 배너는 **집계**만 한다. 칸의 문구를 대신하지 않는다.
+ *
+ * ⚠ 스냅샷이 없을 때는 침묵한다 — 그건 "데이터 결손"이 아니라 "아직 안 왔다"이고,
+ *   연결 상태 줄이 이미 그렇게 말하고 있다. 여기서 또 말하면 첫 화면이 경고로 뒤덮인다.
+ */
+let lastSlotGapText = null;
+function renderSlotGap() {
+  const box = el.slotsBanner;
+  if (!state.snapshot) { box.hidden = true; lastSlotGapText = null; return; }
+
+  const missing = state.snapshot.slots.filter(function (s) { return !s.known; })
+                                      .map(function (s) { return s.id; });
+  if (missing.length === 0) { box.hidden = true; lastSlotGapText = null; return; }
+
+  const text = (missing.length === SLOT_IDS.length)
+    ? '자리 데이터가 없습니다 — 이 기록에 slots 가 없어 ' + SLOT_IDS.length
+      + '칸 전부 상태를 모릅니다. 비어 보이는 것이 아니라 모르는 것입니다.'
+    : missing.length + '칸의 상태를 모릅니다 (' + missing.join(' · ')
+      + '). 이 칸들은 빈자리가 아니라 데이터가 오지 않은 칸입니다.';
+
+  box.hidden = false;
+  /* 같은 문구를 매초 다시 쓰지 마라 — 이 노드는 aria-live 라 스크린리더가 다시 읽는다.
+     stale-banner 가 같은 이유로 임계를 넘나들 때만 문구를 바꾼다(§ 마크업 주석). */
+  if (text !== lastSlotGapText) { box.textContent = text; lastSlotGapText = text; }
+}
+
 function render() {
   renderConnection();
   renderDevice();

@@ -158,6 +158,9 @@ try {
         cells.every(c => c.state !== '상태 미상'), JSON.stringify(cells.slice(0, 3)));
   const devId = await evaluate(client, `document.getElementById('dev-id').textContent`);
   check('장치 ID 가 표시된다', devId && devId !== '—', devId);
+  /* 결손 배너는 **정상 운영에서 침묵해야 한다.** 늘 떠 있는 경고는 아무도 안 읽는다. */
+  check('자리 결손 배너가 뜨지 않는다 (서버가 10칸을 다 싣고 있다)',
+        await evaluate(client, `document.getElementById('slots-banner').hidden === true`));
   await shot(client, '1-ws-connected');
 
   /* ── 3. 🔴 예약 왕복 — 브라우저 → 서버 → 장치 → 화면 ── */

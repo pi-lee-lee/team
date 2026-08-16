@@ -58,13 +58,19 @@ for (const c of CASES) {
     handleServerMessage(${JSON.stringify(frame)}); return true; })()`);
   await sleep(250);
 
+  /* ⚠ `b.disabled` 를 보면 안 된다. 이 화면은 일부러 `aria-disabled` 를 쓴다 —
+     진짜 disabled 로 만들면 키보드·스크린리더 사용자가 그 칸에 도달조차 못 해서
+     "왜 못 누르는지"를 들을 수 없다(1801-1806행). 처음에 이걸 잘못 읽어
+     "disabled 가 안 먹는다"고 오판할 뻔했다. */
   const tiles = await evaluate(client, `[...document.querySelectorAll('.tile')].map(b => ({
-    slot: b.dataset.slot, view: b.dataset.view, disabled: b.disabled,
+    slot: b.dataset.slot, view: b.dataset.view,
+    ariaDisabled: b.getAttribute('aria-disabled'), reason: b.dataset.reason,
     state: b.querySelector('.tile__state').textContent,
     meta: b.querySelector('.tile__meta').textContent }))`);
   const banners = await evaluate(client, `({
     offline: document.getElementById('offline-banner').hidden ? '' : document.getElementById('offline-banner').textContent.trim(),
     stale: document.getElementById('stale-banner').hidden ? '' : document.getElementById('stale-banner').textContent.trim(),
+    slots: document.getElementById('slots-banner').hidden ? '' : document.getElementById('slots-banner').textContent.trim(),
     conn: document.getElementById('conn-text').textContent
   })`);
 
@@ -75,8 +81,8 @@ for (const c of CASES) {
   console.log('\n■ ' + c.title);
   console.log('   상태 미상 칸: ' + (unknown.length ? unknown.join(',') : '없음') + ' (' + unknown.length + '개)');
   console.log('   빈 자리 칸  : ' + (free.length ? free.join(',') : '없음') + ' (' + free.length + '개)');
-  console.log('   첫 칸 표시  : ' + JSON.stringify(tiles[0].state + ' / ' + tiles[0].meta) + '  disabled=' + tiles[0].disabled);
-  console.log('   전역 배너   : ' + JSON.stringify(banners.offline || banners.stale || '(없음)'));
+  console.log('   첫 칸 표시  : ' + JSON.stringify(tiles[0].state + ' / ' + tiles[0].meta) + '  aria-disabled=' + tiles[0].ariaDisabled);
+  console.log('   결손 배너   : ' + JSON.stringify(banners.slots || '(없음)'));
   await client.send('Page.captureScreenshot', { format: 'png' })
     .then(({ data }) => writeFileSync(new URL('slots-' + c.key + '.png', OUT), Buffer.from(data, 'base64')));
 }
