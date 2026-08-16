@@ -351,3 +351,6 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T17:27:05+0900 | 착수 | REQ-0116 | arduino-engineer → arduino-engineer | 자해를 멈춰라 1단계 — busy 를 실패로 세지 않는다 · 더미 주입 중단 (구현만, 플래싱 금지) |
 | 2026-08-16T17:28:01+0900 | 완료 | REQ-0116 | arduino-engineer → arduino-engineer | 자해를 멈춰라 1단계 — busy 를 실패로 세지 않는다 · 더미 주입 중단 (구현만, 플래싱 금지) |
 | 2026-08-16T17:36:05+0900 | 통보 | REQ-0117 | root → root | notice 명령 동작 시험 — 확인 후 삭제 |
+| 2026-08-16T17:43:22+0900 | 발행 | REQ-0118 | root → socket-engineer | 서버 구조 작업 재개 — 잃은 계획서 복구 · (A) 재부팅 오보 결함 · 리팩터링 단계 C |
+| 2026-08-16T17:44:00+0900 | 착수 | REQ-0118 | socket-engineer → socket-engineer | 서버 구조 작업 재개 — 잃은 계획서 복구 · (A) 재부팅 오보 결함 · 리팩터링 단계 C |
+| 2026-08-16T17:46:49+0900 | 진행 | REQ-0118 | socket-engineer → socket-engineer | 서버 구조 작업 재개 — 잃은 계획서 복구 · (A) 재부팅 오보 결함 · 리팩터링 단계 C — 0번 완료: plan-windows-and-mapping.md 복구(Write 원문 + Bash 수정 2·3 순서대로 적용, fix1 은 계획서 미변경이라 제외) — server_seam.h:85 의 §5.7 포인터가 다시 유효하다. REQ-0096 단계 C 기록도 docs/net/refactor-stage-c-recovered.md 로 복구(이음매 5곳을 현재 파일에서 재확인). 다음 (A) 착수 |

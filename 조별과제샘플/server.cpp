@@ -270,7 +270,10 @@ static int g_port_offset = 0;
 // 옛 로그(형식 1)와 새 로그를 **한 파일 안에서 동시에** 다뤄야 한다 — 옛 로그가 판정 근거라
 // 계속 읽어야 하기 때문이다. 이 필드가 있으면 파서가 경계에서 스스로 전환한다.
 // 없으면 관측자는 **날짜 유무를 휴리스틱으로 추측**해야 하고, 그 추측이 오늘 사고를 냈다.
-#define LOG_FORMAT_VERSION 2
+// 3 (REQ-0118): 소크 요약에 `재연결내역(…)` 과 `승격전버림(…)` 두 칸이 추가됐고,
+//   재연결 시 판정 한 줄(`재연결 판정: …`)이 새로 나간다. **기존 칸은 형태를 안 바꿨다** —
+//   순수 추가라 옛 파서가 깨지지는 않지만, 새 칸이 있는지 없는지를 파서가 알아야 하므로 올린다.
+#define LOG_FORMAT_VERSION 3
 
 // ⚠ **소스 식별자다. 파일명이나 mtime 이 아니다.** mtime 은 파일 복사만으로도 바뀌어서
 // "도는 바이너리가 이 소스에서 나왔나"를 증명하지 못한다(08-16 에 실제로 mtime 으로 추리했다).
@@ -524,6 +527,24 @@ struct Server {
     long  ard_seq;
     std::string ard_dev;
 
+    // ── 세션을 가로지르는 uptime 기억 (REQ-0118 (A)) ──────────────────────────
+    // **왜 별도 필드인가**: `ard_uptime` 은 재연결 때 -1 로 버려진다. 그건 결함이 아니라
+    // §7.4 가 의도한 것이다 — 기준선 없이 판정하면 연 480회 오탐이 돌아온다.
+    // 그래서 그 필드는 **손대지 않는다.** 대신 세션을 넘겨 살아남는 기억을 따로 둔다.
+    //
+    // **무엇을 고치는가**: 지금 서버는 재연결을 전부 "재부팅"이라고 부른다. 실제로는
+    // 08-16 기준선에서 새 연결 36건 중 **35건이 재부팅이 아니라 링크 재접속**이었다.
+    // 17:21:36 에 서버가 "재부팅 감지"를 찍었지만 uptime 은 1286 → 1295 로 **늘었다.**
+    // 장치는 죽지 않았는데 장부에는 재부팅으로 남는다.
+    //
+    // ⚠ **이 값은 보고 전용이다. 어떤 판정에도 먹이지 않는다.**
+    //   `uptime_says_reboot()` 이 보는 것은 여전히 `ard_uptime` 뿐이다.
+    long long xs_uptime;          // 직전 세션에서 마지막으로 본 uptime (-1 = 기억 없음)
+    std::string xs_dev;           // 그 uptime 의 주인 — 다른 장치면 비교하지 않는다
+    long long xs_reconnect_reboot;   // 재연결인데 uptime 이 되감김 = 진짜 재부팅
+    long long xs_reconnect_link;     // 재연결인데 uptime 이 이어짐 = 링크만 다시 선 것
+    long long xs_reconnect_unknown;  // 기억이 없거나 장치가 달라 못 가른 것
+
     std::map<sock_t, Conn> conns;      // HTTP/WS 클라이언트
     std::map<uint16_t, Pending> pend;
     uint16_t next_rid;
@@ -579,6 +600,13 @@ struct Server {
     long long drop_overlong;      // 64B 초과 줄(§2.1)
     long long drop_unknown;       // 모르는 타입 문자 — 비프로토콜 텍스트 유입 의심
     long long drop_noise;         // LF 없이 64B 초과 → 버퍼 비움(잡음)
+    // 승격 전(id 미상) 소켓에서 버린 줄 (REQ-0118 (F)).
+    // **왜 필요한가**: 이 경로의 줄은 지금까지 **어느 카운터도 안 올리고 사라졌다.**
+    // 그래서 "안 왔다"와 "왔는데 못 셌다"가 구별되지 않았다 — 08-16 에 `TX-RESYNC 4 : 버린줄 0`
+    // 을 두고 팀이 판정을 못 내린 원인이 이것이다. 그리고 **마감된 소켓 56건이 전부 이 경로**라
+    // 지금 그 소켓들이 무엇을 받았는지 아무도 모른다. 0 이 "해당 없음"인지 "못 셈"인지 가른다.
+    long long drop_prepromo;      // 승격 전 소켓에서 버린 줄(체크섬 실패·비S프레임 포함)
+    long long drop_prepromo_buf;  // 승격 전 소켓 버퍼가 상한을 넘겨 통째로 비운 횟수
     long long retx_count;         // 하행 재전송 횟수(§7.3)
     long long ack_fail_count;     // 하행 ACK 최종 실패 횟수
     bool ard_online;              // 온·오프라인 **엣지** 판정용 직전 상태(§3.4). 아래 루프 주석 참조
@@ -603,13 +631,17 @@ struct Server {
     Server() : lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK), ard(BAD_SOCK),
                aux_conflicts(0), admit_rejects(0),      // 선언 순서와 일치시킨다(-Wreorder)
                ard_seen(false), ard_last_ms(0), ard_last_epoch_ms(0), ard_uptime(-1), ard_seq(-1),
-               ard_dev("?"), next_rid(1), base_valid(false), test_armed(false),
+               ard_dev("?"),
+               xs_uptime(-1), xs_dev(""), xs_reconnect_reboot(0), xs_reconnect_link(0),
+               xs_reconnect_unknown(0),
+               next_rid(1), base_valid(false), test_armed(false),
                resync_count(0), no_disk(false),
                soak_start_ms(0), ard_sessions(0), sess_start_ms(0), sess_frames(0),
                sess_last_line_ms(0), sess_max_gap_ms(0), all_frames(0), all_max_gap_ms(0),
                all_max_gap_at(0), link_down_ms(0), link_down_since(0),
                reboot_by_conn(0), reboot_by_uptime(0), offline_episodes(0),
                drop_cksum(0), drop_overlong(0), drop_unknown(0), drop_noise(0),
+               drop_prepromo(0), drop_prepromo_buf(0),
                retx_count(0), ack_fail_count(0),                  // 선언 순서와 일치시킨다(-Wreorder)
                ard_online(false), last_report_ms(0),
                offline_since_ms(0), offline_at_session(0), recov_dropped(0),
@@ -766,6 +798,13 @@ struct Server {
            + " · 재부팅감지 " + std::to_string(reboot_by_conn + reboot_by_uptime)
            + "(새연결 " + std::to_string(reboot_by_conn)
            + " / uptime추론 " + std::to_string(reboot_by_uptime) + ")"
+           // ⚠ 위 `재부팅감지` 는 **새 연결을 전부 재부팅으로 센다.** 그게 과대집계라는 것이
+           // 08-16 에 밝혀졌고(36건 중 35건이 링크 재접속), 아래가 실제로 갈라 놓은 값이다.
+           // 위 필드는 옛 집계 도구 호환을 위해 **형태를 그대로 두었다** — 이름 정정은
+           // 계약 변경이라 monitor 와 합의 후 별도 교체로 한다(REQ-0118 (A) 2단계).
+           + " · 재연결내역(재부팅 " + std::to_string(xs_reconnect_reboot)
+           + "/링크재접속 " + std::to_string(xs_reconnect_link)
+           + "/미상 " + std::to_string(xs_reconnect_unknown) + ")"
            + " · 오프라인 " + std::to_string(offline_episodes) + "회"
            + " · 링크없음 " + hms(down)
            // 상행만 보면 하행이 통째로 죽어도 요약이 멀쩡하다. 네 숫자를 나란히 둔다.
@@ -775,6 +814,10 @@ struct Server {
            + "/과길이 " + std::to_string(drop_overlong)
            + "/모름 " + std::to_string(drop_unknown)
            + "/잡음 " + std::to_string(drop_noise) + ")"
+           // 승격 전 소켓에서 버린 줄 — 위 4칸 어디에도 안 잡히던 것이다(REQ-0118 (F)).
+           // **0 이면 "안 왔다"가 확정된다.** 전에는 0 이 "못 셌다"일 수도 있었다.
+           + " · 승격전버림 " + std::to_string(drop_prepromo)
+           + "(버퍼비움 " + std::to_string(drop_prepromo_buf) + ")"
            + " · 재전송 " + std::to_string(retx_count)
            + " · ACK실패 " + std::to_string(ack_fail_count)
            + " · " + recovery_phrase()
@@ -1435,6 +1478,31 @@ struct Server {
             // §7.4(개정 8) — 순환을 접은 uptime 전진량 하나로 본다.
             // **seq 는 판정에 쓰지 않는다**: 1Hz 에서 18.2시간마다 합법적으로 0 을 지나간다.
             bool reboot = uptime_says_reboot(ard_uptime, up);
+
+            // ── 세션을 가로지르는 판정 (REQ-0118 (A)) — **보고 전용** ──────────────
+            // 새 세션의 첫 프레임(`ard_uptime < 0`)에서만 본다. 지금까지 서버는 이 순간을
+            // 무조건 "재부팅"이라 불렀지만, 직전 세션의 uptime 을 기억하면 갈린다:
+            //   · 되감겼다  → 장치가 정말 재부팅했다
+            //   · 이어진다  → 장치는 살아 있었고 **링크만 다시 선 것**이다
+            // 08-16 기준선에서 새 연결 36건 중 35건이 후자였다. 지금까지 전부 전자로 셌다.
+            //
+            // ⚠ 위 `reboot` 변수에는 **손대지 않는다.** 그것은 §7.4 판정이고 여기는 장부다.
+            if (ard_uptime < 0) {
+                if (xs_uptime < 0 || xs_dev != f[5]) {
+                    xs_reconnect_unknown++;      // 기억 없음/다른 장치 — 모른다고 말한다
+                } else if (up < xs_uptime) {
+                    xs_reconnect_reboot++;
+                    logf("⟳", "재연결 판정: **재부팅** — uptime " + std::to_string(xs_uptime)
+                              + " → " + std::to_string(up) + " (되감김)");
+                } else {
+                    xs_reconnect_link++;
+                    logf("=", "재연결 판정: **링크 재접속**(장치는 안 죽었다) — uptime "
+                              + std::to_string(xs_uptime) + " → " + std::to_string(up)
+                              + " (+" + std::to_string(up - xs_uptime) + "초)");
+                }
+            }
+            xs_uptime = up; xs_dev = f[5];   // 세션이 끊겨도 이 값은 남는다
+
             ard_seq = seq; ard_uptime = up; ard_dev = f[5];
             ard_last_ms = now_ms(); ard_last_epoch_ms = epoch_ms(); ard_seen = true;
 
@@ -2162,6 +2230,11 @@ struct Server {
                                 // **승격해도 이 프레임을 잃지 않는다.** 되돌려 놓고 넘긴다 —
                                 // 첫 프레임은 §7.4 기준선을 세우는 줄이라 버리면 안 된다.
                                 rest = line + "\n" + unknown[k].buf;
+                            } else if (!line.empty()) {
+                                // (REQ-0118 (F)) 여기서 버려지는 줄을 **이제 센다.**
+                                // 전에는 아무 카운터도 안 올리고 사라져서, 이 소켓이 침묵했는지
+                                // 말했는데 못 알아들었는지 구별할 방법이 없었다.
+                                drop_prepromo++;
                             }
                         }
                         if (found) {
@@ -2172,6 +2245,10 @@ struct Server {
                             }
                         } else if (unknown[k].buf.size() > (size_t)MAX_LINE * 4) {
                             // 잡음만 흘리는 소켓이 메모리를 먹지 않게 한다(§6.2)
+                            // (REQ-0118 (F)) 통째로 버리는 것도 **말없이 하지 않는다.**
+                            drop_prepromo_buf++;
+                            logf("!", "승격 전 소켓 버퍼 상한 초과 — 통째로 비움("
+                                      + std::to_string(unknown[k].buf.size()) + "B)");
                             unknown[k].buf.clear();
                         }
                     }
