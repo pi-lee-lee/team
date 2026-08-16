@@ -373,6 +373,11 @@
        스크린리더가 1초마다 다시 읽는다. 흐르는 숫자는 '마지막 갱신'(비-live)에 둔다. -->
   <p id="stale-banner" class="banner banner--stale" role="status" aria-live="polite" hidden></p>
   <p id="test-banner" class="banner banner--test" role="status" aria-live="polite" hidden></p>
+  <!-- 자리 데이터 결손(2026-08-16). 칸마다 "상태 미상 / 데이터 없음"이라고 이미 말하지만,
+       그건 **칸을 하나씩 읽는 사람**에게만 들린다. 10칸 중 3칸만 조용히 미상이면
+       나머지 7칸이 정상이라 화면 전체는 멀쩡해 보인다 — 시연에서 발표자가 못 알아챈다.
+       그래서 "몇 칸이 왜 미상인가"를 격자 위에서 한 번 더 말한다. -->
+  <p id="slots-banner" class="banner banner--warn" role="status" aria-live="polite" hidden></p>
 
   <main>
     <section aria-labelledby="grid-title">
@@ -1001,6 +1006,7 @@ const el = {
   userId:      document.getElementById('user-id'),
   offline:     document.getElementById('offline-banner'),
   staleBanner: document.getElementById('stale-banner'),
+  slotsBanner: document.getElementById('slots-banner'),
   demoBanner:  document.getElementById('demo-banner'),
   demoTools:   document.getElementById('demo-tools'),
   devOnline:   document.getElementById('dev-online'),
@@ -1187,6 +1193,7 @@ function render() {
   renderDevice();
   renderSim();
   renderTestMode();
+  renderSlotGap();
 
   const armed = isArmed();
   /* 주입 조작을 보낼 곳이 있는가. 무장 표시(§12A.6)와는 **다른 축**이다 —
