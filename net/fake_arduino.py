@@ -73,6 +73,15 @@ def verify(line):
     return line[:cut].split(",")
 
 
+class _DieNow(Exception):
+    """`--downlink-die` 가 의도적으로 세션을 끊을 때 쓰는 내부 신호.
+
+    ⚠ **오류가 아니다.** `OSError` 로 던지면 `run()` 의 접속 실패 경로와 섞여
+    "실패해서 끊긴 것"과 "일부러 끊은 것"이 로그에서 안 갈린다 — 그건 원장 §0 이
+    말하는 그 자리(이름이 결론을 담는 것)라 별도 예외로 뒀다.
+    """
+
+
 class FakeArduino:
     def __init__(self, args):
         self.args = args
@@ -294,10 +303,21 @@ class FakeArduino:
         while True:
             try:
                 self.session()
+            except _DieNow:
+                pass                      # --downlink-die 가 의도적으로 끊은 것. 아래에서 기다린다
             except (ConnectionRefusedError, OSError) as e:
                 say("!", "접속 실패(%s) — 3초 후 재시도" % e)
                 time.sleep(3)
-            if not self.args.reboot_after:
+
+            # --- 의도적 단절 구간을 지킨다(--down-for)
+            # ⚠ 이 시간이 **끊김 길이**다. 3.5초를 넘기면 서버가 오프라인으로 판정하고,
+            #   아래면 서버 상태 지표에는 안 보인다. web 이 스윕하는 것이 이 값이다.
+            wait = self._down_until - time.time()
+            if wait > 0:
+                say("*", "단절 유지 %.1f초 (--down-for) — 그 뒤 재접속한다" % wait)
+                time.sleep(wait)
+                self._down_until = 0.0
+            elif not self.args.reboot_after:
                 # 재부팅 옵션이 없으면 연결이 끊겼을 때만 재접속
                 time.sleep(1)
 
@@ -524,6 +544,17 @@ def main():
                          "그 구간의 화면 거동을 재는 용도")
     ap.add_argument("--mute-for", type=float, default=2.0,
                     help="침묵 길이 초 (기본 2.0). ⚠ 3.5 를 넘기면 서버가 오프라인으로 판정한다")
+    ap.add_argument("--mute-sweep", default="",
+                    help="침묵 길이를 주기마다 바꾼다(쉼표 구분, 예: 2,3,4,8). "
+                         "--mute-for 를 덮어쓴다. **재시작 없이 3.5초 경계를 걸치며 스윕**하려는 것")
+    # ── 🔴 하행을 받고 죽는 흉내 (web 경우 C)
+    ap.add_argument("--downlink-die", choices=["off", "after-apply", "before-recv"], default="off",
+                    help="하행 수신 시 소켓을 끊는다. "
+                         "**after-apply**=적용하고 ACK 없이 끊는다(장치는 적용됨 → 화면↔장치 불일치의 최악 경로) · "
+                         "**before-recv**=읽지도 않고 끊는다(장치 상태 안 바뀜 · 실물 창4 의 모양)")
+    ap.add_argument("--down-for", type=float, default=2.0,
+                    help="--downlink-die 로 끊은 뒤 재접속까지 유지할 단절 길이 초(기본 2.0). "
+                         "⚠ 3.5 를 넘겨야 서버 오프라인 판정이 걸린다")
     ap.add_argument("--drop-rate", type=float, default=0.0,
                     help="ACK 를 이 확률로 유실시킨다 (0.0~1.0). 서버 재전송 경로 시험용")
     ap.add_argument("--reboot-after", type=float, default=0,
