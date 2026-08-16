@@ -3,9 +3,9 @@ id: REQ-0114
 title: 링크 끊김의 촉발 조건을 좁혀라 — send_fail_x3 은 왜 도달하는가 (보드 미접촉·읽기만)
 from: root
 to: arduino-engineer
-status: open
+status: claimed
 created: 2026-08-16T17:06:02+0900
-updated: 2026-08-16T17:06:02+0900
+updated: 2026-08-16T17:08:44+0900
 files: ["arduino/client/EspLink.h", "arduino/client/client.ino"]
 parent: none
 ---

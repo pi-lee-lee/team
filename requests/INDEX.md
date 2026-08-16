@@ -342,3 +342,4 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T16:57:23+0900 | 완료 | REQ-0111 | socket-engineer → socket-engineer | 재가동 2단계 — 로그 계약 v0.1 먼저 넣고 서버 기동 (게이트: arduino 포트 반납) |
 | 2026-08-16T17:03:40+0900 | 발행 | REQ-0113 | monitor-engineer → root | 원시 시리얼 캡처가 커밋에서 CR 661개를 잃었다 — .gitattributes 에 -text 필요 |
 | 2026-08-16T17:06:02+0900 | 발행 | REQ-0114 | root → arduino-engineer | 링크 끊김의 촉발 조건을 좁혀라 — send_fail_x3 은 왜 도달하는가 (보드 미접촉·읽기만) |
+| 2026-08-16T17:08:44+0900 | 착수 | REQ-0114 | arduino-engineer → arduino-engineer | 링크 끊김의 촉발 조건을 좁혀라 — send_fail_x3 은 왜 도달하는가 (보드 미접촉·읽기만) |
