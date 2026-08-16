@@ -38,7 +38,15 @@ CONTAM_TO = datetime(2026, 8, 16, 16, 15, 37)    # 서버 로그가 끊긴 시�
 #   옛 구간과 같은 표에 넣지 않을 뿐이다 — REQ-0112).
 
 # 재부팅으로 볼 uptime 상한. 이보다 크면 "장치는 살아 있었다".
+# 근거: 실측 기동 창 **11.3초**(arduino-engineer, 커밋 337c926 — 옛 36초 값은 폐기됐다).
+# 갓 부팅한 장치의 첫 프레임 uptime 은 11초대이므로 120 은 넉넉하고 안전한 문턱이다.
 BOOT_UPTIME_MAX = 120
+
+# 🔴 서버가 없을 때 장치는 **0.90초 주기로 백오프 없이** 재시도한다(arduino 실측).
+# 이건 결함이 아니라 설계된 거동이므로 **링크 끊김으로 세면 안 된다.**
+# 서버 인스턴스가 막 떴을 때 몰려드는 접속은 "끊겨서 다시 붙은 것"이 아니라
+# "계속 두드리고 있던 것이 드디어 받아들여진 것"이다.
+SERVER_START_GRACE_S = 90
 
 TS = re.compile(r"^(\d{2}):(\d{2}):(\d{2})\s+(.*)$")
 SFRAME = re.compile(r"←ARD\s+S,(\d+),([01]+),([01]+),(\d+),(\w+),(\d+)")
@@ -108,7 +116,17 @@ def main() -> int:
         print("⚠ 프레임이 너무 적다 — 이 구간으로는 판별할 수 없다.")
         return 1
 
-    accepts = [t for t, s in ev if "+? 연결 수락" in s]
+    # 서버 기동 시각들 — 그 직후 접속은 "설계된 재시도가 받아들여진 것"이라 제외한다.
+    starts = [t for t, s in ev
+              if "소크 관측 시작" in s or s.lstrip().startswith("=== INSTANCE")]
+    all_accepts = [t for t, s in ev if "+? 연결 수락" in s]
+
+    def in_grace(t):
+        return any(0 <= (t - st).total_seconds() <= SERVER_START_GRACE_S for st in starts)
+
+    accepts = [t for t in all_accepts if not in_grace(t)]
+    excluded = [t for t in all_accepts if in_grace(t)]
+    excluded_startup = len(excluded)
     same_conn = [(t, s) for t, s in ev if "온라인 복귀" in s and "같은 연결" in s]
     reconn = [(t, s) for t, s in ev if "온라인 복귀" in s and "재연결" in s]
 
@@ -116,6 +134,21 @@ def main() -> int:
     print()
     print("## (A) 재연결형 — 붙었는데 장치는 이미 오래 살아 있던 경우")
     print(f"   ACCEPT {len(accepts)}건 검사 · uptime > {BOOT_UPTIME_MAX}s 이면 '재부팅 아님'")
+    # ⚠ 제외는 **항상** 찍는다. 0건이어도 찍는다.
+    #    "조용히 사라지는 것이 제일 나쁘다"(루트, REQ-0112) — 이 창 안에 진짜 끊김이 있었어도
+    #    같이 지워지므로, 나중에 "이 창은 왜 비었지"를 물을 수 있어야 한다.
+    print(f"   서버 기동 직후 {SERVER_START_GRACE_S}초 제외: **{excluded_startup}건**"
+          f" (서버 기동 표지 {len(starts)}건 기준)")
+    if excluded:
+        print("   ↓ 제외된 접속 — 지표에서 뺐을 뿐 없던 일이 아니다. 직접 확인하라:")
+        for t in excluded[:10]:
+            nxt = next((f for f in frames if f[0] >= t), None)
+            up = nxt[1] if nxt and (nxt[0] - t).total_seconds() <= 180 else None
+            note = ("uptime %s → %s" % (up, "재부팅" if up is not None and up <= BOOT_UPTIME_MAX
+                                        else "장치 생존")) if up is not None else "직후 프레임 없음"
+            print(f"     {t.strftime('%m-%d %H:%M:%S')}  {note}")
+        if len(excluded) > 10:
+            print(f"     … 외 {len(excluded)-10}건")
     print()
     alive, booted, nodata = [], 0, 0
     for t in accepts:
@@ -166,6 +199,10 @@ def main() -> int:
         "since": SINCE.isoformat(), "until": UNTIL.isoformat(), "hours": round(hours, 3),
         "frames": len(frames), "accepts": len(accepts),
         "reconnect_no_reboot": len(alive), "reboots": booted, "undetermined": nodata,
+        # 제외분을 산출물에도 남긴다 — 요약만 보는 사람에게도 보여야 한다.
+        "excluded_server_startup": excluded_startup,
+        "excluded_at": [t.isoformat() for t in excluded[:20]],
+        "server_starts": len(starts),
         "same_conn_recover": len(same_conn), "reconn_recover": len(reconn),
         "reconnect_no_reboot_per_h": round(len(alive) / hours, 3) if hours else None,
         "same_conn_recover_per_h": round(len(same_conn) / hours, 3) if hours else None,

@@ -282,15 +282,23 @@ static std::string default_log_path() {
     return std::string(home) + "/parking-logs/parking-server.log";
 }
 
+// 부모 디렉터리를 **한 단계씩 전부** 만든다.
+// ⚠ 한 단계만 만들면 조부모가 없을 때 mkdir 이 ENOENT 로 실패하고, 그 결과는
+// "로그가 조용히 안 남는다" 이다. 기본 경로($HOME/parking-logs)는 우연히 한 단계라 통과하지만
+// --log= 로 깊은 경로를 주면 그 순간 무너진다. 조용한 실패를 남겨 두지 않는다.
 static void ensure_parent_dir(const std::string& path) {
     size_t cut = path.rfind('/');
     if (cut == std::string::npos || cut == 0) return;
     std::string dir = path.substr(0, cut);
+    for (size_t i = 1; i <= dir.size(); i++) {
+        if (i != dir.size() && dir[i] != '/') continue;
+        std::string part = dir.substr(0, i);
 #ifdef _WIN32
-    _mkdir(dir.c_str());
+        _mkdir(part.c_str());
 #else
-    mkdir(dir.c_str(), 0755);
+        mkdir(part.c_str(), 0755);      // 이미 있으면 EEXIST — 무시해도 되는 유일한 실패다
 #endif
+    }
 }
 
 static long cur_pid() {
@@ -332,8 +340,13 @@ static void open_log(const std::string& path) {
     ensure_parent_dir(g_log_path);
     g_logfile.open(g_log_path.c_str(), std::ios::out | std::ios::app);
     if (!g_logfile.is_open()) {
+        // ⚠ **경로를 지우고 실패 사실로 바꾼다.** 그냥 두면 경계 줄이 `log=<경로>` 라고
+        // 적는데 그 파일은 존재하지도 않는다 — **계약이 거짓말을 하는 것**이고,
+        // 읽는 사람은 "로그가 저기 있는데 왜 비었지"로 시간을 쓴다. 관측 도구가
+        // 신뢰하는 필드라 더더욱 안 된다.
         std::cerr << "⚠ 로그 파일을 열지 못했다: " << g_log_path
                   << " — 화면에만 남는다(관측이 끊긴 것으로 보일 수 있다)\n";
+        g_log_path = "(열기실패:" + g_log_path + ")";
         return;
     }
     g_cout_orig = std::cout.rdbuf();

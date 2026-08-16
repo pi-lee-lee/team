@@ -5,7 +5,7 @@ from: root
 to: monitor-engineer
 status: open
 created: 2026-08-16T16:48:09+0900
-updated: 2026-08-16T16:48:09+0900
+updated: 2026-08-16T16:54:51+0900
 files: ["monitor/serial_tap.py", "monitor/tick.py", "monitor/soak_stats.py"]
 parent: none
 ---

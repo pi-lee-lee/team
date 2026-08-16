@@ -201,6 +201,12 @@ def main() -> int:
               f"   같은연결 복구 {ld['same_conn_recover']} ({ld['same_conn_recover_per_h']}/h)")
         print(f"     끊은 주체: 서버 유휴회수 {ld['server_idle_reap']} · TCP리셋(errno54) {ld['errno54']}"
               f"   ← 유휴회수 0 이면 서버가 끊은 게 아니다")
+        # 제외분은 0 이어도 찍는다. 소리 없이 빠지면 나중에 창이 빈 이유를 못 찾는다.
+        _ex = ld.get("excluded_server_startup", 0)
+        _mark = "🔴" if _ex else "  "
+        print(f"   {_mark} 서버기동 직후 제외 {_ex}건 (기동표지 {ld.get('server_starts', 0)}건)"
+              + ("  ← 이 안에 진짜 끊김이 있었어도 같이 빠진다. linkdrop-last.json 의 excluded_at 확인"
+                 if _ex else "  ← 제외 없음"))
 
     print(f"  세션종료 {tgt['sess_close']} ({tgt['sess_close_per_h']}/h)  "
           f"기준 옛 {base['sess_close_per_h']}/h  | 기대(옛비율) {exp.get('sess_close')}")
