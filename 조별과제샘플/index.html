@@ -481,6 +481,44 @@ const LOG_FILE     = 'data_log.json';
 const POLL_MS      = 3000;    // 폴백 폴링 주기
 
 /**
+ * 이 페이지가 붙어야 할 WS 포트를 정한다. (상수가 아니라 함수인 이유는 위 WS_PORT_DEFAULT 주석)
+ *
+ * 우선순위와 근거:
+ *   1. `?ws=<포트>` — 명시적 지정. 페이지를 다른 정적 서버(예: Live Server 5500)로 열어
+ *      두고 관제 서버는 딴 데 있는 경우가 유일한 정당한 용도다.
+ *   2. `location.port` — **기본값.** 서버가 HTTP/WS 를 한 포트로 서빙하므로
+ *      "나를 준 서버" = "내가 붙을 서버" 다. 오프셋이 몇이든 저절로 맞는다.
+ *   3. `WS_PORT_DEFAULT` — 포트 없이 열린 경우(80/443)만. 문서화된 기본값을 보존한다.
+ *
+ * 반환 `{ port, from, bad }` — `from` 은 어디서 정해졌는지(화면에 띄운다),
+ * `bad` 는 무시된 잘못된 `?ws=` 값이다. **잘못된 값을 조용히 무시하지 않는 이유**:
+ * 조용히 넘기면 사용자는 시험 인스턴스를 보고 있다고 믿는데 실제로는 운영 포트에 붙는다.
+ */
+function resolveWsPort() {
+  const raw = new URLSearchParams(window.location.search).get('ws');
+  if (raw !== null) {
+    const n = Number(raw);
+    if (String(raw).trim() !== '' && Number.isInteger(n) && n >= 1 && n <= 65535) {
+      return { port: String(n), from: 'query', bad: '' };
+    }
+    return wsPortFromPage(String(raw));   // 잘못된 값 → 기본 규칙으로 떨어지되 그 사실을 들고 간다
+  }
+  return wsPortFromPage('');
+}
+
+function wsPortFromPage(bad) {
+  const p = window.location.port;
+  if (p) return { port: p, from: 'page', bad: bad };
+  return { port: String(WS_PORT_DEFAULT), from: 'default', bad: bad };
+}
+
+/** 실제로 열 WS URL. 화면 표시와 접속이 **같은 함수**를 쓰게 해서 둘이 어긋나지 않게 한다. */
+function wsTargetUrl() {
+  const host = window.location.hostname || 'localhost';
+  return 'ws://' + host + ':' + resolveWsPort().port + WS_PATH;
+}
+
+/**
  * 폴백 fetch 한 번의 상한(REQ-0069). 이 시간을 넘기면 **끊고 실패로 보고한다.**
  *
  * 근거: 폴링 주기가 3초이므로 그보다는 넉넉해야 하고(느린 응답을 실패로 몰면 안 된다),

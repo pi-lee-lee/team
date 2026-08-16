@@ -1942,6 +1942,7 @@ static void handleLine(char* s) {
       if (strncmp(s, "AT+", 3) != 0 && hasUsableIp(s)) {   // 명령 에코는 제외
         netHasIp = true;
         cifsrTries = 0;
+        ipLossLatched = false;              // ★ IP 를 실제로 되찾았다 — 다음 소실은 새 사건이다
         if (!assocAt) assocAt = millis();   // 결합 유지시간 계측 시작 (REQ-0071 0단)
 #if DEBUG
         Serial.print(F("[NET] ★ IP 확보: "));
@@ -1956,11 +1957,7 @@ static void handleLine(char* s) {
       //   ⚠ 세는 것과 끊는 것을 섞지 않는다. 사다리는 **원인이 아니라 결과(IP 가 있는가)** 를
       //     보기 때문에 이름 모를 고장에도 동작한다(§6.1). 그 성질을 깨지 않으려는 것이다.
       else if (strncmp(s, "AT+", 3) != 0 && strcmp(s, "0.0.0.0") == 0) {
-        if (espResets < 65535) espResets++;
-#if DEBUG
-        Serial.print(F("[NET] ★ ESP 가 IP 를 잃었다(0.0.0.0) — 모듈이 리셋된 것으로 본다. 누적 "));
-        Serial.println(espResets);
-#endif
+        noteIpLoss();                    // 판별자 ① — 응답이 멀쩡할 때 잡힌다
       }
     }
 
@@ -2247,6 +2244,10 @@ static void netTick(unsigned long now) {
       // CIFSR 은 로컬 질의라 답이 빠르다. 세 번 물어도 쓸 IP 가 없으면 결합부터 다시.
       if (++cifsrTries >= 3) {
         cifsrTries = 0;
+        // ★ 판별자 ② — **응답이 가비지여도 성립한다.** 18:48:12 리셋에서 CIFSR 응답이
+        //   통째로 깨져 `0.0.0.0` 문자열이 안 나왔고, 판별자 ① 만으로는 놓쳤다(monitor 실측).
+        //   "세 번 물어도 쓸 IP 가 없었다"는 **문자열이 아니라 우리 쪽 상태**라 안 깨진다.
+        noteIpLoss();
 #if DEBUG
         Serial.println(F("[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시"));
 #endif
