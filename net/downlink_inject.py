@@ -190,11 +190,15 @@ class Injector:
         self.summary()
 
     def summary(self):
-        self.log("▣", "주입 종료 · 보냄 %d · ACK(result=4) %d · ACK(다른 result) %d · "
-                       "ACK없음 %d · 재접속 %d"
-                 % (self.n_sent, self.n_ack, self.n_ack_other, self.n_timeout, self.n_reconnect))
+        self.log("▣", "주입 종료 · 시도 %d · ACK(result=4) %d · ACK(다른 result) %d · "
+                       "미주입(서버거절) %d · 응답없음 %d · 재접속 %d"
+                 % (self.n_sent, self.n_ack, self.n_ack_other,
+                    self.n_not_injected, self.n_timeout, self.n_reconnect))
         self.log("▣", "⚠ 이 숫자는 **서버 왕복**만 말한다. 장치가 실제로 받았는지(②)는 "
                       "시리얼 로그가 있어야 갈린다 — D1 과 D2 는 monitor 가 가른다")
+        self.log("▣", "🔴 **분모는 '시도'가 아니라 '시도 − 미주입' 이다.** 미주입은 서버가 "
+                      "전선에 안 내보낸 것이라 하행 경로를 시험한 적이 없다 — "
+                      "D1/D2 로 세면 없는 고장이 생긴다")
 
 
 def main():

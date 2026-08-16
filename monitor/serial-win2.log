@@ -35,3 +35,503 @@
 00:04:42  [NET] 5 CIPSTART
 00:04:42  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
 00:04:42  [DIAG] offline step=5 사다리=1/0 rx=205 lines=13 up=6s
+00:04:45  [DIAG] offline step=5 사다리=1/0 rx=205 lines=13 up=9s
+00:04:48  [DIAG] offline step=5 사다리=1/0 rx=205 lines=13 up=12s
+00:04:50  [AT] "ERROR" (5)
+00:04:50  [AT] "Unlink" (6)
+00:04:50  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:04:50  [AT] "AT+CIFSR" (8)
+00:04:50  [AT] "192.168.35.79" (13)
+00:04:50  [NET] ★ IP 확보: 192.168.35.79
+00:04:50  [AT] "OK" (2)
+00:04:50  [NET] 4 CIPMUX=0
+00:04:50  [AT] "AT+CIPMUX=0" (11)
+00:04:50  [AT] "OK" (2)
+00:04:50  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:04:50  [NET] 5 CIPSTART
+00:04:50  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:04:51  [DIAG] offline step=5 사다리=1/0 rx=315 lines=21 up=15s
+00:04:54  [DIAG] offline step=5 사다리=1/0 rx=315 lines=21 up=18s
+00:04:57  [DIAG] offline step=5 사다리=1/0 rx=315 lines=21 up=21s
+00:04:58  [AT] "ERROR" (5)
+00:04:58  [AT] "Unlink" (6)
+00:04:58  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:04:58  [AT] "AT+CIFSR" (8)
+00:04:58  [AT] "192.168.35.79" (13)
+00:04:58  [NET] ★ IP 확보: 192.168.35.79
+00:04:58  [AT] "OK" (2)
+00:04:59  [NET] 4 CIPMUX=0
+00:04:59  [AT] "AT+CIPMUX=0" (11)
+00:04:59  [AT] "OK" (2)
+00:04:59  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:04:59  [NET] 5 CIPSTART
+00:04:59  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:05:00  [DIAG] offline step=5 사다리=1/0 rx=425 lines=29 up=24s
+00:05:03  [DIAG] offline step=5 사다리=1/0 rx=425 lines=29 up=27s
+00:05:06  [DIAG] offline step=5 사다리=1/0 rx=425 lines=29 up=30s
+00:05:07  [AT] "ERROR" (5)
+00:05:07  [AT] "Unlink" (6)
+00:05:07  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:05:07  [AT] "AT+CIFSR" (8)
+00:05:07  [AT] "192.168.35.79" (13)
+00:05:07  [NET] ★ IP 확보: 192.168.35.79
+00:05:07  [AT] "OK" (2)
+00:05:07  [NET] 4 CIPMUX=0
+00:05:07  [AT] "AT+CIPMUX=0" (11)
+00:05:07  [AT] "OK" (2)
+00:05:07  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:05:07  [NET] 5 CIPSTART
+00:05:07  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:05:09  [DIAG] offline step=5 사다리=1/0 rx=535 lines=37 up=33s
+00:05:12  [DIAG] offline step=5 사다리=1/0 rx=535 lines=37 up=36s
+00:05:15  [DIAG] offline step=5 사다리=1/0 rx=535 lines=37 up=39s
+00:05:15  [AT] "ERROR" (5)
+00:05:15  [AT] "Unlink" (6)
+00:05:15  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:05:15  [AT] "AT+CIFSR" (8)
+00:05:15  [AT] "192.168.35.79" (13)
+00:05:15  [NET] ★ IP 확보: 192.168.35.79
+00:05:15  [AT] "OK" (2)
+00:05:16  [NET] 4 CIPMUX=0
+00:05:16  [AT] "AT+CIPMUX=0" (11)
+00:05:16  [AT] "OK" (2)
+00:05:16  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:05:16  [NET] 5 CIPSTART
+00:05:16  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:05:18  [DIAG] offline step=5 사다리=1/0 rx=645 lines=45 up=42s
+00:05:21  [DIAG] offline step=5 사다리=1/0 rx=645 lines=45 up=45s
+00:05:24  [AT] "ERROR" (5)
+00:05:24  [AT] "Unlink" (6)
+00:05:24  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:05:24  [AT] "AT+CIFSR" (8)
+00:05:24  [AT] "192.168.35.79" (13)
+00:05:24  [NET] ★ IP 확보: 192.168.35.79
+00:05:24  [AT] "OK" (2)
+00:05:24  [DIAG] offline step=4 사다리=1/0 rx=694 lines=50 up=48s
+00:05:24  [NET] 4 CIPMUX=0
+00:05:24  [AT] "AT+CIPMUX=0" (11)
+00:05:24  [AT] "OK" (2)
+00:05:24  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:05:24  [NET] 5 CIPSTART
+00:05:24  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:05:27  [DIAG] offline step=5 사다리=1/0 rx=755 lines=53 up=51s
+00:05:30  [DIAG] offline step=5 사다리=1/0 rx=755 lines=53 up=54s
+00:05:32  [AT] "ERROR" (5)
+00:05:32  [AT] "Unlink" (6)
+00:05:32  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:05:32  [AT] "AT+CIFSR" (8)
+00:05:32  [AT] "192.168.35.79" (13)
+00:05:32  [NET] ★ IP 확보: 192.168.35.79
+00:05:32  [AT] "OK" (2)
+00:05:33  [NET] 4 CIPMUX=0
+00:05:33  [AT] "AT+CIPMUX=0" (11)
+00:05:33  [AT] "OK" (2)
+00:05:33  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:05:33  [NET] 5 CIPSTART
+00:05:33  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:05:33  [DIAG] offline step=5 사다리=1/0 rx=865 lines=61 up=57s
+00:05:36  [CNT] up=60 drop=0 esprst=0 resync=0 sendfail=0 okto=0 skip=0 online=0
+00:05:36  [DIAG] offline step=5 사다리=1/0 rx=865 lines=61 up=60s
+00:05:36  [RAM] 최저 여유 65535 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+00:05:39  [DIAG] offline step=5 사다리=1/0 rx=865 lines=61 up=63s
+00:05:41  [AT] "ERROR" (5)
+00:05:41  [AT] "Unlink" (6)
+00:05:41  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:05:41  [AT] "AT+CIFSR" (8)
+00:05:41  [AT] "192.168.35.79" (13)
+00:05:41  [NET] ★ IP 확보: 192.168.35.79
+00:05:41  [AT] "OK" (2)
+00:05:41  [NET] 4 CIPMUX=0
+00:05:41  [AT] "AT+CIPMUX=0" (11)
+00:05:41  [AT] "OK" (2)
+00:05:41  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:05:41  [NET] 5 CIPSTART
+00:05:41  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:05:42  [DIAG] offline step=5 사다리=1/0 rx=975 lines=69 up=66s
+00:05:45  [DIAG] offline step=5 사다리=1/0 rx=975 lines=69 up=69s
+00:05:48  [DIAG] offline step=5 사다리=1/0 rx=975 lines=69 up=72s
+00:05:49  [AT] "ERROR" (5)
+00:05:49  [AT] "Unlink" (6)
+00:05:49  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:05:49  [AT] "AT+CIFSR" (8)
+00:05:49  [AT] "192.168.35.79" (13)
+00:05:49  [NET] ★ IP 확보: 192.168.35.79
+00:05:49  [AT] "OK" (2)
+00:05:50  [NET] 4 CIPMUX=0
+00:05:50  [AT] "AT+CIPMUX=0" (11)
+00:05:50  [AT] "OK" (2)
+00:05:50  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:05:50  [NET] 5 CIPSTART
+00:05:50  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:05:51  [DIAG] offline step=5 사다리=1/0 rx=1085 lines=77 up=75s
+00:05:54  [DIAG] offline step=5 사다리=1/0 rx=1085 lines=77 up=78s
+00:05:57  [DIAG] offline step=5 사다리=1/0 rx=1085 lines=77 up=81s
+00:05:57  [AT] "ERROR" (5)
+00:05:57  [AT] "Unlink" (6)
+00:05:58  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:05:58  [AT] "AT+CIFSR" (8)
+00:05:58  [AT] "192.168.35.79" (13)
+00:05:58  [NET] ★ IP 확보: 192.168.35.79
+00:05:58  [AT] "OK" (2)
+00:05:58  [NET] 4 CIPMUX=0
+00:05:58  [AT] "AT+CIPMUX=0" (11)
+00:05:58  [AT] "OK" (2)
+00:05:58  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:05:58  [NET] 5 CIPSTART
+00:05:58  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:06:00  [DIAG] offline step=5 사다리=1/0 rx=1195 lines=85 up=84s
+00:06:03  [DIAG] offline step=5 사다리=1/0 rx=1195 lines=85 up=87s
+00:06:06  [DIAG] offline step=5 사다리=1/0 rx=1195 lines=85 up=90s
+00:06:06  [AT] "ERROR" (5)
+00:06:06  [AT] "Unlink" (6)
+00:06:06  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:06:06  [AT] "AT+CIFSR" (8)
+00:06:06  [AT] "192.168.35.79" (13)
+00:06:06  [NET] ★ IP 확보: 192.168.35.79
+00:06:06  [AT] "OK" (2)
+00:06:07  [NET] 4 CIPMUX=0
+00:06:07  [AT] "AT+CIPMUX=0" (11)
+00:06:07  [AT] "OK" (2)
+00:06:07  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:06:07  [NET] 5 CIPSTART
+00:06:07  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:06:09  [DIAG] offline step=5 사다리=1/0 rx=1305 lines=93 up=93s
+00:06:12  [DIAG] offline step=5 사다리=1/0 rx=1305 lines=93 up=96s
+00:06:14  [AT] "ERROR" (5)
+00:06:14  [AT] "Unlink" (6)
+00:06:15  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:06:15  [AT] "AT+CIFSR" (8)
+00:06:15  [AT] "192.168.35.79" (13)
+00:06:15  [NET] ★ IP 확보: 192.168.35.79
+00:06:15  [AT] "OK" (2)
+00:06:15  [DIAG] offline step=4 사다리=1/0 rx=1354 lines=98 up=99s
+00:06:15  [NET] 4 CIPMUX=0
+00:06:15  [AT] "AT+CIPMUX=0" (11)
+00:06:15  [AT] "OK" (2)
+00:06:15  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:06:15  [NET] 5 CIPSTART
+00:06:15  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:06:18  [DIAG] offline step=5 사다리=1/0 rx=1415 lines=101 up=102s
+00:06:21  [DIAG] offline step=5 사다리=1/0 rx=1415 lines=101 up=105s
+00:06:23  [AT] "ERROR" (5)
+00:06:23  [AT] "Unlink" (6)
+00:06:23  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:06:23  [AT] "AT+CIFSR" (8)
+00:06:23  [AT] "192.168.35.79" (13)
+00:06:23  [NET] ★ IP 확보: 192.168.35.79
+00:06:23  [AT] "OK" (2)
+00:06:24  [NET] 4 CIPMUX=0
+00:06:24  [AT] "AT+CIPMUX=0" (11)
+00:06:24  [AT] "OK" (2)
+00:06:24  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:06:24  [NET] 5 CIPSTART
+00:06:24  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:06:24  [DIAG] offline step=5 사다리=1/0 rx=1525 lines=109 up=108s
+00:06:27  [DIAG] offline step=5 사다리=1/0 rx=1525 lines=109 up=111s
+00:06:30  [DIAG] offline step=5 사다리=1/0 rx=1525 lines=109 up=114s
+00:06:31  [AT] "ERROR" (5)
+00:06:31  [AT] "Unlink" (6)
+00:06:32  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:06:32  [AT] "AT+CIFSR" (8)
+00:06:32  [AT] "192.168.35.79" (13)
+00:06:32  [NET] ★ IP 확보: 192.168.35.79
+00:06:32  [AT] "OK" (2)
+00:06:32  [NET] 4 CIPMUX=0
+00:06:32  [AT] "AT+CIPMUX=0" (11)
+00:06:32  [AT] "OK" (2)
+00:06:32  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:06:32  [NET] 5 CIPSTART
+00:06:32  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:06:33  [DIAG] offline step=5 사다리=1/0 rx=1635 lines=117 up=117s
+00:06:36  [CNT] up=120 drop=0 esprst=0 resync=0 sendfail=0 okto=0 skip=0 online=0
+00:06:36  [RAM] 최저 여유 65535 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+00:06:36  [DIAG] offline step=5 사다리=1/0 rx=1635 lines=117 up=120s
+00:06:39  [DIAG] offline step=5 사다리=1/0 rx=1635 lines=117 up=123s
+00:06:40  [AT] "ERROR" (5)
+00:06:40  [AT] "Unlink" (6)
+00:06:40  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:06:40  [AT] "AT+CIFSR" (8)
+00:06:40  [AT] "192.168.35.79" (13)
+00:06:40  [NET] ★ IP 확보: 192.168.35.79
+00:06:40  [AT] "OK" (2)
+00:06:41  [NET] 4 CIPMUX=0
+00:06:41  [AT] "AT+CIPMUX=0" (11)
+00:06:41  [AT] "OK" (2)
+00:06:41  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:06:41  [NET] 5 CIPSTART
+00:06:41  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:06:42  [DIAG] offline step=5 사다리=1/0 rx=1745 lines=125 up=126s
+00:06:45  [DIAG] offline step=5 사다리=1/0 rx=1745 lines=125 up=129s
+00:06:48  [DIAG] offline step=5 사다리=1/0 rx=1745 lines=125 up=132s
+00:06:48  [AT] "ERROR" (5)
+00:06:48  [AT] "Unlink" (6)
+00:06:49  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:06:49  [AT] "AT+CIFSR" (8)
+00:06:49  [AT] "192.168.35.79" (13)
+00:06:49  [NET] ★ IP 확보: 192.168.35.79
+00:06:49  [AT] "OK" (2)
+00:06:49  [NET] 4 CIPMUX=0
+00:06:49  [AT] "AT+CIPMUX=0" (11)
+00:06:49  [AT] "OK" (2)
+00:06:49  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:06:49  [NET] 5 CIPSTART
+00:06:49  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:06:51  [DIAG] offline step=5 사다리=1/0 rx=1855 lines=133 up=135s
+00:06:54  [DIAG] offline step=5 사다리=1/0 rx=1855 lines=133 up=138s
+00:06:57  [DIAG] offline step=5 사다리=1/0 rx=1855 lines=133 up=141s
+00:06:57  [AT] "ERROR" (5)
+00:06:57  [AT] "Unlink" (6)
+00:06:57  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:06:57  [AT] "AT+CIFSR" (8)
+00:06:57  [AT] "192.168.35.79" (13)
+00:06:57  [NET] ★ IP 확보: 192.168.35.79
+00:06:57  [AT] "OK" (2)
+00:06:58  [NET] 4 CIPMUX=0
+00:06:58  [AT] "AT+CIPMUX=0" (11)
+00:06:58  [AT] "OK" (2)
+00:06:58  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:06:58  [NET] 5 CIPSTART
+00:06:58  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:07:00  [DIAG] offline step=5 사다리=1/0 rx=1965 lines=141 up=144s
+00:07:03  [DIAG] offline step=5 사다리=1/0 rx=1965 lines=141 up=147s
+00:07:05  [AT] "ERROR" (5)
+00:07:05  [AT] "Unlink" (6)
+00:07:06  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:07:06  [AT] "AT+CIFSR" (8)
+00:07:06  [DIAG] offline step=3 사다리=1/0 rx=2007 lines=144 up=150s
+00:07:06  [AT] "192.168.35.79" (13)
+00:07:06  [NET] ★ IP 확보: 192.168.35.79
+00:07:06  [AT] "OK" (2)
+00:07:06  [NET] 4 CIPMUX=0
+00:07:06  [AT] "AT+CIPMUX=0" (11)
+00:07:06  [AT] "OK" (2)
+00:07:06  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:07:06  [NET] 5 CIPSTART
+00:07:06  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:07:09  [DIAG] offline step=5 사다리=1/0 rx=2075 lines=149 up=153s
+00:07:12  [DIAG] offline step=5 사다리=1/0 rx=2075 lines=149 up=156s
+00:07:14  [AT] "ERROR" (5)
+00:07:14  [AT] "Unlink" (6)
+00:07:14  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:07:14  [AT] "AT+CIFSR" (8)
+00:07:14  [AT] "192.168.35.79" (13)
+00:07:14  [NET] ★ IP 확보: 192.168.35.79
+00:07:14  [AT] "OK" (2)
+00:07:15  [NET] 4 CIPMUX=0
+00:07:15  [AT] "AT+CIPMUX=0" (11)
+00:07:15  [AT] "OK" (2)
+00:07:15  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:07:15  [NET] 5 CIPSTART
+00:07:15  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:07:15  [DIAG] offline step=5 사다리=1/0 rx=2185 lines=157 up=159s
+00:07:18  [DIAG] offline step=5 사다리=1/0 rx=2185 lines=157 up=162s
+00:07:21  [DIAG] offline step=5 사다리=1/0 rx=2185 lines=157 up=165s
+00:07:22  [AT] "ERROR" (5)
+00:07:22  [AT] "Unlink" (6)
+00:07:23  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:07:23  [AT] "AT+CIFSR" (8)
+00:07:23  [AT] "192.168.35.79" (13)
+00:07:23  [NET] ★ IP 확보: 192.168.35.79
+00:07:23  [AT] "OK" (2)
+00:07:23  [NET] 4 CIPMUX=0
+00:07:23  [AT] "AT+CIPMUX=0" (11)
+00:07:23  [AT] "OK" (2)
+00:07:23  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:07:23  [NET] 5 CIPSTART
+00:07:23  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:07:24  [DIAG] offline step=5 사다리=1/0 rx=2295 lines=165 up=168s
+00:07:27  [DIAG] offline step=5 사다리=1/0 rx=2295 lines=165 up=171s
+00:07:30  [DIAG] offline step=5 사다리=1/0 rx=2295 lines=165 up=174s
+00:07:31  [AT] "ERROR" (5)
+00:07:31  [AT] "Unlink" (6)
+00:07:31  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:07:31  [AT] "AT+CIFSR" (8)
+00:07:31  [AT] "192.168.35.79" (13)
+00:07:31  [NET] ★ IP 확보: 192.168.35.79
+00:07:31  [AT] "OK" (2)
+00:07:31  [NET] 4 CIPMUX=0
+00:07:31  [AT] "AT+CIPMUX=0" (11)
+00:07:31  [AT] "OK" (2)
+00:07:31  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:07:32  [NET] 5 CIPSTART
+00:07:32  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:07:33  [DIAG] offline step=5 사다리=1/0 rx=2405 lines=173 up=177s
+00:07:36  [CNT] up=180 drop=0 esprst=0 resync=0 sendfail=0 okto=0 skip=0 online=0
+00:07:36  [RAM] 최저 여유 65535 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+00:07:36  [DIAG] offline step=5 사다리=1/0 rx=2405 lines=173 up=180s
+00:07:40  [DIAG] offline step=5 사다리=1/0 rx=2405 lines=173 up=183s
+00:07:40  [AT] "ERROR" (5)
+00:07:40  [AT] "Unlink" (6)
+00:07:41  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:07:41  [AT] "AT+CIFSR" (8)
+00:07:41  [AT] "192.168.35.79" (13)
+00:07:41  [NET] ★ IP 확보: 192.168.35.79
+00:07:41  [AT] "OK" (2)
+00:07:41  [NET] 4 CIPMUX=0
+00:07:41  [AT] "AT+CIPMUX=0" (11)
+00:07:41  [AT] "OK" (2)
+00:07:41  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:07:41  [NET] 5 CIPSTART
+00:07:41  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:07:43  [DIAG] offline step=5 사다리=1/0 rx=2515 lines=181 up=186s
+00:07:46  [DIAG] offline step=5 사다리=1/0 rx=2515 lines=181 up=189s
+00:07:49  [DIAG] offline step=5 사다리=1/0 rx=2515 lines=181 up=192s
+00:07:49  [AT] "ERROR" (5)
+00:07:49  [AT] "Unlink" (6)
+00:07:49  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:07:49  [AT] "AT+CIFSR" (8)
+00:07:49  [AT] "192.168.35.79" (13)
+00:07:49  [NET] ★ IP 확보: 192.168.35.79
+00:07:49  [AT] "OK" (2)
+00:07:50  [NET] 4 CIPMUX=0
+00:07:50  [AT] "AT+CIPMUX=0" (11)
+00:07:50  [AT] "OK" (2)
+00:07:50  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:07:50  [NET] 5 CIPSTART
+00:07:50  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:07:52  [DIAG] offline step=5 사다리=1/0 rx=2625 lines=189 up=195s
+00:07:55  [DIAG] offline step=5 사다리=1/0 rx=2625 lines=189 up=198s
+00:07:57  [AT] "ERROR" (5)
+00:07:57  [AT] "Unlink" (6)
+00:07:58  [DIAG] offline step=3 사다리=1/0 rx=2642 lines=191 up=201s
+00:07:58  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:07:58  [AT] "AT+CIFSR" (8)
+00:07:58  [AT] "192.168.35.79" (13)
+00:07:58  [NET] ★ IP 확보: 192.168.35.79
+00:07:58  [AT] "OK" (2)
+00:07:58  [NET] 4 CIPMUX=0
+00:07:58  [AT] "AT+CIPMUX=0" (11)
+00:07:58  [AT] "OK" (2)
+00:07:58  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:07:58  [NET] 5 CIPSTART
+00:07:58  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:08:01  [DIAG] offline step=5 사다리=1/0 rx=2735 lines=197 up=204s
+00:08:04  [DIAG] offline step=5 사다리=1/0 rx=2735 lines=197 up=207s
+00:08:06  [AT] "ERROR" (5)
+00:08:06  [AT] "Unlink" (6)
+00:08:06  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:08:06  [AT] "AT+CIFSR" (8)
+00:08:06  [AT] "192.168.35.79" (13)
+00:08:06  [NET] ★ IP 확보: 192.168.35.79
+00:08:06  [AT] "OK" (2)
+00:08:06  [NET] 4 CIPMUX=0
+00:08:06  [AT] "AT+CIPMUX=0" (11)
+00:08:06  [AT] "OK" (2)
+00:08:06  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:08:07  [DIAG] offline step=5 사다리=1/0 rx=2804 lines=204 up=210s
+00:08:07  [NET] 5 CIPSTART
+00:08:07  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:08:10  [DIAG] offline step=5 사다리=1/0 rx=2845 lines=205 up=213s
+00:08:13  [DIAG] offline step=5 사다리=1/0 rx=2845 lines=205 up=216s
+00:08:14  [AT] "ERROR" (5)
+00:08:14  [AT] "Unlink" (6)
+00:08:15  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:08:15  [AT] "AT+CIFSR" (8)
+00:08:15  [AT] "192.168.35.79" (13)
+00:08:15  [NET] ★ IP 확보: 192.168.35.79
+00:08:15  [AT] "OK" (2)
+00:08:15  [NET] 4 CIPMUX=0
+00:08:15  [AT] "AT+CIPMUX=0" (11)
+00:08:15  [AT] "OK" (2)
+00:08:15  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:08:15  [NET] 5 CIPSTART
+00:08:15  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:08:16  [DIAG] offline step=5 사다리=1/0 rx=2955 lines=213 up=219s
+00:08:19  [DIAG] offline step=5 사다리=1/0 rx=2955 lines=213 up=222s
+00:08:22  [DIAG] offline step=5 사다리=1/0 rx=2955 lines=213 up=225s
+00:08:23  [AT] "ERROR" (5)
+00:08:23  [AT] "Unlink" (6)
+00:08:23  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:08:23  [AT] "AT+CIFSR" (8)
+00:08:23  [AT] "192.168.35.79" (13)
+00:08:23  [NET] ★ IP 확보: 192.168.35.79
+00:08:23  [AT] "OK" (2)
+00:08:23  [NET] 4 CIPMUX=0
+00:08:23  [AT] "AT+CIPMUX=0" (11)
+00:08:23  [AT] "OK" (2)
+00:08:23  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:08:24  [NET] 5 CIPSTART
+00:08:24  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:08:25  [DIAG] offline step=5 사다리=1/0 rx=3065 lines=221 up=228s
+00:08:28  [DIAG] offline step=5 사다리=1/0 rx=3065 lines=221 up=231s
+00:08:31  [DIAG] offline step=5 사다리=1/0 rx=3065 lines=221 up=234s
+00:08:31  [AT] "ERROR" (5)
+00:08:31  [AT] "Unlink" (6)
+00:08:32  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:08:32  [AT] "AT+CIFSR" (8)
+00:08:32  [AT] "192.168.35.79" (13)
+00:08:32  [NET] ★ IP 확보: 192.168.35.79
+00:08:32  [AT] "OK" (2)
+00:08:32  [NET] 4 CIPMUX=0
+00:08:32  [AT] "AT+CIPMUX=0" (11)
+00:08:32  [AT] "OK" (2)
+00:08:32  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:08:32  [NET] 5 CIPSTART
+00:08:32  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:08:34  [DIAG] offline step=5 사다리=1/0 rx=3175 lines=229 up=237s
+00:08:36  [CNT] up=240 drop=0 esprst=0 resync=0 sendfail=0 okto=0 skip=0 online=0
+00:08:36  [RAM] 최저 여유 65535 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+00:08:37  [DIAG] offline step=5 사다리=1/0 rx=3175 lines=229 up=240s
+00:08:39  [DIAG] offline step=5 사다리=1/0 rx=3175 lines=229 up=243s
+00:08:40  [AT] "ERROR" (5)
+00:08:40  [AT] "Unlink" (6)
+00:08:40  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:08:40  [AT] "AT+CIFSR" (8)
+00:08:40  [AT] "192.168.35.79" (13)
+00:08:40  [NET] ★ IP 확보: 192.168.35.79
+00:08:40  [AT] "OK" (2)
+00:08:40  [NET] 4 CIPMUX=0
+00:08:40  [AT] "AT+CIPMUX=0" (11)
+00:08:40  [AT] "OK" (2)
+00:08:40  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:08:41  [NET] 5 CIPSTART
+00:08:41  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:08:42  [DIAG] offline step=5 사다리=1/0 rx=3285 lines=237 up=246s
+00:08:45  [DIAG] offline step=5 사다리=1/0 rx=3285 lines=237 up=249s
+00:08:48  [AT] "ERROR" (5)
+00:08:48  [AT] "Unlink" (6)
+00:08:48  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:08:48  [AT] "AT+CIFSR" (8)
+00:08:48  [DIAG] offline step=3 사다리=1/0 rx=3327 lines=240 up=252s
+00:08:48  [AT] "192.168.35.79" (13)
+00:08:48  [NET] ★ IP 확보: 192.168.35.79
+00:08:48  [AT] "OK" (2)
+00:08:49  [NET] 4 CIPMUX=0
+00:08:49  [AT] "AT+CIPMUX=0" (11)
+00:08:49  [AT] "OK" (2)
+00:08:49  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:08:49  [NET] 5 CIPSTART
+00:08:49  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:08:51  [DIAG] offline step=5 사다리=1/0 rx=3395 lines=245 up=255s
+00:08:54  [DIAG] offline step=5 사다리=1/0 rx=3395 lines=245 up=258s
+00:08:57  [AT] "ERROR" (5)
+00:08:57  [AT] "Unlink" (6)
+00:08:57  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:08:57  [AT] "AT+CIFSR" (8)
+00:08:57  [AT] "192.168.35.79" (13)
+00:08:57  [NET] ★ IP 확보: 192.168.35.79
+00:08:57  [AT] "OK" (2)
+00:08:57  [NET] 4 CIPMUX=0
+00:08:57  [AT] "AT+CIPMUX=0" (11)
+00:08:57  [AT] "OK" (2)
+00:08:57  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:08:57  [DIAG] offline step=5 사다리=1/0 rx=3464 lines=252 up=261s
+00:08:58  [NET] 5 CIPSTART
+00:08:58  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:09:00  [DIAG] offline step=5 사다리=1/0 rx=3505 lines=253 up=264s
+00:09:03  [DIAG] offline step=5 사다리=1/0 rx=3505 lines=253 up=267s
+00:09:05  [AT] "ERROR" (5)
+00:09:05  [AT] "Unlink" (6)
+00:09:05  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+00:09:05  [AT] "AT+CIFSR" (8)
+00:09:05  [AT] "192.168.35.79" (13)
+00:09:05  [NET] ★ IP 확보: 192.168.35.79
+00:09:05  [AT] "OK" (2)
+00:09:06  [NET] 4 CIPMUX=0
+00:09:06  [AT] "AT+CIPMUX=0" (11)
+00:09:06  [AT] "OK" (2)
+00:09:06  [NET] CIPMUX=0 적용됨 → CIPSTART
+00:09:06  [NET] 5 CIPSTART
+00:09:06  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+00:09:06  [DIAG] offline step=5 사다리=1/0 rx=3615 lines=261 up=270s
+00:09:09  [DIAG] offline step=5 사다리=1/0 rx=3615 lines=261 up=273s
