@@ -53,6 +53,16 @@ learn/
 조별과제샘플/data_log.json
 조별과제샘플/data_log.json.tmp
 
+# monitor 집계 도구가 tick 마다 다시 만드는 산출물. 원본 로그에서 언제든 재생성된다.
+#
+# ⚠ 무시 = git clean 에 취약이다. 2026-08-16 사고가 정확히 그 경로였다.
+#   그래서 여기 넣는 기준은 하나뿐이다 — **원본에서 다시 만들 수 있는가.**
+#   판정문·상태 보고(JUDGMENT-*.md · STATUS-*.md)와 시리얼 원본 캡처
+#   (serial-*.log·.raw)는 **다시 만들 수 없다 → 무시하지 않고 추적한다.**
+#   결론이 될 만한 것을 out/ 에 두지 마라. 날짜 붙은 파일로 승격시켜라.
+monitor/out/
+monitor/out-*
+
 # 파이썬 검증 도구(net/*.py)의 바이트코드 캐시
 __pycache__/
 *.pyc

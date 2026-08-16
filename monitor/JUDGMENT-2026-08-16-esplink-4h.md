@@ -5,8 +5,16 @@
 
 - 판정창 `judge` = **2026-08-16 11:27:00 ~ 15:27:00 (4.00h, 닫힘)**
 - 기준선 `old` = 2026-08-15 18:42:39 ~ 2026-08-16 10:34:15 (15.86h, EspLink 플래싱 이전)
-- 산출물: `monitor/out/judge-report.md` · `monitor/out/judge-report.json` · `monitor/out-report.md`
+- 산출물: `monitor/out-report.md` / `.json` (정본) · `monitor/out/judge-report.*` (교차검증본)
 - 재현: `python3 monitor/tick.py` (판정창이 `TRACK="judge"` 로 고정돼 있다)
+
+> **어느 실행의 숫자인가** — 아래 표는 `tick.py` 실행본(`monitor/out-report.json`)이다.
+> 팀 리셋 5건을 모두 선언한 쪽이라 기준선의 "자발" 분류가 더 정확하다.
+> 팀 리셋 2건만 준 독립 실행(`monitor/out/judge-report.json`)과 **관측 수치 11개는 전부 일치**했다
+> (`duration_h·frames·frames_per_min·sess_close·errno54·drops_total·drop_real_S·
+> uptime_regressions_spont·offline_events·recover_median_s·max_frame_gap_s`).
+> 단 **기대값 한 칸만 갈린다**: 자발 재부팅 기대 `1.01`(팀리셋 5건 선언) 대 `1.77`(2건).
+> 보수적인 쪽인 **1.01 을 썼다** — 기대가 낮을수록 "0 이 개선"이라는 주장이 약해진다.
 
 ---
 

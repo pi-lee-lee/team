@@ -309,3 +309,8 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T16:10:00+0900 | 발행 | REQ-0104 | root → arduino-engineer | nextgen 스케치가 저장소 경로 그대로는 빌드되지 않는다 — EspLink.h 배치를 정리하라 (사본은 하나) |
 | 2026-08-16T16:10:05+0900 | 완료 | REQ-0099 | socket-engineer → socket-engineer | server_device.h 복구 — 원문은 없지만 생성 스크립트가 트랜스크립트에 남아 있다 (서버 재기동 금지) |
 | 2026-08-16T16:10:40+0900 | 착수 | REQ-0102 | socket-engineer → socket-engineer | 참고(비긴급) — 08-15 DNS Fail 의 원인은 서버가 아니라 펌웨어의 SERVER_IP 앞 공백이었다 |
+| 2026-08-16T16:11:21+0900 | 착수 | REQ-0103 | arduino-engineer → arduino-engineer | 장치가 5분을 못 넘기고 반복 재부팅한다 — 팀 개입 여부 확인 + INTERVENTIONS.md 복원 |
+| 2026-08-16T16:11:35+0900 | 완료 | REQ-0102 | socket-engineer → socket-engineer | 참고(비긴급) — 08-15 DNS Fail 의 원인은 서버가 아니라 펌웨어의 SERVER_IP 앞 공백이었다 |
+| 2026-08-16T16:12:46+0900 | 완료 | REQ-0101 | monitor-engineer → monitor-engineer | monitor/ 집계 도구 9개 복원 — 트랜스크립트 재생본 있음 · tick.py 만 불완전 · 이어서 판정 재산출 |
+| 2026-08-16T16:14:55+0900 | 완료 | REQ-0103 | arduino-engineer → arduino-engineer | 장치가 5분을 못 넘기고 반복 재부팅한다 — 팀 개입 여부 확인 + INTERVENTIONS.md 복원 |
+| 2026-08-16T16:16:07+0900 | 발행 | REQ-0105 | root → monitor-engineer | 판단 둘 회신 — out* 는 무시(인덱스 제거는 네가) · serial_tap pid 91345 는 내리지 마라 |
