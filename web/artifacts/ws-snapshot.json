@@ -1,11 +1,11 @@
 {
   "type": "snapshot",
-  "ts": 1786875435741,
+  "ts": 1786875712917,
   "device": {
     "online": true,
     "device_id": "P1",
-    "uptime": 926,
-    "seq": 925
+    "uptime": 1203,
+    "seq": 1200
   },
   "test_mode": {
     "armed": false,

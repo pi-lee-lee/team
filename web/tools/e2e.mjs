@@ -235,8 +235,34 @@ try {
     note('화면의 "마지막 프레임" 표시 = ' + JSON.stringify(shown));
   }
 
-  /* ── 6. 폴백 폴링 경로 ── */
-  console.log('\n[6] 폴백 — WS 가 안 될 때 파일 폴링이 화면을 채우는가');
+  /* ── 6. 🔴 살아 있던 WS 가 끊어지는 순간 — 전환 그 자체 ──
+     [7] 은 "처음부터 WS 가 안 되는" 경우다. 그건 전환이 아니라 초기 상태다.
+     시연에서 실제로 무서운 것은 **잘 되던 화면이 끊기는 순간**이므로 그것을 따로 잰다. */
+  console.log('\n[6] 🔴 WS → 폴백 전환 — 잘 되던 소켓이 끊어지면');
+  await waitFor(client, `document.getElementById('conn-text').textContent.includes('WebSocket 연결됨')`,
+                { what: '전환 시험 전 WS 연결 확인' });
+  const tCut = Date.now();
+  await evaluate(client, `(() => { transport.ws.close(); return true; })()`);   // 소켓만 끊는다
+  await waitFor(client, `/파일 폴백|연결 끊김/.test(document.getElementById('conn-text').textContent)`,
+                { what: '끊김 인지', timeout: 15000 });
+  check('끊김을 화면이 즉시 말한다 (' + (Date.now() - tCut) + 'ms)', true,
+        await evaluate(client, `document.getElementById('conn-text').textContent`));
+  check('전환을 알림으로도 말한다',
+        (await evaluate(client, `document.getElementById('messages').textContent`)).includes('폴백'),
+        await evaluate(client, `document.getElementById('messages').textContent.slice(0, 80)`));
+  const keep = await waitFor(client,
+    `[...document.querySelectorAll('.tile')].every(b => b.querySelector('.tile__state').textContent !== '상태 미상')`,
+    { what: '끊긴 뒤에도 칸이 상태를 유지', timeout: 15000 }).catch(() => false);
+  check('🔴 끊긴 뒤에도 화면이 비지 않는다 (폴백이 이어받는다)', keep === true, keep);
+  await shot(client, '6-ws-cut');
+  // 저절로 다시 붙는가 — 재연결은 §7.3 의 약속이다
+  const reconnected = await waitFor(client, `document.getElementById('conn-text').textContent.includes('WebSocket 연결됨')`,
+    { what: '자동 재연결', timeout: 30000 }).catch(() => false);
+  check('끊긴 소켓이 저절로 다시 붙는다', reconnected === true,
+        reconnected === true ? '재연결됨' : '30초 안에 못 붙었다');
+
+  /* ── 7. 폴백 폴링 경로 (처음부터 WS 가 없는 경우) ── */
+  console.log('\n[7] 폴백 — WS 가 처음부터 안 될 때 파일 폴링이 화면을 채우는가');
   const dead = await freePort();          // 아무도 안 듣는 포트 (운영 포트가 아님을 보장)
   check('폴백 시험용 죽은 포트가 운영 포트가 아니다', !FORBIDDEN.includes(String(dead)), dead);
   wsCreated.length = 0;
@@ -257,7 +283,7 @@ try {
   await shot(client, '4-fallback');
 
   /* ── 7. REQ-0122 가 사람 눈에 남겨 둔 데모 검증 ── */
-  console.log('\n[7] 데모 — REQ-0122 가 "사람이 눈으로 볼 것"으로 남긴 버튼');
+  console.log('\n[8] 데모 — REQ-0122 가 "사람이 눈으로 볼 것"으로 남긴 버튼');
   await goto(client, BASE + 'index.html?demo=1');
   await sleep(500);
   const btnSel = await evaluate(client, `(() => {
@@ -278,12 +304,12 @@ try {
     await shot(client, '5-demo-armed');
   }
 
-  /* ── 8. 콘솔 오류 ── */
-  console.log('\n[8] 콘솔');
+  /* ── 9. 콘솔 오류 ── */
+  console.log('\n[9] 콘솔');
   check('페이지 예외·오류 없음', consoleErrs.length === 0, JSON.stringify(consoleErrs.slice(0, 3)));
 
-  /* ── 9. 서버 정적 서빙 — 브라우저 시험이 찾아낸 결함을 고정한다 ── */
-  console.log('\n[9] 서버 정적 서빙 — 루트 경로에 쿼리를 붙이면?');
+  /* ── 10. 서버 정적 서빙 — 브라우저 시험이 찾아낸 결함을 고정한다 ── */
+  console.log('\n[10] 서버 정적 서빙 — 루트 경로에 쿼리를 붙이면?');
   const code = async (p) => (await fetch(BASE.slice(0, -1) + p)).status;
   const cRoot = await code('/'), cFile = await code('/index.html?demo=1'), cRootQ = await code('/?demo=1');
   note('GET /              → ' + cRoot);
