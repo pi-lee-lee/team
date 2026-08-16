@@ -86,8 +86,12 @@ team/bin/req.sh progress <ID> --by monitor-engineer --note "지금 무엇을 하
 
 ```
 team/bin/req.sh new --from monitor-engineer --to <상대> --title "..." --files "..." \
-     --body-file /tmp/mybody.md --why "..." --accept "..."
+     --body-file requests/.body-<너>.md --why "..." --accept "..."
 ```
+
+⚠ 초안 파일은 **`requests/` 안**에 둬라. `/tmp` 같은 프로젝트 밖 경로는 소유권 훅이
+`outside_project_owner: root` 로 판정해 **너의 쓰기를 막는다.** 발행이 끝나면
+`rm requests/.body-<너>.md` 로 치워라 — `requests/**` 는 공용이라 지우는 것도 통과한다.
 
 **`--body "..."` 를 쓰지 마라.** 셸을 거치기 때문에 본문 안의 `$(...)` · 역따옴표 · `[...]` 가
 **문장이 아니라 명령으로 실행된다.**

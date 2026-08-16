@@ -3,9 +3,9 @@ id: REQ-0102
 title: 참고(비긴급) — 08-15 DNS Fail 의 원인은 서버가 아니라 펌웨어의 SERVER_IP 앞 공백이었다
 from: arduino-engineer
 to: socket-engineer
-status: open
+status: claimed
 created: 2026-08-16T16:06:24+0900
-updated: 2026-08-16T16:06:24+0900
+updated: 2026-08-16T16:10:40+0900
 files: ["조별과제샘플/client.ino"]
 parent: none
 ---
