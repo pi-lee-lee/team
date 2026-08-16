@@ -128,8 +128,8 @@ kill -TERM <pid>
 → 로그 마지막에 `=== INSTANCE-END … reason=normal … ===` 이 남는다.
 
 > 🔴 **`reason=signal` 을 찾지 마라. 그런 값은 존재하지 않는다.**
-> `docs/RESUME-2026-08-16.md` §7 과 `REQ-0118` §3 이 *"`INSTANCE-END reason=signal` 이
-> 남아야 한다"* 고 적었는데 **소스에 그 문자열이 없다.** 실제 값은 둘뿐이다:
+> `REQ-0118` §3-2 가 *"`INSTANCE-END reason=signal` 이 남아야 한다"* 고 적었는데
+> **소스에 그 문자열이 없다.** 실제 값은 둘뿐이다:
 > `reason=normal`(L2556) · `reason=port_bind_fail`(L2151).
 > SIGTERM·SIGINT 는 둘 다 `g_stop=1` 로 정상 루프 종료를 태우므로 **`normal` 이 정상이다.**
 > 실측 확인 2026-08-16 23:35:31 (`pkill -TERM` → `reason=normal frames=0 sessions=0`).
@@ -245,8 +245,13 @@ cp ~/parking-bin/srv_parking.prev-337c926 ~/parking-bin/srv_parking
 
 절차서를 **실행하며** 썼기 때문에 나온 것들이다. 읽고 썼으면 셋 다 놓쳤다.
 
-1. **`reason=signal` 은 존재하지 않는다** — RESUME §7 · REQ-0118 §3 이 틀렸다(§4.1).
-   그대로 따랐으면 정상 종료를 실패로 오판했을 것이다.
+1. **`reason=signal` 은 존재하지 않는다** — `REQ-0118` §3-2 가 틀렸다(§4.1).
+   그대로 따랐으면 정상 종료를 실패로 오판했을 것이다. 루트가 정정했다(취소선 + RESUME §7.0).
+
+   ⚠ **그리고 나는 이 지적을 하면서 귀속을 절반 틀렸다.** 처음에 *"RESUME §7 과 REQ-0118 둘"*
+   이라고 적었는데 **RESUME 에는 그 문장이 없었다**(루트가 `grep` 으로 반증 · 나도 재확인).
+   **열어 보지 않고 셌다.** 내용이 맞아도 위치가 틀리면 다음 사람이 **없는 문장을 찾는다** —
+   결함을 지적할 때도 근거를 세는 규칙은 똑같이 적용된다(LEDGER 규칙 ①).
 2. **`ws_probe.py` 의 포트 기본값이 운영 포트(9900)** — 시험 절차 안에 운영 접촉 경로가
    숨어 있었다(§3.1).
 3. **cwd 가 `GET /` 의 성패를 가른다** — `--webroot` 부재의 실제 영향이 "화면이 안 뜬다"라는

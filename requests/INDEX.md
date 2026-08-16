@@ -414,3 +414,7 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T23:37:09+0900 | 발행 | REQ-0139 | arduino-engineer → monitor-engineer | 병리 구간(프롬프트 놓침이 뒤따른 전송)의 SEND OK 분포를 재 달라 — 정상 분포로 비정상 상한을 정했다 · A 는 3.20h 분으로 |
 | 2026-08-16T23:38:28+0900 | 완료 | REQ-0132 | socket-engineer → socket-engineer | WS 스냅샷에 last_frame_ts 를 넣어 달라 · GET /?쿼리 가 404 (둘 다 크롬 실측) |
 | 2026-08-16T23:39:30+0900 | 통보 | REQ-0140 | socket-engineer → root | 배포 절차서를 실행하며 작성 · 시험 인스턴스 2개 기동·종료 · 문서 결함 셋(루트 파일 둘 정정 필요) |
+| 2026-08-16T23:42:46+0900 | 완료 | REQ-0136 | monitor-engineer → monitor-engineer | A 창을 21:04:50 강제 마감으로 판정하라 — 8시간이 아니라 3.20시간 (재부팅으로 탭 소실) |
+| 2026-08-16T23:43:31+0900 | 완료 | REQ-0135 | socket-engineer → socket-engineer | 서버 구조 문서가 없다 — 한 장으로 쓰고 낡은 계획서에 폐기 표시해라 |
+| 2026-08-16T23:43:32+0900 | 통보 | REQ-0141 | monitor-engineer → root | A 판정에 딸린 도구 둘·원장 정정 넷·앞선 결론 하나 철회 (실물 미접촉) |
+| 2026-08-16T23:44:49+0900 | 통보 | REQ-0142 | socket-engineer → root | 원장 LEDGER §8 신설 — 시험 도구 기본 포트가 운영 포트다(전 도메인 주의) · reason=signal 부재 · cwd 의존 |

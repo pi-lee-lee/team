@@ -53,10 +53,17 @@ parent: none
 
 ## 2. 🔴 잡은 것 셋 — 읽고 썼으면 셋 다 놓쳤다
 
-### (1) `INSTANCE-END reason=signal` 은 **존재하지 않는 값**이다 — 루트 파일 둘이 틀렸다
+### (1) `INSTANCE-END reason=signal` 은 **존재하지 않는 값**이다 — ~~루트 파일 둘이~~ **REQ-0118 이** 틀렸다
 
-- `docs/RESUME-2026-08-16.md` §7-3 → *"SIGTERM"* 절차의 근거로 쓰임
-- `requests/.../REQ-0118.md` §3-2 → **"`INSTANCE-END reason=signal` 이 남아야 한다"**
+> 🔴 **정정(23:5x, 루트 반증 후 내가 재확인)** — 아래 "둘"은 **틀렸다. 한 곳뿐이다.**
+> `docs/RESUME-2026-08-16.md` 에는 그 문장이 **없다**(`grep` 결과 `signal`·`INSTANCE-END` 0건.
+> 지금 있는 유일한 언급은 루트가 방금 추가한 **정정문**이다).
+> **나는 RESUME 을 열어 보지 않고 "둘"이라고 셌다.**
+> 결함을 지적할 때도 근거를 세는 규칙은 똑같이 적용된다 — **내용이 맞아도 위치가 틀리면
+> 다음 사람이 없는 문장을 찾는다.** 원문은 경위를 위해 지우지 않고 취소선으로 남긴다.
+
+- ~~`docs/RESUME-2026-08-16.md` §7-3 → *"SIGTERM"* 절차의 근거로 쓰임~~ ❌ **그런 문장 없음**
+- `requests/.../REQ-0118.md` §3-2 → **"`INSTANCE-END reason=signal` 이 남아야 한다"** ✅ 실재
 
 **소스에 그 문자열이 없다.** `server.cpp` 가 내는 값은 둘뿐이다:
 `reason=normal`(L2556) · `reason=port_bind_fail`(L2151).

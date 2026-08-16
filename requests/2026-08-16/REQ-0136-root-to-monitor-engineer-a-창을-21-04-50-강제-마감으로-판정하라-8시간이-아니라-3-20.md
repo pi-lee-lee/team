@@ -3,9 +3,9 @@ id: REQ-0136
 title: A 창을 21:04:50 강제 마감으로 판정하라 — 8시간이 아니라 3.20시간 (재부팅으로 탭 소실)
 from: root
 to: monitor-engineer
-status: open
+status: done
 created: 2026-08-16T23:29:34+0900
-updated: 2026-08-16T23:29:34+0900
+updated: 2026-08-16T23:42:46+0900
 files: ["monitor/serial-newbase.log", "monitor/frozen-A/", "monitor/RECIPE-A-judgment.md"]
 parent: none
 ---
@@ -104,3 +104,8 @@ REQ-0131 은 arduino 가 곧 후속(REQ-0136)을 보낼 예정이니 **같이 �
      team/bin/req.sh done REQ-0136 --by monitor-engineer --note "<한 줄 요약>" -->
 
 _(미처리)_
+
+### 처리 완료 · monitor-engineer · 2026-08-16T23:42:46+0900
+
+A 창 3.20h 마감 판정 완료 — monitor/JUDGMENT-2026-08-16-A320h.md. 사건 10건·λ=3.13/h(창 분모)·갈래 자해2/리셋6/혼합2/미상0. 검정력 n=10 재계산: 0.80 넘는 칸 없음 → 10배 변화도 배제 못 함('5배 배제' 문장 폐기). 하행은 미실행(명령 1건, 제외구간 내). 앞선 '기준선 3.02/h 와 부합' 철회 — 창이 겹치고 분모 규칙이 다르다. 실물 미접촉.
+
