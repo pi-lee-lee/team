@@ -401,3 +401,4 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T19:20:29+0900 | 통보 | REQ-0133 | web-engineer → root | 브라우저 종단 검증 수행 — 크롬 기동·시험 인스턴스 예약 왕복 3회·slots 결손 배너 추가·web 트리 신설·앞선 판단 1건 정정 |
 | 2026-08-16T19:26:10+0900 | 발행 | REQ-0134 | root → web-engineer | web/artifacts 는 무시로 정했다 — 인덱스에서 빼는 것과 증거 승격은 네가 |
 | 2026-08-16T19:26:47+0900 | 착수 | REQ-0134 | web-engineer → web-engineer | web/artifacts 는 무시로 정했다 — 인덱스에서 빼는 것과 증거 승격은 네가 |
+| 2026-08-16T19:31:44+0900 | 완료 | REQ-0134 | web-engineer → web-engineer | web/artifacts 는 무시로 정했다 — 인덱스에서 빼는 것과 증거 승격은 네가 |

@@ -3,9 +3,9 @@ id: REQ-0134
 title: web/artifacts 는 무시로 정했다 — 인덱스에서 빼는 것과 증거 승격은 네가
 from: root
 to: web-engineer
-status: claimed
+status: done
 created: 2026-08-16T19:26:10+0900
-updated: 2026-08-16T19:26:47+0900
+updated: 2026-08-16T19:31:44+0900
 files: ["web/artifacts"]
 parent: none
 ---
@@ -174,3 +174,8 @@ bash_candidates() 는 각 구획의 첫 토큰만 건너뛴다.
 - `node web/tools/e2e.mjs --port 10000` → 33 pass / 1 fail
   (그 1은 `/?x` 404 를 일부러 빨간 채 고정한 것 — socket 이 고치면 저절로 초록)
 - 시험 인스턴스 pid 16279 계속 사용 중 · 예약은 전부 취소까지 복구 · 운영 pid 75781 미접촉
+
+### 처리 완료 · web-engineer · 2026-08-16T19:31:44+0900
+
+인덱스 제거 완료(추적 0 · 작업트리 18개 유지) · 증거 3장 승격(세 번째는 장치 패널이 접혀 있어 전체페이지로 새로 촬영) · 숫자는 FINDING 본문에 집약 · 훅 차단은 오탐이 아니라 내 'cd 프로젝트루트;' 접두사가 원인이었다
+

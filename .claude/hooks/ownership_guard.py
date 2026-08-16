@@ -156,6 +156,22 @@ def deny(role, rel, owner, reason, extra=""):
 # --- Bash 휴리스틱 -----------------------------------------------------------
 _PATHY = re.compile(r"[A-Za-z0-9_./~$-]{2,}")
 
+# `sed` 치환식은 경로가 아니다.
+#
+# ⚠ 2026-08-16: `sed -i '' s/a/b/ arduino/x.ino` 가 **자기 파일을 고치는 담당에게도
+#   차단**됐다. `s/a/b/` 에 슬래시가 있어 경로 후보로 잡히고, 어느 규칙에도 안 걸리니
+#   기본 소유자(root)로 떨어져 전문 에이전트가 전부 막힌다.
+#   증상이 "왜 내 파일을 내가 못 고치지"라서 훅 결함으로 오인하기 쉽다.
+#
+#   구분자를 바꾸면(`s|a|b|`) 통과하는데, 그건 우회이지 해결이 아니다 —
+#   우회를 알아야만 일할 수 있는 규칙은 결국 규칙을 안 읽은 사람을 막는다.
+#
+#   범위를 좁게 잡았다: `s`/`y` 로 시작하고 **슬래시 구분자 셋**에 뒤가 플래그뿐인 것만.
+#   같은 모양의 실제 경로(`s/a/b/`)는 사실상 존재하지 않고, 이 저장소에는 최상위 `s/`
+#   디렉터리 자체가 없다. **`sed` 뒤에 오는 파일 인자는 그대로 검사된다** — 아래 시험으로
+#   확인했다(`/private/tmp/.../hooktest.py`, 남의 파일 수정은 여전히 차단).
+_SED_EXPR = re.compile(r"^[sy]/(?:[^/\\]|\\.)*/(?:[^/\\]|\\.)*/[A-Za-z0-9]*$")
+
 
 _SEGSPLIT = re.compile(r"(?:\|\||&&|[;|&\n]|\$\(|`)")
 
@@ -172,6 +188,24 @@ def bash_candidates(cmd, own):
     out = []
     for seg in _SEGSPLIT.split(cmd or ""):
         toks = seg.split()
+        # 디렉터리 이동 구획은 통째로 건너뛴다. `cd` 의 인자는 **가려는 곳**이지
+        # 고치려는 대상이 아니다.
+        #
+        # ⚠ 2026-08-16: 이게 없어서 `cd <프로젝트 루트>; <변조명령>` 이 **대상이
+        #   무엇이든 무조건 차단**됐다. 첫 토큰(`cd`)만 건너뛰고 인자는 경로 후보로
+        #   남으므로 rel_path() 가 "." 이 되고, "." 은 어느 규칙에도 안 걸려
+        #   기본 소유자(root)로 떨어진다. 자기 소유 파일을 고치는 담당도 막힌다.
+        #   web-engineer 가 자기 것을 만지다 막혀 훅 결함을 의심했고, 훅을 읽어
+        #   원인을 갈랐다(REQ-0134 §4).
+        #
+        #   차단 메시지가 진짜 소유권 위반과 **똑같이 나오는 것**이 특히 나빴다 —
+        #   같은 시각에 루트는 남의 영역이라 정당하게 막혔는데, 메시지가 같아서
+        #   둘을 같은 원인으로 읽을 뻔했다.
+        #
+        #   집행은 안 약해진다. 뒤따르는 구획은 그대로 검사되므로
+        #   `cd x; sed -i ... cpp/y.cpp` 의 `sed` 구획은 여전히 걸린다.
+        if toks and os.path.basename(toks[0]) in ("cd", "pushd", "popd"):
+            continue
         for i, tok in enumerate(toks):
             tok = tok.strip("'\"()")
             if i == 0:
@@ -180,6 +214,8 @@ def bash_candidates(cmd, own):
                 continue
             if not _PATHY.fullmatch(tok):
                 continue
+            if _SED_EXPR.match(tok):
+                continue  # sed 치환식 — 고치려는 대상이 아니라 고치는 방법이다
             if "/" in tok or os.path.splitext(tok)[1].lower() in exts:
                 out.append(tok)
     return out
