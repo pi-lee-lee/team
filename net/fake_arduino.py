@@ -448,8 +448,10 @@ def main():
     ap.add_argument("--reboot-after", type=float, default=0,
                     help="N초 뒤 재부팅(연결 끊고 seq/uptime/예약 초기화 후 재접속). §7.4 시험용")
     ap.add_argument("--arrive-sec", type=float, default=0,
-                    help="예약 성공 후 N초 뒤 입차시킨다(0=끔). 켜면 무작위 센서 변화를 멈춰 "
-                         "은퇴 시험이 깨끗해진다. 명세 §7.5 시험용")
+                    help="예약 성공 후 N초 뒤 입차시키고 --depart-sec 뒤 출차시킨다(0=끔). "
+                         "그 출차(occupied 1→0)가 **예약 은퇴(§7.5)를 발동**한다 — 은퇴를 "
+                         "재현할 때만 켜라. ⚠ 조용한 보드를 원하면 **끄는 것이 답이다**(기본값). "
+                         "큰 값을 줘서 미루려 하지 마라 — 그 시각이 오면 그대로 발동한다")
     ap.add_argument("--depart-sec", type=float, default=3.0,
                     help="입차 후 N초 뒤 출차시킨다. 이 출차(occupied 1→0)가 예약 은퇴를 발동시킨다")
     ap.add_argument("--start-empty", action="store_true",

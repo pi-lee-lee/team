@@ -386,3 +386,6 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T18:52:26+0900 | 완료 | REQ-0126 | socket-engineer → socket-engineer | TX-RESYNC 21건 전수 시각·갈래 판정 — '4:0 불일치'는 불일치가 아니다(기대값 0) · 끊김 기전은 둘 |
 | 2026-08-16T18:58:56+0900 | 진행 | REQ-0118 | socket-engineer → socket-engineer | 서버 구조 작업 재개 — 잃은 계획서 복구 · (A) 재부팅 오보 결함 · 리팩터링 단계 C — T 프레임 도구 추가(ws_probe §12A + 프레임 시각) · DEV_ACK 격리 검증 통과 → 원장 §7.1 칸 ✅ 확정 · 이음매1 4/6 하행대기 유지 |
 | 2026-08-16T18:59:01+0900 | 완료 | REQ-0125 | arduino-engineer → arduino-engineer | REQ-0116 의 전제가 절반만 맞다 — 링크 끊김 기전이 둘(busy 자해 2건 / ESP 리셋 2건) · 침묵과 busy 를 갈라 세라 |
+| 2026-08-16T18:59:49+0900 | 통보 | REQ-0127 | arduino-engineer → root | 2단계 소스 완료(51 PASS·미플래싱) · DEBUG=0 으로 구우면 A/B 판별이 사라진다 · SEND_OK 상한 3000→2000ms 자체 조정 |
+| 2026-08-16T19:00:23+0900 | 발행 | REQ-0128 | web-engineer → socket-engineer | 브라우저 종단시험용 시험 인스턴스 기동 요청 — cwd=조별과제샘플 · 조용한 보드 · 3시간 유지 |
+| 2026-08-16T19:00:41+0900 | 착수 | REQ-0128 | socket-engineer → socket-engineer | 브라우저 종단시험용 시험 인스턴스 기동 요청 — cwd=조별과제샘플 · 조용한 보드 · 3시간 유지 |
