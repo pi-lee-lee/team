@@ -410,3 +410,7 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T23:32:43+0900 | 진행 | REQ-0132 | socket-engineer → socket-engineer | WS 스냅샷에 last_frame_ts 를 넣어 달라 · GET /?쿼리 가 404 (둘 다 크롬 실측) — 새 세션 인계. 소스 확인: 둘 다 구현돼 있고 커밋됨 — last_frame_ts 는 snapshot_json() L1203(파일 폴백과 같은 키/epoch ms/미수신시 null), 쿼리 제거는 serve_file() L1881 로 경로 판정보다 앞으로 이동. 다만 아직 grep 확인일 뿐 실왕복을 안 돌렸다. 지금부터 오프셋 시험 인스턴스로 실제 왕복을 시켜 확인한 뒤 닫는다(운영 포트 미접촉). 앞 progress 노트의 '이음ماء' 는 '이음매' 오타다. |
 | 2026-08-16T23:32:58+0900 | 착수 | REQ-0137 | arduino-engineer → arduino-engineer | 보드 구성 확인 항목을 만들어라 — 오늘 밤 사용자가 실물을 본다 (관찰만·변경 금지) |
 | 2026-08-16T23:33:30+0900 | 통보 | REQ-0138 | root → root | 배포 잠금(chmod a-w)을 풀었다 — A 창 종료에 따른 것 · 이제 보호가 없다 |
+| 2026-08-16T23:36:48+0900 | 완료 | REQ-0137 | arduino-engineer → arduino-engineer | 보드 구성 확인 항목을 만들어라 — 오늘 밤 사용자가 실물을 본다 (관찰만·변경 금지) |
+| 2026-08-16T23:37:09+0900 | 발행 | REQ-0139 | arduino-engineer → monitor-engineer | 병리 구간(프롬프트 놓침이 뒤따른 전송)의 SEND OK 분포를 재 달라 — 정상 분포로 비정상 상한을 정했다 · A 는 3.20h 분으로 |
+| 2026-08-16T23:38:28+0900 | 완료 | REQ-0132 | socket-engineer → socket-engineer | WS 스냅샷에 last_frame_ts 를 넣어 달라 · GET /?쿼리 가 404 (둘 다 크롬 실측) |
+| 2026-08-16T23:39:30+0900 | 통보 | REQ-0140 | socket-engineer → root | 배포 절차서를 실행하며 작성 · 시험 인스턴스 2개 기동·종료 · 문서 결함 셋(루트 파일 둘 정정 필요) |
