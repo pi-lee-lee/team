@@ -173,6 +173,24 @@ int main() {
   ok(netOnline,                 "★★ 기준 시각이 64ms 미래여도 정지 감지가 발동하지 않는다");
   ok(!staleSocket,              "★ 복구 사다리로도 들어가지 않는다");
 
+  // ── [8c] 🔴 C-2 경로 — **하행 없이 `CONNECT` 만으로도** 같은 언더플로가 가능하다 ────
+  // 위 [8b] 는 `lastTxOkAt` 을 직접 미래로 놓았지만, 실제 갱신 경로는 셋이다(원장 §8.7-5).
+  //   :1534 sendLine ← drainPending(하행 ACK)  ·  :2148/:2160 pumpSerialRaw(CONNECT 처리)
+  // 뒤 둘은 `statusTick` 보다 **앞에서** 돌므로 **하행이 전혀 없어도** 발동할 수 있다.
+  // 여기서는 합성 대입이 아니라 **진짜 `CONNECT` 줄을 먹여** 그 경로를 태운다.
+  printf("\n[8c] CONNECT 직후 — 하행 없이도 스스로 끊지 않는다 (C-2 경로)\n");
+  arm(nullptr);
+  netOnline    = false;                     // 아직 안 붙은 상태에서 시작
+  lastStatusAt = millis();
+  changePending = false;
+  {
+    unsigned long loopNow = millis();       // loop() 맨 위 스냅샷 (이 뒤로 시계가 흐른다)
+    char cl[] = "CONNECT";
+    handleLine(cl);                         // :2160 에서 lastTxOkAt = millis() → loopNow 보다 미래
+    statusTick(loopNow);                    // 낡은 now 로 검사 — 여기서 끊으면 결함이다
+  }
+  ok(netOnline,                 "★★ CONNECT 처리가 시계를 앞세워도 즉시 끊지 않는다");
+
   // ── [9] 성공 송신이 불변식 시계를 되돌린다 ───────────────────────────────
   printf("\n[9] 성공하면 불변식 시계가 갱신된다\n");
   arm(nullptr);
