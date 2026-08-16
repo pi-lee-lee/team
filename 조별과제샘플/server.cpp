@@ -72,6 +72,8 @@
   #include <sys/select.h>
   #include <sys/time.h>
   #include <sys/stat.h>   // mkdir — 로그 디렉터리 생성 (REQ-0111 로그 계약)
+  #include <sys/file.h>   // flock — 한 로그 파일에 두 인스턴스가 붙는 것을 막는다
+  #include <fcntl.h>      // open  — 위 잠금용 fd
   #include <netinet/in.h>
   #include <netinet/tcp.h>
   #include <arpa/inet.h>
@@ -189,6 +191,27 @@ static const size_t MAX_ARD_NODES = 8;
 //   붙자마자 말을 안 하는 소켓은 **명세 자신의 기준으로 이미 죽은 것**이다.
 //   다만 접속 직후에는 AT 잡음이 먼저 새어 들어와 첫 줄이 깨질 수 있으므로(§6.2)
 //   판정 기준의 2배를 준다 = 7초. 1Hz 이므로 그 안에 **유효 프레임 기회가 7번** 있다.
+//
+// ── 2026-08-16 실측으로 재확인함 (REQ-0111). 이 값을 고치려는 사람이 읽을 것 ──
+//
+// ⚠ **이 시계는 부팅이 아니라 `accept` 에서 시작한다.** 헷갈리기 쉬워 한 번 틀렸다:
+//   "장치 기동이 12초인데 마감이 7초라 정상 부팅을 끊는다"는 결론이 나왔었는데 **틀렸다.**
+//   장치는 WiFi 결합·IP 확보를 **끝낸 뒤에야** TCP 를 연다(시리얼 추적으로 확인:
+//   `IP 확보 → CIPSTART → CONNECT → 첫 S 프레임`이 전부 같은 초). 그러므로 그 12초는
+//   **소켓이 존재하지도 않는 구간**이라 이 마감이 볼 수 없다.
+//
+//   실측(accept 131건 전량):
+//     · 식별 성공 75건 — accept→device_id 확정이 **최대 1.0초** (중앙 0.0). 7초 초과 **0건**.
+//     · 프레임 없이 마감된 56건 — 그 뒤 프레임이 온 것은 **중앙 404초·최대 1380초** 뒤.
+//   두 분포가 1초와 404초로 완전히 갈린다. **7초와 12초 사이에는 아무것도 없다** —
+//   문턱을 그 사이 어디에 두든 판정이 같다는 뜻이라, 지금 값을 바꿀 이유가 없다.
+//
+// 🔴 **줄이지 마라 — 그때는 이야기가 다르다.** 1~2초까지 낮추면 정상 세션을 끊기 시작하고,
+//   끊긴 장치는 **0.90초 주기 무백오프**로 즉시 재접속한다(펌웨어 실측). 그러면
+//   `수락 → 마감 → 재접속` 이 영원히 도는 사이클을 **서버가 스스로 만들어 낸다.**
+//   실제로 그 모양의 증상을 08-16 에 관측했고 원인은 다른 것이었는데, 마감을 줄이면
+//   같은 증상을 진짜로 만들 수 있다. 7초 = 실측 최악(1.0초)의 7배이고,
+//   **그 여유가 이 함정과의 거리다.**
 static const int UNKNOWN_TIMEOUT_MS = OFFLINE_MS * 2;
 static const size_t MAX_UNKNOWN_SOCKS = MAX_ARD_NODES;   // id 없는 소켓이 노드 예산을 넘지 못한다
 
@@ -242,8 +265,19 @@ static int g_port_offset = 0;
 //  (3) 기동 배너에 신원이 없었다. 도는 바이너리가 어느 소스에서 나왔는지 알 수 없어
 //      mtime 비교로 추리해야 했다.
 
+// 로그 형식 버전. **경계 줄의 첫 필드다.**
+// monitor 의 집계 도구 9개가 전부 "줄이 HH:MM:SS 로 시작한다"를 가정하고 짜여 있고,
+// 옛 로그(형식 1)와 새 로그를 **한 파일 안에서 동시에** 다뤄야 한다 — 옛 로그가 판정 근거라
+// 계속 읽어야 하기 때문이다. 이 필드가 있으면 파서가 경계에서 스스로 전환한다.
+// 없으면 관측자는 **날짜 유무를 휴리스틱으로 추측**해야 하고, 그 추측이 오늘 사고를 냈다.
+#define LOG_FORMAT_VERSION 2
+
+// ⚠ **소스 식별자다. 파일명이나 mtime 이 아니다.** mtime 은 파일 복사만으로도 바뀌어서
+// "도는 바이너리가 이 소스에서 나왔나"를 증명하지 못한다(08-16 에 실제로 mtime 으로 추리했다).
+// 빌드할 때 넘겨라: -DBUILD_ID='"'$(git rev-parse --short HEAD)'"'
+// 안 넘기면 아래 기본값이 쓰이는데, **그것이 소스 해시가 아님을 값 자체로 드러낸다.**
 #ifndef BUILD_ID
-  #define BUILD_ID __DATE__ " " __TIME__
+  #define BUILD_ID "unknown-source(compiled " __DATE__ " " __TIME__ ")"
 #endif
 
 // 화면으로 나가는 것을 로그 파일에도 그대로 흘린다.
@@ -278,8 +312,14 @@ static std::string default_log_path() {
 #ifdef _WIN32
     if (!home || !*home) home = getenv("USERPROFILE");
 #endif
-    if (!home || !*home) return std::string("parking-server.log");   // 최후 수단: 현재 디렉터리
-    return std::string(home) + "/parking-logs/parking-server.log";
+    std::string base = (home && *home) ? (std::string(home) + "/parking-logs/parking-server")
+                                       : std::string("parking-server");   // 최후 수단: 현재 디렉터리
+    // 🔴 **시험 인스턴스는 기본 경로를 쓸 수 없다.**
+    // monitor 의 요구: 한 파일에 두 인스턴스가 쓰는 것을 "탐지"가 아니라 "불가능"으로 만들 것.
+    // 오늘 그 가능성 때문에 관측자가 "두 프로세스가 동시에 썼다"고 의심할 수밖에 없었고,
+    // 실제로 그 의심이 잘못된 발표로 이어졌다. 규칙으로 부탁하지 않고 경로를 갈라 버린다.
+    if (g_port_offset != 0) base += ".test+" + std::to_string(g_port_offset);
+    return base + ".log";
 }
 
 // 부모 디렉터리를 **한 단계씩 전부** 만든다.
@@ -335,9 +375,37 @@ static std::string iso8601(long long ep_ms) {
 
 // 로그 파일을 연다. **실패해도 기동을 막지 않는다** — 관측이 없다고 서비스를 멈추는 것은
 // 손해가 더 크다. 다만 화면에 크게 알려서 "조용히 관측이 없는" 상태가 되지 않게 한다.
+// 같은 로그 파일에 두 인스턴스가 붙는 것을 **기계로** 막는다.
+// 경로를 가르는 것(default_log_path)은 실수를 막지만 `--log` 로 같은 경로를 명시하면 뚫린다.
+// 여기서 배타 잠금을 걸어 그마저 불가능하게 한다.
+// flock 은 **fd 에 걸리므로 프로세스가 죽으면 커널이 자동으로 푼다** — 죽은 잠금이 남지 않는다.
+// (Windows 는 미구현. 그쪽은 경로 분리까지만 보장한다 — 계약서에 한계로 적어 둔다.)
+#ifndef _WIN32
+static int g_log_lock_fd = -1;
+static bool lock_log_exclusive(const std::string& path) {
+    g_log_lock_fd = open(path.c_str(), O_WRONLY | O_CREAT, 0644);
+    if (g_log_lock_fd < 0) return true;            // 못 열면 여기서 막지 않는다. open_log 가 판정한다.
+    if (flock(g_log_lock_fd, LOCK_EX | LOCK_NB) == 0) return true;
+    close(g_log_lock_fd);
+    g_log_lock_fd = -1;
+    return false;
+}
+#endif
+
 static void open_log(const std::string& path) {
     g_log_path = path.empty() ? default_log_path() : path;
     ensure_parent_dir(g_log_path);
+#ifndef _WIN32
+    if (!lock_log_exclusive(g_log_path)) {
+        // **여기서는 기동을 막는다.** 로그를 못 여는 것(관측 없음)과 달리, 이건 다른 인스턴스가
+        // 이미 그 파일에 쓰고 있다는 뜻이다. 그대로 뜨면 두 인스턴스의 줄이 섞여
+        // **관측자가 카운터를 잘못 읽는다** — 오늘 하루를 잡아먹은 바로 그 실패다.
+        std::cerr << "⚠ 다른 인스턴스가 이미 이 로그를 쓰고 있다: " << g_log_path << "\n"
+                  << "   같은 파일에 둘이 쓰면 인스턴스 경계가 무의미해진다. 기동하지 않는다.\n"
+                  << "   시험 인스턴스라면 --port-offset= 을 주면 경로가 자동으로 갈린다.\n";
+        exit(1);
+    }
+#endif
     g_logfile.open(g_log_path.c_str(), std::ios::out | std::ios::app);
     if (!g_logfile.is_open()) {
         // ⚠ **경로를 지우고 실패 사실로 바꾼다.** 그냥 두면 경계 줄이 `log=<경로>` 라고
@@ -563,13 +631,16 @@ struct Server {
         snprintf(b, sizeof(b), "%.1f초", ms / 1000.0);
         return std::string(b);
     }
-    // 요약 안에서 "언제"를 가리키는 값(최대공백@… 등)도 날짜가 없으면 자정을 넘는 순간
-    // 어느 날인지 알 수 없다. 줄 앞머리와 달리 한 줄에 여러 번 나오므로 연도는 뺀다 —
-    // 연도는 같은 파일의 `=== INSTANCE` 경계 줄이 확정해 준다.
+    // 요약 안에서 "언제"를 가리키는 값(최대공백@… 등)도 **줄 앞머리와 같은 완전 형식**으로 쓴다.
+    // v0.1 에서 연도를 뺐다가 monitor 지적으로 되돌렸다: "경계 줄이 연도를 확정해 준다"는
+    // **파일을 처음부터 순서대로 읽을 때만** 참인데, 관측자는 5MB 를 통째로 못 올려서
+    // **항상 잘라 읽는다.** 잘린 조각에서 `@08-16 16:52:47` 은 다시 연도가 없다.
+    // 이 계약의 요지는 **부분 문자열만 봐도 절대시각이 확정되는 것**이므로 예외를 두지 않는다.
+    // 비용은 요약이 분당 1줄이라 줄 앞머리의 1/60 이다.
     static std::string clock_at(long long ep_ms) {
         if (ep_ms <= 0) return std::string("-");
         time_t tt = (time_t)(ep_ms / 1000);
-        char b[24]; strftime(b, sizeof(b), "%m-%d %H:%M:%S", localtime(&tt));
+        char b[32]; strftime(b, sizeof(b), "%Y-%m-%d %H:%M:%S", localtime(&tt));
         return std::string(b);
     }
 
@@ -1863,12 +1934,38 @@ struct Server {
         lsn_ard   = listen_on(PORT_ARDUINO + g_port_offset);
         lsn_http  = listen_on(PORT_HTTP    + g_port_offset);
         lsn_phone = listen_on(PORT_PHONE   + g_port_offset);
-        if (lsn_ard == BAD_SOCK || lsn_http == BAD_SOCK || lsn_phone == BAD_SOCK) return 1;
+        // 🔴 포트를 못 잡았으면 **그 사실을 로그에 남기고** 죽는다.
+        // 08-16 에 `프레임 0` 짜리 짧은 인스턴스가 여럿 있었는데, 관측자가 그것이
+        // "장치가 안 붙은 것"인지 "포트를 못 잡은 것"인지 **가를 수 없어서** 한참 헤맸다.
+        // 0 이 "나쁨"인지 "해당 없음"인지 가르는 것 — 그게 관측의 절반이다.
+        if (lsn_ard == BAD_SOCK || lsn_http == BAD_SOCK || lsn_phone == BAD_SOCK) {
+            std::cout << "=== INSTANCE"
+                      << " logfmt=" << LOG_FORMAT_VERSION
+                      << " pid=" << cur_pid()
+                      << " start=" << iso8601(epoch_ms())
+                      << " bin=" << exe_path()
+                      << " build=" << BUILD_ID
+                      << " ports=" << (PORT_ARDUINO + g_port_offset)
+                      << ","      << (PORT_HTTP    + g_port_offset)
+                      << ","      << (PORT_PHONE   + g_port_offset)
+                      << " offset=" << g_port_offset
+                      << " log=" << (g_log_path.empty() ? std::string("(화면만)") : g_log_path)
+                      << " ===" << std::endl;
+            std::cout << "=== INSTANCE-END"
+                      << " logfmt=" << LOG_FORMAT_VERSION
+                      << " pid=" << cur_pid()
+                      << " stop=" << iso8601(epoch_ms())
+                      << " reason=port_bind_fail"
+                      << " frames=0 sessions=0"
+                      << " ===" << std::endl;
+            return 1;
+        }
 
         // ---------- 인스턴스 경계 줄 (REQ-0111 로그 계약 §2.2) — 배너보다 **먼저** 나간다.
         // 기계가 읽는 줄이다. 한 파일에 인스턴스가 여러 개 쌓여도 이 줄로 자르면 섞이지 않는다.
         // 실제 리슨에 성공한 뒤에 찍으므로 ports= 는 **추측이 아니라 사실**이다.
         std::cout << "=== INSTANCE"
+                  << " logfmt=" << LOG_FORMAT_VERSION
                   << " pid=" << cur_pid()
                   << " start=" << iso8601(epoch_ms())
                   << " bin=" << exe_path()
@@ -2241,10 +2338,14 @@ struct Server {
         // ⚠ **이 줄이 없다고 "아직 살아 있다"로 읽으면 안 된다.** SIGKILL·정전·패닉은
         // 이 줄을 남길 기회를 주지 않는다. 실제로 08-16 에 pid 36998 이 이 줄 없이 죽었다.
         // **생존 판정은 로그가 아니라 pid 로 해야 한다.** 이 줄은 "정상 종료였다"만 증명한다.
+        // 누계를 이 줄에 싣는다 — **로그 뒤쪽이 잘려도 이 한 줄로 인스턴스 총계가 복원된다.**
         std::cout << "=== INSTANCE-END"
+                  << " logfmt=" << LOG_FORMAT_VERSION
                   << " pid=" << cur_pid()
                   << " stop=" << iso8601(epoch_ms())
-                  << " reason=signal"
+                  << " reason=normal"
+                  << " frames=" << all_frames
+                  << " sessions=" << ard_sessions
                   << " ===" << std::endl;
         return 0;
     }

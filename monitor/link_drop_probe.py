@@ -21,6 +21,7 @@
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
 from datetime import date, datetime, timedelta
@@ -103,11 +104,31 @@ def parse(path: str):
     return [(ts, r[2]) for r, ts in zip(rows, stamps) if ts is not None]
 
 
+def provenance() -> None:
+    """출처를 **출력 자체에** 찍는다.
+
+    2026-08-16: 내가 만든 합성 픽스처의 출력을 실물 로그 출력처럼 붙여 보고했고,
+    루트가 실물로 읽었다. 문제는 "잘못 읽은 것"이 아니라 **그렇게 읽히게 쓴 출력이
+    판정문에 들어갔으면 아무도 못 걸렀을 것**이라는 점이다.
+    → 사람이 붙일 때 기억하는 것에 의존하지 않는다. 출력이 스스로 밝힌다.
+    """
+    p = os.path.abspath(LOG)
+    fake = any(k in os.path.basename(p).lower() for k in ("fake", "fixture", "sample", "synthetic"))
+    if fake:
+        print("#" * 72)
+        print("# ⚠⚠ 합성 픽스처 출력이다 — 실물 관측이 아니다. 판정 근거로 인용하지 마라.")
+        print(f"# 원본: {p}")
+        print("#" * 72)
+    else:
+        print(f"# 원본 로그: {p}")
+
+
 def main() -> int:
     if SINCE < CONTAM_TO and UNTIL > CONTAM_FROM:
         print(f"⚠ 요청 구간이 오염 구간({CONTAM_FROM} ~ {CONTAM_TO})과 겹친다.")
         print("   그 안의 재부팅·단절은 사용자가 보드를 뽑았다 끼운 결과다 — 장비 판정에 쓰지 마라.\n")
 
+    provenance()
     ev = [(t, s) for t, s in parse(LOG) if SINCE <= t <= UNTIL]
     frames = [(t, int(SFRAME.search(s).group(4))) for t, s in ev if SFRAME.search(s)]
     print(f"# 구간 {SINCE} ~ {UNTIL}   ({(UNTIL - SINCE).total_seconds()/3600:.2f}h)")
@@ -194,7 +215,18 @@ def main() -> int:
         print(f"   {name:24} {n:>5}")
 
     # 기계 판독용 산출 — tick.py 가 이걸 읽어 1급 지표로 올린다(REQ-0112 루트 지시).
-    hours = (UNTIL - SINCE).total_seconds() / 3600.0
+    #
+    # ⚠ 분모는 **요청 구간**이 아니라 **자료가 실제로 있는 구간**이다.
+    #    진행 중인 창을 `--until 23:59` 처럼 미래로 잡으면 아직 오지 않은 시간이
+    #    분모에 들어가 시간당 값이 조용히 희석된다. "좋아 보이는" 쪽으로 틀리는
+    #    종류라 특히 위험하다.
+    data_end = max(t for t, _ in ev)
+    eff_until = min(UNTIL, data_end)
+    hours = (eff_until - SINCE).total_seconds() / 3600.0
+    if eff_until < UNTIL:
+        print()
+        print(f"   ⓘ 분모 보정: 요청 끝 {UNTIL} → 자료 끝 {eff_until}"
+              f" ({hours:.2f}h). 미래 구간을 분모에 넣지 않는다.")
     summary = {
         "since": SINCE.isoformat(), "until": UNTIL.isoformat(), "hours": round(hours, 3),
         "frames": len(frames), "accepts": len(accepts),
