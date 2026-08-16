@@ -34,8 +34,17 @@ SER = sys.argv[1] if len(sys.argv) > 1 else "monitor/serial-win2.log"
 SRV = sys.argv[2] if len(sys.argv) > 2 else os.path.expanduser("~/parking-logs/parking-server.log")
 PERIOD = int(sys.argv[3]) if len(sys.argv) > 3 else 300
 
-TSV = "monitor/win2-pulse.tsv"
-MD = "monitor/WIN2-STATUS.md"
+# 🔴 산출 경로는 **시리얼 로그 이름에서 파생**한다 — 상수로 두면 안 된다.
+#   창2 를 닫고 창3 을 열 때 밟을 뻔했다: 경로가 고정이면 새 인스턴스가
+#   **옛 창의 요약 파일을 덮어쓰거나 두 인스턴스가 같은 파일에 뒤섞여 쓴다.**
+#   `serial-win3.log` → `win3-pulse.tsv` · `WIN3-STATUS.md`
+_stem = os.path.basename(SER)
+for _p in (".log",):
+    if _stem.endswith(_p):
+        _stem = _stem[: -len(_p)]
+_stem = _stem.replace("serial-", "") or "win"
+TSV = f"monitor/{_stem}-pulse.tsv"
+MD = f"monitor/{_stem.upper()}-STATUS.md"
 
 # 시리얼 표지 — 새 펌웨어 539ac53 의 새 줄 둘을 포함한다(arduino 통보 23:59).
 # ⚠ 표지를 여기 적어 두는 이유: 파서에 없으면 조용히 0 이 된다(원장 1.1 · 5.1).

@@ -2,3 +2,5 @@
 iso	ser_bytes	ser_lines	ser_last	event	banner	resync	skip	okto	busy	tx	sendok	ipd	srv_accept	srv_sframe	srv_ack	srv_down	tap_pids	grew
 2026-08-17T00:07:45	16724	376	00:07:43	0	1	0	0	0	3	0	0	0	18	13156	7	7	22061	?
 2026-08-17T00:12:45	41249	941	00:12:44	0	1	0	0	0	3	0	0	0	18	13156	7	7	22061	yes
+2026-08-17T00:17:46	64140	1471	00:17:22	0	1	0	0	0	3	0	0	0	18	13156	7	7	-	yes
+2026-08-17T00:22:46	64140	1471	00:17:22	0	1	0	0	0	3	0	0	0	20	13341	8	8	-	NO

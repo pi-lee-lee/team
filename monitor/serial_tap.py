@@ -93,6 +93,32 @@ def main() -> int:
          f"date={datetime.now().isoformat(sep=' ', timespec='seconds')}")
     note("⚠ 이 시각에 DTR 로 보드가 리셋된다 — 분석에서 '우리가 만든 리셋'으로 표시할 것")
 
+    # 🔴 2026-08-17 00:2x 추가 — `kill` 로 내리면 정리 경로를 안 탔다 (실측으로 밟았다)
+    #
+    #   창2 를 닫으려고 `kill <pid>` 했더니 프로세스는 죽었는데 **`PORT-IN-USE.txt` 가 남았다.**
+    #   그 표식은 *"탭이 포트를 잡고 있다"* 는 뜻이라, 남아 있으면 다음 사람이
+    #   **포트가 묶여 있다고 오독한다.** 표식은 2026-08-16 오염("누가 포트를 잡았는지 몰랐다")
+    #   때문에 만든 것인데, **거짓 양성을 내면 원래 목적을 정확히 반대로 배신한다.**
+    #
+    #   그리고 로그가 **자기 끝을 스스로 선언하지 않았다.** 원장 6.1 이 서버 로그에 대해
+    #   적어 둔 것과 같은 문제다 — *경계를 사람의 선언에 기대면 안 된다.* 내 로그도 같다.
+    #   끝 줄이 없으면 "여기서 끝난 것"과 "여기서 죽은 것"이 구분되지 않는다.
+    #
+    #   ⚠ `kill -9`(SIGKILL)는 잡을 수 없다. **그때는 표식이 남는 것이 정상이다** —
+    #     그러니 표식을 봤으면 항상 `lsof <포트>` 로 다시 확인해라. 표식만 믿지 마라.
+    import signal
+
+    def _bye(signum, _frame):
+        name = signal.Signals(signum).name
+        note(f"캡처 종료 — {name} 수신. 이 줄이 이 로그의 마지막 경계다.")
+        clear_marker()
+        txt.close()
+        raw.close()
+        os._exit(0)
+
+    for _sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(_sig, _bye)
+
     buf = bytearray()
     retries = 0
     while True:
