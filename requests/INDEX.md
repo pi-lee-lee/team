@@ -402,3 +402,4 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T19:26:10+0900 | 발행 | REQ-0134 | root → web-engineer | web/artifacts 는 무시로 정했다 — 인덱스에서 빼는 것과 증거 승격은 네가 |
 | 2026-08-16T19:26:47+0900 | 착수 | REQ-0134 | web-engineer → web-engineer | web/artifacts 는 무시로 정했다 — 인덱스에서 빼는 것과 증거 승격은 네가 |
 | 2026-08-16T19:31:44+0900 | 완료 | REQ-0134 | web-engineer → web-engineer | web/artifacts 는 무시로 정했다 — 인덱스에서 빼는 것과 증거 승격은 네가 |
+| 2026-08-16T20:34:49+0900 | 발행 | REQ-0135 | root → socket-engineer | 서버 구조 문서가 없다 — 한 장으로 쓰고 낡은 계획서에 폐기 표시해라 |
