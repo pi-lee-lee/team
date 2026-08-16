@@ -6,7 +6,15 @@
    바꾸려면 사전 등록 문서를 먼저 고치고 **고친 시각과 이유를 적어야** 한다.
 
 리셋 시작 표지(이른 것부터):
-    1. 부트 가비지  `[AT] "…"` 에 `\\xNN` 3개 이상
+    1. **부트 ROM 가비지** — `[AT] "…"` 에 **앵커 `@\\xF9`** 가 있는 것
+       🔴 2026-08-17 08:3x 정정: 옛 판은 **`\\xNN` 뭉치를 전부** 리셋 표지로 썼다.
+          그런데 가비지는 **둘**이다(원장 7.52): **①부트ROM**(앵커 있음 = 리셋) ·
+          **②UART 손상**(앵커 없음 = 리셋이 아니라 손상 사건).
+          ②를 리셋 시작으로 잡으면 **최대 6초 앞으로 잘못 당겨진다**
+          (실측 `20:40:31` ② vs `20:40:34` ① — 3초 차이).
+          → **①만 리셋 표지로 쓴다. ②는 맥락으로 따로 찍는다.**
+          ⚠ 이는 사전등록 §2.1 의 "부트 가비지"를 **정확히 구현한 것**이지 규칙 변경이 아니다
+            (사전등록 §4.5 에 그렇게 기록했다).
     2. ESP 배너     `[System Ready`
     3. IP 소실      `"0.0.0.0"`
 ⚠ 가비지 선행은 0~6초로 일정하지 않다(원장 7.41) — **시작의 하한**이지 정확한 시각이 아니다.
@@ -40,6 +48,7 @@ CIPSEND = b"AT+CIPSEND"
 SENDOK = b'"SEND OK"'
 ESPBANNER = b"System Ready"
 ZEROIP = b'"0.0.0.0"'
+BOOT_ANCHOR = b"@\\xF9"   # ①부트ROM 앵커. ⚠ `86 40 F9` 로 잡으면 앞 바이트 변동에 놓친다
 GAP_S = 20          # 리셋 표지들을 한 사건으로 묶는 폭
 
 
@@ -75,7 +84,7 @@ def load(path: str):
             else:
                 q = ATQ.search(body)
                 if q and q.group(1).count(b"\\x") >= 3 and len(q.group(1)) >= 8:
-                    kind = "GARB"
+                    kind = "GARB" if BOOT_ANCHOR in q.group(1) else "CORRUPT"
             out.append((t, kind, body))
     return out, n
 
@@ -130,7 +139,9 @@ def run(path: str, lo=None, hi=None, label=""):
     if lo is not None:
         ev = [e for e in ev if lo <= e[0][0] <= hi]
     print(f"\n== {label or path}")
-    print("   " + z("리셋 사건", len(ev), nlines, "GARB|System Ready|\"0.0.0.0\""))
+    ncorr = sum(1 for _, k, _ in rows if k == "CORRUPT")
+    print("   " + z("리셋 사건", len(ev), nlines, "①부트ROM(@\\xF9)|System Ready|\"0.0.0.0\""))
+    print("   " + z("② UART 손상(맥락 · 리셋 표지 아님)", ncorr, nlines, "앵커 없는 이스케이프 뭉치"))
     res = []
     for group in ev:
         t0, k0 = group[0]
