@@ -42,13 +42,18 @@
       "detail": "P1"
     },
     {
+      "name": "자리 결손 배너가 뜨지 않는다 (서버가 10칸을 다 싣고 있다)",
+      "ok": true,
+      "detail": ""
+    },
+    {
       "note": "스크린샷 web/artifacts/1-ws-connected.png"
     },
     {
       "note": "대상 칸 A1"
     },
     {
-      "note": "브라우저 사용자 u6533al7"
+      "note": "브라우저 사용자 u0bzmkzg"
     },
     {
       "name": "확인 대화상자가 열렸다 (키보드 접근 가능한 <dialog>)",
@@ -61,25 +66,25 @@
     {
       "name": "브라우저가 예약 요청을 전선으로 보냈다",
       "ok": true,
-      "detail": "[\"{\\\"type\\\":\\\"reserve\\\",\\\"slot\\\":\\\"A1\\\",\\\"user_id\\\":\\\"u6533al7\\\",\\\"rid\\\":\\\"r1-zb2zb8\\\"}\"]"
+      "detail": "[\"{\\\"type\\\":\\\"reserve\\\",\\\"slot\\\":\\\"A1\\\",\\\"user_id\\\":\\\"u0bzmkzg\\\",\\\"rid\\\":\\\"r1-kh55gn\\\"}\"]"
     },
     {
       "name": "서버가 장치로 R 을 내보냈다 (→ARD R,…,A1)",
       "ok": true,
-      "detail": "→ARD R,9,A1,u6533al7,57"
+      "detail": "→ARD R,11,A1,u0bzmkzg,64"
     },
     {
       "name": "장치가 A 로 응답했다 (←ARD A)",
       "ok": true,
-      "detail": "←ARD A,9,A1,0,38"
+      "detail": "←ARD A,11,A1,0,01"
     },
     {
       "name": "서버 ACK 가 브라우저까지 돌아왔다",
       "ok": true,
-      "detail": "{\"type\":\"ack\",\"rid\":\"r1-zb2zb8\",\"slot\":\"A1\",\"result\":0,\"message\":\"예약되었습니다\"}"
+      "detail": "{\"type\":\"ack\",\"rid\":\"r1-kh55gn\",\"slot\":\"A1\",\"result\":0,\"message\":\"예약되었습니다\"}"
     },
     {
-      "name": "🔴 화면이 예약을 반영했다 (205ms)",
+      "name": "🔴 화면이 예약을 반영했다 (215ms)",
       "ok": true,
       "detail": "내 예약"
     },
@@ -99,7 +104,7 @@
     {
       "name": "스냅샷 프레임을 받았다",
       "ok": true,
-      "detail": "7개"
+      "detail": "8개"
     },
     {
       "note": "device 키: [\"online\",\"device_id\",\"uptime\",\"seq\"]"
@@ -118,7 +123,7 @@
     {
       "name": "폴백 시험용 죽은 포트가 운영 포트가 아니다",
       "ok": true,
-      "detail": "52651"
+      "detail": "52910"
     },
     {
       "name": "WS 실패 후 파일 폴백으로 넘어갔다",
@@ -133,7 +138,7 @@
     {
       "name": "포트 불일치 경고가 떴다 (WS 와 폴백이 다른 서버를 가리킬 수 있는 상태)",
       "ok": true,
-      "detail": "이 페이지는 :10000 에서 받았는데 WebSocket 은 :52651 로 붙습니다. 서로 다른 서버라면 화면이 두 인스턴스의 상태를 섞어 보여 줍니다 — 예약은 :52651 쪽 장치로 내려갑니다.오후 7:10:5"
+      "detail": "이 페이지는 :10000 에서 받았는데 WebSocket 은 :52910 로 붙습니다. 서로 다른 서버라면 화면이 두 인스턴스의 상태를 섞어 보여 줍니다 — 예약은 :52910 쪽 장치로 내려갑니다.오후 7:17:1"
     },
     {
       "note": "출처 표시 = \"data_log.json 폴링 (폴백)\""
