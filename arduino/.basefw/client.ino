@@ -1103,68 +1103,10 @@ static uint32_t      lastTxOkAt   = 0;     // 마지막으로 **실제로 나간
 static uint8_t       stallBusy = 0, stallTimeout = 0, stallReject = 0;
 
 // 프롬프트를 놓쳐 스트림을 강제 복구한 횟수(아래 sendLine 참조).
-//
-// ✏️ 2026-08-16 정정 (REQ-0126) — ~~"서버의 `버린줄(모름)` 카운터와 짝을 이룬다"~~ ❌ **틀렸다.**
-//   여기 *"둘이 맞아떨어져야 정상이고 어긋나면 다른 원인이 있다"* 고 적혀 있었다.
-//   **실측이 정반대다: 기대값은 0 이고, 맞아떨어지면 오히려 이상하다.**
-//
-//   실측 2026-08-16(`monitor/serial-newbase.log` 21건 전수, 18건 직접 증거):
-//   프롬프트를 놓치는 경우는 **거의 전부 ESP 가 명령 모드**였다((b) 갈래). 그러면 더미는
-//   소켓이 아니라 **AT 해석기**로 들어가므로 **서버에는 줄이 도달조차 하지 않는다.**
-//   근거는 `[AT] "#####…"` 가 **에코로 되돌아온 것**이다(데이터 모드였다면 에코 없이
-//   TCP 로 나가고 `SEND OK` 가 떴을 것이다 — `SEND OK` 는 21건 중 한 번도 없었다).
-//
-//   ⚠ 그래서 이 카운터와 서버 카운터의 **크기 비교로 무엇을 판정하지 마라.** 둘은 같은
-//     사건을 두 번 보는 것이 아니라 **애초에 다른 사건**이다(CLAUDE.md "정의를 맞춰라").
-//     교차검증을 하려면 **갈래를 먼저 가른 뒤** (a) 갈래만 서버 카운터와 견줘야 한다.
+// ★ 이 숫자는 **서버의 `버린줄(모름)` 카운터와 짝을 이룬다.** 더미 줄 하나가 서버에서 한 번
+//   버려지므로 둘이 맞아떨어져야 정상이다. 어긋나면 다른 원인이 더 있다는 뜻이다.
+//   단일 지표는 자기 고장을 증언하지 못한다 — 그래서 처음부터 교차검증이 되게 짰다.
 static uint16_t      promptResyncs = 0;
-
-// ── 2단계 (REQ-0116 2단계 · `docs/arduino/design-stage2-sendok.md`) ──────────
-// **`SEND OK` 를 실제로 기다린다.** 지금까지는 `SEND_GAP_MS=80` 이라는 고정 추측으로
-// "앞 전송이 끝났겠지" 하고 다음 CIPSEND 를 쐈다. 그 80ms 는 **우리가 쓰기를 끝낸 시각**부터
-// 재는 것이지 **ESP 가 WiFi 로 다 보낸 시각**이 아니다. 망이 느리면 ESP 는 아직 보내는 중이고
-// 그때 `AT+CIPSEND` 를 쏘면 `busy s...` 로 거부된다 — 그게 기전 A 다.
-//
-// ⚠ **비블로킹이어야 한다.** 여기서 `SEND OK` 를 눌러 기다리면 하트비트(1Hz)와 하행(`+IPD`)
-//   처리가 통째로 밀린다. 그래서 "기다린다"가 아니라 **"아직이면 이번 주기를 건너뛴다"** 다.
-static bool          awaitingSendOk  = false;  // 앞 전송의 SEND OK 를 아직 못 봤다
-static uint32_t      sendOkWaitFrom  = 0;      // 그 기다림이 시작된 시각
-// 안전망: `SEND OK` 가 **영영 안 올 수도 있다.** AT 펌웨어 판본에 따라 안 주거나,
-// SoftwareSerial 이 반이중 + RX 64B 라 우리가 쓰는 동안 도착한 응답이 통째로 사라질 수 있다
-// (원장 §2.5). 상한을 두지 않으면 2단계가 1단계보다 **더 나쁜 정지**를 만든다.
-// 3초의 근거: 하트비트 1초의 3배(정상 왕복을 자르지 않는다) · 살아있음 불변식 10초보다
-// **확실히 짧다**(그쪽이 먼저 발동해 버리면 이 안전망은 존재 의미가 없다).
-static const uint16_t SEND_OK_TIMEOUT_MS = 3000;
-static uint16_t      sendOkTimeouts = 0;       // 진단: 상한 초과 횟수 — 잦으면 그 자체가 발견이다
-static uint16_t      sendSkips      = 0;       // 진단: SEND OK 대기로 건너뛴 주기 수
-static uint16_t      sendFails      = 0;       // 진단: SEND FAIL 수신 횟수
-
-// ── ESP 모듈 리셋 탐지 (REQ-0125 · **진단 전용. 제어에 쓰지 않는다**) ─────────
-// 실측 2026-08-16: 링크 끊김 4건 중 **2건이 ESP-01 모듈 자체의 재부팅**이었다.
-// 우리가 시킨 것이 아니다 — `AT+RST` 는 그 로그 전체에 부팅 사다리 1회뿐이었고,
-// 재부팅 직전까지 `SEND OK` 가 1초마다 정상이었다(예고 없음).
-// **Uno 는 그동안 한 번도 재부팅하지 않았다**(uptime 324→1290→2458→5078s 단조 증가).
-//   → 즉 "재부팅 없는 링크 단절"의 실체 중 최소 절반이 이것이다.
-//
-// ⚠ **일부러 제어 경로를 만들지 않았다.** 기존 사다리가 이미 잘 처리한다 —
-//   실측에서 `CIFSR` 단이 `0.0.0.0` 을 보고 전진을 거부했고, 2초 뒤 IP 를 얻어 복귀했다
-//   (오프라인 전환 → 온라인까지 4초). 사다리가 **원인이 아니라 결과(IP 가 있는가)** 를
-//   보기 때문에 이름 모를 고장에도 그대로 동작한 것이다(§6.1).
-//   배너를 보고 즉시 복구를 걸면 2~3초를 아낄 수 있지만, 그건 **다음 변경**이다 —
-//   한 번에 하나씩 넣어야 효과를 귀속할 수 있다(§6.3).
-//
-// ★ 판별자로 **부트 배너를 쓰지 않는다.** monitor 가 전수 검증해 정정해 줬다(REQ-0125 정정본):
-//
-//   | 판별자 | 전수 | 리셋 사건 일치 | 정상 부팅에서도 뜨나 |
-//   |---|---|---|---|
-//   | 부트 배너 `[System Ready...]` | 4건 | 리셋 3 + 정상부팅 1 | **뜬다 → 오탐** |
-//   | `CIFSR` 응답이 `0.0.0.0`      | 3건 | **3/3**        | **안 뜬다**        |
-//
-//   배너는 **매 기동에 뜨므로** 그것만 세면 정상 부팅을 리셋으로 센다.
-//   `0.0.0.0` 이 뜨는 기전: ESP 가 제멋대로 리셋되면 우리는 아직 자신을 online 이라 믿고
-//   있다가 사다리에 **CIFSR 단(3단)부터 재진입**하는데, 그 시점엔 ESP 가 아직 AP 에
-//   재결합하지 못해 주소가 없다. **정상 부팅은 CWJAP 를 끝낸 뒤 CIFSR 로 오므로 절대 0 이 아니다.**
-static uint16_t      espResets = 0;   // CIFSR 이 0.0.0.0 을 답한 횟수 = ESP 가 상태를 잃은 횟수
 
 // 소켓 복구 진입 — **전송이 안 되는 것을 이유로 오프라인이 되는 모든 경로**가 여기를 통과해야 한다.
 // (연속 실패 카운터 / `link is not valid` 둘 다.) 한 곳이라도 CIPSTART 로 바로 가면
@@ -1172,10 +1114,6 @@ static uint16_t      espResets = 0;   // CIFSR 이 0.0.0.0 을 답한 횟수 = E
 static void startSocketRecovery(void) {
   netOnline = false;
   sendFailStreak = 0;
-  // ★ 2단계: 대기를 **반드시 푼다.** 소켓이 사라지는 마당에 앞 전송의 `SEND OK` 는 영영 오지
-  //   않는다. 안 풀면 다시 온라인이 된 뒤 첫 송신이 통째로 건너뛰어지고, 최악에는 상한(3초)을
-  //   태우고 나서야 첫 프레임이 나간다. **복구 직후가 가장 급한 순간인데 거기서 늦어진다.**
-  awaitingSendOk = false;
   // ⚠ 여기서 멱등 캐시를 비우지 않는다. 이 판정은 **추정**이고, 링크가 실은 살아 있었다면
   //   재시도에 ALREADY CONNECTED 가 와서 그대로 복귀한다 — 그 경우 캐시를 비웠다면
   //   살아 있는 연결의 멱등성(REQ-0035 [18]-4)이 깨진다.
@@ -1274,33 +1212,7 @@ static bool sendLine(const char* line) {
   uint8_t len = (uint8_t)strlen(line);
   if (len == 0 || len > 63) return false;                  // §2.1 한 줄 최대 64바이트(LF 포함)
 
-  // ── 2단계: 앞 전송이 아직 안 끝났으면 **이번 주기는 보내지 않는다** ────────
-  // ⚠ 이것은 **실패가 아니다.** ESP 가 아직 보내는 중이라 우리가 스스로 양보한 것이다.
-  //   그래서 `noteSendResult()` 를 부르지 않는다 — 부르면 정상 동작을 자해로 세게 된다.
-  //   (이 갈래는 `sendLine` 의 나머지를 통째로 건너뛰므로 카운터에 닿지 않는다.)
-  // ⚠ 그럼에도 **막히면 반드시 빠져나온다**: 여기서 계속 건너뛰면 `lastTxOkAt` 이 갱신되지
-  //   않아 살아있음 불변식(10초)이 발동한다. 아래 상한(3초)은 그보다 먼저 푸는 1차 방어다.
-  if (awaitingSendOk) {
-    if ((uint32_t)(millis() - sendOkWaitFrom) < SEND_OK_TIMEOUT_MS) {
-      if (sendSkips < 65535) sendSkips++;
-#if DEBUG
-      Serial.println(F("[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다"));
-#endif
-      return false;
-    }
-    // 상한 초과 — `SEND OK` 를 못 받고 있다. 풀어 주고 **예전 동작(SEND_GAP_MS)으로 되돌아간다.**
-    awaitingSendOk = false;
-    if (sendOkTimeouts < 65535) sendOkTimeouts++;
-#if DEBUG
-    Serial.println(F("[TX-WAIT] ★ SEND OK 상한 초과 → 대기를 푼다(SEND_GAP_MS 시절 동작으로 복귀)"));
-#endif
-  }
-
   inSend = true;
-  // ★ `SEND_GAP_MS` 는 **없애지 않는다. 하한으로 남긴다.**
-  //   `SEND OK` 가 즉시 와도 연속 CIPSEND 를 너무 촘촘히 쏘면 `busy p...`(앞 **명령** 처리 중)가
-  //   난다 — 이 값은 원래 그걸 막으려고 있던 것이고 2단계가 겨냥하는 `busy s...`(앞 **전송**
-  //   처리 중)와 **다른 사건**이다. 둘을 같은 것으로 보고 지우면 옛 결함이 되살아난다.
   while (millis() - lastSendEndAt < SEND_GAP_MS) pumpSerialRaw();   // 연속 CIPSEND 간격
 
   wifi.print(F("AT+CIPSEND="));
@@ -1312,10 +1224,6 @@ static bool sendLine(const char* line) {
   if (ok) {
     wifi.write((const uint8_t*)line, (size_t)len);
     wifi.write('\n');
-    // ★ 2단계: 여기서부터 ESP 가 **실제로 WiFi 로 보내는 중**이다. 그 끝을 알려주는 것이
-    //   `SEND OK` 다. 추측(80ms) 대신 그 신호를 기다린다 — 단, 비블로킹으로.
-    awaitingSendOk = true;
-    sendOkWaitFrom = millis();
   } else if (pr != PROMPT_TIMEOUT) {
     // ─────────────────────────────────────────────────────────────────────
     // ★ REQ-0116 — **거부됐을 때는 더미를 넣지 않는다.**
@@ -1904,18 +1812,6 @@ static void handleLine(char* s) {
         netAdvance(NET_CIPMUX, 200);
         return;
       }
-      // ★ REQ-0125 — **ESP 가 상태를 통째로 잃은 지문.** (진단 전용, 제어에 쓰지 않는다)
-      //   `hasUsableIp()` 는 `0.0.0.0` 을 IP 로 치지 않으므로 위 갈래에서 이미 떨어진다.
-      //   여기서는 **그것을 세기만** 한다 — 흐름은 기존 `cifsrTries` 경로가 그대로 처리한다.
-      //   ⚠ 세는 것과 끊는 것을 섞지 않는다. 사다리는 **원인이 아니라 결과(IP 가 있는가)** 를
-      //     보기 때문에 이름 모를 고장에도 동작한다(§6.1). 그 성질을 깨지 않으려는 것이다.
-      else if (strncmp(s, "AT+", 3) != 0 && strcmp(s, "0.0.0.0") == 0) {
-        if (espResets < 65535) espResets++;
-#if DEBUG
-        Serial.print(F("[NET] ★ ESP 가 IP 를 잃었다(0.0.0.0) — 모듈이 리셋된 것으로 본다. 누적 "));
-        Serial.println(espResets);
-#endif
-      }
     }
 
     // CIPMUX 의 결과. 구형 펌웨어는 이미 그 값이면 `no change` 로 답한다 — 둘 다 성공이다.
@@ -2020,7 +1916,6 @@ static void handleLine(char* s) {
     onlineSince = millis();            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
     lastTxOkAt  = millis();            // ★ 살아있음 불변식의 출발점 — 붙자마자 발동하지 않게 한다
     sendFailStreak = 0;
-    awaitingSendOk = false;            // ★ 2단계: 새 소켓이다 — 앞 소켓의 SEND OK 를 기다리지 않는다
     closeAttempts = 0;
 #if DEBUG
     Serial.println(F("[NET] online (ALREADY CONNECTED · 초기 경합)"));
@@ -2032,7 +1927,6 @@ static void handleLine(char* s) {
     onlineSince = millis();            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
     lastTxOkAt  = millis();            // ★ 살아있음 불변식의 출발점 — 붙자마자 발동하지 않게 한다
     sendFailStreak = 0;
-    awaitingSendOk = false;            // ★ 2단계: 새 소켓이다 — 앞 소켓의 SEND OK 를 기다리지 않는다
     staleSocket = false;               // 진짜로 새로 붙었다 — 낡은 소켓이 아니다
     closeAttempts = 0;
     // TCP 까지 올라왔다는 것은 그 아래(결합·IP)가 전부 성립했다는 뜻이다 — 진단 카운터를 되돌린다.
@@ -2049,7 +1943,6 @@ static void handleLine(char* s) {
   if (isClosedLine(s)) {
     netOnline = false;
     sendFailStreak = 0;
-    awaitingSendOk = false;            // ★ 2단계: 소켓이 닫혔다 — 그 SEND OK 는 영영 오지 않는다
     // 닫혔다는 통보다 — 낡은 소켓 의심이 해소됐다. 사다리도 내려온다.
     staleSocket = false;
     closeAttempts = 0;
@@ -2085,31 +1978,7 @@ static void handleLine(char* s) {
       startSocketRecovery();
       return;
     }
-    // ── 2단계: `SEND OK` — ESP 가 **앞 전송을 실제로 마쳤다**고 알려주는 신호 ──────
-    // 지금까지 이 줄을 **아무도 안 봤다.** 그래서 고정 80ms 추측으로 대신했고, 그 추측이
-    // 틀리는 순간이 `busy s...` 였다. 여기서 대기를 푸는 것이 2단계의 전부다.
-    // ⚠ `strstr` 이 아니라 접두 비교인 이유: 서버 프레임에 우연히 "SEND OK" 가 섞여도
-    //   여기까지 오지 않지만(데이터 줄은 맨 앞에서 갈린다), 판정은 좁을수록 좋다.
-    if (strncmp(s, "SEND OK", 7) == 0) {
-      awaitingSendOk = false;
-      return;
-    }
-    // ── 2단계: `SEND FAIL` — **원래 있던 구멍이다** ──────────────────────────────
-    // 이건 `busy`(거부)와도 무응답(프롬프트 놓침)과도 **완전히 다른 사건**이다:
-    // 프롬프트까지 정상으로 받고 페이로드도 다 썼는데 **전송이 실패한 것** = 진짜 송신 실패.
-    // 그런데 sendLine 은 `>` 를 봤다는 이유로 이미 `noteSendResult(true)` 를 불러
-    // **연속 카운터를 0 으로 되돌린 뒤**였다. 즉 프레임이 안 나갔는데 성공으로 세고 있었다.
-    // ⚠ 이중 계수가 아니다 — 그 성공 계상을 **여기서 되돌리는** 것이다.
-    if (strncmp(s, "SEND FAIL", 9) == 0) {
-      awaitingSendOk = false;
-      if (sendFails < 65535) sendFails++;
-#if DEBUG
-      Serial.println(F("[NET] ★ SEND FAIL — 페이로드까지 썼는데 전송이 실패했다. 실패로 센다"));
-#endif
-      noteSendResult(false);
-      return;
-    }
-    if (strstr(s, "ERROR") || strstr(s, "busy")) {
+    if (strstr(s, "SEND FAIL") || strstr(s, "ERROR") || strstr(s, "busy")) {
 #if DEBUG
       Serial.print(F("[NET] 송신 오류 응답(로그만, 카운터는 sendLine 이 센다): "));
       Serial.println(s);
@@ -2320,12 +2189,6 @@ static void statusTick(unsigned long now) {
     Serial.print(stallBusy);
     Serial.print(F(" / 무응답 ")); Serial.print(stallTimeout);
     Serial.print(F(" / 거부 "));   Serial.print(stallReject);
-    // ★ 2단계 진단 — 정지의 원인이 **2단계 자신**일 수 있다. 그것을 숨기지 않는다.
-    //   `건너뜀` 이 크고 `SENDOK상한` 이 0 이면 ESP 가 계속 전송 중이라는 뜻이고,
-    //   `SENDOK상한` 이 크면 **`SEND OK` 를 못 받고 있다**는 뜻이라 원인이 정반대다.
-    Serial.print(F(" · 건너뜀 "));     Serial.print(sendSkips);
-    Serial.print(F(" / SENDOK상한 ")); Serial.print(sendOkTimeouts);
-    Serial.print(F(" / SENDFAIL "));   Serial.print(sendFails);
     Serial.println(F(") → 링크를 다시 세운다"));
 #endif
     stallBusy = stallTimeout = stallReject = 0;

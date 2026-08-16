@@ -3,9 +3,9 @@ id: REQ-0112
 title: 재가동 3단계 — 파서를 계약에 맞추고 대기 · 신호 오면 tap 재개 · 새 기준선은 따로 연다
 from: root
 to: monitor-engineer
-status: open
+status: claimed
 created: 2026-08-16T16:48:09+0900
-updated: 2026-08-16T16:54:51+0900
+updated: 2026-08-16T18:50:23+0900
 files: ["monitor/serial_tap.py", "monitor/tick.py", "monitor/soak_stats.py"]
 parent: none
 ---

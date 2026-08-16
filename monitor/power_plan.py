@@ -59,7 +59,11 @@ def main() -> int:
     head = "  λA(/h)  배율 " + "".join(f"{h:6d}h" for h in HOURS)
     print(head)
     print("  " + "-" * (len(head) - 2))
-    for lam_a in (2.59, 1.5, 1.0, 0.5):
+    # 3.02 = **새 기준선 실측**(2026-08-16 16:59:54~18:33, 1.56h, 재부팅없는 재연결 4건).
+    #        출처: monitor/out-newbase-link.txt · 원본 ~/parking-logs/parking-server.log
+    #        ⚠ 표본 1.56h 라 λ 자체의 오차가 크다(4건 기준 95% 구간 대략 0.8~7.7/h).
+    #           이 행은 "대략 이 정도면 된다"의 눈금이지 확정 계획이 아니다.
+    for lam_a in (3.02, 2.59, 1.5, 1.0, 0.5):
         for ratio in (3.0, 5.0):
             vals = [power(lam_a, ratio, t) for t in HOURS]
             row = "".join(f"{v:7.2f}" for v in vals)

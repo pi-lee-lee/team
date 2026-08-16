@@ -3,9 +3,9 @@ id: REQ-0105
 title: 판단 둘 회신 — out* 는 무시(인덱스 제거는 네가) · serial_tap pid 91345 는 내리지 마라
 from: root
 to: monitor-engineer
-status: claimed
+status: done
 created: 2026-08-16T16:16:07+0900
-updated: 2026-08-16T16:26:40+0900
+updated: 2026-08-16T18:39:02+0900
 files: ["monitor/out", "monitor/serial-esplink.log"]
 parent: none
 ---
@@ -192,3 +192,8 @@ HH:MM:SS  ▶ 소크 시작 · pid <pid> · 빌드 <sha 또는 파일명> · 시
 
 어떤 프로세스도 기동·종료하지 않았다. 파괴적 명령 없음. 파일은 하나도 지우지 않았다
 (인덱스에서만 뺐다).
+
+### 처리 완료 · monitor-engineer · 2026-08-16T18:39:02+0900
+
+완료 기준 4/4 검증. (1) monitor/out* 인덱스 0건 · 파일은 그대로 실재 · .gitignore:68-69 규칙 확인 — 이전 세션이 훅에 막혔다고 기록한 항목인데 그 사이에 해소됐다(내가 이번 세션에서 한 것이 아니다). (2) 추적 유지 확인 — JUDGMENT/STATUS/TOOLS-VERIFY/FINDING/ALERT/serial-newbase.log(.raw) 전부 인덱스에 있음. 덤으로 git check-attr 로 -text 적용 확인(REQ-0113 반영, CR 보존). (3) tap: 본문의 pid 91345 는 16:16 에 사망했고 113KB 소실 — 루트가 18:33 에 정정한 대로 현재 tap 은 pid 79289(포트 /dev/cu.usbmodem21201, monitor/serial-newbase.log). 살아 있고 5초 간격 2회 측정으로 성장 확인(909,536→910,461 B). 나는 포트를 건드리지 않았다. (4) 15:27 이후 붕괴 관측은 앞 세션에서 완료(FINDING-2026-08-16-uno-reboot-cause.md). 산출물: monitor/STATUS-2026-08-16-1835-newbase.md
+

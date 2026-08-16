@@ -3,9 +3,9 @@ id: REQ-0113
 title: 원시 시리얼 캡처가 커밋에서 CR 661개를 잃었다 — .gitattributes 에 -text 필요
 from: monitor-engineer
 to: root
-status: open
+status: done
 created: 2026-08-16T17:03:40+0900
-updated: 2026-08-16T17:03:40+0900
+updated: 2026-08-16T18:33:24+0900
 files: [".gitattributes"]
 parent: none
 ---
@@ -94,3 +94,8 @@ monitor/serial-* -text -diff
      team/bin/req.sh done REQ-0113 --by root --note "<한 줄 요약>" -->
 
 _(미처리)_
+
+### 처리 완료 · root · 2026-08-16T18:33:24+0900
+
+gitattributes 에 -text 규칙 적용 완료. 검증: check-attr 가 monitor/serial-newbase.log 및 .raw 에 text unset 을 돌려주고, HEAD 커밋본의 .raw 가 CR 18435 개를 그대로 보존한다(작업트리 20030 개는 tap 이 계속 추가 중이라 늘어난 것). 다만 이 수정 이전 커밋들에는 CR 이 벗겨진 사본이 그대로 남아 있다 — 옛 커밋을 상대로 바이트 수준 판정을 하지 마라.
+

@@ -1213,7 +1213,11 @@ struct Server {
 
     // ---------- 이음매: 디바이스 → 도메인 (REQ-0096 단계 C)
     // **디바이스 계층은 이것만 부른다.** 무엇을 할지는 도메인이 정한다.
-    void emit_dev(uint8_t kind, const std::string& dev, const std::string& reason) {
+    // **방금 넣은 이벤트의 참조를 돌려준다.** 호출자가 `pending_events.back()` 을 다시 집으면
+    // "emit_dev 는 반드시 push 한다"는 전제가 코드가 아니라 우연에 걸린다 — 나중에 여기에
+    // 조기 반환(중복 억제·devid 가드·상한)이 하나 들어오는 순간 빈 벡터에 back() 을 부른다.
+    // 경고 0 · 자가검증 통과로 다 빠져나가고 운영에서만 터지는 형태다.
+    DeviceEvent& emit_dev(uint8_t kind, const std::string& dev, const std::string& reason) {
         DeviceEvent e;
         seam_clear_event(&e);
         e.kind = kind;
@@ -1229,6 +1233,17 @@ struct Server {
             e.reason[n] = '\0';
         }
         pending_events.push_back(e);
+        return pending_events.back();
+    }
+
+    // DEV_ACK 전용 — 계약(`server_seam.h`)이 `rid`·`result` 를 정의해 뒀으므로 **채워서 낸다.**
+    // 지금 소비자는 이 둘을 안 읽지만, 0 으로 두면 이벤트가 "rid 0 번 명령의 성공"이라고
+    // 거짓말한다. 값이 있는데 안 싣는 것과 없는 것은 다르다.
+    void emit_dev_ack(const std::string& dev, uint16_t rid, uint8_t result,
+                      const std::string& reason) {
+        DeviceEvent& e = emit_dev(DEV_ACK, dev, reason);   // 반환 참조를 쓴다(back() 아님)
+        e.rid    = rid;
+        e.result = result;
     }
 
     // 도메인이 이벤트를 소비한다. `run()` 루프 끝에서 한 번에 부른다.
@@ -1241,6 +1256,13 @@ struct Server {
             switch (pending_events[i].kind) {
                 case DEV_DISCONNECT:
                     need_snapshot = true;   // 화면에 "센서 끊김"이 뜨게(옮기기 전과 동일)
+                    break;
+                case DEV_ACK:
+                    // 옮기기 전 A 분기 끝의 `write_log_if_changed(); push_snapshot();` 과 같다.
+                    // ⚠ **예약 상태 변경(slots[])은 아직 A 분기에 그대로 있다.** 그것까지 옮기면
+                    // `send_ack` 와 상태 변경의 순서가 바뀐다 — 이음매 1 의 마지막(DEV_SENSORS)에서
+                    // 같은 문제를 한꺼번에 다룬다. 여기서는 **기록·화면만** 옮긴다.
+                    need_log = true; need_snapshot = true;
                     break;
                 case DEV_ONLINE:
                 case DEV_OFFLINE:
@@ -1675,8 +1697,12 @@ struct Server {
             // 테스트 결과는 여기서 상태에 반영하지 않는다 — 무장/오버라이드의 진실은
             // 다음 S 프레임의 tmask 다(§12A.4). ACK 는 "명령이 처리됐다"까지만 말한다.
             if (p.ws_fd != BAD_SOCK) send_ack(p.ws_fd, p.browser_rid, slot, result, p.kind);
-            write_log_if_changed();
-            push_snapshot();
+            // 이음매 1: 직접 호출 → 이벤트. **같은 틱의 drain 이 같은 일을 한다**(2481행).
+            // 한 틱에 ACK 가 여러 건 겹치면 기록·화면이 건별 → 1회로 접힌다 — 이미 옮긴
+            // 3종과 같은 성질이고, 브라우저가 보는 최종 상태는 같다.
+            emit_dev_ack(park_dev, rid, (uint8_t)result,
+                         std::string("ACK ") + p.kind + " " + slot
+                         + " result=" + std::to_string(result));
         }
         else {
             drop_unknown++;
