@@ -3,9 +3,9 @@ id: REQ-0122
 title: 화면이 서버에서 무엇을 읽는지 목록화하라 — 곧 오프라인→무프레임 이름이 바뀐다 (트래픽 금지)
 from: root
 to: web-engineer
-status: open
+status: claimed
 created: 2026-08-16T18:00:45+0900
-updated: 2026-08-16T18:00:45+0900
+updated: 2026-08-16T18:01:41+0900
 files: ["조별과제샘플/index.html"]
 parent: none
 ---
