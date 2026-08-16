@@ -368,3 +368,6 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T18:01:41+0900 | 착수 | REQ-0122 | web-engineer → web-engineer | 화면이 서버에서 무엇을 읽는지 목록화하라 — 곧 오프라인→무프레임 이름이 바뀐다 (트래픽 금지) |
 | 2026-08-16T18:10:23+0900 | 발행 | REQ-0123 | web-engineer → socket-engineer | 개명 범위 확인: 오프라인→무프레임 이 전선 JSON 키(device.online / device_offline)까지 오는가 |
 | 2026-08-16T18:11:28+0900 | 완료 | REQ-0122 | web-engineer → web-engineer | 화면이 서버에서 무엇을 읽는지 목록화하라 — 곧 오프라인→무프레임 이름이 바뀐다 (트래픽 금지) |
+| 2026-08-16T18:13:38+0900 | 진행 | REQ-0118 | socket-engineer → socket-engineer | 서버 구조 작업 재개 — 잃은 계획서 복구 · (A) 재부팅 오보 결함 · 리팩터링 단계 C — 단계 C 조각1·2 완료(시험 인스턴스 검증, 미배포): server_seam.h include + pending_events 큐 + DEV_DISCONNECT 3곳(표에 없던 send_ard 포함) + DEV_ONLINE/OFFLINE 2곳. 각 조각 경고0·자가검증·실왕복. 추가로 (A) 분류 결함 자체 발견·수정 — 되감김만 보면 '재부팅인데 공백이 길어 uptime 이 옛값을 넘는' 경우를 놓친다. 공백 G 기준으로 교체하고 재현 검증(uptime 3→8·공백21초를 재부팅으로 정확히 잡음) |
+| 2026-08-16T18:14:13+0900 | 착수 | REQ-0123 | socket-engineer → socket-engineer | 개명 범위 확인: 오프라인→무프레임 이 전선 JSON 키(device.online / device_offline)까지 오는가 |
+| 2026-08-16T18:14:54+0900 | 완료 | REQ-0123 | socket-engineer → socket-engineer | 개명 범위 확인: 오프라인→무프레임 이 전선 JSON 키(device.online / device_offline)까지 오는가 |

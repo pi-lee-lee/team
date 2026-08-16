@@ -1130,6 +1130,9 @@ function render() {
   renderTestMode();
 
   const armed = isArmed();
+  /* 주입 조작을 보낼 곳이 있는가. 무장 표시(§12A.6)와는 **다른 축**이다 —
+     폴백은 "무장인 것은 맞는데 조작은 못 한다"가 정확한 상태다. */
+  const cmdReason = canAct() ? '' : ('주입 명령을 보낼 수 없습니다 — ' + actionBlockedReason());
   const slots = state.snapshot ? state.snapshot.slots : SLOT_IDS.map(function (id) {
     return { id: id, occupied: 0, reserved: 0, user_id: null, reserved_at: null, overridden: 0, known: false };
   });
@@ -1156,7 +1159,19 @@ function render() {
     const pressed1 = injected && slot.occupied === 1;
     t.inject.set0.setAttribute('aria-pressed', pressed0 ? 'true' : 'false');
     t.inject.set1.setAttribute('aria-pressed', pressed1 ? 'true' : 'false');
-    t.inject.clear.setAttribute('aria-disabled', injected ? 'false' : 'true');
+
+    /* 🔴 폴백에서 무장이 보이게 된 것의 부작용(REQ-0122). `body.is-armed .inject` 가
+       칸마다 조작 버튼 3개를 띄우는데, 예전에는 폴백에서 armed 가 항상 null 이라 이 줄이
+       한 번도 안 돌았다. 이제는 돈다 — 그런데 **폴백에는 보낼 경로가 없다.**
+       누르면 sendCommand() 의 canAct() 가 막아 주므로 트래픽은 안 생기지만,
+       살아 있는 것처럼 보이는 버튼 30개가 시연 중에 뜨는 것 자체가 문제다.
+       무장 표시는 남기고(§12A.6 의 요구) 조작만 죽인다. */
+    t.inject.set0.setAttribute('aria-disabled', cmdReason ? 'true' : 'false');
+    t.inject.set1.setAttribute('aria-disabled', cmdReason ? 'true' : 'false');
+    t.inject.set0.dataset.reason = cmdReason;
+    t.inject.set1.dataset.reason = cmdReason;
+    t.inject.clear.setAttribute('aria-disabled', (cmdReason || !injected) ? 'true' : 'false');
+    t.inject.clear.dataset.reason = cmdReason || '주입된 값이 없어 해제할 것이 없습니다';
   }
 
   // 스냅샷이 막 도착했을 때 1초를 기다리지 않고 즉시 신선도 표시를 걷기 위해 여기서도 한 번 민다.
@@ -1704,8 +1719,10 @@ el.grid.addEventListener('click', function (event) {
   const slot = btn.dataset.slot;
   const action = btn.dataset.inject;
   if (btn.getAttribute('aria-disabled') === 'true') {
-    /* 타일 핸들러는 closest('.tile') 로 걸러지므로 여기서 막을 필요가 없다 */
-    showMessage(slot + ' · 주입된 값이 없어 해제할 것이 없습니다', 'info');
+    /* 타일 핸들러는 closest('.tile') 로 걸러지므로 여기서 막을 필요가 없다.
+       이유는 버튼이 들고 있다 — "해제할 것이 없다"와 "보낼 경로가 없다"는 다른 사정이고,
+       폴백에서 후자를 전자로 말하면 사용자가 엉뚱한 것을 고치러 간다. */
+    showMessage(slot + ' · ' + (btn.dataset.reason || '주입된 값이 없어 해제할 것이 없습니다'), 'info');
     return;
   }
   if (action === 'clear') sendCommand('test_clear', slot, null);

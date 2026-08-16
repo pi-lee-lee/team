@@ -53,6 +53,11 @@ learn/
 조별과제샘플/data_log.json
 조별과제샘플/data_log.json.tmp
 
+# 호스트 테스트를 컴파일한 실행 파일. 소스에서 언제든 다시 만든다.
+# (2026-08-16: stage1_test.bin 이 커밋에 섞여 들어왔다 — 매 실행마다 다시 올라온다)
+arduino/test/*.bin
+arduino/test/*.out
+
 # monitor 집계 도구가 tick 마다 다시 만드는 산출물. 원본 로그에서 언제든 재생성된다.
 #
 # ⚠ 무시 = git clean 에 취약이다. 2026-08-16 사고가 정확히 그 경로였다.

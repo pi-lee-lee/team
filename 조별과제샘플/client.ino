@@ -26,7 +26,14 @@
 #include <stdio.h>
 #include <string.h>
 
+// ⚠ `#ifndef` 로 감싼 이유 (REQ-0116): 후보 ④(진단 출력이 AT 타이밍을 미는가)를 재려면
+//   **소스를 고치지 않고** `DEBUG=0` 빌드를 만들 수 있어야 한다. 소스를 고쳐 가며 구우면
+//   두 팔의 차이가 DEBUG 뿐이라는 보장이 깨진다.
+//     arduino-cli compile --build-property "compiler.cpp.extra_flags=-DDEBUG=0" ...
+//   기본값은 1 그대로이므로 평소 빌드는 바이트가 변하지 않는다(확인함).
+#ifndef DEBUG
 #define DEBUG 1
+#endif
 
 // ─────────────────────────────────────────────────────────────────────────
 // 부팅 원인 기록 (REQ-0071 사실 4)

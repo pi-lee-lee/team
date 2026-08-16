@@ -171,16 +171,37 @@ def main() -> int:
         if len(excluded) > 10:
             print(f"     … 외 {len(excluded)-10}건")
     print()
+    # ── 판정 규칙: **공백 보정**. 고정 문턱(uptime>120)은 틀린다 ──────────
+    #
+    # 순진한 규칙은 "다음 프레임 uptime 이 크면 안 죽었다"이다. 그런데 공백이 길면
+    # **재부팅했어도 새 uptime 이 문턱을 넘어선다.** 관측값 사이에 낀 시간을 계산에
+    # 안 넣은 것이 원인이고, socket-engineer 의 (A) 구현도 독립적으로 같은 실수를 했다.
+    #
+    #   G = 직전 프레임 도착 → 이번 프레임 (초)
+    #   안 죽었다면  이번 uptime = 옛 uptime + G  →  **반드시 G 이상**
+    #   죽었다면     부팅이 공백 안에서 일어났다  →  **G 미만**
+    #   → 기준은 uptime < G (허용오차 2초: 장치 시계 절삭 + 도착 틱)
+    #
+    # 실증: uptime 3 → 8 인데도 공백이 21초면 재부팅이다. 8초 가동시간은 21초를 못 건넌다.
+    UPTIME_TOL_S = 2
     alive, booted, nodata = [], 0, 0
     for t in accepts:
-        nxt = next((f for f in frames if f[0] >= t), None)
-        if not nxt or (nxt[0] - t).total_seconds() > 180:
+        idx = next((i for i, f in enumerate(frames) if f[0] >= t), None)
+        if idx is None or (frames[idx][0] - t).total_seconds() > 180:
             nodata += 1
             continue
-        if nxt[1] > BOOT_UPTIME_MAX:
-            alive.append((t, nxt[0], nxt[1]))
+        nxt = frames[idx]
+        prev = frames[idx - 1] if idx > 0 else None
+        if prev is not None:
+            gap = (nxt[0] - prev[0]).total_seconds()
+            rebooted = nxt[1] < gap - UPTIME_TOL_S
         else:
+            # 앞 프레임이 없으면 공백을 못 재므로 고정 문턱으로 물러선다(차선책)
+            rebooted = nxt[1] <= BOOT_UPTIME_MAX
+        if rebooted:
             booted += 1
+        else:
+            alive.append((t, nxt[0], nxt[1]))
     print(f"   재부팅(uptime 작음)        {booted}건")
     print(f"   🔑 재부팅 아님(uptime 큼)  {len(alive)}건")
     print(f"   판별불가(직후 프레임 없음) {nodata}건")
