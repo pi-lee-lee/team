@@ -1,3 +1,21 @@
+---
+id: REQ-0131
+title: AT+CIPSEND → SEND OK 실측 지연 분포를 재 달라 — SEND_OK_TIMEOUT_MS 임계값 근거 (A 판정 파서 변경 아님)
+from: arduino-engineer
+to: monitor-engineer
+status: claimed
+created: 2026-08-16T19:06:50+0900
+updated: 2026-08-16T19:07:58+0900
+files: ["monitor/serial-newbase.log (읽기전용 측정)"]
+parent: none
+---
+
+# REQ-0131 · AT+CIPSEND → SEND OK 실측 지연 분포를 재 달라 — SEND_OK_TIMEOUT_MS 임계값 근거 (A 판정 파서 변경 아님)
+
+**요청자** `arduino-engineer` → **담당** `monitor-engineer`
+
+## 요청 내용
+
 # `AT+CIPSEND` → `SEND OK` 실측 지연 분포를 재 달라 — 2단계 임계값의 근거로 쓴다
 
 ## 🔴 먼저: 이건 **A 판정 파서를 바꾸라는 요청이 아니다**
@@ -78,3 +96,23 @@ A 창의 판정 파이프라인은 그대로 두고, **읽기 전용 측정 하�
 01:53 이후에 굽고, 순서상 내 플래싱은 **조건부**다(루트 확정). A 창이 계속 도는 동안
 표본이 늘수록 좋으니 **A 창이 닫힐 때 8시간분으로 한 번에 내도 된다.**
 지금 급히 1.5시간분으로 낼 필요는 없다 — **꼬리를 보는 것이 목적이라 표본이 많을수록 낫다.**
+
+## 왜 필요한가
+
+SEND_OK_TIMEOUT_MS=2000 이 추측값이다. 굽기 전에 실측으로 정할 수 있는데 그 자료가 지금 A 창에 쌓이는 중이다.
+
+## 대상 파일
+
+- `monitor/serial-newbase.log (읽기전용 측정)`
+## 완료 기준
+
+정상 갈래의 Δ 히스토그램(0/1/2/3/4+초 각각 건수)·최대 Δ 와 그 시각·표본 수(정상/비정상)가 나온다 · 서브초 정밀도를 만들어내지 않는다 · 동결과 부딪히면 하지 말고 사유 회신
+
+---
+
+## 처리 결과
+
+<!-- 담당자가 여기에 적는다. 처리 후 반드시:
+     team/bin/req.sh done REQ-0131 --by monitor-engineer --note "<한 줄 요약>" -->
+
+_(미처리)_

@@ -1,0 +1,127 @@
+{
+  "base": "http://127.0.0.1:10000/",
+  "results": [
+    {
+      "name": "페이지가 연 WebSocket 은 정확히 하나",
+      "ok": true,
+      "detail": "[\"ws://127.0.0.1:10000/ws\"]"
+    },
+    {
+      "name": "그 대상이 시험 인스턴스다 (ws://127.0.0.1:10000/ws)",
+      "ok": true,
+      "detail": "ws://127.0.0.1:10000/ws"
+    },
+    {
+      "name": "🔴 운영 포트로 새지 않았다",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "푸터가 실제 접속 대상을 말한다",
+      "ok": true,
+      "detail": "ws://127.0.0.1:10000/ws"
+    },
+    {
+      "name": "연결 상태가 WebSocket 연결됨",
+      "ok": true,
+      "detail": "WebSocket 연결됨"
+    },
+    {
+      "name": "10칸이 그려졌다",
+      "ok": true,
+      "detail": "10"
+    },
+    {
+      "name": "칸이 \"상태 미상\"에서 벗어났다 (서버 값이 실제로 반영됐다)",
+      "ok": true,
+      "detail": "[{\"slot\":\"A1\",\"state\":\"빈 자리\",\"meta\":\"눌러서 예약\"},{\"slot\":\"A2\",\"state\":\"빈 자리\",\"meta\":\"눌러서 예약\"},{\"slot\":\"A3\",\"state\":\"빈 자리\",\"meta\":\"눌러서 예약\"}]"
+    },
+    {
+      "name": "장치 ID 가 표시된다",
+      "ok": true,
+      "detail": "P1"
+    },
+    {
+      "note": "스크린샷 web/artifacts/1-ws-connected.png"
+    },
+    {
+      "note": "대상 칸 A1"
+    },
+    {
+      "note": "브라우저 사용자 uduob5ab"
+    },
+    {
+      "name": "확인 대화상자가 열렸다 (키보드 접근 가능한 <dialog>)",
+      "ok": true,
+      "detail": "예약하시겠습니까?"
+    },
+    {
+      "note": "스크린샷 web/artifacts/2-confirm-dialog.png"
+    },
+    {
+      "name": "브라우저가 예약 요청을 전선으로 보냈다",
+      "ok": false,
+      "detail": "[]"
+    },
+    {
+      "name": "서버가 장치로 R 을 내보냈다 (→ARD R,…,A1)",
+      "ok": true,
+      "detail": "→ARD R,3,A1,uduob5ab,4E"
+    },
+    {
+      "name": "장치가 A 로 응답했다 (←ARD A)",
+      "ok": true,
+      "detail": "←ARD A,3,A1,0,32"
+    },
+    {
+      "name": "서버 ACK 가 브라우저까지 돌아왔다",
+      "ok": true,
+      "detail": "{\"type\":\"ack\",\"rid\":\"r1-dgr9wh\",\"slot\":\"A1\",\"result\":0,\"message\":\"예약되었습니다\"}"
+    },
+    {
+      "name": "🔴 화면이 예약을 반영했다 (4ms)",
+      "ok": false,
+      "detail": "빈 자리"
+    },
+    {
+      "note": "스크린샷 web/artifacts/3-reserved.png"
+    },
+    {
+      "name": "예약이 취소돼 원래 상태로 돌아왔다",
+      "ok": true,
+      "detail": "빈 자리"
+    },
+    {
+      "name": "스냅샷 프레임을 받았다",
+      "ok": true,
+      "detail": "8개"
+    },
+    {
+      "note": "device 키: [\"online\",\"device_id\",\"uptime\",\"seq\"]"
+    },
+    {
+      "name": "🔴 device.last_frame_ts 가 WS 스냅샷에 없다 (신선도 표시가 주 경로에서 안 도는 원인)",
+      "ok": true,
+      "detail": "[\"online\",\"device_id\",\"uptime\",\"seq\"]"
+    },
+    {
+      "note": "스냅샷 원문 web/artifacts/ws-snapshot.json"
+    },
+    {
+      "note": "화면의 \"마지막 프레임\" 표시 = \"알 수 없음 (이 경로에는 이 정보가 없습니다)\""
+    },
+    {
+      "name": "폴백 시험용 죽은 포트가 운영 포트가 아니다",
+      "ok": true,
+      "detail": "52474"
+    },
+    {
+      "name": "실행 중 예외",
+      "ok": false,
+      "detail": "페이지 예외: TypeError: Cannot read properties of null (reading 'textContent')\n    at <anonymous>:1:37"
+    },
+    {
+      "note": "스크린샷 web/artifacts/error.png"
+    }
+  ]
+}

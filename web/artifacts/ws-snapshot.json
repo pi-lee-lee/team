@@ -1,0 +1,96 @@
+{
+  "type": "snapshot",
+  "ts": 1786874839649,
+  "device": {
+    "online": true,
+    "device_id": "P1",
+    "uptime": 330,
+    "seq": 331
+  },
+  "test_mode": {
+    "armed": false,
+    "override_count": 0
+  },
+  "slots": [
+    {
+      "id": "A1",
+      "occupied": 0,
+      "reserved": 0,
+      "user_id": null,
+      "reserved_at": null,
+      "overridden": 0
+    },
+    {
+      "id": "A2",
+      "occupied": 0,
+      "reserved": 0,
+      "user_id": null,
+      "reserved_at": null,
+      "overridden": 0
+    },
+    {
+      "id": "A3",
+      "occupied": 0,
+      "reserved": 0,
+      "user_id": null,
+      "reserved_at": null,
+      "overridden": 0
+    },
+    {
+      "id": "A4",
+      "occupied": 0,
+      "reserved": 0,
+      "user_id": null,
+      "reserved_at": null,
+      "overridden": 0
+    },
+    {
+      "id": "A5",
+      "occupied": 0,
+      "reserved": 0,
+      "user_id": null,
+      "reserved_at": null,
+      "overridden": 0
+    },
+    {
+      "id": "B1",
+      "occupied": 0,
+      "reserved": 0,
+      "user_id": null,
+      "reserved_at": null,
+      "overridden": 0
+    },
+    {
+      "id": "B2",
+      "occupied": 0,
+      "reserved": 0,
+      "user_id": null,
+      "reserved_at": null,
+      "overridden": 0
+    },
+    {
+      "id": "B3",
+      "occupied": 0,
+      "reserved": 0,
+      "user_id": null,
+      "reserved_at": null,
+      "overridden": 0
+    },
+    {
+      "id": "B4",
+      "occupied": 0,
+      "reserved": 0,
+      "user_id": null,
+      "reserved_at": null,
+      "overridden": 0
+    },
+    {
+      "id": "B5",
+      "occupied": 0,
+      "reserved": 0,
+      "user_id": null,
+      "reserved_at": null,
+      "overridden": 0
+    }
+  ]
+}
