@@ -77,7 +77,16 @@ class FakeArduino:
     def __init__(self, args):
         self.args = args
         self._was_muted = False       # --mute-every 전이 로그용
+        self._down_until = 0.0        # --downlink-die 후 재접속 금지 시각
+        self._mute_i = 0              # --mute-sweep 순환 인덱스
         self.reset_state(first=True)
+
+    def mute_len(self):
+        """이번 침묵의 길이. --mute-sweep 이 있으면 주기마다 다음 값을 쓴다."""
+        if self.args.mute_sweep:
+            vals = [float(x) for x in self.args.mute_sweep.split(",") if x.strip()]
+            return vals[self._mute_i % len(vals)]
+        return self.args.mute_for
 
     # --- 상태 -------------------------------------------------------------
     def reset_state(self, first=False):
@@ -355,13 +364,16 @@ class FakeArduino:
             muted = False
             if self.args.mute_every > 0:
                 phase = (now - session_start) % self.args.mute_every
-                if phase < self.args.mute_for:
+                cur = self.mute_len()
+                if phase < cur:
                     muted = True
                     if not self._was_muted:
-                        say("!", "침묵 시작 %.1f초 — 소켓은 유지한다(서버는 %.1f초까지 온라인으로 본다)"
-                            % (self.args.mute_for, 3.5))
+                        say("!", "침묵 시작 %.1f초 — 소켓 유지. 서버 오프라인 판정은 3.5초다 → "
+                                 "이번 것은 %s"
+                            % (cur, "**보인다**(3.5초 초과)" if cur > 3.5 else "안 보인다(3.5초 이하)"))
                 elif self._was_muted:
-                    say("*", "침묵 끝 — S 프레임 재개")
+                    say("*", "침묵 끝(%.1f초) — S 프레임 재개" % cur)
+                    self._mute_i += 1          # 다음 주기에 스윕 다음 값
                 self._was_muted = muted
 
             bits_now = (self.bits(self.eff_occupied()), self.bits(self.reserved), self.tmask())
@@ -386,6 +398,18 @@ class FakeArduino:
                 if not chunk:
                     say("-", "서버가 연결을 닫았다")
                     s.close()
+                    return
+                # --- 하행을 받고 죽는 흉내 (§ web 경우 C · 루트 지시)
+                #
+                # 🔴 **(b) before-recv — 받지도 못하고 끊긴다.**
+                # 바이트가 온 것을 알자마자 **파싱도 적용도 ACK 도 없이** 소켓을 닫는다.
+                # 실물 창4(07:54:35)가 이 모양이었다: 서버는 3회 재전송했고 장치 `+IPD` 는 0건.
+                # → 서버는 `ack_timeout`, 장치 상태는 **안 바뀐다.**
+                if self.args.downlink_die == "before-recv":
+                    say("!", "[die:before-recv] 하행 %d바이트 도착 — **읽지 않고** 소켓을 닫는다 "
+                             "(장치 상태 안 바뀜 · 서버는 ack_timeout 을 보게 된다)" % len(chunk))
+                    s.close()
+                    self._down_until = time.time() + self.args.down_for
                     return
                 buf.extend(chunk)
             except socket.timeout:
@@ -448,6 +472,27 @@ class FakeArduino:
         else:
             slot, result = self.handle_request(kind, rid, slot)
         ack = build("A,%s,%s,%d," % (rid, slot, result))
+
+        # --- 🔴 (a) after-apply — **적용은 했는데 ACK 없이 소켓을 닫는다**
+        #
+        # 이것이 화면↔장치 불일치의 **최악 경로**다:
+        #   장치: 예약을 **적용했다**  /  서버: `ack_timeout` → 화면 **롤백**
+        # `--drop-rate` 와 다른 점은 **소켓까지 닫는다**는 것이다. 재전송이 멱등 캐시에
+        # 닿을 기회조차 없앤다 — 실물에서 리셋으로 끊겼을 때의 모양이다.
+        #
+        # ⚠ 서버는 이 갈림을 **다음 S 프레임에서 스스로 고친다**(server.cpp:1674-1684:
+        # 아두이노가 reserved=1 인데 서버가 0 이고 pending 이 없으면 `C` 재하달).
+        # **그 자가 치유가 실제로 도는지가 이 모드로 재려는 것이다.**
+        if self.args.downlink_die == "after-apply":
+            say("!", "[die:after-apply] 적용했지만 ACK 를 **안 보내고** 소켓을 닫는다: %s"
+                     % ack.rstrip())
+            say("!", "  → 장치는 적용됨 / 서버는 ack_timeout. 다음 S 에서 서버가 C 로 고치는지 봐라")
+            try:
+                s.close()
+            except OSError:
+                pass
+            self._down_until = time.time() + self.args.down_for
+            raise _DieNow()
 
         # --- ACK 유실 (§6.3 의 결과를 재현). 예약은 이미 반영된 뒤에 버린다 —
         #     그래야 서버 재전송 시 멱등 캐시가 적중하는 진짜 경로를 시험한다.
