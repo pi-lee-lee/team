@@ -36,10 +36,17 @@
 
 `SEND OK` 가 "안 왔다" 는 세 가지다 — 갈라서 낸다
 --------------------------------------------------
-    (a) 왔다                      앵커 뒤에 `SEND OK` 가 나타났고 그 사이 오프라인 전환 없음
-    (b) 오프라인 전환이 먼저 왔다   `전송 3회 연속 실패` 가 `SEND OK` 보다 먼저
+    (a) 왔다                      앵커 뒤에 `SEND OK` 가 나타났고 그 사이 링크가 안 죽었다
+    (b) 링크 붕괴가 먼저 왔다      `전송 3회 연속 실패` 또는 `[DIAG] offline step=` 이 `SEND OK` 보다 먼저
                                   → 그 뒤의 `SEND OK` 는 회복 사다리의 것이지 이 전송의 것이 아니다
     (c) 창 끝까지 없었다           로그가 거기서 끝났다(관측 종료). **'안 온 것'이 아니다**
+
+🔴 2026-08-16 정정 — (b) 의 표지가 `전송 3회 연속 실패` 하나였을 때 **N 칸이 오염됐다.**
+   pre-A `17:06:42` 앵커가 `Δ=9s` 로 N 최대값이 됐는데, 원문을 여니 `ERROR`/`Unlink` 로
+   **링크가 죽고 회복 사다리가 돈 9초**였다. 3진아웃을 거치지 않았으므로 (b) 에 안 걸렸고,
+   다음 주기가 `[TX]` 라서 N 으로 분류됐다.
+   → `[DIAG] offline step=` 을 표지에 더했다. **A 구간의 N 최대값(19:25:33 Δ=2s)은
+     원문 확인 결과 깨끗하다** — 이 정정으로 A 의 결론은 바뀌지 않는다.
 
 사용: python3 monitor/resync_gap.py [로그] [시작ISO] [끝ISO]
 """
@@ -62,7 +69,7 @@ ANCHOR = re.compile(rb"\[TX\] ")            # 뒤 공백 필수 — [TX-DROP]/[T
 RESYNC = b"[TX-RESYNC]"
 SENDOK = b'"SEND OK"'
 BUSY = b'"busy '
-OFFLINE = "전송 3회 연속 실패".encode("utf-8")
+OFFLINE = ("전송 3회 연속 실패".encode("utf-8"), b"[DIAG] offline step=")
 
 # 개입(같은 기계에 시험 서버 인스턴스가 뜬 시각) — mech_timeline.py 와 같은 목록
 LAST_INTERVENTION = datetime(2026, 8, 16, 19, 15, 32)
@@ -127,8 +134,8 @@ def main() -> int:
             tj, bj = rows[j]
             if BUSY in bj:
                 busy_seen = True
-            if OFFLINE in bj:
-                outcome = "b.오프라인전환먼저"
+            if any(k in bj for k in OFFLINE):
+                outcome = "b.링크붕괴먼저"
                 gap = int((tj - t).total_seconds())
                 break
             if SENDOK in bj:
@@ -156,11 +163,11 @@ def main() -> int:
             mx = max(arrived, key=lambda r: r["gap"])
             print(f"   → 최대 Δ = {mx['gap']}s  (앵커 {mx['t']:%m-%d %H:%M:%S})"
                   f"  · 실제 경과는 ({mx['gap']-1}, {mx['gap']+1})초")
-        blocked = [r for r in sub if r["out"] == "b.오프라인전환먼저"]
+        blocked = [r for r in sub if r["out"] == "b.링크붕괴먼저"]
         if blocked:
-            print(f"\n   ### 오프라인 전환이 먼저 온 {len(blocked)}건 — **이 전송의 `SEND OK` 는 오지 않았다**")
+            print(f"\n   ### 링크 붕괴가 먼저 온 {len(blocked)}건 — **이 전송의 `SEND OK` 는 오지 않았다**")
             for r in blocked:
-                print(f"     앵커 {r['t']:%m-%d %H:%M:%S} → {r['gap']}s 뒤 3진아웃"
+                print(f"     앵커 {r['t']:%m-%d %H:%M:%S} → {r['gap']}s 뒤 링크 붕괴"
                       f" · busy {'있음' if r['busy'] else '없음'}")
         nb = sum(1 for r in sub if r["busy"])
         print(f"\n   busy 동반: {nb}/{len(sub)}건")
@@ -172,7 +179,7 @@ def main() -> int:
                   f" · '왔다' {len(qa)}건 · 최대 Δ {qm}s")
 
     print(f"\n{'='*66}\n## 읽는 법")
-    print("  · **P 의 '왔다' 는 상한을 올릴 근거이고, '오프라인전환먼저' 는 올려도 소용없다는 근거다.**")
+    print("  · **P 의 '왔다' 는 상한을 올릴 근거이고, '링크붕괴먼저' 는 올려도 소용없다는 근거다.**")
     print("    둘의 비율이 설계를 가른다 — 어느 한쪽만 인용하지 마라.")
     print("  · Δ 를 '그 CIPSEND 의 응답 시간' 으로 부르지 마라. 그 귀속은 로그가 못 받친다.")
     print("  · 표본이 적으면 건수를 그대로 적어라. 비율로 바꾸지 마라.")

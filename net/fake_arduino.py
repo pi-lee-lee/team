@@ -440,7 +440,13 @@ class FakeArduino:
 def main():
     ap = argparse.ArgumentParser(description="주차 관제 명세대로 동작하는 가짜 아두이노")
     ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=9991)
+    # 🔴 **기본값을 일부러 두지 않는다.** 전에는 9991(= 운영 아두이노 TCP)이 기본값이었고,
+    # `--port` 를 빼먹으면 **가짜 장치가 운영에 붙었다.** 그러면 가짜 프레임이 운영 로그에
+    # 들어가고 **관측자가 그것을 실물로 읽는다** — 조용히 자료를 오염시키는 최악의 형태다.
+    # (원장 §8.2. web 의 `e2e.mjs` 가 같은 이유로 먼저 이렇게 해 뒀다)
+    ap.add_argument("--port", type=int, required=True,
+                    help="시험 인스턴스의 아두이노 TCP 포트. **기본값 없음** — "
+                         "가짜 장치가 운영에 붙는 것을 막으려는 것이다")
     ap.add_argument("--devid", default="P1", help="장치 ID (1~8자)")
     ap.add_argument("--interval", type=float, default=1.0, help="하트비트 주기 초 (기본 1.0 = 1Hz)")
     ap.add_argument("--drop-rate", type=float, default=0.0,
@@ -464,6 +470,20 @@ def main():
                          "견디는지(명세 §2.1 규칙 8) 시험용")
     ap.add_argument("--seed", type=int, default=None, help="난수 시드(재현용)")
     a = ap.parse_args()
+
+    # ── 🔴 운영 포트 차단 (원장 §8.2) — **탈출구를 두지 않는다**
+    #
+    # `ws_probe` 는 관측 전용 예외를 뒀지만 여기는 다르다:
+    # **가짜 장치를 운영에 붙일 정당한 이유가 존재하지 않는다.** 붙는 순간 가짜 S 프레임이
+    # 운영 로그에 섞이고, 그것은 사후에 진짜와 **구별되지 않는다.** 되돌릴 방법이 없는
+    # 오염이라 플래그로도 열지 않는다.
+    PRODUCTION_PORTS = (9991, 9900, 5500)
+    if a.port in PRODUCTION_PORTS:
+        say("!", "🔴 %d 는 운영 포트다. 가짜 장치는 운영에 붙일 수 없다 — 예외 없다." % a.port)
+        say("!", "   가짜 프레임이 운영 로그에 들어가면 사후에 진짜와 구별되지 않는다.")
+        say("!", "   시험 인스턴스를 --port-offset 으로 띄우고 그 포트를 줘라.")
+        return 2
+
     if a.seed is not None:
         random.seed(a.seed)
 
@@ -479,4 +499,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # ⚠ 반환값을 버리면 위 운영 포트 차단이 **종료 코드 0** 을 낸다 —
+    # 막았다고 찍고도 감싼 스크립트에는 성공으로 보인다. 거부는 코드로도 말해야 한다.
+    sys.exit(main() or 0)

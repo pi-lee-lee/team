@@ -127,19 +127,31 @@ kill -TERM <pid>
 
 → 로그 마지막에 `=== INSTANCE-END … reason=normal … ===` 이 남는다.
 
-> 🔴 **`reason=signal` 을 찾지 마라. 그런 값은 존재하지 않는다.**
-> `REQ-0118` §3-2 가 *"`INSTANCE-END reason=signal` 이 남아야 한다"* 고 적었는데
-> **소스에 그 문자열이 없다.** 실제 값은 둘뿐이다:
-> `reason=normal`(L2556) · `reason=port_bind_fail`(L2151).
+> 🔴 **지금 빌드는 `reason=normal` 을 낸다. `signal` 을 기다리면 오판한다.**
+> 실제 값은 둘이다: `reason=normal`(L2556) · `reason=port_bind_fail`(L2151).
 > SIGTERM·SIGINT 는 둘 다 `g_stop=1` 로 정상 루프 종료를 태우므로 **`normal` 이 정상이다.**
-> 실측 확인 2026-08-16 23:35:31 (`pkill -TERM` → `reason=normal frames=0 sessions=0`).
-> **`signal` 을 기다리면 멀쩡한 종료를 실패로 오판한다.**
+> 실측 2026-08-16 23:35:31 (`pkill -TERM` → `reason=normal frames=0 sessions=0`).
+>
+> ⚠ **다만 `signal` 은 "없던 값"이 아니라 "옛 이름"이다.**
+> `337c926` 이 도입했고 **`a091f17` 이 `normal` 로 개명**했다(`git log -S` 확정).
+> 운영 로그 601행에 실물이 남아 있다 —
+> `=== INSTANCE-END pid=72134 stop=2026-08-16T17:06:42+0900 reason=signal ===`.
+> → **`REQ-0118` §3-2 는 틀린 것이 아니라 낡은 것이었다.** 쓰인 시점에는 맞는 값이었다.
+> → **로그를 읽는 도구는 셋 다 받아야 한다.** `normal` 과 `signal` 은 같은 뜻이다.
 
 **(b) 선행 인스턴스가 없을 때 — 이번이 그렇다**
 
-죽었다는 것을 **pid 와 포트로** 확인한다. **로그로 확인하지 마라** — LEDGER §1.2:
-`SIGKILL`·정전·재부팅은 `INSTANCE-END` 를 남길 기회를 주지 않는다. 21:05 이 정확히 그 경우라
-**그 인스턴스에는 END 줄이 영원히 없다.**
+죽었다는 것을 **pid 와 포트로** 확인한다. **로그의 부재로 확인하지 마라** — LEDGER §1.2:
+`SIGKILL`·정전은 `INSTANCE-END` 를 남길 기회를 주지 않으므로 **줄이 없다고 죽은 것도,
+있다고 산 것도 아니다.** 생존은 언제나 pid 다.
+
+> ⚠ **21:05 재부팅은 그 경우가 **아니었다**.** 확인해 보니 pid 75781 은 **정상 종료했다**:
+> `=== INSTANCE-END logfmt=3 pid=75781 stop=2026-08-16T21:04:50+0900 reason=normal
+> frames=10176 sessions=11 ===` (운영 로그 13608행)
+> → OS 가 재시작하며 `SIGTERM` 을 보냈고 서버가 규약대로 닫았다. **`shutdown stall` 기록과도
+> 맞는다**(정상 종료 절차를 밟다가 걸린 것). **강제 종료로 서술하면 안 된다.**
+> → 부수 효과: **A 창 마감 시각 21:04:50 과 프레임 누계 10176·세션 11 이 그 한 줄로 확정된다.**
+> 로그 뒤쪽을 뒤질 필요가 없다(§1.2 가 END 줄에 누계를 실은 이유가 이것이다).
 
 ```bash
 ps -p 75781                              # 없어야 한다

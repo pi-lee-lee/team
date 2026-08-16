@@ -128,7 +128,17 @@ def frames(s, buf, deadline):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=9900)
+    # 🔴 **기본값을 일부러 두지 않는다.** 전에는 9900(= 운영 HTTP/WS)이 기본값이었다.
+    # 그래서 `--port` 를 빼먹은 사람은 **"시험한다"고 생각하면서 운영에 붙었다.**
+    # 포트 분리·flock·로그 분리·chmod 잠금을 전부 통과하는 경로다 — 방어선이 몇 겹이든
+    # **기본값이 운영을 가리키면 그 전부를 우회한다.** (원장 §8.2)
+    # web 의 `web/tools/e2e.mjs` 가 같은 이유로 먼저 이렇게 해 뒀고, 그 방식이 옳다.
+    ap.add_argument("--port", type=int, required=True,
+                    help="시험 인스턴스의 HTTP/WS 포트. **기본값 없음** — "
+                         "운영 포트를 실수로 집지 않게 하려는 것이다")
+    ap.add_argument("--allow-production", action="store_true",
+                    help="운영 포트(9900/9991/5500)에 붙는 것을 허용한다. "
+                         "**관측 전용** — 상태를 바꾸는 요청은 이 플래그로도 안 열린다")
     ap.add_argument("--listen", type=float, default=3.0, help="이 시간(초)만큼 수신하고 끝낸다")
     ap.add_argument("--reserve", metavar="SLOT")
     ap.add_argument("--cancel", metavar="SLOT")
@@ -163,6 +173,34 @@ def main():
                                   "occupied": a.occupied, "rid": a.rid}
         if a.test_clear:  return {"type": "test_clear", "slot": a.test_clear, "rid": a.rid}
         return None
+
+    # ── 🔴 운영 포트 방어 (원장 §8.2)
+    #
+    # **막는 것은 "운영 접속"이 아니라 "운영에 상태 변경을 쏘는 것"이다.**
+    # A 창을 깰 뻔한 것은 관측이 아니라 **예약 한 번**이었다(web REQ-0129). 그래서:
+    #   · 운영 포트 + 상태 변경  → **어떤 플래그로도 안 열린다.** 여기서 죽는다
+    #   · 운영 포트 + 관측만      → `--allow-production` 을 명시해야 열리고, 크게 찍는다
+    #   · 그 외(시험 포트)        → 그냥 돈다
+    #
+    # 관측까지 전면 금지하지 않는 이유: 새벽에 운영을 들여다볼 정당한 이유가 실제로 생기는데,
+    # 그때 도구가 무조건 거부하면 **사람이 압박 속에서 이 파일을 고치게 된다.** 그게 더 나쁘다.
+    PRODUCTION_PORTS = (9900, 9991, 5500)
+    if a.port in PRODUCTION_PORTS:
+        if request() is not None:
+            print("🔴 %d 는 운영 포트다. 상태를 바꾸는 요청(--reserve/--cancel/--sim/--test-*)은\n"
+                  "   운영에 보낼 수 없다. --allow-production 으로도 열리지 않는다.\n"
+                  "   관측 창이 도는 동안 예약 한 번이 기준선을 깬다 — 실제로 그럴 뻔했다.\n"
+                  "   시험 인스턴스를 띄우고 그 포트로 붙어라(--port-offset)." % a.port,
+                  file=sys.stderr)
+            return 2
+        if not a.allow_production:
+            print("🔴 %d 는 운영 포트다. 관측만 할 것이라면 --allow-production 을 명시해라.\n"
+                  "   (기본값을 없앤 이유: 전에는 이 포트가 기본값이라 --port 를 빼먹으면\n"
+                  "    시험한다고 생각하면서 운영에 붙었다 — 원장 §8.2)" % a.port,
+                  file=sys.stderr)
+            return 2
+        print("⚠⚠ 운영 포트 %d 에 **관측 전용**으로 붙는다. 상태 변경은 보내지 않는다.\n"
+              "    개입 기록이 필요하면 req.sh notice 로 남겨라." % a.port, file=sys.stderr)
 
     s = socket.create_connection((a.host, a.port), timeout=5)
     t0 = time.time()
@@ -207,4 +245,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # ⚠ `main()` 만 부르면 **반환값이 버려져 종료 코드가 항상 0** 이 된다.
+    # 그러면 위 운영 포트 방어가 "막았다"고 찍고도 **감싼 스크립트에는 성공으로 보인다.**
+    # 거부는 종료 코드로도 말해야 한다.
+    sys.exit(main() or 0)
