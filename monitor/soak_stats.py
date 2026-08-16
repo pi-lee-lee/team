@@ -37,6 +37,19 @@ from datetime import datetime, date, time as dtime, timedelta
 
 TS_RE = re.compile(rb"^(\d{2}):(\d{2}):(\d{2})\s\s?")
 
+# ── 로그 계약 v0.1 대응 (REQ-0107 에서 socket-engineer 와 확정) ──────────
+# 새 형식은 **모든 줄에 날짜**가 붙고, 기동 시 기계 판독용 경계 줄을 찍는다.
+#   2026-08-16 15:47:19  +? 연결 수락 …
+#   === INSTANCE logfmt=2 pid=… start=<ISO8601> bin=… build=… ports=… offset=0 ===
+#   === INSTANCE-END … reason=… frames=… sessions=… ===
+#
+# ⚠ 설계 원칙: **날짜 없는 옛 로그의 집계 결과가 한 글자도 달라지면 안 된다.**
+#    지금 판정(교정 6/6)이 그 5MB 로그에 걸려 있다. 그래서 새 규칙은
+#    "날짜 있는 줄을 하나라도 만났을 때만" 앵커링에 관여한다.
+TS_RE_DATED = re.compile(rb"^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})\s\s?")
+RE_INSTANCE = re.compile(rb"^===\s*INSTANCE(-END)?\b(.*?)===\s*$")
+KV_RE = re.compile(r"(\w+)=([^\s]+)")
+
 RE_FRAME = re.compile(r"^←ARD (S,.*)$")
 RE_ARD_IN = re.compile(r"^←ARD (.*)$")
 RE_DROP = re.compile(r"^! 체크섬 불일치")
@@ -79,21 +92,47 @@ def parse_log(path: str, base_date: date, rollback_threshold_s: int = 3600):
     last_ard_txt = ""
     total_lines = 0
     untimed = 0
+    anchors: list[tuple[int, date]] = []   # (day_idx, 실제 날짜) — 새 형식에서만 채워진다
+    instances: list[dict] = []             # === INSTANCE … === 경계 줄
 
     with open(path, "rb") as f:
         for lineno, raw in enumerate(f, 1):
             total_lines += 1
             raw = raw.rstrip(b"\r\n")
-            m = TS_RE.match(raw)
-            if not m:
-                untimed += 1
+
+            # 계약 v0.1: 인스턴스 경계 줄. 시각 접두어가 없을 수 있으므로 먼저 본다.
+            im = RE_INSTANCE.match(raw)
+            if im:
+                fields = dict(KV_RE.findall(im.group(2).decode("utf-8", "replace")))
+                instances.append({"end": bool(im.group(1)), "lineno": lineno, **fields})
+                start = fields.get("start")
+                if start and not im.group(1):
+                    try:  # start= 는 절대시각이므로 앵커로 쓸 수 있다
+                        anchors.append((day_idx, datetime.fromisoformat(start).date()))
+                    except ValueError:
+                        pass
                 continue
-            hh, mm, ss = int(m.group(1)), int(m.group(2)), int(m.group(3))
-            secs = hh * 3600 + mm * 60 + ss
-            if prev_secs is not None and secs < prev_secs - rollback_threshold_s:
-                day_idx += 1
-            prev_secs = secs
-            body_b = raw[m.end():]
+
+            dm = TS_RE_DATED.match(raw)
+            if dm:
+                hh, mm, ss = int(dm.group(4)), int(dm.group(5)), int(dm.group(6))
+                secs = hh * 3600 + mm * 60 + ss
+                if prev_secs is not None and secs < prev_secs - rollback_threshold_s:
+                    day_idx += 1
+                prev_secs = secs
+                anchors.append((day_idx, date(int(dm.group(1)), int(dm.group(2)), int(dm.group(3)))))
+                body_b = raw[dm.end():]
+            else:
+                m = TS_RE.match(raw)
+                if not m:
+                    untimed += 1
+                    continue
+                hh, mm, ss = int(m.group(1)), int(m.group(2)), int(m.group(3))
+                secs = hh * 3600 + mm * 60 + ss
+                if prev_secs is not None and secs < prev_secs - rollback_threshold_s:
+                    day_idx += 1
+                prev_secs = secs
+                body_b = raw[m.end():]
             body = body_b.decode("utf-8", errors="replace")
 
             kind = None
@@ -155,14 +194,23 @@ def parse_log(path: str, base_date: date, rollback_threshold_s: int = 3600):
             if kind:
                 events.append(Event((day_idx, secs), kind, data, lineno, body_b))
 
-    # 날짜 앵커링: 마지막 날짜 인덱스를 base_date 로
+    # 날짜 앵커링.
+    #  · 옛 형식(날짜 없음): 마지막 날짜 인덱스를 base_date 로 — **기존 동작 그대로.**
+    #  · 새 형식(날짜 있음): 로그가 스스로 말한 날짜를 쓴다. --base-date 추측이 필요 없다.
     max_day = day_idx
+    if anchors:
+        ref_idx, ref_date = anchors[-1]
+        anchor_note = f"로그의 날짜 필드({ref_date})로 앵커링 — 계약 v0.1"
+    else:
+        ref_idx, ref_date = max_day, base_date
+        anchor_note = f"날짜 없는 옛 형식 — 마지막 줄을 {base_date} 로 가정"
     for ev in events:
         d, secs = ev.ts
-        the_date = base_date - timedelta(days=(max_day - d))
+        the_date = ref_date - timedelta(days=(ref_idx - d))
         ev.ts = datetime.combine(the_date, dtime()) + timedelta(seconds=secs)
 
-    return events, {"total_lines": total_lines, "untimed": untimed, "days": max_day + 1}
+    return events, {"total_lines": total_lines, "untimed": untimed, "days": max_day + 1,
+                    "anchor": anchor_note, "instances": instances}
 
 
 def parse_frame(payload: str):
@@ -646,6 +694,10 @@ def main():
         "days": meta["days"],
         "last_log_ts": last_ts.isoformat(sep=" "),
         "generated": args.now or "(--now 미지정)",
+        # 계약 v0.1: 날짜를 어떻게 정했는지와 인스턴스 경계를 산출물에 남긴다.
+        # 오늘 "16:00 을 08-16 으로 읽어" 낸 오독이 이 한 줄이 없어서 생겼다.
+        "anchor": meta.get("anchor"),
+        "instances": meta.get("instances", []),
     }
 
     md = fmt_md(stats, expect_map, meta_out, notes, args.baseline)

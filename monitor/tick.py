@@ -55,6 +55,12 @@ WINDOWS = [
     "CONTAMINATED_사람개입=2026-08-16T15:26:00..",
 ]
 BASELINE = "old"
+# 이름 → (시작ISO, 끝ISO). link_drop_probe 에 넘기려면 창을 파싱해 둬야 한다.
+WINDOWS_BY_NAME = {}
+for _w in WINDOWS:
+    _n, _, _r = _w.partition("=")
+    _s, _, _e = _r.partition("..")
+    WINDOWS_BY_NAME[_n] = (_s, _e or "2100-01-01T00:00:00")
 TEAM_RESETS = [
     "2026-08-15T19:46:14=client.ino 재플래싱",
     "2026-08-15T19:56:09=client.ino 재플래싱",
@@ -124,7 +130,9 @@ def main() -> int:
             ts = datetime.fromisoformat(line[:19])
         except ValueError:
             continue
-        if ts >= cutoff:
+        # 오염 구간(사용자가 보드를 뽑았다 끼운 구간)의 재부팅은 장비 사건이 아니다.
+        # 이걸 세면 "전원 사건이 안 끝났다" 경고가 영구히 떠서 곧 무시당한다.
+        if ts >= cutoff and ts < datetime.fromisoformat(CONTAM_SINCE):
             reboots_after.append(ts)
 
     d = json.load(open("monitor/out-report.json", encoding="utf-8"))
@@ -174,13 +182,39 @@ def main() -> int:
           f"남은 {max(0.0, TARGET_H - tgt['duration_h']):.2f}h")
     print(f"  프레임 {tgt['frames']:,} ({tgt['frames_per_min']}/분)   "
           f"기준 옛 {base['frames_per_min']}/분")
+
+    # ── 🔑 1급 지표: 링크 끊김 (REQ-0112 루트 지시) ─────────────────────
+    # 이 장비에서 실제로 움직이는 양은 MCU 재부팅이 아니라 **ESP 링크의 끊김·재접속**이다.
+    # 기준선 13.92h 에서 새 연결 36건 중 35건이 "재부팅 없는 재연결"이었고
+    # Uno 는 한 번도 안 죽었다 (monitor/FINDING-2026-08-16-link-vs-mcu.md).
+    # 그래서 재부팅을 세는 자리에 이것을 놓는다.
+    ld = None
+    try:
+        w = WINDOWS_BY_NAME.get(TRACK)
+        if w:
+            run([sys.executable, "monitor/link_drop_probe.py", LOG, w[0], w[1]])
+            ld = json.load(open("monitor/out/linkdrop-last.json", encoding="utf-8"))
+    except Exception as e:
+        print(f"  (링크 지표 산출 실패: {type(e).__name__})")
+    if ld:
+        print(f"  🔑 재부팅없는 재연결 {ld['reconnect_no_reboot']} ({ld['reconnect_no_reboot_per_h']}/h)"
+              f"   같은연결 복구 {ld['same_conn_recover']} ({ld['same_conn_recover_per_h']}/h)")
+        print(f"     끊은 주체: 서버 유휴회수 {ld['server_idle_reap']} · TCP리셋(errno54) {ld['errno54']}"
+              f"   ← 유휴회수 0 이면 서버가 끊은 게 아니다")
+
     print(f"  세션종료 {tgt['sess_close']} ({tgt['sess_close_per_h']}/h)  "
           f"기준 옛 {base['sess_close_per_h']}/h  | 기대(옛비율) {exp.get('sess_close')}")
     print(f"  errno=54 {tgt['errno54']}  기대(옛비율) {exp.get('errno54')}")
     print(f"  바이트손상(real_S) {tgt['drop_real_S']}  기대 {exp.get('drop_real_S')}  "
           f"| 드롭전체 {tgt['drops_total']}")
-    print(f"  자발 재부팅후보 {tgt['uptime_regressions_spont']}  기대 {exp.get('uptime_regressions_spont')}"
-          f"  ← 기대<1 이면 0 은 무의미")
+    # 재부팅은 **0 이 정상**이라는 전제로 예외 감시만 한다(REQ-0112).
+    # 기준선 13.92h 에서도 0 이었다 — 고칠 재부팅 문제는 애초에 없었다.
+    _rb = tgt['uptime_regressions_spont']
+    if _rb:
+        print(f"  🔴 예외 — 자발 재부팅 {_rb}건 발생. 0 이 정상인 지표다. 개입 이력부터 확인하라")
+    else:
+        print(f"  재부팅 0 (정상) · 기대 {exp.get('uptime_regressions_spont')}"
+              f"  ← 기준선도 0 이라 이 지표엔 판별력이 없다")
     print(f"  오프라인 {tgt['offline_events']} · 복구중앙 {tgt['recover_median_s']}s "
           f"· 최대공백 {tgt['max_frame_gap_s']}s")
     # ⚠ 0 의 의미를 가른다 — "안 쌓였다"와 "읽을 수 없다"는 완전히 다른 사건이다.
@@ -209,6 +243,12 @@ def main() -> int:
         print(f"  ✅ 창시작 조건 충족 — {CLEAN_SINCE} 이후 자발 재부팅 0건, {held:.0f}분 유지. "
               f"이 시각을 4시간 창 시작으로 확정할 수 있다.")
     for n in d["notes"]:
+        # 이미 원문까지 확인해 규명된 경고는 그렇게 표시한다.
+        # 규명된 경고를 매번 그대로 띄우면 사람이 경고 전체를 무시하게 된다.
+        if "단독 K" in n:
+            print("  ✔(규명됨) 단독 K 33건 — 전부 10:34:16~10:34:54(38초)에 몰려 있다."
+                  " 플래싱 경계 직후 옛 빌드의 잔재이고 판정창에서는 0 이다.")
+            continue
         print("  " + n)
     return 0
 

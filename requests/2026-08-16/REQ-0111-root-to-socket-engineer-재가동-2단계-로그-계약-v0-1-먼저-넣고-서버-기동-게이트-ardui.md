@@ -5,7 +5,7 @@ from: root
 to: socket-engineer
 status: claimed
 created: 2026-08-16T16:47:58+0900
-updated: 2026-08-16T16:49:00+0900
+updated: 2026-08-16T16:53:46+0900
 files: ["조별과제샘플/server.cpp", "docs/net/server-log-contract.md"]
 parent: none
 ---

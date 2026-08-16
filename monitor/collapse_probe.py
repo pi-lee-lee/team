@@ -80,7 +80,9 @@ def parse():
     return out
 
 
+# 오염은 **구간**이다(열린 경계로 두면 앞으로 모든 창에서 경고가 떠 무시당한다).
 CONTAM_SINCE = datetime(2026, 8, 16, 15, 26, 0)
+CONTAM_UNTIL = datetime(2026, 8, 16, 16, 15, 37)
 
 
 def contam_guard():
@@ -90,10 +92,10 @@ def contam_guard():
     (사용자 확인 · REQ-0108). 거기서 나오는 재부팅·단절은 **고장이 아니다.**
     막지는 않는다 — 그 구간을 일부러 볼 일이 있다. 다만 **조용히 지나가지 않는다.**
     """
-    if UNTIL <= CONTAM_SINCE:
+    if UNTIL <= CONTAM_SINCE or SINCE >= CONTAM_UNTIL:
         return
     print("=" * 72)
-    print("🔴 경고 — 요청한 구간이 오염 구간(2026-08-16 15:26~)과 겹친다.")
+    print(f"🔴 경고 — 요청한 구간이 오염 구간({CONTAM_SINCE} ~ {CONTAM_UNTIL})과 겹친다.")
     print("   그 구간의 재부팅·세션단절·프레임공백은 **사용자가 보드를 뽑았다 끼운 결과**다.")
     print("   장비/펌웨어 판정의 근거로 인용하지 마라. (출처: 사용자 확인 · REQ-0108)")
     if SINCE < CONTAM_SINCE:

@@ -29,7 +29,13 @@ LOG = sys.argv[1] if len(sys.argv) > 1 else "/tmp/parking-soak.log"
 SINCE = datetime.fromisoformat(sys.argv[2]) if len(sys.argv) > 2 else datetime(2026, 8, 15, 20, 32, 16)
 UNTIL = datetime.fromisoformat(sys.argv[3]) if len(sys.argv) > 3 else datetime(2026, 8, 16, 15, 26, 0)
 BASE = date(2026, 8, 16)
-CONTAM = datetime(2026, 8, 16, 15, 26, 0)
+# 오염 **구간** — 열린 경계로 두지 마라.
+# 열어 두면 앞으로 모든 관측창에서 경고가 뜨고, 늘 뜨는 경고는 곧 무시당한다.
+# 그러면 진짜 오염이 왔을 때 아무도 안 본다.
+CONTAM_FROM = datetime(2026, 8, 16, 15, 26, 0)   # 사용자 실물 작업 시작
+CONTAM_TO = datetime(2026, 8, 16, 16, 15, 37)    # 서버 로그가 끊긴 시각 = 자료의 끝
+# ⚠ 관측 재개 후는 **새 기준선**이라 오염이 아니다(사용자가 실물 구성을 바꿨을 수 있으므로
+#   옛 구간과 같은 표에 넣지 않을 뿐이다 — REQ-0112).
 
 # 재부팅으로 볼 uptime 상한. 이보다 크면 "장치는 살아 있었다".
 BOOT_UPTIME_MAX = 120
@@ -38,30 +44,61 @@ TS = re.compile(r"^(\d{2}):(\d{2}):(\d{2})\s+(.*)$")
 SFRAME = re.compile(r"←ARD\s+S,(\d+),([01]+),([01]+),(\d+),(\w+),(\d+)")
 
 
+TS_DATED = re.compile(r"^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})\s+(.*)$")
+
+
 def parse(path: str):
-    """뒤에서 앞으로 날짜 앵커링(soak_stats.py 와 같은 방식). 앞에서 잡으면 하루씩 밀린다."""
+    """옛 형식(날짜 없음)과 계약 v0.1(날짜 있음)을 **한 파일 안에서 동시에** 다룬다.
+
+    · 날짜 있는 줄  → 그 날짜를 그대로 쓴다(추측 없음).
+    · 날짜 없는 줄  → 뒤에서 앞으로 앵커링. 앞에서 잡으면 하루씩 밀린다
+      (2026-08-16 에 나와 socket 과 루트가 각각 이 함정에 빠졌다).
+    """
     with open(path, "rb") as f:
         raw = f.read()
-    rows = []
+    rows = []          # (hms 또는 None, 절대날짜 또는 None, 본문)
     for line in raw.decode("utf-8", "replace").splitlines():
+        dm = TS_DATED.match(line)
+        if dm:
+            rows.append(((int(dm[4]), int(dm[5]), int(dm[6])),
+                         date(int(dm[1]), int(dm[2]), int(dm[3])), dm[7]))
+            continue
         m = TS.match(line)
         if m:
-            rows.append((int(m[1]), int(m[2]), int(m[3]), m[4]))
+            rows.append(((int(m[1]), int(m[2]), int(m[3])), None, m[4]))
+
     stamps = [None] * len(rows)
-    day, nxt = BASE, None
-    for i in range(len(rows) - 1, -1, -1):
-        h, mi, s, _ = rows[i]
-        hms = (h, mi, s)
-        if nxt is not None and hms > nxt:
+    # 날짜가 명시된 줄이 하나라도 있으면 **가장 뒤의 것**을 기준으로 삼는다.
+    last_dated = next((i for i in range(len(rows) - 1, -1, -1) if rows[i][1]), None)
+    if last_dated is not None:
+        day = rows[last_dated][1]
+        tail = last_dated
+    else:
+        day, tail = BASE, len(rows) - 1
+    nxt = None
+    for i in range(tail, -1, -1):
+        hms, d, _ = rows[i]
+        if d is not None:
+            day = d
+        elif nxt is not None and hms > nxt:
             day -= timedelta(days=1)
         nxt = hms
-        stamps[i] = datetime.combine(day, datetime.min.time()).replace(hour=h, minute=mi, second=s)
-    return [(ts, r[3]) for r, ts in zip(rows, stamps)]
+        stamps[i] = datetime.combine(day, datetime.min.time()).replace(
+            hour=hms[0], minute=hms[1], second=hms[2])
+    # 기준점 뒤쪽(날짜 명시 구간)은 그대로 앞으로 채운다
+    for i in range(tail + 1, len(rows)):
+        hms, d, _ = rows[i]
+        if d is not None:
+            day = d
+        stamps[i] = datetime.combine(day, datetime.min.time()).replace(
+            hour=hms[0], minute=hms[1], second=hms[2])
+    return [(ts, r[2]) for r, ts in zip(rows, stamps) if ts is not None]
 
 
 def main() -> int:
-    if UNTIL > CONTAM:
-        print(f"⚠ 요청 구간이 오염 경계({CONTAM})를 넘는다 — 그 뒤는 사람이 보드를 만진 구간이다.\n")
+    if SINCE < CONTAM_TO and UNTIL > CONTAM_FROM:
+        print(f"⚠ 요청 구간이 오염 구간({CONTAM_FROM} ~ {CONTAM_TO})과 겹친다.")
+        print("   그 안의 재부팅·단절은 사용자가 보드를 뽑았다 끼운 결과다 — 장비 판정에 쓰지 마라.\n")
 
     ev = [(t, s) for t, s in parse(LOG) if SINCE <= t <= UNTIL]
     frames = [(t, int(SFRAME.search(s).group(4))) for t, s in ev if SFRAME.search(s)]
@@ -122,6 +159,25 @@ def main() -> int:
     ]
     for name, n in rows:
         print(f"   {name:24} {n:>5}")
+
+    # 기계 판독용 산출 — tick.py 가 이걸 읽어 1급 지표로 올린다(REQ-0112 루트 지시).
+    hours = (UNTIL - SINCE).total_seconds() / 3600.0
+    summary = {
+        "since": SINCE.isoformat(), "until": UNTIL.isoformat(), "hours": round(hours, 3),
+        "frames": len(frames), "accepts": len(accepts),
+        "reconnect_no_reboot": len(alive), "reboots": booted, "undetermined": nodata,
+        "same_conn_recover": len(same_conn), "reconn_recover": len(reconn),
+        "reconnect_no_reboot_per_h": round(len(alive) / hours, 3) if hours else None,
+        "same_conn_recover_per_h": round(len(same_conn) / hours, 3) if hours else None,
+        "server_idle_reap": count("유휴 마감"), "errno54": count("errno=54"),
+    }
+    try:
+        import json, os
+        os.makedirs("monitor/out", exist_ok=True)
+        with open("monitor/out/linkdrop-last.json", "w", encoding="utf-8") as f:
+            json.dump(summary, f, ensure_ascii=False, indent=1)
+    except OSError:
+        pass
 
     print()
     print("## 판정")

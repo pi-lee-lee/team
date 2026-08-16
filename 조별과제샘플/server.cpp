@@ -61,6 +61,7 @@
   #include <winsock2.h>
   #include <ws2tcpip.h>
   #include <windows.h>
+  #include <direct.h>     // _mkdir — 로그 디렉터리 생성 (REQ-0111 로그 계약)
   #pragma comment(lib, "ws2_32.lib")
   typedef SOCKET sock_t;
   #define BAD_SOCK INVALID_SOCKET
@@ -70,12 +71,16 @@
   #include <sys/socket.h>
   #include <sys/select.h>
   #include <sys/time.h>
+  #include <sys/stat.h>   // mkdir — 로그 디렉터리 생성 (REQ-0111 로그 계약)
   #include <netinet/in.h>
   #include <netinet/tcp.h>
   #include <arpa/inet.h>
   #include <unistd.h>
   #include <errno.h>
   #include <signal.h>
+  #ifdef __APPLE__
+    #include <mach-o/dyld.h>   // _NSGetExecutablePath — 경계 줄의 bin= 필드
+  #endif
   typedef int sock_t;
   #define BAD_SOCK (-1)
   static void closesock(sock_t s) { close(s); }
@@ -225,10 +230,122 @@ static void on_stop_signal(int) { g_stop = 1; }
 // 0 이 아니면 기동 배너에 크게 찍어 시험 인스턴스를 운영으로 착각할 수 없게 한다.
 static int g_port_offset = 0;
 
+// ---------------------------------------------------------------- 로그 계약 v0.1 (REQ-0111)
+// 명세: docs/net/server-log-contract.md
+//
+// **왜 있는가 — 지어낸 요구가 아니라 2026-08-16 에 두 번 당한 것이다.**
+//  (1) 타임스탬프에 날짜가 없었다. 21시간짜리 로그가 자정을 넘자 어제 16:00 과 오늘 16:00 이
+//      같아 보였고, **두 사람이 각각 독립적으로** 어제 줄을 오늘 것으로 읽어 "두 프로세스가
+//      동시에 기록 중"이라는 잘못된 판단을 했다. 실제로는 순차 종료였다.
+//  (2) 로그 경로를 셸 리다이렉션이 정했다. 그래서 나중에 뜬 인스턴스가 다른 곳에 쓰는 바람에
+//      관측이 조용히 끊겼고, 아무도 "그 프로세스는 어디에 쓰고 있나"를 답할 수 없었다.
+//  (3) 기동 배너에 신원이 없었다. 도는 바이너리가 어느 소스에서 나왔는지 알 수 없어
+//      mtime 비교로 추리해야 했다.
+
+#ifndef BUILD_ID
+  #define BUILD_ID __DATE__ " " __TIME__
+#endif
+
+// 화면으로 나가는 것을 로그 파일에도 그대로 흘린다.
+// **출력 지점마다 두 번 쓰지 않는 이유**: 한 군데만 빠뜨려도 파일이 화면보다 덜 남는데,
+// 그 차이는 사고가 난 뒤에야 발견된다. 스트림버퍼에서 한 번에 가르면 빠뜨릴 곳이 없다.
+class TeeBuf : public std::streambuf {
+public:
+    TeeBuf(std::streambuf* a, std::streambuf* b) : a_(a), b_(b) {}
+protected:
+    int overflow(int c) {
+        if (c == EOF) return 0;
+        if (a_->sputc((char)c) == EOF) return EOF;
+        if (b_->sputc((char)c) == EOF) return EOF;
+        return c;
+    }
+    int sync() { return (a_->pubsync() == 0 && b_->pubsync() == 0) ? 0 : -1; }
+private:
+    std::streambuf* a_;
+    std::streambuf* b_;
+};
+
+static std::ofstream    g_logfile;
+static TeeBuf*          g_tee       = 0;
+static std::streambuf*  g_cout_orig = 0;
+static std::string      g_log_path;
+
+// 기본 로그 경로. **`/tmp` 를 쓰지 않는다** — 08-16 에 `/tmp` 의 캡처 파일이 unlink 된 채
+// 프로세스만 fd 를 붙들고 있어서 113KB 를 통째로 잃었고, macOS 는 재부팅 시 `/tmp` 를 비운다.
+// 저장소 안에도 두지 않는다 — 추적되지 않는 파일은 `git clean` 에 쓸려 나간다(같은 날 겪었다).
+static std::string default_log_path() {
+    const char* home = getenv("HOME");
+#ifdef _WIN32
+    if (!home || !*home) home = getenv("USERPROFILE");
+#endif
+    if (!home || !*home) return std::string("parking-server.log");   // 최후 수단: 현재 디렉터리
+    return std::string(home) + "/parking-logs/parking-server.log";
+}
+
+static void ensure_parent_dir(const std::string& path) {
+    size_t cut = path.rfind('/');
+    if (cut == std::string::npos || cut == 0) return;
+    std::string dir = path.substr(0, cut);
+#ifdef _WIN32
+    _mkdir(dir.c_str());
+#else
+    mkdir(dir.c_str(), 0755);
+#endif
+}
+
+static long cur_pid() {
+#ifdef _WIN32
+    return (long)GetCurrentProcessId();
+#else
+    return (long)getpid();
+#endif
+}
+
+// 경계 줄의 bin= 필드. 실패해도 기동을 막지 않는다 — 모르면 "?" 를 적는다.
+static std::string exe_path() {
+    char b[1024];
+#ifdef _WIN32
+    DWORD n = GetModuleFileNameA(NULL, b, (DWORD)sizeof(b));
+    return n ? std::string(b, n) : std::string("?");
+#elif defined(__APPLE__)
+    uint32_t n = (uint32_t)sizeof(b);
+    if (_NSGetExecutablePath(b, &n) != 0) return std::string("?");
+    char rp[1024];
+    return realpath(b, rp) ? std::string(rp) : std::string(b);
+#else
+    ssize_t n = readlink("/proc/self/exe", b, sizeof(b) - 1);
+    return n > 0 ? std::string(b, (size_t)n) : std::string("?");
+#endif
+}
+
+static std::string iso8601(long long ep_ms) {
+    time_t tt = (time_t)(ep_ms / 1000);
+    char b[40];
+    strftime(b, sizeof(b), "%Y-%m-%dT%H:%M:%S%z", localtime(&tt));
+    return std::string(b);
+}
+
+// 로그 파일을 연다. **실패해도 기동을 막지 않는다** — 관측이 없다고 서비스를 멈추는 것은
+// 손해가 더 크다. 다만 화면에 크게 알려서 "조용히 관측이 없는" 상태가 되지 않게 한다.
+static void open_log(const std::string& path) {
+    g_log_path = path.empty() ? default_log_path() : path;
+    ensure_parent_dir(g_log_path);
+    g_logfile.open(g_log_path.c_str(), std::ios::out | std::ios::app);
+    if (!g_logfile.is_open()) {
+        std::cerr << "⚠ 로그 파일을 열지 못했다: " << g_log_path
+                  << " — 화면에만 남는다(관측이 끊긴 것으로 보일 수 있다)\n";
+        return;
+    }
+    g_cout_orig = std::cout.rdbuf();
+    g_tee = new TeeBuf(g_cout_orig, g_logfile.rdbuf());
+    std::cout.rdbuf(g_tee);
+}
+
 static void logf(const char* mark, const std::string& msg) {
     long long t = epoch_ms() / 1000;
     time_t tt = (time_t)t;
-    char ts[16]; strftime(ts, sizeof(ts), "%H:%M:%S", localtime(&tt));
+    // ⚠ **날짜를 빼지 마라.** 이 줄에서 날짜가 빠져 있던 탓에 08-16 에 오독이 두 번 났다.
+    char ts[32]; strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", localtime(&tt));
     std::cout << ts << "  " << mark << " " << msg << std::endl;
 }
 // prev_up < 0 = 기준선 없음(첫 프레임·새 연결 직후) → 판정하지 않는다.
@@ -433,10 +550,13 @@ struct Server {
         snprintf(b, sizeof(b), "%.1f초", ms / 1000.0);
         return std::string(b);
     }
+    // 요약 안에서 "언제"를 가리키는 값(최대공백@… 등)도 날짜가 없으면 자정을 넘는 순간
+    // 어느 날인지 알 수 없다. 줄 앞머리와 달리 한 줄에 여러 번 나오므로 연도는 뺀다 —
+    // 연도는 같은 파일의 `=== INSTANCE` 경계 줄이 확정해 준다.
     static std::string clock_at(long long ep_ms) {
         if (ep_ms <= 0) return std::string("-");
         time_t tt = (time_t)(ep_ms / 1000);
-        char b[16]; strftime(b, sizeof(b), "%H:%M:%S", localtime(&tt));
+        char b[24]; strftime(b, sizeof(b), "%m-%d %H:%M:%S", localtime(&tt));
         return std::string(b);
     }
 
@@ -1731,6 +1851,22 @@ struct Server {
         lsn_http  = listen_on(PORT_HTTP    + g_port_offset);
         lsn_phone = listen_on(PORT_PHONE   + g_port_offset);
         if (lsn_ard == BAD_SOCK || lsn_http == BAD_SOCK || lsn_phone == BAD_SOCK) return 1;
+
+        // ---------- 인스턴스 경계 줄 (REQ-0111 로그 계약 §2.2) — 배너보다 **먼저** 나간다.
+        // 기계가 읽는 줄이다. 한 파일에 인스턴스가 여러 개 쌓여도 이 줄로 자르면 섞이지 않는다.
+        // 실제 리슨에 성공한 뒤에 찍으므로 ports= 는 **추측이 아니라 사실**이다.
+        std::cout << "=== INSTANCE"
+                  << " pid=" << cur_pid()
+                  << " start=" << iso8601(epoch_ms())
+                  << " bin=" << exe_path()
+                  << " build=" << BUILD_ID
+                  << " ports=" << (PORT_ARDUINO + g_port_offset)
+                  << ","      << (PORT_HTTP    + g_port_offset)
+                  << ","      << (PORT_PHONE   + g_port_offset)
+                  << " offset=" << g_port_offset
+                  << " log=" << (g_log_path.empty() ? std::string("(화면만)") : g_log_path)
+                  << " ===" << std::endl;
+
         if (g_port_offset)
             std::cout << "*** 시험 인스턴스 — 포트 +" << g_port_offset
                       << " 이동됨. 운영이 아니다(REQ-0072 이음매) ***\n";
@@ -2087,6 +2223,16 @@ struct Server {
         // ---------- 소크 종료 요약 (REQ-0065) — 한 줄로 끝난다
         if (sess_start_ms) end_ard_session("서버 종료");
         logf("▣", "소크 종료 · " + soak_line());
+
+        // ---------- 인스턴스 종료 경계 (REQ-0111 로그 계약 §2.3)
+        // ⚠ **이 줄이 없다고 "아직 살아 있다"로 읽으면 안 된다.** SIGKILL·정전·패닉은
+        // 이 줄을 남길 기회를 주지 않는다. 실제로 08-16 에 pid 36998 이 이 줄 없이 죽었다.
+        // **생존 판정은 로그가 아니라 pid 로 해야 한다.** 이 줄은 "정상 종료였다"만 증명한다.
+        std::cout << "=== INSTANCE-END"
+                  << " pid=" << cur_pid()
+                  << " stop=" << iso8601(epoch_ms())
+                  << " reason=signal"
+                  << " ===" << std::endl;
         return 0;
     }
 };
@@ -2220,6 +2366,14 @@ int main(int argc, char** argv) {
     signal(SIGINT,  on_stop_signal);
     signal(SIGTERM, on_stop_signal);
     int rc;
+    // 로그 경로(REQ-0111 로그 계약 §2.4) — 비워 두면 기본 경로를 쓴다.
+    // **셸 리다이렉션에 맡기지 않는 이유**: 08-16 에 나중 뜬 인스턴스가 다른 곳에 쓰는 바람에
+    // 관측이 조용히 끊겼다. 어디에 쓰는지는 서버가 정하고, 경계 줄에 log= 로 적어 둔다.
+    std::string log_path;
+    for (int i = 1; i < argc; i++) {
+        std::string a(argv[i]);
+        if (a.compare(0, 6, "--log=") == 0) log_path = a.substr(6);
+    }
     // 시험용 포트 이동(REQ-0072) — 운영 인스턴스를 안 죽이고 두 번째를 띄우기 위한 이음매
     for (int i = 1; i < argc; i++) {
         std::string a(argv[i]);
@@ -2235,8 +2389,14 @@ int main(int argc, char** argv) {
         }
         g_port_offset = off;
     }
+    // --selftest 는 로그 파일을 열지 않는다. 자가검증 출력이 운영 로그에 섞이면
+    // 인스턴스 경계 없이 사람이 만든 줄이 끼어드는 셈이라, 계약이 지키려는 것을 스스로 깬다.
     if (argc > 1 && std::string(argv[1]) == "--selftest") rc = selftest();
-    else { Server s; rc = s.run(); }
+    else {
+        open_log(log_path);
+        Server s;
+        rc = s.run();
+    }
 #ifdef _WIN32
     WSACleanup();
 #endif

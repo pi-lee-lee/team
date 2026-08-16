@@ -336,3 +336,5 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T16:48:43+0900 | 착수 | REQ-0110 | arduino-engineer → arduino-engineer | 재가동 1단계 — 보드 접촉 해제 · 플래시 덤프와 기동 창 측정 · 재플래싱은 하지 마라 |
 | 2026-08-16T16:49:00+0900 | 진행 | REQ-0110 | arduino-engineer → arduino-engineer | 재가동 1단계 — 보드 접촉 해제 · 플래시 덤프와 기동 창 측정 · 재플래싱은 하지 마라 — 16:49 플래시 덤프 시작 - 선언 완료. 포트 점유 예정, monitor 는 반납 신호까지 대기 |
 | 2026-08-16T16:49:00+0900 | 착수 | REQ-0111 | socket-engineer → socket-engineer | 재가동 2단계 — 로그 계약 v0.1 먼저 넣고 서버 기동 (게이트: arduino 포트 반납) |
+| 2026-08-16T16:53:24+0900 | 완료 | REQ-0110 | arduino-engineer → arduino-engineer | 재가동 1단계 — 보드 접촉 해제 · 플래시 덤프와 기동 창 측정 · 재플래싱은 하지 마라 |
+| 2026-08-16T16:53:46+0900 | 진행 | REQ-0111 | socket-engineer → socket-engineer | 재가동 2단계 — 로그 계약 v0.1 먼저 넣고 서버 기동 (게이트: arduino 포트 반납) — 로그 계약 v0.1 구현 완료 — 전 줄 날짜 + INSTANCE/INSTANCE-END 경계 줄 + 고정 경로(HOME/parking-logs) + 화면과 파일 동일 기록. 경고 0 빌드·자가검증·실왕복·인스턴스 분리 검증 통과. 서버는 지시대로 아직 안 올렸다 — arduino 포트 반납 신호 대기 |
