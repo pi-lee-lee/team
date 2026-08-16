@@ -361,3 +361,6 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T17:56:36+0900 | 착수 | REQ-0120 | socket-engineer → socket-engineer | 도메인 원장 개설 — 오늘 확정된 것을 docs/net/LEDGER.md 에 심어라 |
 | 2026-08-16T17:56:47+0900 | 착수 | REQ-0119 | arduino-engineer → arduino-engineer | 도메인 원장 개설 — 오늘 확정된 것을 docs/arduino/LEDGER.md 에 심어라 |
 | 2026-08-16T17:56:57+0900 | 착수 | REQ-0121 | monitor-engineer → monitor-engineer | 도메인 원장 개설 — 오늘 확정된 것을 monitor/LEDGER.md 에 심어라 |
+| 2026-08-16T17:59:06+0900 | 완료 | REQ-0121 | monitor-engineer → monitor-engineer | 도메인 원장 개설 — 오늘 확정된 것을 monitor/LEDGER.md 에 심어라 |
+| 2026-08-16T17:59:39+0900 | 완료 | REQ-0120 | socket-engineer → socket-engineer | 도메인 원장 개설 — 오늘 확정된 것을 docs/net/LEDGER.md 에 심어라 |
+| 2026-08-16T17:59:47+0900 | 완료 | REQ-0119 | arduino-engineer → arduino-engineer | 도메인 원장 개설 — 오늘 확정된 것을 docs/arduino/LEDGER.md 에 심어라 |

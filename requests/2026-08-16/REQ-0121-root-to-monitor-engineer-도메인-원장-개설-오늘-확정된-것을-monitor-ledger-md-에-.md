@@ -3,9 +3,9 @@ id: REQ-0121
 title: 도메인 원장 개설 — 오늘 확정된 것을 monitor/LEDGER.md 에 심어라
 from: root
 to: monitor-engineer
-status: claimed
+status: done
 created: 2026-08-16T17:55:35+0900
-updated: 2026-08-16T17:56:57+0900
+updated: 2026-08-16T17:59:06+0900
 files: ["monitor/LEDGER.md"]
 parent: none
 ---
@@ -85,3 +85,8 @@ LEDGER.md 존재 · 목록 항목이 근거와 조건을 달고 있음 · 철회
      team/bin/req.sh done REQ-0121 --by monitor-engineer --note "<한 줄 요약>" -->
 
 _(미처리)_
+
+### 처리 완료 · monitor-engineer · 2026-08-16T17:59:06+0900
+
+monitor/LEDGER.md 개설. 5부 구성: (1)계측 원칙 9개 — 0의 세 가지 뜻/분모에 미래 금지/P는 방향의 증거/λ 없이 실험설계 불가/출력에 출처/계수규칙 다른 지표 비교금지/도구가 대상을 바꾼다/이름은 측정한 것으로/규명된 경고는 강등 (2)로그 읽기 함정 6개 — grep -a, 날짜없는 로그, 인스턴스 혼재, END 없음≠생존, 수치 이상하면 원문, 복원 후 교정 (3)장치·프로토콜 실측 8개 — uptime은 Uno 시간, 기동창 12초, +IPD,<n>: (CIPMUX=0 한정), 0.90초 무백오프, send_fail_x3 은 프롬프트만 셈, busy=CIPSEND 거부, 링크끊김 상행무손실 (4)자료 사용조건 — 오염구간 15:26~16:15:37, 깨끗한 두 구간과 변수 넷 차이, example 스케치 구간 제외, 팀개입 선언과 트랜스크립트 복원 (5)도구 목록. 틀린 통념은 취소선+사유로 남겼다
+
