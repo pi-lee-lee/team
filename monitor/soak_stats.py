@@ -94,6 +94,7 @@ def parse_log(path: str, base_date: date, rollback_threshold_s: int = 3600):
     untimed = 0
     anchors: list[tuple[int, date]] = []   # (day_idx, 실제 날짜) — 새 형식에서만 채워진다
     instances: list[dict] = []             # === INSTANCE … === 경계 줄
+    epoch_date: date | None = None         # day_idx 0 에 해당하는 실제 날짜(날짜 명시 줄이 정한다)
 
     with open(path, "rb") as f:
         for lineno, raw in enumerate(f, 1):
@@ -120,7 +121,16 @@ def parse_log(path: str, base_date: date, rollback_threshold_s: int = 3600):
                 if prev_secs is not None and secs < prev_secs - rollback_threshold_s:
                     day_idx += 1
                 prev_secs = secs
-                anchors.append((day_idx, date(int(dm.group(1)), int(dm.group(2)), int(dm.group(3)))))
+                # 🔑 줄이 날짜를 **말했으면 그 날짜를 쓴다.** 추론하지 않는다.
+                #    앞서는 day_idx 산술로 날짜를 되짚었는데, 그러면 롤오버 추정이
+                #    한 번만 어긋나도 명시된 날짜를 무시하고 전부 밀린다.
+                #    (오늘 날짜 추론으로 세 번 틀렸다. 명시된 값이 있으면 그것이 이긴다.)
+                ln_date = date(int(dm.group(1)), int(dm.group(2)), int(dm.group(3)))
+                if epoch_date is None:
+                    # 이 줄 앞의 날짜 없는 줄들이 쌓아 둔 day_idx 를 보존하도록 기준을 잡는다
+                    epoch_date = ln_date - timedelta(days=day_idx)
+                day_idx = (ln_date - epoch_date).days
+                anchors.append((day_idx, ln_date))
                 body_b = raw[dm.end():]
             else:
                 m = TS_RE.match(raw)
@@ -198,12 +208,17 @@ def parse_log(path: str, base_date: date, rollback_threshold_s: int = 3600):
     #  · 옛 형식(날짜 없음): 마지막 날짜 인덱스를 base_date 로 — **기존 동작 그대로.**
     #  · 새 형식(날짜 있음): 로그가 스스로 말한 날짜를 쓴다. --base-date 추측이 필요 없다.
     max_day = day_idx
-    if anchors:
-        ref_idx, ref_date = anchors[-1]
-        anchor_note = f"로그의 날짜 필드({ref_date})로 앵커링 — 계약 v0.1"
+    if epoch_date is not None:
+        # 날짜를 명시한 줄이 있었다 → 그 줄들은 자기 날짜를 그대로 갖는다.
+        # 사이에 낀 날짜 없는 줄만 상대 위치로 채워진다.
+        ref_idx, ref_date = 0, epoch_date
+        n_dated = len(anchors)
+        anchor_note = (f"로그가 명시한 날짜를 사용({epoch_date} ~) · 날짜 명시 줄 {n_dated:,}개 "
+                       f"— 추론 아님")
     else:
         ref_idx, ref_date = max_day, base_date
-        anchor_note = f"날짜 없는 옛 형식 — 마지막 줄을 {base_date} 로 가정"
+        anchor_note = (f"⚠ 날짜 없는 옛 형식(계약 이전) — 마지막 줄을 {base_date} 로 **가정**했다. "
+                       f"--base-date 가 틀리면 전 구간이 밀린다")
     for ev in events:
         d, secs = ev.ts
         the_date = ref_date - timedelta(days=(ref_idx - d))
