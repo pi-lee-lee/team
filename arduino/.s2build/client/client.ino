@@ -1181,7 +1181,36 @@ static uint16_t      sendFails      = 0;       // 진단: SEND FAIL 수신 횟�
 //   `0.0.0.0` 이 뜨는 기전: ESP 가 제멋대로 리셋되면 우리는 아직 자신을 online 이라 믿고
 //   있다가 사다리에 **CIFSR 단(3단)부터 재진입**하는데, 그 시점엔 ESP 가 아직 AP 에
 //   재결합하지 못해 주소가 없다. **정상 부팅은 CWJAP 를 끝낸 뒤 CIFSR 로 오므로 절대 0 이 아니다.**
-static uint16_t      espResets = 0;   // CIFSR 이 0.0.0.0 을 답한 횟수 = ESP 가 상태를 잃은 횟수
+//
+// ✏️ **2026-08-16 19:0x 재정정 (monitor 2차 검증) — 판별자 하나로는 부족하다. OR 로 본다.**
+//   내가 처음엔 배너를 썼다가 `0.0.0.0` 단독으로 바꿨는데, **그것도 놓치는 경우가 있다:**
+//
+//   | 판별자 | 실측 약점 |
+//   |---|---|
+//   | 부트 배너 | 정상 부팅(16:59:57)에도 뜬다 → **오탐** |
+//   | `CIFSR → 0.0.0.0` | 18:48:12 리셋에서 **CIFSR 응답 자체가 가비지**라 문자열이 안 나왔다 → **누락** |
+//
+//   ⚠ **리셋이 심할수록 `0.0.0.0` 을 놓치는 방향**이라 특히 나쁘다 — 제일 중요한 사건을 놓친다.
+//   → **IP 소실 = (`0.0.0.0` 을 봤다) OR (CIFSR 을 3회 물어도 쓸 IP 가 없었다)**
+//     뒤쪽은 응답이 깨져도 성립하므로 앞쪽의 구멍을 정확히 메운다.
+//
+// ⚠ **걸쇠(latch)가 필요한 이유**: 한 번의 리셋에서 `0.0.0.0` 이 여러 번 오고 그 뒤 3회 소진까지
+//   가면 **한 사건이 네 번 세진다.** 그러면 이 카운터는 "사건 수"가 아니라 "증상 수"가 되어
+//   monitor 의 사건 계수와 **정의가 어긋난다**(CLAUDE.md "무엇을 세는가").
+//   그래서 **IP 를 잃은 순간 한 번만** 세고, 실제로 IP 를 되찾을 때 걸쇠를 푼다.
+static uint16_t      espResets = 0;      // ESP 가 IP 를 잃은 **사건 수** (증상 수가 아니다)
+static bool          ipLossLatched = false;
+
+// IP 소실을 한 번만 세는 자리. 두 판별자 어느 쪽이든 여기로 들어온다.
+static void noteIpLoss(void) {
+  if (ipLossLatched) return;             // 같은 사건의 두 번째 증상 — 세지 않는다
+  ipLossLatched = true;
+  if (espResets < 65535) espResets++;
+#if DEBUG
+  Serial.print(F("[NET] ★ ESP 가 IP 를 잃었다 — 모듈 리셋으로 본다. 누적 사건 "));
+  Serial.println(espResets);
+#endif
+}
 
 // 소켓 복구 진입 — **전송이 안 되는 것을 이유로 오프라인이 되는 모든 경로**가 여기를 통과해야 한다.
 // (연속 실패 카운터 / `link is not valid` 둘 다.) 한 곳이라도 CIPSTART 로 바로 가면
@@ -1913,6 +1942,7 @@ static void handleLine(char* s) {
       if (strncmp(s, "AT+", 3) != 0 && hasUsableIp(s)) {   // 명령 에코는 제외
         netHasIp = true;
         cifsrTries = 0;
+        ipLossLatched = false;              // ★ IP 를 실제로 되찾았다 — 다음 소실은 새 사건이다
         if (!assocAt) assocAt = millis();   // 결합 유지시간 계측 시작 (REQ-0071 0단)
 #if DEBUG
         Serial.print(F("[NET] ★ IP 확보: "));
@@ -1927,11 +1957,7 @@ static void handleLine(char* s) {
       //   ⚠ 세는 것과 끊는 것을 섞지 않는다. 사다리는 **원인이 아니라 결과(IP 가 있는가)** 를
       //     보기 때문에 이름 모를 고장에도 동작한다(§6.1). 그 성질을 깨지 않으려는 것이다.
       else if (strncmp(s, "AT+", 3) != 0 && strcmp(s, "0.0.0.0") == 0) {
-        if (espResets < 65535) espResets++;
-#if DEBUG
-        Serial.print(F("[NET] ★ ESP 가 IP 를 잃었다(0.0.0.0) — 모듈이 리셋된 것으로 본다. 누적 "));
-        Serial.println(espResets);
-#endif
+        noteIpLoss();                    // 판별자 ① — 응답이 멀쩡할 때 잡힌다
       }
     }
 
@@ -2218,6 +2244,10 @@ static void netTick(unsigned long now) {
       // CIFSR 은 로컬 질의라 답이 빠르다. 세 번 물어도 쓸 IP 가 없으면 결합부터 다시.
       if (++cifsrTries >= 3) {
         cifsrTries = 0;
+        // ★ 판별자 ② — **응답이 가비지여도 성립한다.** 18:48:12 리셋에서 CIFSR 응답이
+        //   통째로 깨져 `0.0.0.0` 문자열이 안 나왔고, 판별자 ① 만으로는 놓쳤다(monitor 실측).
+        //   "세 번 물어도 쓸 IP 가 없었다"는 **문자열이 아니라 우리 쪽 상태**라 안 깨진다.
+        noteIpLoss();
 #if DEBUG
         Serial.println(F("[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시"));
 #endif
@@ -2340,10 +2370,18 @@ static void statusTick(unsigned long now) {
     // ★ 2단계 진단 — 정지의 원인이 **2단계 자신**일 수 있다. 그것을 숨기지 않는다.
     //   `건너뜀` 이 크고 `SENDOK상한` 이 0 이면 ESP 가 계속 전송 중이라는 뜻이고,
     //   `SENDOK상한` 이 크면 **`SEND OK` 를 못 받고 있다**는 뜻이라 원인이 정반대다.
-    Serial.print(F(" · 건너뜀 "));     Serial.print(sendSkips);
-    Serial.print(F(" / SENDOK상한 ")); Serial.print(sendOkTimeouts);
-    Serial.print(F(" / SENDFAIL "));   Serial.print(sendFails);
-    Serial.println(F(") → 링크를 다시 세운다"));
+    //
+    // ⚠⚠ **누적 창이 다르다. 한 줄에 있다고 같은 기준으로 비교하지 마라.**
+    //   위 셋(busy/무응답/거부)은 **이 정지 구간만** 센다 — 바로 아래에서 0 으로 비워진다.
+    //   아래 넷은 **부팅 이후 누적**이다 — 어디서도 비우지 않는다.
+    //   그래서 `건너뜀 17` 과 `busy 7` 을 나란히 놓고 크기를 비교하면 **틀린다.**
+    //   (CLAUDE.md "숫자 둘을 비교하기 전에 — 어디서 시작하는가")
+    //   ★ 라벨에 `누적` 을 박아 두는 이유가 이것이다. 지우지 마라.
+    Serial.print(F(") · 누적[건너뜀 ")); Serial.print(sendSkips);
+    Serial.print(F(" / SENDOK상한 "));  Serial.print(sendOkTimeouts);
+    Serial.print(F(" / SENDFAIL "));    Serial.print(sendFails);
+    Serial.print(F(" / ESP리셋 "));     Serial.print(espResets);
+    Serial.println(F("] → 링크를 다시 세운다"));
 #endif
     stallBusy = stallTimeout = stallReject = 0;
     startSocketRecovery();             // netOnline 을 내리고 CIPCLOSE 사다리로 간다

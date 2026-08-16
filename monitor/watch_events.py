@@ -26,16 +26,22 @@ DEADLINE = datetime.fromisoformat(sys.argv[2]) if len(sys.argv) > 2 else datetim
 
 MARK = "전송 3회 연속 실패".encode()
 POLL_S = 60
-TAIL_BYTES = 4_000_000     # 사건은 뒤쪽에 쌓인다. 앞부분을 매번 다시 읽을 이유가 없다.
 
 
 def count(path: str) -> int:
-    """사건 수를 센다. 바이트로 읽는다 — 시리얼 로그에는 디코드 불가 바이트가 섞여 있다."""
-    size = os.path.getsize(path)
+    """사건 수를 센다. **파일 전체**를 센다.
+
+    바이트로 읽는다 — 시리얼 로그에는 디코드 불가 바이트가 섞여 있다.
+
+    🔴 여기에 tail 최적화를 넣지 마라. 한 번 넣었다가 뺐다.
+       "뒤쪽 N 바이트만 센다"로 하면 창이 EOF 에 붙어 **앞으로 슬라이드**한다.
+       그러면 새 사건 1건이 늘어도 오래된 사건 1건이 창 밖으로 빠져 총계가 안 늘고,
+       **사건이 났는데 감시기가 안 깨어난다.** 기준값은 전체로 세고 이후는 창으로 세면
+       비교 대상이 아예 다른 것이 된다(원장 1.1 의 '못 셈' 칸).
+       실측 성장률 185 B/s → A 종료까지 약 5.5MB. 60초에 한 번 5MB 를 세는 것은 공짜다.
+       **최적화가 사는 이득이 없고 잃는 것은 지시 이행 그 자체다.**
+    """
     with open(path, "rb") as f:
-        if size > TAIL_BYTES:
-            f.seek(size - TAIL_BYTES)
-            f.readline()          # 잘린 첫 줄은 버린다
         return f.read().count(MARK)
 
 

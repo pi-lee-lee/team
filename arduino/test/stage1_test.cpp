@@ -243,12 +243,42 @@ int main() {
     handleLine(zero);
   }
   ok(espResets == 1,            "★ CIFSR 이 0.0.0.0 이면 ESP 가 상태를 잃은 것으로 센다");
+
+  // ★★ 걸쇠 — 같은 사건의 증상이 여러 번 와도 **한 번만** 센다.
+  //   이게 없으면 카운터가 "사건 수"가 아니라 "증상 수"가 되어 monitor 의 계수와 정의가 어긋난다.
+  netLastSent = NET_CIFSR;
+  { char z2[] = "0.0.0.0"; handleLine(z2); }
+  netLastSent = NET_CIFSR;
+  { char z3[] = "0.0.0.0"; handleLine(z3); }
+  ok(espResets == 1,            "★★ 같은 사건의 0.0.0.0 이 반복돼도 한 번만 센다 (증상 아닌 사건)");
+
+  // 실제로 IP 를 되찾으면 걸쇠가 풀리고, 다음 소실은 **새 사건**이다.
   netLastSent = NET_CIFSR;
   {
     char real[] = "192.168.35.79";
     handleLine(real);
   }
   ok(espResets == 1,            "★ 정상 IP 는 세지 않는다 (오탐 없음)");
+  ok(!ipLossLatched,            "★ IP 를 되찾으면 걸쇠가 풀린다");
+  netLastSent = NET_CIFSR;
+  { char z4[] = "0.0.0.0"; handleLine(z4); }
+  ok(espResets == 2,            "★★ 되찾은 뒤 다시 잃으면 새 사건으로 센다");
+
+  // ── [17] 판별자 ② — 응답이 가비지여도 IP 소실을 잡는다 ────────────────────
+  // 18:48:12 리셋에서 CIFSR 응답이 통째로 깨져 `0.0.0.0` 문자열이 안 나왔다(monitor 실측).
+  // `0.0.0.0` 단독 판별자만 있으면 **가장 심한 리셋을 놓친다** — 그 구멍을 메우는 경로다.
+  printf("\n[17] 판별자 ② — CIFSR 3회 소진(응답이 깨져도 성립)\n");
+  arm(nullptr);
+  netOnline = false;
+  netHasIp  = true;
+  ipLossLatched = false;
+  espResets = 0;
+  cifsrTries = 3;                           // 세 번 물어도 못 얻은 상태
+  netStep = NET_CIFSR;
+  netLastSent = NET_CIFSR;
+  netStepAt = millis() - 5000;              // 대기시간이 지난 것으로 둔다
+  netTick(millis());
+  ok(espResets == 1,            "★★ 0.0.0.0 문자열이 하나도 없어도 IP 소실을 잡는다");
 
   // ── [16] 🔴 루트 지시(REQ-0125 3번) — **침묵 탐지를 잃지 않았다**를 증명한다 ──
   // 기전 B(ESP 모듈이 죽는다)를 탐지하는 유일한 경로가 3연속 실패다.

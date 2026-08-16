@@ -434,7 +434,9 @@
     </section>
   </main>
 
-  <footer>docs/net/parking-protocol.md v1.2 기준 · WebSocket <span class="mono">ws://&lt;host&gt;:9900/ws</span> · 폴백 <span class="mono">data_log.json</span></footer>
+  <!-- WS 주소를 여기에 **하드코딩하지 마라.** 운영과 시험 인스턴스가 같이 도는 동안
+       "지금 어느 서버를 보고 있나"는 화면이 답해야 한다. boot() 이 실제 대상으로 채운다. -->
+  <footer>docs/net/parking-protocol.md v1.2 기준 · WebSocket <span class="mono" id="foot-ws">…</span> · 폴백 <span class="mono">data_log.json</span></footer>
 </div>
 
 <div class="test-frame" aria-hidden="true"></div>
@@ -491,19 +493,22 @@ const POLL_MS      = 3000;    // 폴백 폴링 주기
  *   3. `WS_PORT_DEFAULT` — 포트 없이 열린 경우(80/443)만. 문서화된 기본값을 보존한다.
  *
  * 반환 `{ port, from, bad }` — `from` 은 어디서 정해졌는지(화면에 띄운다),
- * `bad` 는 무시된 잘못된 `?ws=` 값이다. **잘못된 값을 조용히 무시하지 않는 이유**:
- * 조용히 넘기면 사용자는 시험 인스턴스를 보고 있다고 믿는데 실제로는 운영 포트에 붙는다.
+ * `bad` 는 무시된 잘못된 `?ws=` 값이고 **없으면 `null`** 이다. **잘못된 값을 조용히 무시하지
+ * 않는 이유**: 조용히 넘기면 사용자는 시험 인스턴스를 보고 있다고 믿는데 실제로는 운영 포트에 붙는다.
+ *
+ * ⚠ `bad` 의 없음은 `null` 로만 판단하라. 빈 문자열은 **실제로 올 수 있는 잘못된 값**이다
+ *   (`?ws=` 로 열면 값이 `''` 다). 참/거짓으로 검사하면 그 경우만 경고가 새어 나간다.
  */
 function resolveWsPort() {
   const raw = new URLSearchParams(window.location.search).get('ws');
   if (raw !== null) {
     const n = Number(raw);
     if (String(raw).trim() !== '' && Number.isInteger(n) && n >= 1 && n <= 65535) {
-      return { port: String(n), from: 'query', bad: '' };
+      return { port: String(n), from: 'query', bad: null };
     }
     return wsPortFromPage(String(raw));   // 잘못된 값 → 기본 규칙으로 떨어지되 그 사실을 들고 간다
   }
-  return wsPortFromPage('');
+  return wsPortFromPage(null);
 }
 
 function wsPortFromPage(bad) {
@@ -1006,6 +1011,7 @@ const el = {
   devSource:   document.getElementById('dev-source'),
   devAge:      document.getElementById('dev-age'),
   messages:    document.getElementById('messages'),
+  footWs:      document.getElementById('foot-ws'),
   dialog:      document.getElementById('confirm-dialog'),
   dialogTitle: document.getElementById('confirm-title'),
   dialogBody:  document.getElementById('confirm-body'),
@@ -1920,8 +1926,7 @@ const transport = {
   },
 
   connect() {
-    const host = window.location.hostname || 'localhost';
-    const url = 'ws://' + host + ':' + WS_PORT + WS_PATH;
+    const url = wsTargetUrl();     // ⚠ 상수 포트를 되살리지 마라 — WS_PORT_DEFAULT 주석 참조
     let sock;
     try {
       sock = new WebSocket(url);
@@ -2373,6 +2378,31 @@ function buildDemoTools(tools) {
   if (demoMode) {
     el.demoBanner.hidden = false;
     el.demoBanner.textContent = '데모 모드 — 서버 없이 명세(docs/net/parking-protocol.md §5.3 / §9.1)의 예제를 하드코딩해 렌더링합니다. 실제 데이터가 아닙니다.';
+  }
+
+  /* 어느 서버에 붙는지를 화면에 적는다 — 운영(:9900)과 시험(:10000)이 같이 도는 동안
+     이건 장식이 아니라 안전장치다. 접속과 표시가 같은 함수(wsTargetUrl)를 쓰므로 어긋날 수 없다. */
+  const wsInfo = resolveWsPort();
+  if (demoMode) {
+    el.footWs.textContent = '(데모 모드 — 접속하지 않음)';
+  } else if (window.location.protocol === 'file:') {
+    el.footWs.textContent = '(file:// — 접속하지 않음)';
+  } else {
+    el.footWs.textContent = wsTargetUrl();
+  }
+
+  if (!demoMode && window.location.protocol !== 'file:') {
+    if (wsInfo.bad !== null) {          // ⚠ 빈 문자열도 잘못된 값이다 — 참/거짓으로 검사하지 마라
+      showMessage('?ws= 값 "' + wsInfo.bad + '" 이(가) 포트가 아니어서 무시했습니다. '
+                + wsTargetUrl() + ' 로 접속합니다 — 의도한 서버가 맞는지 확인하세요.', 'err');
+    }
+    /* 페이지를 준 포트와 WS 포트가 다르면 **다른 인스턴스일 수 있다.**
+       이 화면은 폴백을 상대경로로 읽으므로, 그 경우 WS 와 파일이 서로 다른 서버를 가리킨다. */
+    if (wsInfo.from === 'query' && window.location.port && wsInfo.port !== window.location.port) {
+      showMessage('이 페이지는 :' + window.location.port + ' 에서 받았는데 WebSocket 은 :'
+                + wsInfo.port + ' 로 붙습니다. 서로 다른 서버라면 화면이 두 인스턴스의 상태를 '
+                + '섞어 보여 줍니다 — 예약은 :' + wsInfo.port + ' 쪽 장치로 내려갑니다.', 'err');
+    }
   }
 
   render();
