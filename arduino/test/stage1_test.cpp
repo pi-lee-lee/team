@@ -302,6 +302,35 @@ int main() {
   printf("      (참고: 오프라인까지 %d 주기 — 2단계 이전은 3주기였다)\n", guard);
   ok(guard <= 8,                "★ 늦어지더라도 상한+3주기 안에 잡힌다 (무한 정지 아님)");
 
+  // ── [18] 🔴 운영 계수기가 `DEBUG` 와 무관하게 나간다 (루트 지시) ────────────
+  // 요점은 "카운터가 있다"가 아니라 **"DEBUG=0 에서 읽을 수 있다"** 이다.
+  // 셀 수만 있고 못 읽으면 안 뺀 것과 같다. 그래서 **출력 자체를 검사**한다.
+  printf("\n[18] 운영 계수기 [CNT] — DEBUG 밖에서 읽을 수 있는가\n");
+  arm(nullptr);
+  linkDrops = 0; espResets = 0; promptResyncs = 0;
+  cntLastAt = millis();
+  startSocketRecovery();                    // 링크 끊김 1건
+  ok(linkDrops == 1,            "★ 링크 재수립이 운영 계수기에 잡힌다");
+  startSocketRecovery();
+  ok(linkDrops == 2,            "★ 두 번째도 잡힌다");
+
+  size_t mark = Serial.out.size();          // 여기서부터 새로 나온 것만 본다
+  g_millis += 60001;                        // 출력 주기를 넘긴다
+  cntTick(millis());
+  std::string fresh = Serial.out.substr(mark);
+  ok(fresh.find("[CNT]")   != std::string::npos,
+                                "★★ [CNT] 줄이 실제로 나간다 (DEBUG 와 무관한 경로)");
+  ok(fresh.find("drop=2")  != std::string::npos,
+                                "★★ 끊김 횟수가 그 줄에 실려 읽을 수 있다");
+  ok(fresh.find("esprst=") != std::string::npos,
+                                "★ ESP 리셋 칸도 실려 나간다");
+
+  // 주기 전에는 안 나간다 — 시리얼 대역을 낭비하지 않는다는 확인
+  mark = Serial.out.size();
+  cntTick(millis());
+  ok(Serial.out.substr(mark).find("[CNT]") == std::string::npos,
+                                "★ 주기 전에는 안 찍는다 (대역 낭비 없음)");
+
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }

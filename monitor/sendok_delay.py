@@ -88,17 +88,19 @@ def main() -> int:
 
     win = [(t, r) for t, r in rows if lo <= t <= hi]
 
-    ok_norm: list[tuple[datetime, int]] = []   # (시작시각, Δ초) — 정상
+    ok_norm: list[tuple[datetime, int]] = []   # (시작시각, Δ초) — 전체 구간, 정상
     ok_bad: list[tuple[datetime, int]] = []    # 비정상 표지가 낀 것
+    fw_norm: list[tuple[datetime, int]] = []   # 🔑 페이로드→SEND OK = **펌웨어 타이머와 같은 구간**
     unpaired = 0                               # SEND OK 없이 다음 CIPSEND 가 온 것
 
     start_t = None
+    pay_t = None      # 페이로드를 다 쓴 시점(그 줄이 읽힌 시각)
     dirty = False
     for t, r in win:
         if START.search(r):
             if start_t is not None:
                 unpaired += 1          # 앞의 것은 SEND OK 를 못 봤다
-            start_t, dirty = t, False
+            start_t, pay_t, dirty = t, None, False
             continue
         if start_t is None:
             continue
@@ -107,18 +109,19 @@ def main() -> int:
             continue
         if DONE in r:
             d = int((t - start_t).total_seconds())
-            (ok_bad if dirty else ok_norm).append((start_t, d))
-            start_t, dirty = None, False
+            if dirty:
+                ok_bad.append((start_t, d))
+            else:
+                ok_norm.append((start_t, d))
+                if pay_t is not None:
+                    fw_norm.append((pay_t, int((t - pay_t).total_seconds())))
+            start_t, pay_t, dirty = None, None, False
+            continue
+        # CIPSEND 와 SEND OK 사이의 `[AT] "…"` 줄 = 페이로드. 마지막 것을 쓴다.
+        if b'[AT] "' in r:
+            pay_t = t
     if start_t is not None:
         unpaired += 1
-
-    def buckets(rec: list[tuple[datetime, int]]) -> dict[str, int]:
-        b = {"0": 0, "1": 0, "2": 0, "3": 0, "4+": 0}
-        for _, d in rec:
-            b[str(d)] = b.get(str(d), 0) + 1 if d < 4 else b["4+"]
-            if d >= 4:
-                b["4+"] = b["4+"] + 0     # 위에서 이미 올림 방지
-        return b
 
     def tally(rec):
         b = {"0": 0, "1": 0, "2": 0, "3": 0, "4+": 0}
@@ -132,7 +135,21 @@ def main() -> int:
     if n_norm < 100:
         print("  ⚠ 정상 표본이 100 미만이다 — 꼬리를 말하기에 부족하다. 구간을 늘려라.")
 
-    print("\n## 🔑 정상 갈래 Δ 분포 — **임계값 근거는 이것뿐이다**")
+    print("\n## 🔑🔑 페이로드→`SEND OK` — **`SEND_OK_TIMEOUT_MS` 가 실제로 재는 구간**")
+    print("   (아래 '전체 구간'은 프롬프트 `>` 대기까지 포함해 더 길다. 임계값은 이 표로 정해라.)")
+    tf = tally(fw_norm)
+    nf = len(fw_norm)
+    for k in ("0", "1", "2", "3", "4+"):
+        n = tf[k]
+        pct = f"{100.0 * n / nf:.3f}%" if nf else "-"
+        bar = "█" * min(40, int(40 * n / max(1, nf)))
+        label = f"Δ={k}s" if k != "4+" else "Δ≥4s"
+        print(f"  {label:<7} {n:7,}  {pct:>9}  {bar}")
+    if fw_norm:
+        mt, md = max(fw_norm, key=lambda x: x[1])
+        print(f"  → 최대 Δ = {md}s (페이로드 {mt:%m-%d %H:%M:%S}) · 표본 {nf:,}")
+
+    print("\n## 전체 구간(`CIPSEND`→`SEND OK`) 정상 갈래 — 프롬프트 대기 포함, 상한")
     tn = tally(ok_norm)
     for k in ("0", "1", "2", "3", "4+"):
         n = tn[k]

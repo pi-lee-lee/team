@@ -1200,6 +1200,42 @@ static uint16_t      sendFails      = 0;       // 진단: SEND FAIL 수신 횟�
 //   그래서 **IP 를 잃은 순간 한 번만** 세고, 실제로 IP 를 되찾을 때 걸쇠를 푼다.
 static uint16_t      espResets = 0;      // ESP 가 IP 를 잃은 **사건 수** (증상 수가 아니다)
 static bool          ipLossLatched = false;
+static uint16_t      linkDrops = 0;      // 링크가 실제로 끊겨 재수립에 들어간 횟수(누적)
+
+// ── 🔴 운영 계수기 출력 — **`DEBUG` 와 무관하게 항상 나간다** ────────────────
+//
+// 왜 `#if DEBUG` 밖인가 (루트 지시 · 2026-08-16):
+//   계수기 **변수**는 원래도 DEBUG 밖이었다. 문제는 **찍는 줄이 전부 안에 있었던 것**이다.
+//   → `DEBUG=0` 으로 구우면 3칸이 1칸으로 주는 게 아니라 **관측이 0칸**이 된다.
+//     장치가 **자기 ESP 리셋에 대해 눈이 먼 채로** 시연장에 서게 된다.
+//   **셀 수만 있고 못 읽으면 안 뺀 것과 같다.** 그래서 읽는 경로를 같이 둔다.
+//
+// 왜 S 프레임(전선)이 아니라 시리얼인가:
+//   전선에 실으면 서버 로그에 영구 보관되어 더 낫다. **그러나 프로토콜 변경이라
+//   socket·web 이 걸리고**, 펌웨어 수정과 같은 굽기에 섞으면 변수가 둘이 된다(§6.3).
+//   → **별건으로 올린다.** 지금은 도메인 안에서 닫히는 방법을 쓴다.
+//
+// 비용: 60초에 한 줄(약 60바이트). 115200bps 에서 약 5ms. 플래시도 수십 바이트다.
+//   ⚠ `[AT]` 원문 로깅과 달리 **대역을 먹지 않는다** — 그래서 이건 밖에 둬도 된다.
+//     경계는 "정수 카운터는 밖 · 장문 진단은 안"이다. 이 경계를 흐리지 마라.
+//
+// ⚠ 형식을 바꾸면 monitor 파서가 깨진다. 칸을 **추가**하되 기존 칸 이름·순서는 유지해라.
+static uint32_t      cntLastAt = 0;
+static const uint32_t CNT_PERIOD_MS = 60000;
+
+static void cntTick(uint32_t now) {
+  if ((uint32_t)(now - cntLastAt) < CNT_PERIOD_MS) return;
+  cntLastAt = now;
+  // 전부 **부팅 이후 누적**이다. 구간값이 아니다 — 창을 잡으려면 두 줄을 빼서 써라.
+  Serial.print(F("[CNT] up="));      Serial.print(now / 1000);
+  Serial.print(F(" drop="));         Serial.print(linkDrops);
+  Serial.print(F(" esprst="));       Serial.print(espResets);
+  Serial.print(F(" resync="));       Serial.print(promptResyncs);
+  Serial.print(F(" sendfail="));     Serial.print(sendFails);
+  Serial.print(F(" okto="));         Serial.print(sendOkTimeouts);
+  Serial.print(F(" skip="));         Serial.print(sendSkips);
+  Serial.print(F(" online="));       Serial.println(netOnline ? 1 : 0);
+}
 
 // IP 소실을 한 번만 세는 자리. 두 판별자 어느 쪽이든 여기로 들어온다.
 static void noteIpLoss(void) {
@@ -1222,6 +1258,9 @@ static void startSocketRecovery(void) {
   //   않는다. 안 풀면 다시 온라인이 된 뒤 첫 송신이 통째로 건너뛰어지고, 최악에는 상한(3초)을
   //   태우고 나서야 첫 프레임이 나간다. **복구 직후가 가장 급한 순간인데 거기서 늦어진다.**
   awaitingSendOk = false;
+  // ★ 운영 계수 — **전송이 안 되어 링크를 다시 세우는 모든 경로가 여기를 지난다.**
+  //   그래서 여기 한 곳에서만 세면 중복도 누락도 없다(이 함수의 존재 이유 그대로다).
+  if (linkDrops < 65535) linkDrops++;
   // ⚠ 여기서 멱등 캐시를 비우지 않는다. 이 판정은 **추정**이고, 링크가 실은 살아 있었다면
   //   재시도에 ALREADY CONNECTED 가 와서 그대로 복귀한다 — 그 경우 캐시를 비웠다면
   //   살아 있는 연결의 멱등성(REQ-0035 [18]-4)이 깨진다.
@@ -2512,6 +2551,7 @@ void loop() {
   drainPending();
   sensorTick();
   statusTick(now);
+  cntTick(now);                     // ★ DEBUG 밖 — 운영 빌드에서도 관측이 남는다
 #if DEBUG
   diagTick(now);
   ramTick(now);

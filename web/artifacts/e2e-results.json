@@ -48,7 +48,7 @@
       "note": "대상 칸 A1"
     },
     {
-      "note": "브라우저 사용자 uduob5ab"
+      "note": "브라우저 사용자 u6533al7"
     },
     {
       "name": "확인 대화상자가 열렸다 (키보드 접근 가능한 <dialog>)",
@@ -60,31 +60,36 @@
     },
     {
       "name": "브라우저가 예약 요청을 전선으로 보냈다",
-      "ok": false,
-      "detail": "[]"
+      "ok": true,
+      "detail": "[\"{\\\"type\\\":\\\"reserve\\\",\\\"slot\\\":\\\"A1\\\",\\\"user_id\\\":\\\"u6533al7\\\",\\\"rid\\\":\\\"r1-zb2zb8\\\"}\"]"
     },
     {
       "name": "서버가 장치로 R 을 내보냈다 (→ARD R,…,A1)",
       "ok": true,
-      "detail": "→ARD R,3,A1,uduob5ab,4E"
+      "detail": "→ARD R,9,A1,u6533al7,57"
     },
     {
       "name": "장치가 A 로 응답했다 (←ARD A)",
       "ok": true,
-      "detail": "←ARD A,3,A1,0,32"
+      "detail": "←ARD A,9,A1,0,38"
     },
     {
       "name": "서버 ACK 가 브라우저까지 돌아왔다",
       "ok": true,
-      "detail": "{\"type\":\"ack\",\"rid\":\"r1-dgr9wh\",\"slot\":\"A1\",\"result\":0,\"message\":\"예약되었습니다\"}"
+      "detail": "{\"type\":\"ack\",\"rid\":\"r1-zb2zb8\",\"slot\":\"A1\",\"result\":0,\"message\":\"예약되었습니다\"}"
     },
     {
-      "name": "🔴 화면이 예약을 반영했다 (4ms)",
-      "ok": false,
-      "detail": "빈 자리"
+      "name": "🔴 화면이 예약을 반영했다 (205ms)",
+      "ok": true,
+      "detail": "내 예약"
     },
     {
       "note": "스크린샷 web/artifacts/3-reserved.png"
+    },
+    {
+      "name": "같은 칸을 다시 누르면 취소를 묻는다 (예약이 화면에 실제로 잡혀 있다는 뜻)",
+      "ok": true,
+      "detail": "예약을 취소하시겠습니까?"
     },
     {
       "name": "예약이 취소돼 원래 상태로 돌아왔다",
@@ -94,7 +99,7 @@
     {
       "name": "스냅샷 프레임을 받았다",
       "ok": true,
-      "detail": "8개"
+      "detail": "7개"
     },
     {
       "note": "device 키: [\"online\",\"device_id\",\"uptime\",\"seq\"]"
@@ -113,15 +118,75 @@
     {
       "name": "폴백 시험용 죽은 포트가 운영 포트가 아니다",
       "ok": true,
-      "detail": "52474"
+      "detail": "52651"
     },
     {
-      "name": "실행 중 예외",
+      "name": "WS 실패 후 파일 폴백으로 넘어갔다",
+      "ok": true,
+      "detail": "파일 폴백 (data_log.json)"
+    },
+    {
+      "name": "폴백 경로에서도 10칸이 상태를 말한다",
+      "ok": true,
+      "detail": "[\"빈 자리\",\"빈 자리\",\"빈 자리\"]"
+    },
+    {
+      "name": "포트 불일치 경고가 떴다 (WS 와 폴백이 다른 서버를 가리킬 수 있는 상태)",
+      "ok": true,
+      "detail": "이 페이지는 :10000 에서 받았는데 WebSocket 은 :52651 로 붙습니다. 서로 다른 서버라면 화면이 두 인스턴스의 상태를 섞어 보여 줍니다 — 예약은 :52651 쪽 장치로 내려갑니다.오후 7:10:5"
+    },
+    {
+      "note": "출처 표시 = \"data_log.json 폴링 (폴백)\""
+    },
+    {
+      "note": "스크린샷 web/artifacts/4-fallback.png"
+    },
+    {
+      "name": "§9.1 개정 4 폴백+무장 데모 버튼이 있다",
+      "ok": true,
+      "detail": "#e2e-demo-btn"
+    },
+    {
+      "name": "무장 표시가 켜졌다",
+      "ok": true,
+      "detail": "\"⚠ 테스트 모드 무장됨 — 지금 보이는 점유 상태는 진짜가 아닐 수 있습니다주입된 칸 1개 · 빗금 친 칸이\""
+    },
+    {
+      "name": "주입된 칸에 ⚑ 주입값 빗금이 보인다 (A3 기대)",
+      "ok": true,
+      "detail": "[\"A3\"]"
+    },
+    {
+      "note": "스크린샷 web/artifacts/5-demo-armed.png"
+    },
+    {
+      "name": "페이지 예외·오류 없음",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "note": "GET /              → 200"
+    },
+    {
+      "note": "GET /index.html?x  → 200"
+    },
+    {
+      "note": "GET /?x            → 404"
+    },
+    {
+      "name": "GET / 는 200",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "name": "GET /index.html?x 는 200",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "name": "GET /?x 도 200 이어야 한다 (지금은 404 — server.cpp serve_file 결함)",
       "ok": false,
-      "detail": "페이지 예외: TypeError: Cannot read properties of null (reading 'textContent')\n    at <anonymous>:1:37"
-    },
-    {
-      "note": "스크린샷 web/artifacts/error.png"
+      "detail": "404 · path==\"/\" 판정이 쿼리 제거보다 먼저라 fn 이 빈 문자열이 된다"
     }
   ]
 }

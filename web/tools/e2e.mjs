@@ -67,9 +67,19 @@ async function click(client, selector) {
  */
 async function goto(client, url) {
   await client.send('Page.navigate', { url });
-  await waitFor(client,
-    `document.readyState === 'complete' && !!document.getElementById('conn-text') && !!document.querySelector('.tile')`,
-    { what: '문서 준비 (' + url + ')', timeout: 15000 });
+  try {
+    await waitFor(client,
+      `document.readyState === 'complete' && !!document.getElementById('conn-text') && !!document.querySelector('.tile')`,
+      { what: '문서 준비 (' + url + ')', timeout: 15000 });
+  } catch (e) {
+    // 실패했을 때 **무엇이 안 됐는지** 말하게 한다. "false" 하나로는 아무것도 못 고친다.
+    const diag = await evaluate(client, `({
+      href: location.href, ready: document.readyState,
+      conn: !!document.getElementById('conn-text'), tiles: document.querySelectorAll('.tile').length,
+      title: document.title, body: (document.body ? document.body.textContent.slice(0, 200) : '(body 없음)')
+    })`).catch(err => ({ evalError: err.message }));
+    throw new Error(e.message + '\n      진단: ' + JSON.stringify(diag));
+  }
 }
 
 /** 칸의 상태 문구. 없으면 빈 문자열. */
@@ -227,7 +237,9 @@ try {
   const dead = await freePort();          // 아무도 안 듣는 포트 (운영 포트가 아님을 보장)
   check('폴백 시험용 죽은 포트가 운영 포트가 아니다', !FORBIDDEN.includes(String(dead)), dead);
   wsCreated.length = 0;
-  await goto(client, BASE + '?ws=' + dead);
+  /* ⚠ `BASE + '?ws=...'` 를 쓰면 안 된다 — 서버가 404 를 준다(아래 [9] 참조).
+     `/index.html` 을 명시해야 쿼리가 붙은 주소가 통한다. 브라우저 시험이 찾아낸 서버 결함이다. */
+  await goto(client, BASE + 'index.html?ws=' + dead);
   await waitFor(client, `document.getElementById('conn-text').textContent.includes('파일 폴백')`,
                 { what: '파일 폴백 전환', timeout: 20000 });
   check('WS 실패 후 파일 폴백으로 넘어갔다', true,
@@ -243,7 +255,7 @@ try {
 
   /* ── 7. REQ-0122 가 사람 눈에 남겨 둔 데모 검증 ── */
   console.log('\n[7] 데모 — REQ-0122 가 "사람이 눈으로 볼 것"으로 남긴 버튼');
-  await goto(client, BASE + '?demo=1');
+  await goto(client, BASE + 'index.html?demo=1');
   await sleep(500);
   const btnSel = await evaluate(client, `(() => {
     const b = [...document.querySelectorAll('button')].find(x => /개정 4 폴백/.test(x.textContent));
@@ -266,6 +278,20 @@ try {
   /* ── 8. 콘솔 오류 ── */
   console.log('\n[8] 콘솔');
   check('페이지 예외·오류 없음', consoleErrs.length === 0, JSON.stringify(consoleErrs.slice(0, 3)));
+
+  /* ── 9. 서버 정적 서빙 — 브라우저 시험이 찾아낸 결함을 고정한다 ── */
+  console.log('\n[9] 서버 정적 서빙 — 루트 경로에 쿼리를 붙이면?');
+  const code = async (p) => (await fetch(BASE.slice(0, -1) + p)).status;
+  const cRoot = await code('/'), cFile = await code('/index.html?demo=1'), cRootQ = await code('/?demo=1');
+  note('GET /              → ' + cRoot);
+  note('GET /index.html?x  → ' + cFile);
+  note('GET /?x            → ' + cRootQ);
+  check('GET / 는 200', cRoot === 200, cRoot);
+  check('GET /index.html?x 는 200', cFile === 200, cFile);
+  /* 이 단언은 **일부러 "고쳐지면 실패"하게 두지 않았다** — 지금은 404 인 것이 사실이고,
+     socket 이 고치면 여기가 초록으로 바뀌면서 고쳐졌음을 알려 준다. */
+  check('GET /?x 도 200 이어야 한다 (지금은 404 — server.cpp serve_file 결함)',
+        cRootQ === 200, cRootQ + ' · path=="/" 판정이 쿼리 제거보다 먼저라 fn 이 빈 문자열이 된다');
 
 } catch (e) {
   failed++;
