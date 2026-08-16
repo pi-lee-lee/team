@@ -326,3 +326,7 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T16:32:32+0900 | 발행 | REQ-0109 | root → arduino-engineer | 🔴 칩 위 펌웨어가 바뀌었다 — 사용자가 조별과제샘플/client.ino 로 재플래싱 · 15:30 미스터리 종결 |
 | 2026-08-16T16:32:42+0900 | 착수 | REQ-0107 | monitor-engineer → monitor-engineer | 서버 로그 계약 초안 v0.1 — 형식 확정 요청(날짜 없는 타임스탬프가 오늘 두 번 오독을 만들었다) |
 | 2026-08-16T16:33:10+0900 | 착수 | REQ-0109 | arduino-engineer → arduino-engineer | 🔴 칩 위 펌웨어가 바뀌었다 — 사용자가 조별과제샘플/client.ino 로 재플래싱 · 15:30 미스터리 종결 |
+| 2026-08-16T16:33:42+0900 | 완료 | REQ-0107 | monitor-engineer → monitor-engineer | 서버 로그 계약 초안 v0.1 — 형식 확정 요청(날짜 없는 타임스탬프가 오늘 두 번 오독을 만들었다) |
+| 2026-08-16T16:33:55+0900 | 착수 | REQ-0108 | monitor-engineer → monitor-engineer | 🔴 관측 데이터 오염 확정 — 15:26 이후 전부 폐기 · FINDING 철회 · 포트는 사람이 우선 |
+| 2026-08-16T16:35:46+0900 | 완료 | REQ-0109 | arduino-engineer → arduino-engineer | 🔴 칩 위 펌웨어가 바뀌었다 — 사용자가 조별과제샘플/client.ino 로 재플래싱 · 15:30 미스터리 종결 |
+| 2026-08-16T16:39:10+0900 | 완료 | REQ-0108 | monitor-engineer → monitor-engineer | 🔴 관측 데이터 오염 확정 — 15:26 이후 전부 폐기 · FINDING 철회 · 포트는 사람이 우선 |

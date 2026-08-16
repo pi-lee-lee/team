@@ -80,7 +80,30 @@ def parse():
     return out
 
 
+CONTAM_SINCE = datetime(2026, 8, 16, 15, 26, 0)
+
+
+def contam_guard():
+    """🔴 오염 구간을 말없이 집계하지 않는다.
+
+    2026-08-16 15:26 이후는 사용자가 아두이노를 물리적으로 뽑았다 끼운 구간이다
+    (사용자 확인 · REQ-0108). 거기서 나오는 재부팅·단절은 **고장이 아니다.**
+    막지는 않는다 — 그 구간을 일부러 볼 일이 있다. 다만 **조용히 지나가지 않는다.**
+    """
+    if UNTIL <= CONTAM_SINCE:
+        return
+    print("=" * 72)
+    print("🔴 경고 — 요청한 구간이 오염 구간(2026-08-16 15:26~)과 겹친다.")
+    print("   그 구간의 재부팅·세션단절·프레임공백은 **사용자가 보드를 뽑았다 끼운 결과**다.")
+    print("   장비/펌웨어 판정의 근거로 인용하지 마라. (출처: 사용자 확인 · REQ-0108)")
+    if SINCE < CONTAM_SINCE:
+        print(f"   깨끗한 부분만 보려면: --until 로 {CONTAM_SINCE.isoformat()} 을 지정해라.")
+    print("=" * 72)
+    print()
+
+
 def main() -> int:
+    contam_guard()
     ev = [e for e in parse() if SINCE <= e[0] <= UNTIL]
     if not ev:
         print("구간에 이벤트 없음 — 로그가 이 구간을 담고 있지 않다.", file=sys.stderr)
