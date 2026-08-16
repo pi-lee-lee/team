@@ -86,9 +86,11 @@ async function goto(client, url) {
 const stateOf = (slot) => `(() => { const b = document.querySelector('.tile[data-slot="${slot}"]');
   return b ? b.querySelector('.tile__state').textContent : ''; })()`;
 
-async function shot(client, name) {
+async function shot(client, name, { full = false } = {}) {
   try {
-    const { data } = await client.send('Page.captureScreenshot', { format: 'png' });
+    // full=true 는 뷰포트 아래까지 담는다. 장치 패널(신선도 표시)이 접혀 있어 기본 촬영에는 안 잡힌다.
+    const { data } = await client.send('Page.captureScreenshot',
+      full ? { format: 'png', captureBeyondViewport: true } : { format: 'png' });
     const f = new URL(name + '.png', OUT);
     writeFileSync(f, Buffer.from(data, 'base64'));
     note('스크린샷 web/artifacts/' + name + '.png');
@@ -233,6 +235,10 @@ try {
     note('스냅샷 원문 web/artifacts/ws-snapshot.json');
     const shown = await evaluate(client, `document.getElementById('dev-frame').textContent`);
     note('화면의 "마지막 프레임" 표시 = ' + JSON.stringify(shown));
+    /* 🔴 이 장면은 **고쳐지고 나면 다시 못 찍는다.** REQ-0132 가 처리되면 이 칸에 실제
+       시각이 들어가므로, "고치기 전에는 주 경로에서 신선도를 몰랐다"는 증거는 지금이 마지막이다.
+       장치 패널이 접혀 있어 전체 페이지로 찍는다. */
+    await shot(client, '7-freshness-unknown', { full: true });
   }
 
   /* ── 6. 🔴 살아 있던 WS 가 끊어지는 순간 — 전환 그 자체 ──
