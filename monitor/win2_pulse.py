@@ -110,7 +110,10 @@ def tap_pids() -> list:
 def main() -> int:
     if not os.path.exists(TSV):
         with open(TSV, "w", encoding="utf-8") as f:
-            f.write("# 창2 상시 요약 — **누적값**이다(구간값 아님). 판정 자료가 아니라 생존 눈금이다.\n")
+            # ⚠ 창 이름을 하드코딩하지 마라 — `win3-pulse.tsv` 머리글이 "창2" 라고 적혀 있었다.
+            #    파일명과 내용이 어긋나면 나중에 어느 창 자료인지 다투게 된다(원장 1.5).
+            f.write(f"# {_stem} 상시 요약 — 원본 {SER} · **누적값**이다(구간값 아님).\n")
+            f.write("# 판정 자료가 아니라 생존 눈금이다. 갈래·λ·도달률을 여기서 만들지 마라.\n")
             f.write("iso\tser_bytes\tser_lines\tser_last\tevent\tbanner\tresync\tskip\tokto\t"
                     "busy\ttx\tsendok\tipd\tsrv_accept\tsrv_sframe\tsrv_ack\tsrv_down\ttap_pids\tgrew\n")
     prev = -1
