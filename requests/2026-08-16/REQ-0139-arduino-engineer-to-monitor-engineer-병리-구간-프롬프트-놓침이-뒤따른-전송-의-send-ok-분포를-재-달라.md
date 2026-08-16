@@ -3,9 +3,9 @@ id: REQ-0139
 title: 병리 구간(프롬프트 놓침이 뒤따른 전송)의 SEND OK 분포를 재 달라 — 정상 분포로 비정상 상한을 정했다 · A 는 3.20h 분으로
 from: arduino-engineer
 to: monitor-engineer
-status: open
+status: done
 created: 2026-08-16T23:37:09+0900
-updated: 2026-08-16T23:37:09+0900
+updated: 2026-08-16T23:52:38+0900
 files: ["monitor/serial-newbase.log (읽기 전용) · monitor/ 아래 신규 측정 산출물"]
 parent: none
 ---
@@ -142,3 +142,8 @@ SEND_OK_TIMEOUT_MS=2000 의 근거는 REQ-0131 이 준 정상 전송 분포인�
      team/bin/req.sh done REQ-0139 --by monitor-engineer --note "<한 줄 요약>" -->
 
 _(미처리)_
+
+### 처리 완료 · monitor-engineer · 2026-08-16T23:52:38+0900
+
+P 는 2건이 아니라 30건이다 — monitor/MEASURE-2026-08-16-2350-sendok-final.md. (a)왔다 20건(Δ=2s 12 · 3s 8 · 최대 3s · 4s 이상 0) / (b)링크붕괴가 먼저 10건 = SEND OK 안 옴. 질문①의 답: 이분법이 안 맞는다 — 안 온 10건 중 4건에서 ESP 는 busy 로 살아서 답했고 앵커 페이로드를 메아리로 되돌렸는데 SEND OK 는 끝내 안 왔다. 그리고 원문상 실패 카운터를 올린 방아쇠는 SEND OK 대기가 아니라 프롬프트 놓침이다. busy 유무가 기전 갈래와 10/10 일치(없음6=리셋계열6, 있음4=자해2+혼합2). pre-A 는 따로(P 9건, 최대 3s). 내 도구 결함 하나(회복 사다리가 정상 긴지연으로 위장) 스스로 잡아 고치고 공개했다.
+

@@ -418,3 +418,11 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T23:43:31+0900 | 완료 | REQ-0135 | socket-engineer → socket-engineer | 서버 구조 문서가 없다 — 한 장으로 쓰고 낡은 계획서에 폐기 표시해라 |
 | 2026-08-16T23:43:32+0900 | 통보 | REQ-0141 | monitor-engineer → root | A 판정에 딸린 도구 둘·원장 정정 넷·앞선 결론 하나 철회 (실물 미접촉) |
 | 2026-08-16T23:44:49+0900 | 통보 | REQ-0142 | socket-engineer → root | 원장 LEDGER §8 신설 — 시험 도구 기본 포트가 운영 포트다(전 도메인 주의) · reason=signal 부재 · cwd 의존 |
+| 2026-08-16T23:52:23+0900 | 완료 | REQ-0131 | monitor-engineer → monitor-engineer | AT+CIPSEND → SEND OK 실측 지연 분포를 재 달라 — SEND_OK_TIMEOUT_MS 임계값 근거 (A 판정 파서 변경 아님) |
+| 2026-08-16T23:52:26+0900 | 착수 | REQ-0139 | monitor-engineer → monitor-engineer | 병리 구간(프롬프트 놓침이 뒤따른 전송)의 SEND OK 분포를 재 달라 — 정상 분포로 비정상 상한을 정했다 · A 는 3.20h 분으로 |
+| 2026-08-16T23:52:38+0900 | 완료 | REQ-0139 | monitor-engineer → monitor-engineer | 병리 구간(프롬프트 놓침이 뒤따른 전송)의 SEND OK 분포를 재 달라 — 정상 분포로 비정상 상한을 정했다 · A 는 3.20h 분으로 |
+| 2026-08-16T23:53:54+0900 | 통보 | REQ-0143 | socket-engineer → root | 시험 도구 둘 굳힘(검증 완료) · PPID=1 기동 줄 복원 · 소유권 훅이 배포 기동을 막는다(루트 결정 필요) |
+| 2026-08-16T23:54:58+0900 | 발행 | REQ-0144 | root → arduino-engineer | 구워라 — 보류 해제(사용자 결정) · DEBUG=1 필수 · 보드 확인은 건너뛴다 |
+| 2026-08-16T23:55:59+0900 | 발행 | REQ-0145 | web-engineer → socket-engineer | REQ-0132 마무리 확인용 시험 인스턴스 (급하지 않다 · 배포와 창 개방이 먼저) |
+| 2026-08-16T23:56:52+0900 | 통보 | REQ-0146 | web-engineer → root | e2e.mjs [5] 극성 정정 + 원장 5장 신설 + 실측: 지금 파킹 서버가 하나도 안 떠 있다 |
+| 2026-08-16T23:57:09+0900 | 착수 | REQ-0144 | arduino-engineer → arduino-engineer | 구워라 — 보류 해제(사용자 결정) · DEBUG=1 필수 · 보드 확인은 건너뛴다 |

@@ -3,9 +3,9 @@ id: REQ-0131
 title: AT+CIPSEND → SEND OK 실측 지연 분포를 재 달라 — SEND_OK_TIMEOUT_MS 임계값 근거 (A 판정 파서 변경 아님)
 from: arduino-engineer
 to: monitor-engineer
-status: claimed
+status: done
 created: 2026-08-16T19:06:50+0900
-updated: 2026-08-16T19:12:36+0900
+updated: 2026-08-16T23:52:23+0900
 files: ["monitor/serial-newbase.log (읽기전용 측정)"]
 parent: none
 ---
@@ -116,3 +116,8 @@ SEND_OK_TIMEOUT_MS=2000 이 추측값이다. 굽기 전에 실측으로 정할 �
      team/bin/req.sh done REQ-0131 --by monitor-engineer --note "<한 줄 요약>" -->
 
 _(미처리)_
+
+### 처리 완료 · monitor-engineer · 2026-08-16T23:52:22+0900
+
+최종본을 8h 가 아니라 A 창 3.20h 로 냈다(8h 는 오지 않았다) — monitor/MEASURE-2026-08-16-2350-sendok-final.md §5. 페이로드→SEND OK: Δ=0s 10,122(99.803%) · 1s 20 · 2s 이상 0 · 최대 1s. CIPSEND→SEND OK(상한): 최대 2s(19:25:33, 원문 확인 깨끗). 분모 정상 10,143 · 비정상 10 · 짝짓기실패 37. 개입 없는 구간(1.79h)만 뽑아도 모양 동일(99.823% · 최대 1s) → CPU 경합이 분포를 만들지 않았다.
+

@@ -221,24 +221,60 @@ try {
     .catch(e => '(실패: ' + e.message + ')');
   check('예약이 취소돼 원래 상태로 돌아왔다', !/실패/.test(back), back);
 
-  /* ── 5. last_frame_ts — REQ 근거를 실측으로 만든다 ── */
-  console.log('\n[5] WS 스냅샷에 last_frame_ts 가 있는가 (실측)');
+  /* ── 5. last_frame_ts — REQ-0132 가 들어왔는지 확인한다 ──
+     🔴 2026-08-16 23:5x · web-engineer — **극성을 뒤집었다.**
+     이 단계는 원래 "키가 **없다**"를 단언했다(그때는 그것이 사실이었고, 결함을 고정해서
+     REQ 의 근거로 삼으려던 것이다). socket 이 REQ-0132 로 고친 뒤에는 같은 단언이
+     **고쳐졌다는 이유로 빨간불**이 된다 — 하니스가 "회귀했다, 다시 열어라"라고 거짓말을 한다.
+     실제로 socket 이 "[5] 가 초록이 되는지 확인해 달라"고 했고, 뒤집지 않고 돌렸다면
+     멀쩡한 수정을 되돌리라고 요구할 뻔했다.
+     고치기 전의 사실은 REQ-0132 와 LEDGER §2.1 · web/artifacts/7-freshness-unknown.png 에 남아 있다.
+     교훈: **결함의 존재를 단언하는 검사는 고쳐지는 순간 거짓 경보가 된다.** 결함을 고정할
+     때는 "고쳐지면 초록"이 되게 쓴다([10] 이 그렇게 돼 있어서 그쪽은 손댈 것이 없었다). */
+  console.log('\n[5] WS 스냅샷의 last_frame_ts — REQ-0132 (실측)');
   const snaps = wsFrames.filter(f => f.dir === 'rx' && f.data.includes('"snapshot"'));
   check('스냅샷 프레임을 받았다', snaps.length > 0, snaps.length + '개');
   if (snaps.length) {
     const j = JSON.parse(snaps[snaps.length - 1].data);
-    const keys = Object.keys(j.device || {});
+    const dev = j.device || {};
+    const keys = Object.keys(dev);
     note('device 키: ' + JSON.stringify(keys));
-    check('🔴 device.last_frame_ts 가 WS 스냅샷에 없다 (신선도 표시가 주 경로에서 안 도는 원인)',
-          !('last_frame_ts' in (j.device || {})), JSON.stringify(keys));
+    check('device.last_frame_ts 가 WS 스냅샷에 있다 (REQ-0132)',
+          'last_frame_ts' in dev, JSON.stringify(keys));
+    const lf = dev.last_frame_ts;
+    /* 계약은 셋이다: 키 이름 · epoch **밀리초** · 무프레임이면 null(0 이 아니다).
+       0 을 받으면 화면이 1970년으로부터의 나이를 그린다 — 그래서 값의 형태까지 검사한다.
+       13자리 하한(2001-09-09)만 본다. 상한을 두면 하니스가 미래에 저절로 썩는다. */
+    check('값이 null 이거나 epoch ms 다 (0 이 아니다)',
+          lf === null || (typeof lf === 'number' && lf > 1e12), JSON.stringify(lf));
     writeFileSync(new URL('ws-snapshot.json', OUT), JSON.stringify(j, null, 2));
     note('스냅샷 원문 web/artifacts/ws-snapshot.json');
+
+    /* 파일 경로의 같은 키와 나란히 놓는다 — **차이가 나는 것이 정상**이다.
+       server.cpp:1340 이 last_frame_ts 를 기록 키에서 일부러 뺐다(넣으면 초당 한 번 쓴다).
+       즉 파일은 **상태가 바뀔 때만** 다시 써지고, 그 사이 파일의 last_frame_ts 는 얼어 있다.
+       WS 는 프레임마다 갱신된다. 같은 키·같은 단위인데 **신선도가 다르다.**
+       socket 의 REQ-0132 실측에서 둘이 30.187초 벌어져 있던 것이 이 이유로 설명된다.
+       여기서는 단언하지 않고 값을 남긴다 — 간격의 크기는 그 순간 상태 변화 여부에 달렸다. */
+    let fileLf = '(못 읽음)';
+    try {
+      const arr = await (await fetch(BASE.slice(0, -1) + '/data_log.json')).json();
+      const last = Array.isArray(arr) ? arr[arr.length - 1] : arr;
+      fileLf = last && last.device ? last.device.last_frame_ts : '(device 없음)';
+      if (typeof lf === 'number' && typeof fileLf === 'number')
+        note('WS 와 파일의 last_frame_ts 간격 = ' + (lf - fileLf) + 'ms  '
+             + '(파일은 상태 변화 때만 다시 써진다 — server.cpp:1340. 벌어지는 것이 정상)');
+    } catch (e) { fileLf = '(' + e.message + ')'; }
+    note('WS last_frame_ts = ' + JSON.stringify(lf) + ' · 파일 = ' + JSON.stringify(fileLf));
+
     const shown = await evaluate(client, `document.getElementById('dev-frame').textContent`);
     note('화면의 "마지막 프레임" 표시 = ' + JSON.stringify(shown));
-    /* 🔴 이 장면은 **고쳐지고 나면 다시 못 찍는다.** REQ-0132 가 처리되면 이 칸에 실제
-       시각이 들어가므로, "고치기 전에는 주 경로에서 신선도를 몰랐다"는 증거는 지금이 마지막이다.
-       장치 패널이 접혀 있어 전체 페이지로 찍는다. */
-    await shot(client, '7-freshness-unknown', { full: true });
+    /* 서버가 값을 줬는데 화면이 여전히 "알 수 없음"이면 고장은 이제 **내 쪽**이다.
+       값이 null 인 경우(장치를 한 번도 못 본 인스턴스)는 "알 수 없음"이 정답이므로 뺀다. */
+    if (typeof lf === 'number')
+      check('화면이 실제 시각을 그린다 ("알 수 없음" 이 아니다)',
+            !/알 수 없음/.test(shown), JSON.stringify(shown));
+    await shot(client, '7-freshness', { full: true });
   }
 
   /* ── 6. 🔴 살아 있던 WS 가 끊어지는 순간 — 전환 그 자체 ──
@@ -272,8 +308,10 @@ try {
   const dead = await freePort();          // 아무도 안 듣는 포트 (운영 포트가 아님을 보장)
   check('폴백 시험용 죽은 포트가 운영 포트가 아니다', !FORBIDDEN.includes(String(dead)), dead);
   wsCreated.length = 0;
-  /* ⚠ `BASE + '?ws=...'` 를 쓰면 안 된다 — 서버가 404 를 준다(아래 [9] 참조).
-     `/index.html` 을 명시해야 쿼리가 붙은 주소가 통한다. 브라우저 시험이 찾아낸 서버 결함이다. */
+  /* ⚠ 예전에는 `BASE + '?ws=...'` 를 쓰면 서버가 404 를 줬다(아래 **[10]** — [9] 가 아니다.
+     REQ-0132 본문에서 내가 이 번호를 잘못 적었고 socket 도 그대로 받아 적었다).
+     REQ-0132 로 고쳐졌지만 **운영에 올라간 빌드가 무엇인지는 여기서 알 수 없으므로**
+     `/index.html` 을 명시하는 이 형태를 유지한다 — 옛 빌드에서도 통하는 유일한 주소다. */
   await goto(client, BASE + 'index.html?ws=' + dead);
   await waitFor(client, `document.getElementById('conn-text').textContent.includes('파일 폴백')`,
                 { what: '파일 폴백 전환', timeout: 20000 });
@@ -323,10 +361,13 @@ try {
   note('GET /?x            → ' + cRootQ);
   check('GET / 는 200', cRoot === 200, cRoot);
   check('GET /index.html?x 는 200', cFile === 200, cFile);
-  /* 이 단언은 **일부러 "고쳐지면 실패"하게 두지 않았다** — 지금은 404 인 것이 사실이고,
-     socket 이 고치면 여기가 초록으로 바뀌면서 고쳐졌음을 알려 준다. */
-  check('GET /?x 도 200 이어야 한다 (지금은 404 — server.cpp serve_file 결함)',
-        cRootQ === 200, cRootQ + ' · path=="/" 판정이 쿼리 제거보다 먼저라 fn 이 빈 문자열이 된다');
+  /* 이 단언은 **일부러 "고쳐지면 실패"하게 두지 않았다** — 결함이 있는 동안은 빨간불이고,
+     socket 이 고치면 저절로 초록이 된다. REQ-0132 로 실제로 그렇게 됐다(server.cpp:1881-1883).
+     ⚠ [5] 는 반대로 써 있어서 고쳐지는 순간 거짓 경보가 됐다. 이쪽이 옳은 형태다.
+     이제 이 줄은 **회귀 감시**다 — 다시 404 가 되면 여기가 잡는다.
+     🔴 200/404 는 **빌드 판별자**이기도 하다: 붙은 서버가 REQ-0132 이전인지 이후인지 이 한 줄로 갈린다. */
+  check('GET /?x 도 200 (REQ-0132 이후. 404 면 옛 빌드이거나 회귀다)',
+        cRootQ === 200, cRootQ + ' · 404 라면: path=="/" 판정이 쿼리 제거보다 먼저인 옛 serve_file');
 
 } catch (e) {
   failed++;
