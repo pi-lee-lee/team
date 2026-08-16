@@ -138,8 +138,42 @@ def main() -> int:
         return 1
 
     # 서버 기동 시각들 — 그 직후 접속은 "설계된 재시도가 받아들여진 것"이라 제외한다.
-    starts = [t for t, s in ev
-              if "소크 관측 시작" in s or s.lstrip().startswith("=== INSTANCE")]
+    #
+    # 🔴 2026-08-17 00:1x — REQ-0112 파서 감사. **처음에 내가 틀리게 진단했다. 둘 다 적는다.**
+    #
+    #   ❌ 내 첫 진단: "`startswith('=== INSTANCE')` 가 `=== INSTANCE-END` 도 통과하므로
+    #      서버 종료를 기동으로 오인해 잘못 제외한다."
+    #      → **틀렸다. 그 가지는 애초에 도달하지 않는다.** `parse()` 는 타임스탬프로 시작하는
+    #      줄만 내보내는데 `=== INSTANCE…` 줄에는 타임스탬프 접두어가 없다. 그래서
+    #      `ev` 에 들어오지 않는다. 합성 픽스처로 확인했다(`monitor/fixture-instance-end.log`):
+    #      동결본과 고친 판이 **같은 결과**를 냈고 둘 다 "서버 기동 표지 0건" 이었다.
+    #      → 오분류는 **일어난 적이 없다.** A 판정도 영향 없다.
+    #
+    #   ✅ 실제로 성립하는 문제는 다른 것이다: **그래서 이 제외는 지금 `⏱ 소크 관측 시작`
+    #      한 줄에만 의존한다.** 실측(2026-08-16 로그 전수): `=== INSTANCE` 20건 ·
+    #      `⏱ 소크 관측 시작` 20건 — 1:1 이라 지금은 맞는다. 그러나 그 한국어 문자열이
+    #      한 번 바뀌면(이미 `오프라인 판정`→`무프레임 판정` 전례가 있다) **제외가 조용히 0**
+    #      이 되고, 기동 직후 몰림이 전부 링크 끊김으로 세어진다(원장 1.1 의 '못 셈').
+    #
+    #   → 고침: 기계 판독용 `=== INSTANCE … start=<ISO>` 를 **원본에서 따로 긁어** 더한다.
+    #     `start=` 를 키로 쓰므로 `INSTANCE-END`(`stop=`)는 구조적으로 안 들어온다.
+    #   ⚠ `frozen-A/link_drop_probe.py` 는 **고치지 않는다**(고치면 A 를 다른 자로 재게 된다).
+    #     이 파일과 동결본은 이 지점에서 **의도적으로 다르다.** A 재현은 확인했다(바이트 동일).
+    starts = [t for t, s in ev if "소크 관측 시작" in s]
+    with open(LOG, "rb") as _f:
+        for _line in _f.read().decode("utf-8", "replace").splitlines():
+            _t = _line.lstrip()
+            if not _t.startswith("=== INSTANCE") or _t.startswith("=== INSTANCE-END"):
+                continue
+            _m = re.search(r"\bstart=(\S+)", _t)
+            if not _m:
+                continue
+            try:
+                _ts = datetime.fromisoformat(_m.group(1)).replace(tzinfo=None)
+            except ValueError:
+                continue
+            if SINCE <= _ts <= UNTIL and _ts not in starts:
+                starts.append(_ts)
     all_accepts = [t for t, s in ev if "+? 연결 수락" in s]
 
     def in_grace(t):

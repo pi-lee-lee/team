@@ -1,0 +1,34 @@
+
+[PARKING NODE] proto v1 / 10 slots / dev=P1
+[BOOT] 리셋 원인: 불명 (부트로더가 MCUSR 을 지우고 넘어왔다)
+[BOOT] 사다리 4단(ESP 하드리셋선) 미배선 — A2 를 ESP RST 에 물리고 ESP_RST_WIRED=1 · 6단(워치독) 끔
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=2 사다리=0/0 rx=45 lines=4 up=3s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="SK_WiFiGIGA50DC_2.4G","2011050796"" (44)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[AT] "ERROR" (5)
+[NET] ★ CWJAP 실패 1회 (구형 펌웨어는 사유를 주지 않는다)
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 0s · 연속 1회 · 결합유지 없음 · 현재 0단(0회 누적)
+[LADDER] ↑↑ 단 상승 → 1단
+[LADDER] 1단 조치: 시리얼 드레인 8바이트 버림 + 줄 조립 초기화
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.35.79" (13)
+[NET] ★ IP 확보: 192.168.35.79
+[AT] "OK" (2)
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 적용됨 → CIPSTART
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+[DIAG] offline step=5 사다리=1/0 rx=205 lines=13 up=6s

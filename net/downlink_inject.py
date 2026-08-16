@@ -67,6 +67,7 @@ class Injector:
         self.n_sent = 0
         self.n_ack = 0
         self.n_ack_other = 0
+        self.n_not_injected = 0
         self.n_timeout = 0
         self.n_reconnect = 0
 
@@ -96,7 +97,17 @@ class Injector:
             self.sock = None
 
     def inject(self, rid):
-        """한 번 주입하고 ACK 를 기다린다. 반환: 'ack' | 'ack_other' | 'timeout'"""
+        """한 번 주입하고 응답을 기다린다.
+
+        반환: 'ack'(result=4, 정상) | 'ack_other' | 'not_injected' | 'timeout'
+
+        🔴 **`not_injected` 를 `timeout` 과 반드시 갈라야 한다.**
+        장치가 오프라인이면 서버는 ACK 가 아니라 **`{"type":"error","code":"device_offline"}`**
+        를 돌려주고 **전선에는 아무것도 안 내보낸다**(server.cpp:1799·1810·1851 → `send_err`).
+        이것을 응답 없음으로 흘리면 30초 뒤 timeout 이 되고, monitor 는 그것을
+        **D1/D2(장치가 못 받았다)로 센다** — 그러나 실제로는 **①이 아예 없었다.**
+        → **없는 하행 고장을 만들어 내는 자리다.** 그래서 별도 칸으로 센다.
+        """
         req = {"type": "test_set", "slot": self.a.slot, "occupied": "1", "rid": rid}
         send_text(self.sock, req)
         self.n_sent += 1
@@ -112,17 +123,31 @@ class Injector:
                 o = json.loads(body.decode("utf-8", "replace"))
             except ValueError:
                 continue
-            if o.get("type") == "ack" and o.get("rid") == rid:
+            if o.get("rid") != rid:
+                continue                      # 다른 요청의 응답 — 흘린다
+
+            # ── 서버가 거절한 경우: **전선에 아무것도 안 나갔다**
+            if o.get("type") == "error":
+                code = o.get("code", "?")
+                self.n_not_injected += 1
+                if code == "device_offline":
+                    self.log("=", "미주입 %s — 장치 오프라인(서버가 전선에 안 내보냈다). "
+                                  "🔴 이것은 하행 실패가 **아니다**. D1/D2 로 세지 마라" % rid)
+                else:
+                    self.log("!", "미주입 %s — 서버 거절 code=%s. 전선에 안 나갔다" % (rid, code))
+                return "not_injected"
+
+            if o.get("type") == "ack":
                 result = o.get("result")
                 if result == 4:
                     self.n_ack += 1
                     self.log("←", "ACK %s result=4 (정상 — 무장 안 된 상태의 거절)" % rid)
                     return "ack"
-                # 🔴 4 가 아니면 **상태가 바뀌었을 수 있다.** 크게 남긴다.
+                # 🔴 4 가 아니다. **무장돼 있으면 상태가 바뀐다.** 크게 남긴다.
                 self.n_ack_other += 1
-                self.log("!", "🔴 ACK %s result=%s — 4 가 아니다. 무장 상태를 의심하라. "
-                              "상태가 바뀌었을 수 있으므로 판정에 반드시 적어라"
-                         % (rid, result))
+                self.log("!", "🔴 ACK %s result=%s — 4 가 아니다. **무장 상태를 의심하라.** "
+                              "무장돼 있으면 이 주입이 실제로 상태를 바꿨다는 뜻이다. "
+                              "판정에 반드시 적고, 계속 나오면 주입을 멈춰라" % (rid, result))
                 return "ack_other"
         self.n_timeout += 1
         self.log("!", "ACK 없음 %s — %.0f초 안에 안 왔다 (monitor 의 D1/D2 후보)"

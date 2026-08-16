@@ -158,15 +158,37 @@ ps -p 75781                              # 없어야 한다
 lsof -nP -iTCP -sTCP:LISTEN              # 9991·9900·5500 이 없어야 한다
 ```
 
-### 4.2 바이너리 설치
+### 4.2 바이너리 설치 — 🔴 **이것도 루트가 친다** (socket 은 훅에 막힌다)
 
 검증한 것과 **같은 파일**을 옮긴다. **다시 빌드하지 마라** — 재빌드하면 그것은
 §2·§3 에서 검증한 산출물이 아니다.
 
 ```bash
-cp ~/parking-bin/srv_parking ~/parking-bin/srv_parking.prev-337c926   # 되돌리기용
-cp /Users/idong-u/learn/조별과제샘플/server_test ~/parking-bin/srv_parking
+cp /Users/idong-u/parking-bin/srv_parking /Users/idong-u/parking-bin/srv_parking.prev-<옛sha>
+cp /Users/idong-u/learn/조별과제샘플/server_test /Users/idong-u/parking-bin/srv_parking
 ```
+
+> ⚠ **2026-08-17 00:0x 정정.** 처음에 이 절을 socket 이 치는 것으로 적었는데 **틀렸다.**
+> 훅이 **`cp` 도 막는다**(리다이렉션만 막는 것이 아니다):
+> *"Bash 명령에 파일 변조 패턴 'cp ' 이 있고 대상이 남의 영역이다."*
+> → **§4.2 와 §4.3 둘 다 루트 단계다.** socket 은 §0~§3(빌드·시험)과 §4.4(확인)를 맡는다.
+> 우회 수단(`python3` 등)은 **쓰지 않는다** — 규약이다(CLAUDE.md).
+
+### 4.2.1 `build=` 가 HEAD 와 달라도 낡은 것이 아닐 수 있다
+
+배포하는 것은 **검증한 산출물**이므로, 그 뒤 다른 도메인이 커밋을 쌓으면
+`build=<sha>` 가 HEAD 보다 뒤처져 보인다. **판단 기준은 하나다:**
+
+```bash
+git diff --stat <build sha> HEAD -- 조별과제샘플/
+```
+
+- **비어 있으면** → 서버 소스가 그대로다. `build=` 는 **정확하다.** 재빌드하지 마라.
+- **비어 있지 않으면** → 미배포 변경이 실제로 있다. 그 사실을 통보에 적어라.
+
+⚠ **통보에 이 한 줄을 넣어라.** 안 적으면 관측자가 t0 기록표에서
+"미배포 변경이 또 있나"로 읽는다. (2026-08-17 배포: `build=22f788d` · HEAD `d332970` ·
+서버 소스 **동일**)
 
 ### 4.3 🔴 기동 — **어느 디렉터리에서 띄우는지가 동작을 바꾼다**
 

@@ -1,12 +1,12 @@
 이 파일이 있으면 monitor 의 시리얼 탭이 포트를 잡고 있다.
 
   포트   /dev/cu.usbmodem21201
-  pid    79289
-  시작   2026-08-16 16:59:54
-  기록   monitor/serial-newbase.log
+  pid    22061
+  시작   2026-08-17 00:04:34
+  기록   monitor/serial-win2.log
 
 보드를 직접 쓰려면 이것부터 내려라:
-  kill 79289
+  kill 22061
 
 ⚠ 내리면 포트가 즉시 풀린다. 탭은 포트를 다시 뺏지 않는다.
 ⚠ 다시 열 때 DTR 로 보드가 한 번 리셋된다 —
