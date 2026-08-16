@@ -64,6 +64,14 @@ static void arm(const char* refuse /* nullptr 이면 정상 프롬프트 */) {
   lastSendEndAt  = 0;
   lastTxOkAt     = millis();
   inSend         = false;
+  // ★ 2단계 상태도 반드시 여기서 지운다.
+  //   빠뜨렸더니 **[1] 의 성공이 [2]~[7] 로 새어** 이후 시험이 전부 "SEND OK 대기 중"으로
+  //   건너뛰어졌고 9건이 무더기로 실패했다. 원장 §4.5 가 경고한 시험 간 격리 함정 그대로다.
+  //   ⚠ 새 전역 상태를 추가하면 **여기도 같이 늘려라.** 안 그러면 다음 사람이 같은 곳에서 넘어진다.
+  awaitingSendOk = false;
+  sendOkWaitFrom = 0;
+  sendSkips = sendOkTimeouts = sendFails = 0;
+  espResets = 0;
 }
 
 static const char* FRAME = "S,1,0000000000,0000000000,1,P1,";
@@ -156,6 +164,113 @@ int main() {
   sendLine(FRAME);                          // 성공 송신
   unsigned long since = millis() - lastTxOkAt;
   ok(since < 1000,              "★ 성공하면 lastTxOkAt 이 지금으로 갱신된다 (정지 오판 방지)");
+
+  // ══ 2단계 (REQ-0116 2단계 · `SEND OK` 를 실제로 기다린다) ═══════════════════
+  // 여기부터는 **1단계가 아니라 2단계**를 잰다. 위 [1]~[9] 는 손대지 않았다 —
+  // 그래야 2단계가 1단계를 깨지 않았다는 것이 같은 실행에서 증명된다.
+
+  // ── [10] 성공 뒤에는 SEND OK 를 볼 때까지 다음 송신을 건너뛴다 ──────────────
+  printf("\n[10] SEND OK 대기 — 앞 전송이 안 끝났으면 보내지 않는다\n");
+  arm(nullptr);
+  sendLine(FRAME);                          // 1) 성공 → 대기 시작
+  ok(awaitingSendOk,            "★ 성공 송신 뒤에는 SEND OK 를 기다리는 상태가 된다");
+  size_t sentAfterFirst = wifi.sentLines.size();
+  bool r10 = sendLine(FRAME);               // 2) 아직 SEND OK 없음 → 건너뜀
+  ok(!r10,                      "대기 중에는 sendLine 이 false 를 돌려준다");
+  ok(wifi.sentLines.size() == sentAfterFirst,
+                                "★ 건너뛴 주기에는 전선에 아무것도 안 나간다");
+  ok(sendSkips == 1,            "건너뛴 횟수가 진단에 기록된다");
+  // ★ 가장 중요한 것 — **건너뛰기는 실패가 아니다.**
+  //   여기서 카운터가 오르면 정상 동작(ESP 가 아직 보내는 중)을 자해로 세게 된다.
+  ok(sendFailStreak == 0,       "★★ 건너뛰기는 연속 실패로 세지 않는다 (자해 방지)");
+  ok(promptResyncs == 0,        "★ 건너뛸 때 더미를 넣지 않는다 (CIPSEND 를 쏘지도 않았다)");
+
+  // ── [11] SEND OK 가 오면 대기가 풀리고 다음 송신이 나간다 ──────────────────
+  printf("\n[11] SEND OK 수신 → 대기 해제\n");
+  {
+    char sendok[] = "SEND OK";
+    handleLine(sendok);
+  }
+  ok(!awaitingSendOk,           "★ SEND OK 를 받으면 대기가 풀린다");
+  bool r11 = sendLine(FRAME);
+  ok(r11,                       "★ 대기가 풀리면 다음 프레임이 정상적으로 나간다");
+
+  // ── [12] 안전망 — SEND OK 가 영영 안 와도 상한이 풀어 준다 ─────────────────
+  // 이것이 없으면 2단계는 1단계보다 **더 나쁜 정지**를 만든다(설계 §4).
+  printf("\n[12] 안전망 — SEND OK 가 안 와도 상한(3초)이 풀어 준다\n");
+  arm(nullptr);
+  sendLine(FRAME);                          // 대기 시작
+  ok(awaitingSendOk,            "대기 중이다");
+  sendOkWaitFrom = millis() - (SEND_OK_TIMEOUT_MS + 1);   // 상한을 넘긴 것으로 둔다
+  bool r12 = sendLine(FRAME);
+  ok(r12,                       "★★ 상한을 넘기면 대기를 풀고 실제로 보낸다 (영구 정지 방지)");
+  ok(sendOkTimeouts == 1,       "상한 초과가 진단에 기록된다 — 잦으면 그 자체가 발견이다");
+
+  // ── [13] SEND FAIL 은 실패로 센다 — **원래 있던 구멍** ─────────────────────
+  // 프롬프트까지 받고 페이로드도 썼는데 전송이 실패한 것이라 `busy` 와 전혀 다르다.
+  // 지금까지는 `>` 를 봤다는 이유로 성공으로 세고 카운터를 0 으로 되돌리고 있었다.
+  printf("\n[13] SEND FAIL — 진짜 전송 실패는 실패로 센다\n");
+  arm(nullptr);
+  sendFailStreak = 1;                       // 앞선 실패 1회가 있었다고 두고
+  sendLine(FRAME);                          // '>' 를 받았으므로 이 시점엔 0 으로 리셋된다
+  ok(sendFailStreak == 0,       "성공으로 세어 카운터가 0 이 된 상태 (여기까지는 기존 동작)");
+  {
+    char sf[] = "SEND FAIL";
+    handleLine(sf);
+  }
+  ok(sendFailStreak == 1,       "★★ SEND FAIL 을 받으면 실패로 센다 (성공 계상을 되돌린다)");
+  ok(!awaitingSendOk,           "★ SEND FAIL 도 대기를 푼다 (여기서 안 풀면 3초를 헛기다린다)");
+  ok(sendFails == 1,            "SEND FAIL 이 진단에 기록된다");
+
+  // ── [14] 링크가 다시 서면 대기를 끌고 가지 않는다 ─────────────────────────
+  // 소켓이 사라지는 마당에 앞 전송의 SEND OK 는 영영 오지 않는다. 안 풀면 복구 직후
+  // 첫 송신이 통째로 건너뛰어진다 — **가장 급한 순간에 늦어진다.**
+  printf("\n[14] 복구 시 대기 해제\n");
+  arm(nullptr);
+  sendLine(FRAME);
+  ok(awaitingSendOk,            "대기 중이다");
+  startSocketRecovery();
+  ok(!awaitingSendOk,           "★★ 소켓 복구로 들어가면 대기를 푼다");
+
+  // ── [15] ESP 리셋 지문 — CIFSR 이 0.0.0.0 을 답하면 센다 (진단 전용) ───────
+  // ⚠ 부트 배너를 판별자로 쓰지 않는 이유: **정상 부팅에도 뜬다**(monitor 전수 검증, REQ-0125).
+  printf("\n[15] ESP 리셋 지문 — CIFSR 0.0.0.0\n");
+  arm(nullptr);
+  netOnline   = false;                      // CIFSR 판정부는 오프라인 경로에 있다
+  netLastSent = NET_CIFSR;
+  {
+    char zero[] = "0.0.0.0";
+    handleLine(zero);
+  }
+  ok(espResets == 1,            "★ CIFSR 이 0.0.0.0 이면 ESP 가 상태를 잃은 것으로 센다");
+  netLastSent = NET_CIFSR;
+  {
+    char real[] = "192.168.35.79";
+    handleLine(real);
+  }
+  ok(espResets == 1,            "★ 정상 IP 는 세지 않는다 (오탐 없음)");
+
+  // ── [16] 🔴 루트 지시(REQ-0125 3번) — **침묵 탐지를 잃지 않았다**를 증명한다 ──
+  // 기전 B(ESP 모듈이 죽는다)를 탐지하는 유일한 경로가 3연속 실패다.
+  // 2단계가 "건너뛰기"를 추가했으므로 **그 경로가 여전히 끝까지 도달하는지**를 재야 한다.
+  // 주장으로 보고하지 않는다 — 실제로 ESP 죽음을 흉내 내어 오프라인까지 가는지 본다.
+  printf("\n[16] ESP 죽음 시나리오 — 침묵 3연속이 여전히 오프라인으로 간다\n");
+  arm(nullptr);
+  sendLine(FRAME);                          // 마지막 성공 송신 → SEND OK 대기 시작
+  ok(awaitingSendOk,            "성공 직후라 SEND OK 를 기다리는 상태");
+  // 여기서 ESP 가 죽는다: SEND OK 도, '>' 도, 오류도 오지 않는다 = 완전 침묵
+  wifi.refusePrompt = true;
+  wifi.refuseReply  = "";                   // 아무 응답도 없음
+  int guard = 0;
+  while (netOnline && guard++ < 20) {
+    g_millis += 1000;                       // 하트비트 1주기씩 전진
+    sendLine(FRAME);
+  }
+  ok(!netOnline,                "★★ ESP 가 완전히 침묵해도 결국 오프라인으로 간다 (탐지 유지)");
+  ok(staleSocket,               "★ 복구 사다리로 들어간다");
+  // 늦어지기는 한다 — 그 비용을 숨기지 않고 수치로 못박는다.
+  printf("      (참고: 오프라인까지 %d 주기 — 2단계 이전은 3주기였다)\n", guard);
+  ok(guard <= 8,                "★ 늦어지더라도 상한+3주기 안에 잡힌다 (무한 정지 아님)");
 
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;

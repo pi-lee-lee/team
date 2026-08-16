@@ -133,6 +133,20 @@ def main():
     ap.add_argument("--reserve", metavar="SLOT")
     ap.add_argument("--cancel", metavar="SLOT")
     ap.add_argument("--sim", action="store_true", help="시뮬 한 걸음(§12B.5 sim_step)")
+    # ── §12A 테스트 모드 — 하행 `T` 프레임을 낸다.
+    # **왜 넣었나(REQ-0118 이음매 1)**: `DEV_ACK` 이관이 실제로 도는지 격리 검증하려면
+    # **장치 상태를 안 바꾸는 ACK** 가 필요하다. R/C 는 예약을 바꾸므로 장치가 즉시 S 프레임을
+    # 보내고, 그 S 가 로그·스냅샷을 따로 일으켜 **ACK 가 만든 것과 구별이 안 된다**(원장 §7.6).
+    # `--test-set` 을 **무장하지 않은 상태로** 쏘면 장치가 `result=4` 로 거절하고
+    # **아무 상태도 안 바꾼다** → 뒤따르는 S 가 없다. 그래서 이것이 격리 조건이다.
+    ap.add_argument("--test-arm", action="store_true", help="§12A 무장(T,A). 장치 상태를 바꾼다")
+    ap.add_argument("--test-disarm", action="store_true", help="§12A 해제(T,D)")
+    ap.add_argument("--test-set", metavar="SLOT",
+                    help="§12A 오버라이드(T,S). **무장 전에 쓰면 result=4 로 거절되고 "
+                         "장치 상태가 안 바뀐다** — DEV_ACK 격리 검증용")
+    ap.add_argument("--test-clear", metavar="SLOT", help="§12A 오버라이드 해제(T,X)")
+    ap.add_argument("--occupied", default="1", choices=["0", "1"],
+                    help="--test-set 이 넣을 값")
     ap.add_argument("--user", default="u17")
     ap.add_argument("--rid", default="probe-1")
     ap.add_argument("--delay", type=float, default=0.4, help="접속 후 요청까지 대기")
@@ -143,9 +157,15 @@ def main():
         if a.reserve: return {"type": "reserve", "slot": a.reserve, "user_id": a.user, "rid": a.rid}
         if a.cancel:  return {"type": "cancel",  "slot": a.cancel,  "rid": a.rid}
         if a.sim:     return {"type": "sim_step", "rid": a.rid}
+        if a.test_arm:    return {"type": "test_arm", "rid": a.rid}
+        if a.test_disarm: return {"type": "test_disarm", "rid": a.rid}
+        if a.test_set:    return {"type": "test_set", "slot": a.test_set,
+                                  "occupied": a.occupied, "rid": a.rid}
+        if a.test_clear:  return {"type": "test_clear", "slot": a.test_clear, "rid": a.rid}
         return None
 
     s = socket.create_connection((a.host, a.port), timeout=5)
+    t0 = time.time()
     buf = bytearray(handshake(s, a.host, a.port))
 
     deadline = time.time() + a.listen
@@ -160,7 +180,11 @@ def main():
             t = o.get("type")
         except Exception:
             t = "?"
-        print("← [%s] %d바이트  길이필드: %s  마스킹=%s" % (t, len(body), desc, masked))
+        # ⚠ **시각을 반드시 찍는다.** 이게 없으면 "ack 다음에 snapshot 이 왔다"까지만 알 뿐
+        # **그 스냅샷이 ACK 때문인지 1Hz S 프레임 때문인지 못 가른다**(원장 §7.6 이 그 함정이다).
+        # t0 = 접속 직후이고, 아래 값은 그로부터의 경과 초다.
+        print("← [%s] t=+%.3fs  %d바이트  길이필드: %s  마스킹=%s"
+              % (t, time.time() - t0, len(body), desc, masked))
         if t == "snapshot":
             print("   device=%s" % json.dumps(o.get("device"), ensure_ascii=False))
             print("   slots =%s" % " ".join(
