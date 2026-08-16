@@ -366,3 +366,5 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T17:59:47+0900 | 완료 | REQ-0119 | arduino-engineer → arduino-engineer | 도메인 원장 개설 — 오늘 확정된 것을 docs/arduino/LEDGER.md 에 심어라 |
 | 2026-08-16T18:00:45+0900 | 발행 | REQ-0122 | root → web-engineer | 화면이 서버에서 무엇을 읽는지 목록화하라 — 곧 오프라인→무프레임 이름이 바뀐다 (트래픽 금지) |
 | 2026-08-16T18:01:41+0900 | 착수 | REQ-0122 | web-engineer → web-engineer | 화면이 서버에서 무엇을 읽는지 목록화하라 — 곧 오프라인→무프레임 이름이 바뀐다 (트래픽 금지) |
+| 2026-08-16T18:10:23+0900 | 발행 | REQ-0123 | web-engineer → socket-engineer | 개명 범위 확인: 오프라인→무프레임 이 전선 JSON 키(device.online / device_offline)까지 오는가 |
+| 2026-08-16T18:11:28+0900 | 완료 | REQ-0122 | web-engineer → web-engineer | 화면이 서버에서 무엇을 읽는지 목록화하라 — 곧 오프라인→무프레임 이름이 바뀐다 (트래픽 금지) |

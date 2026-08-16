@@ -541,6 +541,7 @@ struct Server {
     // ⚠ **이 값은 보고 전용이다. 어떤 판정에도 먹이지 않는다.**
     //   `uptime_says_reboot()` 이 보는 것은 여전히 `ard_uptime` 뿐이다.
     long long xs_uptime;          // 직전 세션에서 마지막으로 본 uptime (-1 = 기억 없음)
+    long long xs_last_ms;         // 그 프레임이 **도착한** 시각(now_ms). 공백 G 를 재는 데 쓴다
     std::string xs_dev;           // 그 uptime 의 주인 — 다른 장치면 비교하지 않는다
     long long xs_reconnect_reboot;   // 재연결인데 uptime 이 되감김 = 진짜 재부팅
     long long xs_reconnect_link;     // 재연결인데 uptime 이 이어짐 = 링크만 다시 선 것
@@ -642,7 +643,8 @@ struct Server {
                aux_conflicts(0), admit_rejects(0),      // 선언 순서와 일치시킨다(-Wreorder)
                ard_seen(false), ard_last_ms(0), ard_last_epoch_ms(0), ard_uptime(-1), ard_seq(-1),
                ard_dev("?"),
-               xs_uptime(-1), xs_dev(""), xs_reconnect_reboot(0), xs_reconnect_link(0),
+               xs_uptime(-1), xs_last_ms(0), xs_dev(""),
+               xs_reconnect_reboot(0), xs_reconnect_link(0),
                xs_reconnect_unknown(0),
                next_rid(1), base_valid(false), test_armed(false),
                resync_count(0), no_disk(false),
@@ -1549,20 +1551,30 @@ struct Server {
             //
             // ⚠ 위 `reboot` 변수에는 **손대지 않는다.** 그것은 §7.4 판정이고 여기는 장부다.
             if (ard_uptime < 0) {
-                if (xs_uptime < 0 || xs_dev != f[5]) {
+                // 공백 G = 직전 프레임 도착 → 지금(초). **되감김만 보면 안 된다**:
+                // 재부팅했는데 공백이 길면 새 uptime 이 옛 값을 넘어서 "안 죽었다"로 오분류된다.
+                // (monitor 가 자기 규칙 `uptime>120` 에서 같은 함정을 밟았다 — 2026-08-16)
+                //
+                // 안 죽었다면 지금 uptime = 옛 uptime + G 이므로 **반드시 G 이상**이다.
+                // 죽었다면 부팅이 공백 안에서 일어났으므로 **G 미만**이다. 그래서 G 가 기준이다.
+                // 허용오차 2초: 장치 시계는 초 단위 절삭이고 도착 시각도 틱에 걸린다.
+                long long G = xs_last_ms ? (now_ms() - xs_last_ms) / 1000 : -1;
+                if (xs_uptime < 0 || xs_dev != f[5] || G < 0) {
                     xs_reconnect_unknown++;      // 기억 없음/다른 장치 — 모른다고 말한다
-                } else if (up < xs_uptime) {
+                } else if (up < xs_uptime || up + 2 < G) {
                     xs_reconnect_reboot++;
                     logf("⟳", "재연결 판정: **재부팅** — uptime " + std::to_string(xs_uptime)
-                              + " → " + std::to_string(up) + " (되감김)");
+                              + " → " + std::to_string(up) + " · 공백 " + std::to_string(G) + "초"
+                              + (up < xs_uptime ? " (되감김)" : " (공백보다 짧은 가동시간)"));
                 } else {
                     xs_reconnect_link++;
                     logf("=", "재연결 판정: **링크 재접속**(장치는 안 죽었다) — uptime "
                               + std::to_string(xs_uptime) + " → " + std::to_string(up)
-                              + " (+" + std::to_string(up - xs_uptime) + "초)");
+                              + " (+" + std::to_string(up - xs_uptime) + "초) · 공백 "
+                              + std::to_string(G) + "초");
                 }
             }
-            xs_uptime = up; xs_dev = f[5];   // 세션이 끊겨도 이 값은 남는다
+            xs_uptime = up; xs_dev = f[5]; xs_last_ms = now_ms();   // 세션이 끊겨도 남는다
 
             ard_seq = seq; ard_uptime = up; ard_dev = f[5];
             ard_last_ms = now_ms(); ard_last_epoch_ms = epoch_ms(); ard_seen = true;

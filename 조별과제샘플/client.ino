@@ -2174,7 +2174,10 @@ static void statusTick(unsigned long now) {
 #if DEBUG
     // 원인은 **진단으로만** 남긴다 — 원인별 제어 경로를 만들면 다시 "아는 실패만" 막게 된다.
     Serial.print(F("[NET] ★ 정지 감지: "));
-    Serial.print((unsigned long)(now - lastTxOkAt));
+    // ⚠ `(uint32_t)` 캐스트는 실기에서는 무의미하지만(unsigned long 이 곧 32비트)
+    //   호스트 테스트에서는 필요하다 — 64비트 `unsigned long` 과 32비트 `lastTxOkAt` 을
+    //   섞으면 언더플로가 감싸이지 않아 1.8e19 같은 값이 찍힌다. 판정식과 같은 폭으로 맞춘다.
+    Serial.print((unsigned long)(uint32_t)(now - lastTxOkAt));
     Serial.print(F("ms 동안 한 줄도 못 나갔다 (busy "));
     Serial.print(stallBusy);
     Serial.print(F(" / 무응답 ")); Serial.print(stallTimeout);

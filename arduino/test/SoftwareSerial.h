@@ -37,6 +37,25 @@ class SoftwareSerial {
   // 테스트가 서버인 척 밀어 넣는다 (+IPD 포장은 호출자가 한다)
   void deliver(const std::string& s) { for (char c : s) rx.push_back(c); }
 
+  // ★ 시험 간 격리 (2026-08-16 추가).
+  //   이게 없으면 **앞 시험이 남긴 바이트가 다음 시험을 오염시킨다.** 실제로 겪었다:
+  //   프롬프트 거부 시험에서 더미 `#` 들이 `\r\n` 없이 `atLine` 에 쌓였고, 다음 시험의
+  //   `AT+CIPSEND=32\r\n` 이 그 뒤에 붙어 `"###…AT+CIPSEND=32"` 가 되는 바람에
+  //   명령으로 인식되지 못해 `>` 가 안 나왔다.
+  //   ⚠ 흥미롭게도 **그건 스텁의 결함이 아니라 실기 증상의 정확한 재현**이다
+  //   (REQ-0064 의 "두 줄이 붙어 찍힌다"가 바로 이것). 그래서 이 동작은 그대로 두고,
+  //   **시험이 명시적으로 초기화**하게 한다.
+  void reset() {
+    rx.clear();
+    atLine.clear();
+    payload.clear();
+    pendingPayload = 0;
+    sentLines.clear();
+    atLog.clear();
+    refusePrompt = false;
+    stickySocket = false;
+  }
+
   // 스케치가 실제로 전선에 내보낸 프로토콜 라인들 (LF 제거된 상태)
   std::vector<std::string> sentLines;
   bool traceAt = false;
