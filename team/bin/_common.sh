@@ -55,6 +55,15 @@ alloc_id() {
   m="$(find "$REQ_DIR" -maxdepth 2 -name 'REQ-*.md' -type f 2>/dev/null \
         | sed -E 's#.*/REQ-0*([0-9]+).*#\1#' | sort -n | tail -1)"
   [ "${m:-0}" -gt "${n:-0}" ] 2>/dev/null && n="$m"
+  # ⚠ 위 둘은 **파일이 있어야** 동작한다. 2026-08-16 에 git clean 이 .seq 와 요청 md 를
+  # 함께 지우자 번호가 0054 로 되감겨 08-15 의 REQ-0054~0057 과 충돌했다.
+  # 원장 INDEX.md 는 추적 파일이라 그때도 살아남았다 → 세 번째 하한선으로 쓴다.
+  # 원장은 append-only 라 한 번 내준 번호는 여기서 절대 사라지지 않는다.
+  if [ -f "$REQ_DIR/INDEX.md" ]; then
+    local x
+    x="$(sed -E -n 's#.*\| *REQ-0*([0-9]+) *\|.*#\1#p' "$REQ_DIR/INDEX.md" | sort -n | tail -1)"
+    [ "${x:-0}" -gt "${n:-0}" ] 2>/dev/null && n="$x"
+  fi
   n=$(( ${n:-0} + 1 ))
   while ! mkdir "$SEQ_DIR/$n" 2>/dev/null; do
     n=$(( n + 1 ))

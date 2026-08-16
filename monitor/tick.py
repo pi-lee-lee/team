@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""1시간 단위 스냅샷 러너 — 매 갱신마다 같은 인자를 다시 치지 않는다.
+
+구간 정의·팀 리셋 목록을 여기 한 곳에 두고, 매 tick 마다:
+  1) 전체 재집계 (monitor/out-report.md/.json)
+  2) 세션 타임라인 (monitor/out-timeline.txt)
+  3) 체크섬 드롭 원문 덤프 (monitor/out-drops.txt)
+  4) 시리얼 캡처 생존 확인
+  5) **한 줄 이력 추가** (monitor/out-history.tsv) — 추세를 매번 재계산하지 않고 본다
+  6) 문맥에 올릴 **짧은 요약만** 표준출력
+
+경계가 바뀌면(재플래싱 등) 아래 상수만 고친다.
+"""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+from datetime import date, datetime
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(ROOT)
+
+LOG = "/tmp/parking-soak.log"
+SERIAL = "monitor/serial-esplink.log"
+HISTORY = "monitor/out-history.tsv"
+
+# ── 경계 정의 (재플래싱하면 여기만 고친다) ───────────────────────────────
+BASE_DATE = "2026-08-16"
+WINDOWS = [
+    "old=2026-08-15T18:42:39..2026-08-16T10:34:15",
+    "old_late=2026-08-16T09:00:00..2026-08-16T10:34:15",
+    "old_adj=2026-08-16T10:25:30..2026-08-16T10:34:15",
+    "esplink_all=2026-08-16T10:34:15..",
+    "esplink_noboot=2026-08-16T10:34:55..",
+    "esplink_tap=2026-08-16T11:13:20..",
+    # 확정 판정창 — 11:27 이후 자발 재부팅 0 조건이 충족돼 확정한 4시간 창(닫힘).
+    # 15:30:47 에 uptime 14568→36 재부팅이 나서 그 뒤는 별개 구간으로 가른다.
+    "judge=2026-08-16T11:27:00..2026-08-16T15:27:00",
+    "after_judge=2026-08-16T15:27:00..",
+]
+BASELINE = "old"
+TEAM_RESETS = [
+    "2026-08-15T19:46:14=client.ino 재플래싱",
+    "2026-08-15T19:56:09=client.ino 재플래싱",
+    "2026-08-15T20:32:16=client.ino 재플래싱",
+    "2026-08-16T10:34:15=EspLink 플래싱(REQ-0091)",
+    "2026-08-16T11:13:17=시리얼 캡처 DTR 리셋(monitor-engineer)",
+]
+MARKS = [
+    "2026-08-16T10:34:15=EspLink 플래싱 (펌웨어 경계)",
+    "2026-08-16T11:13:17=시리얼 캡처 개시 DTR 리셋 (관측 경계)",
+]
+TRACK = "judge"           # 4시간 판정 대상 창 (확정·닫힘)
+TARGET_H = 4.0
+
+# 깨끗한 4시간 창을 시작하려면 이 시각 이후로 (a) 자발 MCU 재부팅 0 (b) 재플래싱 0 이어야 한다.
+# 매번 경계를 옮기면 아무것도 못 재므로, **조건이 충족된 뒤에** 창을 잡는다.
+CLEAN_SINCE = "2026-08-16T11:27:00"
+CLEAN_HOLD_MIN = 30.0
+
+
+def run(cmd: list[str]) -> str:
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    if p.returncode != 0:
+        print(f"!! 실패: {' '.join(cmd[:3])}…\n{p.stderr[:800]}", file=sys.stderr)
+    return p.stdout
+
+
+def main() -> int:
+    now = datetime.now()
+    now_iso = now.isoformat(timespec="seconds")
+
+    cmd = [sys.executable, "monitor/soak_stats.py", "--log", LOG,
+           "--base-date", BASE_DATE, "--baseline", BASELINE,
+           "--now", now_iso,
+           "--out-md", "monitor/out-report.md",
+           "--out-json", "monitor/out-report.json"]
+    for w in WINDOWS:
+        cmd += ["--win", w]
+    for t in TEAM_RESETS:
+        cmd += ["--team-reset", t]
+    run(cmd)
+
+    tl = [sys.executable, "monitor/session_timeline.py", "--log", LOG,
+          "--base-date", BASE_DATE, "--since", "2026-08-15T18:42:00"]
+    for m in MARKS:
+        tl += ["--marks", m]
+    with open("monitor/out-timeline.txt", "w", encoding="utf-8") as f:
+        f.write(run(tl))
+
+    with open("monitor/out-drops.txt", "w", encoding="utf-8") as f:
+        f.write(run([sys.executable, "monitor/drop_dump.py", LOG, BASE_DATE]))
+
+    ev = [sys.executable, "monitor/esp_events.py", "--log", LOG, "--base-date", BASE_DATE]
+    for t in TEAM_RESETS:
+        ev += ["--team-reset", t]
+    esp_out = run(ev)
+    with open("monitor/out-esp-events.txt", "w", encoding="utf-8") as f:
+        f.write(esp_out)
+
+    # 창 시작 조건 판정: CLEAN_SINCE 이후 자발 MCU 재부팅이 있었나
+    cutoff = datetime.fromisoformat(CLEAN_SINCE)
+    reboots_after = []
+    for line in esp_out.splitlines():
+        if "MCU재부팅" not in line or line.lstrip().startswith("#"):
+            continue
+        try:
+            ts = datetime.fromisoformat(line[:19])
+        except ValueError:
+            continue
+        if ts >= cutoff:
+            reboots_after.append(ts)
+
+    d = json.load(open("monitor/out-report.json", encoding="utf-8"))
+    wins = {w["name"]: w for w in d["windows"]}
+    tgt = wins.get(TRACK)
+    base = wins[BASELINE]
+    exp = d["expected"].get(TRACK, {})
+
+    # 시리얼 생존
+    ser_bytes = os.path.getsize(SERIAL) if os.path.exists(SERIAL) else 0
+    ser_raw = SERIAL + ".raw"
+    ser_raw_bytes = os.path.getsize(ser_raw) if os.path.exists(ser_raw) else 0
+    ser_lines = 0
+    ser_last = "-"
+    if ser_bytes:
+        with open(SERIAL, "rb") as f:
+            data = f.read()
+        lines = [l for l in data.decode("utf-8", "replace").splitlines() if l.strip()]
+        ser_lines = len(lines)
+        ser_last = lines[-1][:90] if lines else "-"
+    tap_alive = subprocess.run(["pgrep", "-f", "serial_tap.py"],
+                               capture_output=True, text=True).stdout.strip()
+
+    # 이력 한 줄
+    newfile = not os.path.exists(HISTORY)
+    with open(HISTORY, "a", encoding="utf-8") as f:
+        if newfile:
+            f.write("tick\ttrack_h\tframes\tfpm\tclose\tclose_ph\te54\te54_ph\t"
+                    "realS\tdrops\tupreg_spont\toffline\tser_raw_B\tser_lines\n")
+        f.write("\t".join(str(x) for x in [
+            now.strftime("%m-%d %H:%M"),
+            f"{tgt['duration_h']:.2f}", tgt["frames"], tgt["frames_per_min"],
+            tgt["sess_close"], tgt["sess_close_per_h"],
+            tgt["errno54"],
+            round(tgt["errno54"] / tgt["duration_h"], 2) if tgt["duration_h"] else 0,
+            tgt["drop_real_S"], tgt["drops_total"],
+            tgt["uptime_regressions_spont"], tgt["offline_events"],
+            ser_raw_bytes, ser_lines,
+        ]) + "\n")
+
+    # ── 문맥에 올릴 짧은 요약 ──────────────────────────────────
+    print(f"== tick {now.strftime('%H:%M:%S')} · 판정창 `{TRACK}`")
+    pct = 100.0 * tgt["duration_h"] / TARGET_H
+    print(f"  진행 {tgt['duration_h']:.2f}h / {TARGET_H}h ({pct:.0f}%)  "
+          f"남은 {max(0.0, TARGET_H - tgt['duration_h']):.2f}h")
+    print(f"  프레임 {tgt['frames']:,} ({tgt['frames_per_min']}/분)   "
+          f"기준 옛 {base['frames_per_min']}/분")
+    print(f"  세션종료 {tgt['sess_close']} ({tgt['sess_close_per_h']}/h)  "
+          f"기준 옛 {base['sess_close_per_h']}/h  | 기대(옛비율) {exp.get('sess_close')}")
+    print(f"  errno=54 {tgt['errno54']}  기대(옛비율) {exp.get('errno54')}")
+    print(f"  바이트손상(real_S) {tgt['drop_real_S']}  기대 {exp.get('drop_real_S')}  "
+          f"| 드롭전체 {tgt['drops_total']}")
+    print(f"  자발 재부팅후보 {tgt['uptime_regressions_spont']}  기대 {exp.get('uptime_regressions_spont')}"
+          f"  ← 기대<1 이면 0 은 무의미")
+    print(f"  오프라인 {tgt['offline_events']} · 복구중앙 {tgt['recover_median_s']}s "
+          f"· 최대공백 {tgt['max_frame_gap_s']}s")
+    # ⚠ 0 의 의미를 가른다 — "안 쌓였다"와 "읽을 수 없다"는 완전히 다른 사건이다.
+    ser_exists = os.path.exists(SERIAL)
+    if not ser_exists and tap_alive:
+        print(f"  시리얼: 🔴 **경로 소실(unlink)** — tap(pid {tap_alive.split()[0]})은 살아서 쓰는 중이나 "
+              f"파일이 디렉터리에서 지워져 아무도 못 읽는다.")
+        print(f"          → 이 0 은 '데이터 없음'이 아니라 '접근 불가'다. "
+              f"프로세스를 죽이면 그 내용은 영구 소실된다.")
+    elif not ser_exists:
+        print(f"  시리얼: 🔴 파일 없음 · tap 죽음 — 캡처가 돌지 않는다(0 은 무의미).")
+    else:
+        print(f"  시리얼: raw {ser_raw_bytes}B · {ser_lines}줄 · "
+              f"tap {'살아있음' if tap_alive else '🔴죽음'}")
+        print(f"          마지막: {ser_last}")
+
+    held = (now - cutoff).total_seconds() / 60.0
+    if reboots_after:
+        last_rb = max(reboots_after)
+        print(f"  🔴 창시작 조건 미충족 — {CLEAN_SINCE} 이후 자발 MCU 재부팅 {len(reboots_after)}건 "
+              f"(마지막 {last_rb}). 전원 사건이 안 끝났다.")
+    elif held < CLEAN_HOLD_MIN:
+        print(f"  ⏳ 창시작 조건 감시 중 — 자발 재부팅 0건, 유지 {held:.0f}분 "
+              f"/ {CLEAN_HOLD_MIN:.0f}분 필요")
+    else:
+        print(f"  ✅ 창시작 조건 충족 — {CLEAN_SINCE} 이후 자발 재부팅 0건, {held:.0f}분 유지. "
+              f"이 시각을 4시간 창 시작으로 확정할 수 있다.")
+    for n in d["notes"]:
+        print("  " + n)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

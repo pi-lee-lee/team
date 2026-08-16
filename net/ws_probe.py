@@ -8,6 +8,7 @@
     python3 net/ws_probe.py --listen 3                       # 3초간 받은 것만 출력
     python3 net/ws_probe.py --reserve B3 --user u17          # 예약 보내고 응답 관찰
     python3 net/ws_probe.py --cancel B3
+    python3 net/ws_probe.py --sim                            # 시뮬 한 걸음(§12B.5)
 
 **길이 필드 바이트를 그대로 찍는다.** 스냅샷이 125바이트를 넘으면 서버가 126 마커 +
 16비트 확장 길이를 써야 하는데(명세 §5.2), "845바이트가 왔다"만으로는 그 경로가 실제로
@@ -131,10 +132,18 @@ def main():
     ap.add_argument("--listen", type=float, default=3.0, help="이 시간(초)만큼 수신하고 끝낸다")
     ap.add_argument("--reserve", metavar="SLOT")
     ap.add_argument("--cancel", metavar="SLOT")
+    ap.add_argument("--sim", action="store_true", help="시뮬 한 걸음(§12B.5 sim_step)")
     ap.add_argument("--user", default="u17")
     ap.add_argument("--rid", default="probe-1")
     ap.add_argument("--delay", type=float, default=0.4, help="접속 후 요청까지 대기")
     a = ap.parse_args()
+
+    # 보낼 요청을 한 곳에서 만든다 — 세 군데에 흩어 두면 종류를 늘릴 때 하나를 빠뜨린다.
+    def request():
+        if a.reserve: return {"type": "reserve", "slot": a.reserve, "user_id": a.user, "rid": a.rid}
+        if a.cancel:  return {"type": "cancel",  "slot": a.cancel,  "rid": a.rid}
+        if a.sim:     return {"type": "sim_step", "rid": a.rid}
+        return None
 
     s = socket.create_connection((a.host, a.port), timeout=5)
     buf = bytearray(handshake(s, a.host, a.port))
@@ -161,19 +170,13 @@ def main():
         else:
             print("   %s" % text[:200])
 
-        if not sent and (a.reserve or a.cancel) and time.time() - (deadline - a.listen) >= a.delay:
-            if a.reserve:
-                send_text(s, {"type": "reserve", "slot": a.reserve, "user_id": a.user, "rid": a.rid})
-            else:
-                send_text(s, {"type": "cancel", "slot": a.cancel, "rid": a.rid})
+        if not sent and request() and time.time() - (deadline - a.listen) >= a.delay:
+            send_text(s, request())
             sent = True
 
-    if not sent and (a.reserve or a.cancel):
+    if not sent and request():
         # 스냅샷이 안 와도 요청은 보내 본다
-        if a.reserve:
-            send_text(s, {"type": "reserve", "slot": a.reserve, "user_id": a.user, "rid": a.rid})
-        else:
-            send_text(s, {"type": "cancel", "slot": a.cancel, "rid": a.rid})
+        send_text(s, request())
         for op, body, desc, _m in frames(s, buf, time.time() + 6):
             print("← %d바이트 길이필드: %s\n   %s" % (len(body), desc, body.decode("utf-8", "replace")[:300]))
     s.close()

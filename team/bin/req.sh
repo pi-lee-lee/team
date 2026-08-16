@@ -7,7 +7,9 @@
 #
 # 사용법
 #   req.sh new --from <나> --to <상대> --title "<제목>" [--files a,b] [--parent REQ-0003]
-#              [--body "<본문>"] [--why "<이유>"] [--accept "<완료 기준>"]
+#              [--body-file <경로>] [--why "<이유>"] [--accept "<완료 기준>"]
+#              ⚠ 본문은 --body-file 을 써라. --body 는 셸 치환이 실행된다(2026-08-16 사고)
+#   req.sh progress <ID> --by <에이전트> --note "<지금 무엇을 하고 있나>"   ← 상태는 안 바꾼다
 #   req.sh list [--to X] [--from X] [--status open|claimed|done|rejected] [--all]
 #   req.sh path <REQ-0007>          # md 파일 절대경로
 #   req.sh show <REQ-0007>          # 내용 출력
@@ -39,6 +41,14 @@ cmd_new() {
       --files) files="$2"; shift 2;;
       --parent) parent="$2"; shift 2;;
       --body) body="$2"; shift 2;;
+      --body-file)
+        # ⚠ 이것을 써라. --body 는 셸을 거치므로 본문의 $(...) · 역따옴표 · 글로브가
+        #   **명령으로 실행된다.** 2026-08-16 에 REQ 본문에 적은 git clean 예시가
+        #   실제로 실행되어 추적되지 않던 파일이 대량 삭제됐다. 파일로 넘기면 그 경로가 없다.
+        [ -f "$2" ] || die "본문 파일이 없다: $2"
+        body="$(cat "$2")"; shift 2;;
+      --why-file)  [ -f "$2" ] || die "파일이 없다: $2"; why="$(cat "$2")"; shift 2;;
+      --accept-file) [ -f "$2" ] || die "파일이 없다: $2"; accept="$(cat "$2")"; shift 2;;
       --why) why="$2"; shift 2;;
       --accept) accept="$2"; shift 2;;
       *) die "알 수 없는 옵션: $1";;
@@ -175,6 +185,22 @@ case "${1:-}" in
     id="$2"; shift 2; by=""
     while [ $# -gt 0 ]; do case "$1" in --by) by="$2"; shift 2;; *) die "알 수 없는 옵션: $1";; esac; done
     transit "$id" claimed "착수" "$by" ""
+    ;;
+  progress)
+    # 진행 중임을 원장에 알린다. 상태는 안 바꾸고 updated 와 INDEX 만 갱신한다.
+    # 왜 필요한가: 이것이 없으면 claim 시각에 updated 가 멈춰 있어
+    # 몇 시간째 일하고 있어도 상태창에는 방치된 것처럼 보인다(2026-08-16 실제 사고).
+    id="$2"; shift 2; by=""; note=""
+    while [ $# -gt 0 ]; do
+      case "$1" in --by) by="$2"; shift 2;; --note) note="$2"; shift 2;; *) die "알 수 없는 옵션: $1";; esac
+    done
+    [ -n "$id" ] || die "요청 ID 가 필요하다"
+    [ -n "$by" ] || die "--by <에이전트 이름> 이 필요하다"
+    [ -n "$note" ] || die "--note 가 필요하다 — 무엇을 하고 있는지 한 줄이 없으면 알릴 값어치가 없다"
+    f="$(req_file "$id")" || die "그런 요청이 없다: $id"
+    fm_set "$f" updated "$(now_iso)"
+    index_append "진행" "$id" "$by" "$(fm_get "$f" to)" "$(fm_get "$f" title) — $note"
+    echo "$id ← 진행 기록: $note"
     ;;
   done)
     id="$2"; shift 2; by=""; note=""

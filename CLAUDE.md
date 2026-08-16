@@ -36,9 +36,10 @@
 | 담당 에이전트 | 소유 경로·확장자 |
 |---|---|
 | `android-engineer` | `docs/android/**`, `android/**`, `**/AndroidManifest.xml`, `**/build.gradle`, `**/build.gradle.kts`, `**/settings.gradle*`, `**/gradle.properties`, `.kt`, `.kts`, `.java`, `.aidl`, `.pro` |
-| `arduino-engineer` | `docs/arduino/**`, `arduino/**`, `**/*.ino`, `**/platformio.ini`, `.ino` |
+| `arduino-engineer` | `docs/arduino/**`, `arduino/**`, `**/*.ino`, `**/platformio.ini`, `조별과제샘플/nextgen/Esp*`, `조별과제샘플/nextgen/Esp*`, `조별과제샘플/nextgen/*.ino`, `조별과제샘플/nextgen/*.ino`, `.ino` |
 | `cpp-engineer` | `docs/cpp/**`, `**/src/main/cpp/**`, `**/src/main/jni/**`, `**/jni/**`, `cpp/**`, `opencv/**`, `.c`, `.cc`, `.cpp`, `.cxx`, `.h`, `.hpp`, `.hxx`, `.inl` |
-| `socket-engineer` | `조별과제샘플/server.cpp`, `조별과제샘플/server.cpp`, `docs/net/**`, `net/**`, `socket/**`, `**/net/**`, `**/*.proto` |
+| `monitor-engineer` | `monitor/**`, `monitor/**` |
+| `socket-engineer` | `조별과제샘플/server.cpp`, `조별과제샘플/server.cpp`, `docs/net/**`, `net/**`, `socket/**`, `**/net/**`, `**/*.proto`, `조별과제샘플/server*`, `조별과제샘플/server*`, `조별과제샘플/nextgen/server*`, `조별과제샘플/nextgen/server*` |
 | `web-engineer` | `docs/web/**`, `web/**`, `public/**`, `.html`, `.htm`, `.css`, `.scss`, `.js`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.jsx`, `.vue` |
 | `root` | `.claude/**`, `team/**`, `CLAUDE.md`, `README.md`, `.gitignore`, `.mcp.json`, `docs/*`, `*.md` |
 | _(전원 공용)_ | `requests/**`, `.team/**`, `samples/**` |
@@ -78,7 +79,7 @@ ID 할당은 `mkdir` 락으로 원자적이라 두 에이전트가 동시에 발
 team/bin/req.sh new --from android-engineer --to cpp-engineer \
   --title "JNI 함수에 문자열 인자 추가" \
   --files "android/app/src/main/cpp/native-lib.cpp" \
-  --body "<상대가 코드를 바로 고칠 수 있을 만큼 구체적으로>" \
+  --body-file <본문을 적은 파일 경로> \   # ⚠ --body 금지: 셸 치환이 실행된다(2026-08-16 사고)
   --why  "<이 변경이 없으면 무엇이 안 되는지>" \
   --accept "<무엇이 되면 끝인가 + 검증 방법>"
 

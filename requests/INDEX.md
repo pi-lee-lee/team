@@ -154,3 +154,154 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-14T17:42:48+0900 | 발행 | REQ-0053 | root → socket-engineer | 최우선: 서버가 블로킹 send() 에서 행 — 상대가 안 빼가면 전체가 선다 |
 | 2026-08-14T17:43:36+0900 | 착수 | REQ-0053 | socket-engineer → socket-engineer | 최우선: 서버가 블로킹 send() 에서 행 — 상대가 안 빼가면 전체가 선다 |
 | 2026-08-14T17:53:48+0900 | 완료 | REQ-0053 | socket-engineer → socket-engineer | 최우선: 서버가 블로킹 send() 에서 행 — 상대가 안 빼가면 전체가 선다 |
+| 2026-08-14T18:50:39+0900 | 발행 | REQ-0054 | root → socket-engineer | 검토: client.ino 의 명세 준수 — 전선 계약의 주인 눈으로 |
+| 2026-08-14T18:50:56+0900 | 반려 | REQ-0054 | root → socket-engineer | 검토: client.ino 의 명세 준수 — 전선 계약의 주인 눈으로 |
+| 2026-08-14T18:51:43+0900 | 발행 | REQ-0055 | root → cpp-engineer | 검토: server.cpp 전체 — 특히 select 루프와 이번에 바뀐 전송 경로 |
+| 2026-08-14T18:52:21+0900 | 발행 | REQ-0056 | root → socket-engineer | 검토: client.ino 의 명세 준수 — 전선 계약의 주인 눈으로 |
+| 2026-08-14T18:52:21+0900 | 발행 | REQ-0057 | root → arduino-engineer | 검토: index.html 과 서버의 상호작용 — 장치 쪽 눈으로 |
+| 2026-08-14T18:52:47+0900 | 발행 | REQ-0058 | root → web-engineer | 검토: 얼린 명세 자체 — 화면을 만들며 발견한 명세의 공백 |
+| 2026-08-14T18:53:17+0900 | 착수 | REQ-0055 | cpp-engineer → cpp-engineer | 검토: server.cpp 전체 — 특히 select 루프와 이번에 바뀐 전송 경로 |
+| 2026-08-14T18:53:22+0900 | 착수 | REQ-0056 | socket-engineer → socket-engineer | 검토: client.ino 의 명세 준수 — 전선 계약의 주인 눈으로 |
+| 2026-08-14T18:53:33+0900 | 착수 | REQ-0057 | arduino-engineer → arduino-engineer | 검토: index.html 과 서버의 상호작용 — 장치 쪽 눈으로 |
+| 2026-08-14T18:53:41+0900 | 착수 | REQ-0058 | web-engineer → web-engineer | 검토: 얼린 명세 자체 — 화면을 만들며 발견한 명세의 공백 |
+| 2026-08-14T18:57:33+0900 | 완료 | REQ-0056 | socket-engineer → socket-engineer | 검토: client.ino 의 명세 준수 — 전선 계약의 주인 눈으로 |
+| 2026-08-14T18:59:02+0900 | 완료 | REQ-0057 | arduino-engineer → arduino-engineer | 검토: index.html 과 서버의 상호작용 — 장치 쪽 눈으로 |
+| 2026-08-14T18:59:44+0900 | 발행 | REQ-0059 | root → socket-engineer | 명세 구멍: 멱등 캐시 8칸이 재전송 창을 못 덮는다 — M 이 두 번 적용된다 |
+| 2026-08-14T18:59:59+0900 | 완료 | REQ-0055 | cpp-engineer → cpp-engineer | 검토: server.cpp 전체 — 특히 select 루프와 이번에 바뀐 전송 경로 |
+| 2026-08-14T19:00:11+0900 | 완료 | REQ-0058 | web-engineer → web-engineer | 검토: 얼린 명세 자체 — 화면을 만들며 발견한 명세의 공백 |
+| 2026-08-14T19:00:48+0900 | 착수 | REQ-0059 | socket-engineer → socket-engineer | 명세 구멍: 멱등 캐시 8칸이 재전송 창을 못 덮는다 — M 이 두 번 적용된다 |
+| 2026-08-14T19:14:49+0900 | 완료 | REQ-0059 | socket-engineer → socket-engineer | 명세 구멍: 멱등 캐시 8칸이 재전송 창을 못 덮는다 — M 이 두 번 적용된다 |
+| 2026-08-14T23:14:14+0900 | 발행 | REQ-0060 | root → arduino-engineer | 실기 플래시: 보드가 맥에 붙었다 — 최신 스케치를 올리고 시리얼을 확인하라 |
+| 2026-08-14T23:14:50+0900 | 착수 | REQ-0060 | arduino-engineer → arduino-engineer | 실기 플래시: 보드가 맥에 붙었다 — 최신 스케치를 올리고 시리얼을 확인하라 |
+| 2026-08-14T23:25:15+0900 | 완료 | REQ-0060 | arduino-engineer → arduino-engineer | 실기 플래시: 보드가 맥에 붙었다 — 최신 스케치를 올리고 시리얼을 확인하라 |
+| 2026-08-14T23:32:34+0900 | 발행 | REQ-0061 | root → arduino-engineer | 재플래시: 사용자가 핀을 D7↔D8 로 바꿨다 |
+| 2026-08-14T23:32:54+0900 | 착수 | REQ-0061 | arduino-engineer → arduino-engineer | 재플래시: 사용자가 핀을 D7↔D8 로 바꿨다 |
+| 2026-08-15T01:27:01+0900 | 발행 | REQ-0062 | root → socket-engineer | 365일 상시가동 결함: seq 랩(18.2h)이 재부팅 오탐을 만든다 — 판정 규칙을 정하라 |
+| 2026-08-15T01:27:46+0900 | 발행 | REQ-0063 | root → arduino-engineer | 365일 상시가동: 워치독 + ESP 하드웨어 리셋선 (와이어 포맷 불변) |
+| 2026-08-15T01:28:02+0900 | 착수 | REQ-0062 | socket-engineer → socket-engineer | 365일 상시가동 결함: seq 랩(18.2h)이 재부팅 오탐을 만든다 — 판정 규칙을 정하라 |
+| 2026-08-15T01:28:42+0900 | 착수 | REQ-0063 | arduino-engineer → arduino-engineer | 365일 상시가동: 워치독 + ESP 하드웨어 리셋선 (와이어 포맷 불변) |
+| 2026-08-15T01:29:01+0900 | 완료 | REQ-0061 | arduino-engineer → arduino-engineer | 재플래시: 사용자가 핀을 D7↔D8 로 바꿨다 |
+| 2026-08-15T01:42:16+0900 | 완료 | REQ-0062 | socket-engineer → socket-engineer | 365일 상시가동 결함: seq 랩(18.2h)이 재부팅 오탐을 만든다 — 판정 규칙을 정하라 |
+| 2026-08-15T01:51:53+0900 | 발행 | REQ-0064 | root → arduino-engineer | 🔴 실기 최우선: no ip 무한반복 — WIFI 상태줄을 버려서 IP 없이 CIPSTART 를 쏜다 |
+| 2026-08-15T01:53:13+0900 | 발행 | REQ-0065 | root → socket-engineer | 2시간 소크 관측: 서버가 연결·프레임·공백을 스스로 증언하게 하라 |
+| 2026-08-15T01:54:26+0900 | 착수 | REQ-0065 | socket-engineer → socket-engineer | 2시간 소크 관측: 서버가 연결·프레임·공백을 스스로 증언하게 하라 |
+| 2026-08-15T01:55:17+0900 | 착수 | REQ-0064 | arduino-engineer → arduino-engineer | 🔴 실기 최우선: no ip 무한반복 — WIFI 상태줄을 버려서 IP 없이 CIPSTART 를 쏜다 |
+| 2026-08-15T02:02:01+0900 | 완료 | REQ-0065 | socket-engineer → socket-engineer | 2시간 소크 관측: 서버가 연결·프레임·공백을 스스로 증언하게 하라 |
+| 2026-08-15T02:38:50+0900 | 발행 | REQ-0066 | arduino-engineer → socket-engineer | 실기 수신경로 검증: 서버에서 예약(R)을 한 번 내려 달라 — +IPD 가 0건이다 |
+| 2026-08-15T02:40:38+0900 | 착수 | REQ-0066 | socket-engineer → socket-engineer | 실기 수신경로 검증: 서버에서 예약(R)을 한 번 내려 달라 — +IPD 가 0건이다 |
+| 2026-08-15T02:42:04+0900 | 발행 | REQ-0067 | root → web-engineer | 화면이 죽은 데이터를 살아있는 것처럼 보여준다 — 신선도 표시가 필요하다 |
+| 2026-08-15T02:42:30+0900 | 착수 | REQ-0067 | web-engineer → web-engineer | 화면이 죽은 데이터를 살아있는 것처럼 보여준다 — 신선도 표시가 필요하다 |
+| 2026-08-15T02:54:21+0900 | 완료 | REQ-0067 | web-engineer → web-engineer | 화면이 죽은 데이터를 살아있는 것처럼 보여준다 — 신선도 표시가 필요하다 |
+| 2026-08-15T03:00:51+0900 | 발행 | REQ-0068 | web-engineer → socket-engineer | 폴백에도 장치 생사를 실어라 — (마) 채택, 중첩 device{online,last_frame_ts} |
+| 2026-08-15T03:01:44+0900 | 착수 | REQ-0068 | socket-engineer → socket-engineer | 폴백에도 장치 생사를 실어라 — (마) 채택, 중첩 device{online,last_frame_ts} |
+| 2026-08-15T03:02:13+0900 | 발행 | REQ-0069 | root → web-engineer | 폴백 fetch 에 상한을 걸어라 — 매달린 응답은 실패 보고조차 못 한다 |
+| 2026-08-15T03:02:49+0900 | 착수 | REQ-0069 | web-engineer → web-engineer | 폴백 fetch 에 상한을 걸어라 — 매달린 응답은 실패 보고조차 못 한다 |
+| 2026-08-15T03:06:54+0900 | 완료 | REQ-0068 | socket-engineer → socket-engineer | 폴백에도 장치 생사를 실어라 — (마) 채택, 중첩 device{online,last_frame_ts} |
+| 2026-08-15T03:07:18+0900 | 발행 | REQ-0070 | socket-engineer → web-engineer | 폴백 device{online,last_frame_ts} 준비 완료 — 샘플 레코드 첨부 |
+| 2026-08-15T03:16:17+0900 | 완료 | REQ-0069 | web-engineer → web-engineer | 폴백 fetch 에 상한을 걸어라 — 매달린 응답은 실패 보고조차 못 한다 |
+| 2026-08-15T03:16:54+0900 | 착수 | REQ-0070 | web-engineer → web-engineer | 폴백 device{online,last_frame_ts} 준비 완료 — 샘플 레코드 첨부 |
+| 2026-08-15T09:07:23+0900 | 완료 | REQ-0066 | socket-engineer → socket-engineer | 실기 수신경로 검증: 서버에서 예약(R)을 한 번 내려 달라 — +IPD 가 0건이다 |
+| 2026-08-15T12:36:34+0900 | 발행 | REQ-0071 | root → arduino-engineer | 🔴 불안상태에서 복구되지 않는다 — 복구 사다리 (REQ-0063 흡수). CWJAP FAIL 은 '못 붙음'이 아니라 '12초 뒤 결합 소실' 이다 |
+| 2026-08-15T12:37:23+0900 | 발행 | REQ-0072 | root → socket-engineer | 좀비 아두이노 소켓 회수(유휴 마감+keepalive) · 그리고 '복구시간' 을 소크 지표에 넣어라 |
+| 2026-08-15T12:38:00+0900 | 착수 | REQ-0072 | socket-engineer → socket-engineer | 좀비 아두이노 소켓 회수(유휴 마감+keepalive) · 그리고 '복구시간' 을 소크 지표에 넣어라 |
+| 2026-08-15T12:46:59+0900 | 완료 | REQ-0070 | web-engineer → web-engineer | 폴백 device{online,last_frame_ts} 준비 완료 — 샘플 레코드 첨부 |
+| 2026-08-15T12:52:55+0900 | 착수 | REQ-0071 | arduino-engineer → arduino-engineer | 🔴 불안상태에서 복구되지 않는다 — 복구 사다리 (REQ-0063 흡수). CWJAP FAIL 은 '못 붙음'이 아니라 '12초 뒤 결합 소실' 이다 |
+| 2026-08-15T12:56:36+0900 | 완료 | REQ-0071 | arduino-engineer → arduino-engineer | 🔴 불안상태에서 복구되지 않는다 — 복구 사다리 (REQ-0063 흡수). CWJAP FAIL 은 '못 붙음'이 아니라 '12초 뒤 결합 소실' 이다 |
+| 2026-08-15T12:56:41+0900 | 완료 | REQ-0064 | arduino-engineer → arduino-engineer | 🔴 실기 최우선: no ip 무한반복 — WIFI 상태줄을 버려서 IP 없이 CIPSTART 를 쏜다 |
+| 2026-08-15T12:56:49+0900 | 완료 | REQ-0063 | arduino-engineer → arduino-engineer | 365일 상시가동: 워치독 + ESP 하드웨어 리셋선 (와이어 포맷 불변) |
+| 2026-08-15T13:02:32+0900 | 완료 | REQ-0072 | socket-engineer → socket-engineer | 좀비 아두이노 소켓 회수(유휴 마감+keepalive) · 그리고 '복구시간' 을 소크 지표에 넣어라 |
+| 2026-08-15T13:19:57+0900 | 발행 | REQ-0073 | root → arduino-engineer | 🔴 재시도 폭주가 라우터에 막힌다 — 지수 백오프(상한 5~10분) + 쿨다운 단 + '직전시도경과' 계측 |
+| 2026-08-15T13:21:17+0900 | 발행 | REQ-0074 | root → arduino-engineer | 🔴 최우선: 최소 AP 결합 테스트 스케치 (arduino/aptest) — 로직인지 하드웨어인지 가른다. REQ-0073 보다 먼저 |
+| 2026-08-15T13:21:52+0900 | 발행 | REQ-0075 | arduino-engineer → socket-engineer | 정상 재접속 66회의 소요시간 분포를 알려 달라 (REQ-0073 백오프 설계 근거) |
+| 2026-08-15T13:23:13+0900 | 착수 | REQ-0074 | arduino-engineer → arduino-engineer | 🔴 최우선: 최소 AP 결합 테스트 스케치 (arduino/aptest) — 로직인지 하드웨어인지 가른다. REQ-0073 보다 먼저 |
+| 2026-08-15T13:26:11+0900 | 착수 | REQ-0075 | socket-engineer → socket-engineer | 정상 재접속 66회의 소요시간 분포를 알려 달라 (REQ-0073 백오프 설계 근거) |
+| 2026-08-15T13:26:45+0900 | 완료 | REQ-0074 | arduino-engineer → arduino-engineer | 🔴 최우선: 최소 AP 결합 테스트 스케치 (arduino/aptest) — 로직인지 하드웨어인지 가른다. REQ-0073 보다 먼저 |
+| 2026-08-15T13:27:12+0900 | 완료 | REQ-0075 | socket-engineer → socket-engineer | 정상 재접속 66회의 소요시간 분포를 알려 달라 (REQ-0073 백오프 설계 근거) |
+| 2026-08-15T13:42:17+0900 | 발행 | REQ-0076 | root → arduino-engineer | 🔴 aptest 2판: MAC 하나만 바꿔 A/B — 차단 가설을 확정하거나 죽인다 (단계1 결과: 최소 스케치도 CWJAP FAIL) |
+| 2026-08-15T13:42:50+0900 | 착수 | REQ-0076 | arduino-engineer → arduino-engineer | 🔴 aptest 2판: MAC 하나만 바꿔 A/B — 차단 가설을 확정하거나 죽인다 (단계1 결과: 최소 스케치도 CWJAP FAIL) |
+| 2026-08-15T13:47:07+0900 | 완료 | REQ-0076 | arduino-engineer → arduino-engineer | 🔴 aptest 2판: MAC 하나만 바꿔 A/B — 차단 가설을 확정하거나 죽인다 (단계1 결과: 최소 스케치도 CWJAP FAIL) |
+| 2026-08-15T16:01:20+0900 | 반려 | REQ-0073 | root → arduino-engineer | 🔴 재시도 폭주가 라우터에 막힌다 — 지수 백오프(상한 5~10분) + 쿨다운 단 + '직전시도경과' 계측 |
+| 2026-08-15T16:02:35+0900 | 발행 | REQ-0077 | root → socket-engineer | 서버 재기동 + 새 망 기준선 — 맥 IP 가 192.168.50.146 에서 192.168.35.21 로 바뀌었다 |
+| 2026-08-15T16:02:55+0900 | 발행 | REQ-0078 | root → arduino-engineer | client.ino 플래싱까지 자율 수행 — ESP_RST_WIRED 0 복귀 · aptest 판정 버그 · 프레임 적재 확인 |
+| 2026-08-15T16:03:21+0900 | 착수 | REQ-0077 | socket-engineer → socket-engineer | 서버 재기동 + 새 망 기준선 — 맥 IP 가 192.168.50.146 에서 192.168.35.21 로 바뀌었다 |
+| 2026-08-15T16:03:22+0900 | 착수 | REQ-0078 | arduino-engineer → arduino-engineer | client.ino 플래싱까지 자율 수행 — ESP_RST_WIRED 0 복귀 · aptest 판정 버그 · 프레임 적재 확인 |
+| 2026-08-15T17:25:09+0900 | 완료 | REQ-0077 | socket-engineer → socket-engineer | 서버 재기동 + 새 망 기준선 — 맥 IP 가 192.168.50.146 에서 192.168.35.21 로 바뀌었다 |
+| 2026-08-15T17:26:23+0900 | 발행 | REQ-0079 | socket-engineer → arduino-engineer | 새 망 첫 소크 실측 — MCU 68.5분 연속 가동(옛 망 중앙값 약 6분의 11배), 재부팅 1회 |
+| 2026-08-15T17:27:32+0900 | 완료 | REQ-0078 | arduino-engineer → arduino-engineer | client.ino 플래싱까지 자율 수행 — ESP_RST_WIRED 0 복귀 · aptest 판정 버그 · 프레임 적재 확인 |
+| 2026-08-15T17:28:59+0900 | 완료 | REQ-0079 | arduino-engineer → arduino-engineer | 새 망 첫 소크 실측 — MCU 68.5분 연속 가동(옛 망 중앙값 약 6분의 11배), 재부팅 1회 |
+| 2026-08-15T17:47:08+0900 | 발행 | REQ-0080 | root → socket-engineer | 2시간 소크 관측 — 새 환경 기준선 · 하행 재전송률 판정 |
+| 2026-08-15T17:47:35+0900 | 발행 | REQ-0081 | root → arduino-engineer | 2시간 소크 — 장치 쪽 안정성 확인 · 저장소와 실제 칩의 불일치 재발 방지 |
+| 2026-08-15T17:47:38+0900 | 착수 | REQ-0080 | socket-engineer → socket-engineer | 2시간 소크 관측 — 새 환경 기준선 · 하행 재전송률 판정 |
+| 2026-08-15T17:48:21+0900 | 착수 | REQ-0081 | arduino-engineer → arduino-engineer | 2시간 소크 — 장치 쪽 안정성 확인 · 저장소와 실제 칩의 불일치 재발 방지 |
+| 2026-08-15T18:21:23+0900 | 발행 | REQ-0082 | root → socket-engineer | 시연 시나리오 종단 검증 — 번호판 5500 경로 · 하행 예약 30회 · 통신은 통과했으나 기능은 미검증이다 |
+| 2026-08-15T18:22:01+0900 | 착수 | REQ-0082 | socket-engineer → socket-engineer | 시연 시나리오 종단 검증 — 번호판 5500 경로 · 하행 예약 30회 · 통신은 통과했으나 기능은 미검증이다 |
+| 2026-08-15T18:28:22+0900 | 완료 | REQ-0080 | socket-engineer → socket-engineer | 2시간 소크 관측 — 새 환경 기준선 · 하행 재전송률 판정 |
+| 2026-08-15T18:28:30+0900 | 발행 | REQ-0083 | root → socket-engineer | 서버가 아두이노를 1대만 받는다 — device_id 키 다중 연결로 바꿔라 (조원 노드 여러 대가 서로 밀어낸다) |
+| 2026-08-15T18:30:01+0900 | 발행 | REQ-0084 | root → arduino-engineer | EspLink 단일 헤더 추출 — 함수 3개(begin/send/receive)로 조원이 통신을 몰라도 쓰게 하라 |
+| 2026-08-15T18:30:39+0900 | 완료 | REQ-0082 | socket-engineer → socket-engineer | 시연 시나리오 종단 검증 — 번호판 5500 경로 · 하행 예약 30회 · 통신은 통과했으나 기능은 미검증이다 |
+| 2026-08-15T18:32:51+0900 | 발행 | REQ-0085 | root → socket-engineer | [계획 수립] 장치는 관측만·판단은 서버 — 센서-공간 매핑을 서버 설정으로. 층 확장이 설정 변경으로 끝나야 한다 |
+| 2026-08-15T18:33:15+0900 | 착수 | REQ-0083 | socket-engineer → socket-engineer | 서버가 아두이노를 1대만 받는다 — device_id 키 다중 연결로 바꿔라 (조원 노드 여러 대가 서로 밀어낸다) |
+| 2026-08-15T18:38:35+0900 | 발행 | REQ-0086 | root → socket-engineer | [계획] OS별 파일 분리(PAL) — ifdef 12곳을 없애고 파일 하나에 한 OS 코드만. 시연 PC 가 윈도우다 |
+| 2026-08-15T18:43:58+0900 | 완료 | REQ-0083 | socket-engineer → socket-engineer | 서버가 아두이노를 1대만 받는다 — device_id 키 다중 연결로 바꿔라 (조원 노드 여러 대가 서로 밀어낸다) |
+| 2026-08-15T18:48:31+0900 | 착수 | REQ-0085 | socket-engineer → socket-engineer | [계획 수립] 장치는 관측만·판단은 서버 — 센서-공간 매핑을 서버 설정으로. 층 확장이 설정 변경으로 끝나야 한다 |
+| 2026-08-15T18:48:31+0900 | 착수 | REQ-0086 | socket-engineer → socket-engineer | [계획] OS별 파일 분리(PAL) — ifdef 12곳을 없애고 파일 하나에 한 OS 코드만. 시연 PC 가 윈도우다 |
+| 2026-08-15T18:51:45+0900 | 완료 | REQ-0086 | socket-engineer → socket-engineer | [계획] OS별 파일 분리(PAL) — ifdef 12곳을 없애고 파일 하나에 한 OS 코드만. 시연 PC 가 윈도우다 |
+| 2026-08-15T18:51:45+0900 | 완료 | REQ-0085 | socket-engineer → socket-engineer | [계획 수립] 장치는 관측만·판단은 서버 — 센서-공간 매핑을 서버 설정으로. 층 확장이 설정 변경으로 끝나야 한다 |
+| 2026-08-15T19:32:11+0900 | 완료 | REQ-0081 | arduino-engineer → arduino-engineer | 2시간 소크 — 장치 쪽 안정성 확인 · 저장소와 실제 칩의 불일치 재발 방지 |
+| 2026-08-15T19:32:55+0900 | 착수 | REQ-0084 | arduino-engineer → arduino-engineer | EspLink 단일 헤더 추출 — 함수 3개(begin/send/receive)로 조원이 통신을 몰라도 쓰게 하라 |
+| 2026-08-15T19:48:39+0900 | 완료 | REQ-0084 | arduino-engineer → arduino-engineer | EspLink 단일 헤더 추출 — 함수 3개(begin/send/receive)로 조원이 통신을 몰라도 쓰게 하라 |
+| 2026-08-15T19:49:06+0900 | 발행 | REQ-0087 | arduino-engineer → socket-engineer | 소크 오염 사과 + 고장주입 2·3번용 조용한 창 요청 (EspLink 검증 잔여분) |
+| 2026-08-15T19:51:37+0900 | 완료 | REQ-0087 | socket-engineer → socket-engineer | 소크 오염 사과 + 고장주입 2·3번용 조용한 창 요청 (EspLink 검증 잔여분) |
+| 2026-08-15T20:21:19+0900 | 발행 | REQ-0088 | root → socket-engineer | 일반 하행 프레임 W + 공유 헤더 server_wire.h — 기능마다 프레임 타입을 늘리지 않는다 (첫 사용자: LCD 번호판 7자리) |
+| 2026-08-15T20:24:57+0900 | 발행 | REQ-0089 | arduino-engineer → socket-engineer | server_wire.h 인터페이스 4가지만 확정해 달라 — EspLink receive() 연결 대기 중 |
+| 2026-08-15T20:26:37+0900 | 발행 | REQ-0090 | socket-engineer → arduino-engineer | server_wire.h 확정 — W 프레임 디코더/구조체 정의 (REQ-0089 가 물은 넷 전부) |
+| 2026-08-15T20:27:17+0900 | 완료 | REQ-0088 | socket-engineer → socket-engineer | 일반 하행 프레임 W + 공유 헤더 server_wire.h — 기능마다 프레임 타입을 늘리지 않는다 (첫 사용자: LCD 번호판 7자리) |
+| 2026-08-15T20:32:40+0900 | 착수 | REQ-0090 | arduino-engineer → arduino-engineer | server_wire.h 확정 — W 프레임 디코더/구조체 정의 (REQ-0089 가 물은 넷 전부) |
+| 2026-08-15T20:33:23+0900 | 완료 | REQ-0090 | arduino-engineer → arduino-engineer | server_wire.h 확정 — W 프레임 디코더/구조체 정의 (REQ-0089 가 물은 넷 전부) |
+| 2026-08-15T20:36:32+0900 | 완료 | REQ-0089 | socket-engineer → socket-engineer | server_wire.h 인터페이스 4가지만 확정해 달라 — EspLink receive() 연결 대기 중 |
+| 2026-08-16T10:26:31+0900 | 발행 | REQ-0091 | root → arduino-engineer | EspLink 로 client.ino 재작성 + 직접 플래싱 · 조별과제샘플/nextgen 사본 만들기 |
+| 2026-08-16T10:27:19+0900 | 착수 | REQ-0091 | arduino-engineer → arduino-engineer | EspLink 로 client.ino 재작성 + 직접 플래싱 · 조별과제샘플/nextgen 사본 만들기 |
+| 2026-08-16T10:44:20+0900 | 완료 | REQ-0091 | arduino-engineer → arduino-engineer | EspLink 로 client.ino 재작성 + 직접 플래싱 · 조별과제샘플/nextgen 사본 만들기 |
+| 2026-08-16T10:53:40+0900 | 발행 | REQ-0092 | root → socket-engineer | 쌓인 로그 사후 분석 — 옛 펌웨어 대 EspLink 펌웨어 회귀 판정 (라이브 관측 없이) |
+| 2026-08-16T10:54:31+0900 | 착수 | REQ-0092 | socket-engineer → socket-engineer | 쌓인 로그 사후 분석 — 옛 펌웨어 대 EspLink 펌웨어 회귀 판정 (라이브 관측 없이) |
+| 2026-08-16T10:57:19+0900 | 완료 | REQ-0092 | socket-engineer → socket-engineer | 쌓인 로그 사후 분석 — 옛 펌웨어 대 EspLink 펌웨어 회귀 판정 (라이브 관측 없이) |
+| 2026-08-16T11:06:29+0900 | 발행 | REQ-0093 | root → monitor-engineer | EspLink 펌웨어 장기 관측 — 21분 표본을 4시간 이상으로 늘려 회귀 판정을 확정하라 |
+| 2026-08-16T11:06:40+0900 | 착수 | REQ-0093 | monitor-engineer → monitor-engineer | EspLink 펌웨어 장기 관측 — 21분 표본을 4시간 이상으로 늘려 회귀 판정을 확정하라 |
+| 2026-08-16T11:19:30+0900 | 발행 | REQ-0094 | monitor-engineer → arduino-engineer | EspLink 빌드에 진단 시리얼 출력 추가 — 지금 장치가 끊길 때 아무것도 안 찍는다 |
+| 2026-08-16T11:29:11+0900 | 완료 | REQ-0094 | arduino-engineer → arduino-engineer | EspLink 빌드에 진단 시리얼 출력 추가 — 지금 장치가 끊길 때 아무것도 안 찍는다 |
+| 2026-08-16T11:36:08+0900 | 발행 | REQ-0095 | monitor-engineer → arduino-engineer | INTERVENTIONS.md 에 사용자 개입 항목 추가 — 11:15~11:26 ESP 전원차단·캐패시터 교체 |
+| 2026-08-16T11:36:36+0900 | 착수 | REQ-0095 | arduino-engineer → arduino-engineer | INTERVENTIONS.md 에 사용자 개입 항목 추가 — 11:15~11:26 ESP 전원차단·캐패시터 교체 |
+| 2026-08-16T11:37:36+0900 | 완료 | REQ-0095 | arduino-engineer → arduino-engineer | INTERVENTIONS.md 에 사용자 개입 항목 추가 — 11:15~11:26 ESP 전원차단·캐패시터 교체 |
+| 2026-08-16T11:58:29+0900 | 발행 | REQ-0096 | root → socket-engineer | 서버 리팩터링 착수 — 주차장 도메인 / 디바이스 계층 분리 (파일·클래스 단위, 프로세스 분리는 아님) |
+| 2026-08-16T11:59:04+0900 | 착수 | REQ-0096 | socket-engineer → socket-engineer | 서버 리팩터링 착수 — 주차장 도메인 / 디바이스 계층 분리 (파일·클래스 단위, 프로세스 분리는 아님) |
+| 2026-08-16T12:00:39+0900 | 발행 | REQ-0097 | socket-engineer → monitor-engineer | 서버 교체 창 조율 — REQ-0096 리팩터 완료 후 1회. 네 판정창을 안 깨는 시각을 달라 |
+| 2026-08-16T12:01:40+0900 | 착수 | REQ-0097 | monitor-engineer → monitor-engineer | 서버 교체 창 조율 — REQ-0096 리팩터 완료 후 1회. 네 판정창을 안 깨는 시각을 달라 |
+| 2026-08-16T12:02:37+0900 | 완료 | REQ-0097 | monitor-engineer → monitor-engineer | 서버 교체 창 조율 — REQ-0096 리팩터 완료 후 1회. 네 판정창을 안 깨는 시각을 달라 |
+| 2026-08-16T13:37:38+0900 | 발행 | REQ-0098 | root → root | ⏳ 예약: 15:27 판정 이후 전 에이전트 재기동 (context7 안내 반영) — 이후 작업은 이 뒤로 줄 세운다 |
+| 2026-08-16T14:08:55+0900 | 진행 | REQ-0096 | root → socket-engineer | 서버 리팩터링 착수 — 주차장 도메인 / 디바이스 계층 분리 (파일·클래스 단위, 프로세스 분리는 아님) — 루트가 progress 명령 동작을 시험함 |
+| 2026-08-16T15:21:28+0900 | 진행 | REQ-0096 | socket-engineer → socket-engineer | 서버 리팩터링 착수 — 주차장 도메인 / 디바이스 계층 분리 (파일·클래스 단위, 프로세스 분리는 아님) — 단계 A·B 완료(server_device.h 175행 · server_seam.h) · server.cpp 2391→2244행 · 빌드 경고0 · 자가검증/실왕복 통과 · 단계 C 규모 실측 확정(이음매 넘는 호출 5곳) · 인수인계 절 기록됨 · 운영 pid 36998 미교체(15:27 이후 예정) |
+| 2026-08-16T15:23:08+0900 | 발행 | REQ-0054 | socket-engineer → root | .gitignore 44행이 리팩터링 산출물을 통째로 무시한다 — server_wire.h 도 이미 누락 중 |
+| 2026-08-16T15:26:28+0900 | 발행 | REQ-0055 | root → socket-engineer | 🔴 즉시 작업 정리 — untracked 파일 대량 삭제 사고. 재기동 전 문맥을 파일로 내려라 |
+| 2026-08-16T15:26:28+0900 | 발행 | REQ-0056 | root → monitor-engineer | 🔴 즉시 작업 정리 — untracked 파일 대량 삭제 사고. 재기동 전 문맥을 파일로 내려라 |
+| 2026-08-16T15:26:28+0900 | 발행 | REQ-0057 | root → arduino-engineer | 🔴 즉시 작업 정리 — untracked 파일 대량 삭제 사고. 재기동 전 문맥을 파일로 내려라 |
+| 2026-08-16T15:29:42+0900 | 착수 | REQ-0056 | monitor-engineer → monitor-engineer | 🔴 즉시 작업 정리 — untracked 파일 대량 삭제 사고. 재기동 전 문맥을 파일로 내려라 |
+| 2026-08-16T15:32:20+0900 | 발행 | REQ-0079 | root → root | 셸치환 차단 시험 — 이 REQ 는 확인 후 삭제 대상 |
+| 2026-08-16T15:33:06+0900 | 진행 | REQ-0056 | monitor-engineer → monitor-engineer | 🔴 즉시 작업 정리 — untracked 파일 대량 삭제 사고. 재기동 전 문맥을 파일로 내려라 — 정리 완료 · 인수인계 docs/monitor-engineer/handoff-2026-08-16.md (git add 로 인덱스에 올려 보호함). ⚠ docs/ 가 안전한 이유는 경로가 아니라 추적됨이다 — 새로 쓴 인수인계는 untracked 라 또 쓸려나간다. 다른 에이전트에게도 git add 를 전하라. 4시간 판정창 완주(11:27~15:27), 14:54 시점 수치 확보: 프레임 52.95/분(옛 49.99), 세션종료 1건(기대 12.2, P≈0.007%), 바이트손상 0 대 0, 무전송 0%. 단 옛 기준선은 캐패시터 2200µF·판정창은 100µF 라 변수가 둘이다. 시리얼 원문은 재현 불가 — 결론만 숫자로 남겼다 |
+| 2026-08-16T15:51:16+0900 | 착수 | REQ-0055 | socket-engineer → socket-engineer | 🔴 즉시 작업 정리 — untracked 파일 대량 삭제 사고. 재기동 전 문맥을 파일로 내려라 |
+| 2026-08-16T15:53:52+0900 | 착수 | REQ-0057 | arduino-engineer → arduino-engineer | 🔴 즉시 작업 정리 — untracked 파일 대량 삭제 사고. 재기동 전 문맥을 파일로 내려라 |
+| 2026-08-16T15:53:56+0900 | 완료 | REQ-0057 | arduino-engineer → arduino-engineer | 🔴 즉시 작업 정리 — untracked 파일 대량 삭제 사고. 재기동 전 문맥을 파일로 내려라 |
+| 2026-08-16T15:54:01+0900 | 진행 | REQ-0078 | arduino-engineer → arduino-engineer | client.ino 플래싱까지 자율 수행 — ESP_RST_WIRED 0 복귀 · aptest 판정 버그 · 프레임 적재 확인 — 재기동 후 세션 인계. ①ESP_RST_WIRED=0 디스크에 생존(uncommitted). ②aptest.ino 사고로 삭제-차단, git show dacddfd 로 복원가능. ③④ REQ-0057(하루 더 최신)이 새 작업 동결-플래싱 미실시. 보드 연결됨, 빌드 GREEN. 루트 순서 지정 대기 |
+| 2026-08-16T15:54:50+0900 | 완료 | REQ-0056 | monitor-engineer → monitor-engineer | 🔴 즉시 작업 정리 — untracked 파일 대량 삭제 사고. 재기동 전 문맥을 파일로 내려라 |
+| 2026-08-16T15:54:59+0900 | 진행 | REQ-0055 | socket-engineer → socket-engineer | 🔴 즉시 작업 정리 — untracked 파일 대량 삭제 사고. 재기동 전 문맥을 파일로 내려라 — 정리 완료 · 인수인계 docs/net/handoff-socket-engineer-2026-08-16.md · 🔴 server.cpp 빌드 깨짐(server_device.h 삭제, git 복구 불가) · 서버 pid 36998 은 생존 중이며 재현 불가 유일본이라 재기동 금지 |
+| 2026-08-16T15:58:32+0900 | 진행 | REQ-0055 | socket-engineer → socket-engineer | 🔴 즉시 작업 정리 — untracked 파일 대량 삭제 사고. 재기동 전 문맥을 파일로 내려라 — 정정 2건 반영: .gitignore 는 루트가 이미 수정해 둬서 선행조건 없음(초안 권고 철회) · server_device.h 재추출 계획은 중복정의 없음까지 검증 완료 |
+| 2026-08-16T16:00:37+0900 | 완료 | REQ-0054 | root → root | .gitignore 44행이 리팩터링 산출물을 통째로 무시한다 — server_wire.h 도 이미 누락 중 |
+| 2026-08-16T16:00:46+0900 | 완료 | REQ-0055 | root → socket-engineer | 🔴 즉시 작업 정리 — untracked 파일 대량 삭제 사고. 재기동 전 문맥을 파일로 내려라 |
+| 2026-08-16T16:02:25+0900 | 발행 | REQ-0099 | root → socket-engineer | server_device.h 복구 — 원문은 없지만 생성 스크립트가 트랜스크립트에 남아 있다 (서버 재기동 금지) |
+| 2026-08-16T16:02:35+0900 | 발행 | REQ-0100 | root → arduino-engineer | nextgen·EspLink·aptest 복원 — 플래싱된 실물이 /private/tmp/ngbuild 에 남아 있다 (REQ-0078 충돌 해소) |
+| 2026-08-16T16:02:45+0900 | 발행 | REQ-0101 | root → monitor-engineer | monitor/ 집계 도구 9개 복원 — 트랜스크립트 재생본 있음 · tick.py 만 불완전 · 이어서 판정 재산출 |
+| 2026-08-16T16:03:09+0900 | 착수 | REQ-0099 | socket-engineer → socket-engineer | server_device.h 복구 — 원문은 없지만 생성 스크립트가 트랜스크립트에 남아 있다 (서버 재기동 금지) |
+| 2026-08-16T16:03:20+0900 | 착수 | REQ-0100 | arduino-engineer → arduino-engineer | nextgen·EspLink·aptest 복원 — 플래싱된 실물이 /private/tmp/ngbuild 에 남아 있다 (REQ-0078 충돌 해소) |
+| 2026-08-16T16:03:21+0900 | 착수 | REQ-0101 | monitor-engineer → monitor-engineer | monitor/ 집계 도구 9개 복원 — 트랜스크립트 재생본 있음 · tick.py 만 불완전 · 이어서 판정 재산출 |
+| 2026-08-16T16:06:18+0900 | 진행 | REQ-0101 | monitor-engineer → monitor-engineer | monitor/ 집계 도구 9개 복원 — 트랜스크립트 재생본 있음 · tick.py 만 불완전 · 이어서 판정 재산출 — 9개 복원+git add 완료. 교정 통과: old 구간이 15.86h/47571프레임/드롭16/종료56/errno54 12/역행7 전부 정확히 재현 — 파서 무결. 판정창 11:27~15:27 4.0h 완주 재산출 완료. 현재 tick.py 빠진 Edit 복원 중 |
+| 2026-08-16T16:06:24+0900 | 발행 | REQ-0102 | arduino-engineer → socket-engineer | 참고(비긴급) — 08-15 DNS Fail 의 원인은 서버가 아니라 펌웨어의 SERVER_IP 앞 공백이었다 |
+| 2026-08-16T16:06:53+0900 | 완료 | REQ-0100 | arduino-engineer → arduino-engineer | nextgen·EspLink·aptest 복원 — 플래싱된 실물이 /private/tmp/ngbuild 에 남아 있다 (REQ-0078 충돌 해소) |

@@ -26,6 +26,48 @@ else
 fi
 
 echo
+echo "══ STALLED (조용한 클레임) ═════════════════════════════════"
+# 왜 있는가: claimed 인데 updated 가 오래된 요청은 "일하는 중"과 "멈춤"이 구분되지 않는다.
+# 2026-08-16 에 socket-engineer 가 계획만 내고 2시간 서 있었는데 아무도 몰랐다.
+# 들어오는 보고는 눈에 띄지만 **침묵은 아무도 알려주지 않는다.** 그래서 침묵을 표로 만든다.
+python3 - "$ROOT" <<'PYEOF'
+import sys, os, glob, re, datetime
+root = sys.argv[1] if len(sys.argv) > 1 else "."
+now = datetime.datetime.now(datetime.timezone.utc).astimezone()
+rows = []
+seen = set()
+for f in glob.glob(os.path.join(root, "requests", "*", "REQ-*.md")):
+    if os.path.islink(f):
+        continue   # requests/open/ 은 심볼릭 링크라 원본과 중복된다
+    head = open(f, encoding="utf-8", errors="replace").read(1200)
+    def fm(k):
+        m = re.search(rf"^{k}:\s*(.+)$", head, re.M)
+        return m.group(1).strip() if m else ""
+    if fm("status") != "claimed":
+        continue
+    try:
+        up = datetime.datetime.fromisoformat(fm("updated"))
+    except Exception:
+        continue
+    mins = int((now - up).total_seconds() // 60)
+    rid = fm("id")
+    if rid in seen:
+        continue
+    seen.add(rid)
+    rows.append((mins, rid, fm("to"), fm("title")[:52]))
+rows.sort(reverse=True)
+if not rows:
+    print("  (없음)")
+for mins, rid, to, title in rows:
+    mark = "🔴" if mins >= 60 else ("⚠ " if mins >= 30 else "  ")
+    print(f"  {mark} {rid}  {mins:>4}분 조용  {to:<18} {title}")
+if any(m >= 30 for m, *_ in rows):
+    print()
+    print("  ⚠ 30분 넘게 조용하면 확인하라 — 일하는 중일 수도, 멈춰 있을 수도 있다.")
+    print("    담당은 team/bin/req.sh progress <ID> --by <이름> --note \"...\" 로 알려야 한다.")
+PYEOF
+
+echo
 echo "══ RECENT (최근 이벤트) ════════════════════════════════════"
 if [ -f "$INDEX" ]; then
   tail -n "$n" "$INDEX"

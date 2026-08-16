@@ -40,8 +40,10 @@
 // <ctime> 를 직접 넣는다. POSIX 에서는 아래 <sys/time.h> 가 우연히 끌어와서 통과했지만
 // 그 include 는 #else 안이라 Windows 에는 없다 — 즉 macOS 빌드 성공은 우연이었다.
 #include <ctime>
+#include <csignal>      // sig_atomic_t / SIGINT — 윈도우에도 있어야 하므로 공통 블록에 둔다
 #include <string>
 #include <vector>
+#include <algorithm>    // 복구시간 중앙값(REQ-0072) — nth_element
 #include <map>
 #include <fstream>
 #include <sstream>
@@ -92,6 +94,7 @@ static const int  ACK_TIMEOUT_MS = 1500;    // §7.3
 static const int  ACK_MAX_TRIES  = 3;       // 최초 + 재전송 2회
 static const int  OFFLINE_MS     = 3500;    // §3.4
 static const int  SELECT_TICK_MS = 200;     // 타이머를 돌리기 위한 select 최대 대기
+static const int  SOAK_REPORT_MS = 60000;   // 소크 관측 주기 보고(REQ-0065)
 static const int  LOG_KEEP       = 2;       // §9.1 최신 2건
 static const uint64_t WS_MAX_FRAME = 64 * 1024;  // 클라이언트가 선언한 길이의 상한
 
@@ -113,100 +116,79 @@ static const uint64_t WS_MAX_FRAME = 64 * 1024;  // 클라이언트가 선언한
 // 소켓 옵션은 한 호출을, 마감시각은 한 프레임 전체를 막는다.
 static const int SEND_TIMEOUT_MS = 1000;
 
+// ---------------------------------------------------------------- 좀비 소켓 회수 (REQ-0072)
+// 실측 사례: 세션#32 가 12:06:41 이후 프레임 0건인데 **17분 넘게 ESTABLISHED 로 살아 있었다.**
+// 장치가 FIN 없이 죽으면(전원 붕괴·ESP 행) 서버는 그 fd 를 영원히 들고 있는다 — 365일
+// 상시가동에서 fd 누수 경로다. 재접속 자체는 막히지 않는다(새 연결이 옛 소켓을 대체한다).
+// 그래서 이건 결함 수리가 아니라 **위생**이다.
+//
+// ⚠ 두 장치는 중복이 아니다. **잡는 고장이 서로 다르다.**
+//   · keepalive(OS)  : 상대가 통째로 사라진 경우 — 전원 붕괴·망 분리. ACK 가 아예 안 온다.
+//   · 유휴 마감(앱)  : 상대의 TCP 스택은 살아서 ACK 를 꼬박 보내는데 **앱이 조용한** 경우.
+//                      ESP 가 행에 걸려 +IPD 경로만 죽은 바로 그 사고가 여기다.
+//                      keepalive 는 이걸 **원리적으로 못 잡는다** — 커널이 대신 응답하니까.
+//
+// ARD_IDLE_CLOSE_MS = 60000 의 근거 (지어낸 값이 아니다. 저장소 안의 숫자에서 끌어냈다):
+//
+//   하한 — **"이 소켓 위에서 장치가 다시 말할 수 있는 최장 정체"보다 커야 한다.**
+//     끊고 재연결하는 경우는 옛 소켓이 이미 죽어 있으니 여기서 지킬 것이 없다. 지켜야 할 것은
+//     **소켓은 멀쩡한데 ESP 만 `busy p...` 로 물려 있다가 스스로 풀리는** 경우다. 그 정체의
+//     상한을 장치 쪽 사다리 숫자로 잡는다(조별과제샘플/client.ino):
+//       · CIPCLOSE 사다리 3회      = 약 2.5초        (client.ino:505)
+//       · AT+RST 한 사이클         = 약 14초         (client.ino:504)
+//       · CWJAP 응답 대기 상한     = 최대 30초       (client.ino:524)
+//       → 최악 약 44초. 60초는 그 위다.
+//   상한 — 목적이 fd 회수이므로 길수록 의미가 준다. 60초면 fd 하나가 최대 1분만 낭비된다.
+//   그리고 **§3.4 의 3.5초에 바로 끊지 않는다.** 3.5초는 "화면에 오프라인이라 쓴다"는
+//   표시 판정이지 소켓 수명이 아니다. 거기서 끊으면 잠깐 늦은 프레임까지 죽인다.
+//
+//   즉 순서를 못 박는다:  3.5초(표시) ≪ 25초(keepalive) < 60초(유휴 마감)
+//
+// ⚠⚠ **어느 시계로 재는가가 이 값보다 중요하다.** 유휴는 `ard_last_ms`(체크섬을 통과한 `S`
+// 프레임 시각, §3.4 가 쓰는 바로 그 시계)로 잰다. `sess_last_line_ms`(수신한 모든 줄)로 재면
+// **AT 잡음이나 깨진 줄을 흘리는 장치가 영원히 살아남는다** — 줄은 계속 오니 유휴가 리셋되는데
+// device_online() 은 계속 false 다. 그게 정확히 회수해야 할 좀비다(§6.2 잡음 유입 참조).
+static const int ARD_IDLE_CLOSE_MS = 60000;
+
+// keepalive 파라미터 — 탐지까지 10 + 5×3 = **25초**. 유휴 마감(60초)보다 먼저 걸리게 둔다.
+// OS 가 잡을 수 있는 고장은 OS 가 먼저 잡는 편이 낫다(앱이 안 깨어나도 fd 가 돌아온다).
+// KEEPALIVE_IDLE_S 는 §3.4 의 3.5초보다 넉넉히 위라 **건강한 1Hz 링크에서는 한 번도 안 쏜다.**
+static const int KEEPALIVE_IDLE_S  = 10;
+static const int KEEPALIVE_INTVL_S = 5;
+static const int KEEPALIVE_CNT     = 3;
+
+// 복구시간 표본 상한 — 중앙값을 내려면 표본을 들고 있어야 하는데 365일 상시가동에서
+// 무한히 쌓을 수는 없다. 넘으면 **더 담지 않고 그 사실을 요약에 적는다**(조용히 버리지 않는다).
+static const size_t RECOV_SAMPLE_MAX = 10000;
+
+// ---------------------------------------------------------------- 다중 노드 (REQ-0083)
+// 조원들이 각자 노드를 올린다(주차 센서·모터 제어·기타 센서). 옛 구조는 소켓을 하나만 들어
+// **두 번째 노드가 첫 번째를 끊었다.** 그게 배포의 1순위 차단 요인이었다.
+//
+// MAX_ARD_NODES = 8 의 근거:
+//   조별과제 규모가 4~6대다(루트 확인). 거기에 개발용 예비 2대를 더해 8 로 둔다.
+//   위로 더 올릴 이유가 없다 — 노드마다 1Hz 하트비트가 오므로 8대면 초당 8프레임이고,
+//   그 이상은 이 서버의 단일 스레드 select 루프가 아니라 다른 구조를 논해야 할 규모다.
+//   **상한에 걸리면 새 연결을 거절한다(가장 오래된 것을 쫓아내지 않는다).**
+//   이유: 살아서 잘 돌고 있는 노드를 끊고 정체 모를 새 소켓을 들이는 것은 **확실한 것을 버리고
+//   불확실한 것을 얻는 거래**다. 같은 device_id 의 재접속은 자리를 물려받으므로(아래) 거절이
+//   재부팅한 노드를 막지도 않는다.
+static const size_t MAX_ARD_NODES = 8;
+
+// **id 를 아직 모르는 소켓**의 상한과 마감.
+// 첫 프레임을 받아야 device_id 를 아는데 소켓은 그 전에 이미 존재한다. 그 사이의 소켓을
+// 무한히 받아 주면 그것이 곧 자원 고갈이다.
+//
+// UNKNOWN_TIMEOUT_MS = 7000 의 근거 — **지어낸 값이 아니라 §3.4 에서 끌어냈다**:
+//   §3.4 는 3.5초(하트비트 3회분 + 여유) 무프레임이면 "말하지 않는 장치"로 판정한다.
+//   붙자마자 말을 안 하는 소켓은 **명세 자신의 기준으로 이미 죽은 것**이다.
+//   다만 접속 직후에는 AT 잡음이 먼저 새어 들어와 첫 줄이 깨질 수 있으므로(§6.2)
+//   판정 기준의 2배를 준다 = 7초. 1Hz 이므로 그 안에 **유효 프레임 기회가 7번** 있다.
+static const int UNKNOWN_TIMEOUT_MS = OFFLINE_MS * 2;
+static const size_t MAX_UNKNOWN_SOCKS = MAX_ARD_NODES;   // id 없는 소켓이 노드 예산을 넘지 못한다
+
 static const char* SLOT_ID[10] = {"A1","A2","A3","A4","A5","B1","B2","B3","B4","B5"};
-static const char* WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-
-// ---------------------------------------------------------------- SHA-1
-// RFC 3174. 흔한 실수 셋: 길이는 **비트 수**를 빅엔디안 64비트로, 패딩은 0x80 뒤 0 을
-// 채워 56 mod 64, 회전은 전부 32비트. --selftest 가 이 셋을 한 번에 잡는다.
-struct SHA1 {
-    uint32_t h[5];
-    uint64_t len;
-    uint8_t  buf[64];
-    size_t   n;
-
-    SHA1() { reset(); }
-    void reset() {
-        h[0]=0x67452301u; h[1]=0xEFCDAB89u; h[2]=0x98BADCFEu; h[3]=0x10325476u; h[4]=0xC3D2E1F0u;
-        len = 0; n = 0;
-    }
-    static uint32_t rol(uint32_t v, int b) { return (v << b) | (v >> (32 - b)); }
-
-    void block(const uint8_t* p) {
-        uint32_t w[80];
-        for (int i = 0; i < 16; i++)
-            w[i] = (uint32_t(p[i*4]) << 24) | (uint32_t(p[i*4+1]) << 16) |
-                   (uint32_t(p[i*4+2]) << 8) | uint32_t(p[i*4+3]);
-        for (int i = 16; i < 80; i++)
-            w[i] = rol(w[i-3] ^ w[i-8] ^ w[i-14] ^ w[i-16], 1);
-
-        uint32_t a=h[0], b=h[1], c=h[2], d=h[3], e=h[4];
-        for (int i = 0; i < 80; i++) {
-            uint32_t f, k;
-            if      (i < 20) { f = (b & c) | (~b & d);          k = 0x5A827999u; }
-            else if (i < 40) { f = b ^ c ^ d;                   k = 0x6ED9EBA1u; }
-            else if (i < 60) { f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDCu; }
-            else             { f = b ^ c ^ d;                   k = 0xCA62C1D6u; }
-            uint32_t t = rol(a,5) + f + e + k + w[i];
-            e = d; d = c; c = rol(b,30); b = a; a = t;
-        }
-        h[0]+=a; h[1]+=b; h[2]+=c; h[3]+=d; h[4]+=e;
-    }
-    void update(const uint8_t* p, size_t sz) {
-        len += uint64_t(sz) * 8;                    // ← 비트 수
-        while (sz--) {
-            buf[n++] = *p++;
-            if (n == 64) { block(buf); n = 0; }
-        }
-    }
-    void final(uint8_t out[20]) {
-        uint64_t bits = len;
-        uint8_t pad = 0x80;
-        update(&pad, 1);
-        uint8_t z = 0;
-        while (n != 56) update(&z, 1);
-        uint8_t lb[8];
-        for (int i = 0; i < 8; i++) lb[i] = uint8_t((bits >> (56 - 8*i)) & 0xFF);  // 빅엔디안
-        // update() 가 len 을 또 더하지 않도록 직접 넣는다
-        for (int i = 0; i < 8; i++) { buf[n++] = lb[i]; if (n == 64) { block(buf); n = 0; } }
-        for (int i = 0; i < 5; i++) {
-            out[i*4]   = uint8_t((h[i] >> 24) & 0xFF);
-            out[i*4+1] = uint8_t((h[i] >> 16) & 0xFF);
-            out[i*4+2] = uint8_t((h[i] >> 8)  & 0xFF);
-            out[i*4+3] = uint8_t( h[i]        & 0xFF);
-        }
-    }
-};
-
-static std::string base64(const uint8_t* p, size_t n) {
-    static const char* T = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string o;
-    for (size_t i = 0; i < n; i += 3) {
-        uint32_t v = uint32_t(p[i]) << 16;
-        if (i+1 < n) v |= uint32_t(p[i+1]) << 8;
-        if (i+2 < n) v |= uint32_t(p[i+2]);
-        o += T[(v >> 18) & 63];
-        o += T[(v >> 12) & 63];
-        o += (i+1 < n) ? T[(v >> 6) & 63] : '=';
-        o += (i+2 < n) ? T[v & 63]        : '=';
-    }
-    return o;
-}
-
-static std::string ws_accept(const std::string& key) {
-    std::string s = key + WS_GUID;
-    SHA1 sh; sh.update((const uint8_t*)s.data(), s.size());
-    uint8_t d[20]; sh.final(d);
-    return base64(d, 20);
-}
-
-// ---------------------------------------------------------------- 시간
-// ⚠ now_ms() 와 epoch_ms() 는 **원점이 다르다. 절대 섞어 쓰지 마라.**
-//   now_ms()   : 단조 증가하는 상대 시각. 윈도우에서는 **부팅 후 경과 ms**.
-//                타이머 계산(ACK 타임아웃·offline 판정)에만 쓴다.
-//   epoch_ms() : Unix epoch 기준 절대 시각. 바깥으로 나가는 값(ts, reserved_at)에만 쓴다.
-//   POSIX 에서는 둘 다 epoch 라 섞어도 티가 안 나지만, 윈도우에서는 그 순간
-//   수십 년짜리 값이 나온다. **윈도우에서만 틀리는 버그**라 여기서 못 잡는다.
+#include "server_device.h"   // 디바이스 계층 잎 유틸 (REQ-0096 A): SHA-1·base64·ws_accept·체크섬
 
 // 타이머 전용 — 상대 시각 (윈도우: 부팅 후 경과)
 static long long now_ms() {
@@ -228,37 +210,69 @@ static long long epoch_ms() {
     return (long long)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 #endif
 }
+// ---------------------------------------------------------------- 종료 신호 (REQ-0065)
+// 소크 시험은 Ctrl-C 로 끝난다. 그때 **한 줄 요약을 남기고** 죽어야 관측이 완성된다.
+// 핸들러에서 하는 일은 플래그 하나 세우는 것뿐이다 — 여기서 logf 를 부르면 비동기 안전하지 않다.
+static volatile sig_atomic_t g_stop = 0;
+static void on_stop_signal(int) { g_stop = 1; }
+
+// ---------------------------------------------------------------- 시험용 포트 이동 (REQ-0072)
+// **왜 필요한가**: 유휴 마감이 실제로 소켓을 닫는지 확인하려면 진짜 연결을 붙여 봐야 하는데,
+// 운영 인스턴스가 9991/9900/5500 을 잡고 있으면 두 번째 인스턴스가 뜨지 못한다.
+// 소크 이력을 들고 있는 프로세스를 재시작해서 확인하는 것은 **관측을 부수고 관측하는 짓**이다.
+// 그래서 세 포트를 한꺼번에 옮기는 이음매를 둔다. **판정에는 전혀 관여하지 않는다**
+// (--selftest 의 no_disk 와 같은 성격의 이음매다).
+// 0 이 아니면 기동 배너에 크게 찍어 시험 인스턴스를 운영으로 착각할 수 없게 한다.
+static int g_port_offset = 0;
+
 static void logf(const char* mark, const std::string& msg) {
     long long t = epoch_ms() / 1000;
     time_t tt = (time_t)t;
     char ts[16]; strftime(ts, sizeof(ts), "%H:%M:%S", localtime(&tt));
     std::cout << ts << "  " << mark << " " << msg << std::endl;
 }
-
-// ---------------------------------------------------------------- 라인 체크섬 (§2.2)
-// 대상: 첫 바이트부터 체크섬 앞 쉼표까지(그 쉼표 포함). 대문자 2자리 hex.
-static std::string cksum(const std::string& prefix) {
-    unsigned char x = 0;
-    for (size_t i = 0; i < prefix.size(); i++) x ^= (unsigned char)prefix[i];
-    char b[3]; snprintf(b, sizeof(b), "%02X", x);
-    return std::string(b);
+// prev_up < 0 = 기준선 없음(첫 프레임·새 연결 직후) → 판정하지 않는다.
+static bool uptime_says_reboot(long long prev_up, long long up) {
+    if (prev_up < 0 || up < 0) return false;      // 기준선 없음 / 깨진 값은 판정하지 않는다
+    long long fwd = ((up - prev_up) % UPTIME_WRAP + UPTIME_WRAP) % UPTIME_WRAP;
+    return fwd > UPTIME_MAX_FWD;
 }
-static std::string build_line(const std::string& prefix) { return prefix + cksum(prefix) + "\n"; }
 
-static bool verify_line(const std::string& line, std::vector<std::string>& out) {
-    size_t cut = line.rfind(',');
-    if (cut == std::string::npos) return false;
-    if (cksum(line.substr(0, cut + 1)) != line.substr(cut + 1)) return false;
-    out.clear();
-    std::string body = line.substr(0, cut);
-    std::string cur;
-    for (size_t i = 0; i < body.size(); i++) {
-        if (body[i] == ',') { out.push_back(cur); cur.clear(); }
-        else cur += body[i];
-    }
-    out.push_back(cur);
-    return true;
-}
+// ---------------------------------------------------------------- 다중 노드 (REQ-0083)
+// **주차 노드는 하나다. 나머지는 보조 노드다.** 왜 대칭이 아닌가:
+//   `R`/`C`/`T` 하행은 **주차 칸을 가진 장치**로만 가야 하는데, 전선에는 "내가 주차 노드다"라고
+//   말하는 필드가 없다. `S` 는 10칸 비트를 통째로 실을 뿐 소유권을 주장하지 않는다.
+//   그래서 **없는 규약을 지어내지 않고**, 관측 가능한 규칙 하나로 정한다:
+//
+//        ▶ **첫 `S` 를 보낸 장치가 그 서버 수명 동안 주차 노드다(first-S-wins).**
+//
+//   두 번째 장치가 `S` 를 보내면 **충돌로 로그에 크게 남기고 하행을 주지 않는다.**
+//   조용히 둘 중 하나를 고르면 "예약이 가끔 엉뚱한 데로 간다"가 되는데, 그건 며칠 뒤에
+//   원인을 못 찾는 종류의 사고다. **가정이 깨지는 순간이 로그에 보이는 것**이 이 규칙의 값이다.
+//   근본 해법은 전선에 역할 필드를 두는 것이고, 그건 v1.4 급 변경이라 명세에 제안으로만 남긴다.
+//
+// 보조 노드는 **상행 전용**이다(수신·계측만). 하행을 받을 방법이 아직 명세에 없다.
+struct AuxNode {
+    sock_t fd;
+    std::string buf;
+    long long connected_ms;      // 접속 시각(now_ms)
+    long long last_ms;           // 마지막 **유효** 프레임(now_ms) — 유휴 마감의 기준
+    long long last_epoch_ms;     // 바깥으로 내보낼 때 쓰는 절대 시각
+    long long frames;            // 누적 유효 프레임
+    long long drops;             // 버린 줄
+    bool online;                 // §3.4 엣지 판정용 직전 상태
+    int  offline_episodes;
+    AuxNode() : fd(BAD_SOCK), connected_ms(0), last_ms(0), last_epoch_ms(0),
+                frames(0), drops(0), online(false), offline_episodes(0) {}
+};
+
+// 아직 `device_id` 를 모르는 소켓. 첫 유효 프레임에서 승격된다.
+struct UnknownSock {
+    sock_t fd;
+    std::string buf;
+    long long since_ms;
+    UnknownSock() : fd(BAD_SOCK), since_ms(0) {}
+};
 
 // ---------------------------------------------------------------- 상태
 struct Slot {
@@ -291,10 +305,23 @@ struct Server {
     Slot slots[10];
     sock_t lsn_ard, lsn_http, lsn_phone;
     std::map<sock_t, std::string> phones;   // 폰 연결 → 수신 버퍼 (연결마다 따로!)
-    sock_t ard;                        // 아두이노 연결 (하나만)
+    // ⚠ `ard` 는 이제 "아두이노 연결"이 아니라 **주차 노드의 연결**이다(REQ-0083).
+    // 이름을 안 바꾼 이유: 이 필드에 얽힌 상태·지표가 79곳인데, 그 전부를 건드리면
+    // **하위호환을 코드로 증명할 수 없다.** 지금 도는 단일 노드(P1)가 그대로 동작해야 하고
+    // 그게 조원 배포 전까지 유일한 실물이다. 그래서 주차 노드 경로는 **한 줄도 안 바꾸고**,
+    // 보조 노드를 옆에 붙이는 쪽을 택했다. 단일 노드 동작이 구조적으로 보존된다.
+    sock_t ard;                        // **주차 노드**의 연결 (여전히 하나)
+    std::string park_dev;              // 주차 노드의 device_id. "" = 아직 미정(first-S-wins)
+    std::map<std::string, AuxNode> aux;   // device_id → 보조 노드 (상행 전용)
+    std::vector<UnknownSock> unknown;     // id 미상 소켓 — 첫 유효 프레임에서 승격
+    int  aux_conflicts;                // `S` 를 보냈지만 주차 노드가 아닌 장치 수(가정 붕괴 신호)
+    int  admit_rejects;                // 상한 초과로 거절한 연결 수
     std::string ard_buf;
     bool  ard_seen;
     long long ard_last_ms;
+    // §9.1 `device.last_frame_ts` 전용 — **epoch 시각**이다. ard_last_ms 를 쓰면 안 된다:
+    // 그건 now_ms() 기반(윈도우에서는 부팅 후 경과)이라 바깥으로 나가면 수십 년짜리 값이 된다(28행 경고).
+    long long ard_last_epoch_ms;
     long long ard_uptime;
     long  ard_seq;
     std::string ard_dev;
@@ -317,14 +344,434 @@ struct Server {
     int  test_ovr[10];        // 1 = 그 칸의 occupied 는 주입된 값
     int  base_ovr[10];        // 직전 프레임의 오버라이드 비트 — 되돌림 판정용(§7.5-3)
 
+    // --selftest 전용 이음매 두 개. **판정에는 절대 관여하지 않는다.**
+    // resync_count : 재동기화가 실제로 몇 번 일어났는지 세어 §7.4 오탐을 증명한다.
+    // no_disk      : 자가검증이 작업 디렉터리의 data_log.json 을 덮어쓰지 않게 막는다.
+    int  resync_count;
+    bool no_disk;
+
+    // ---------- 소크 관측 (REQ-0065)
+    // "2시간 안 끊겼다"는 **로그가 증명해야** 한다. 접속·종료 순간만 찍히면 그 사이의 침묵을
+    // 아무도 증언하지 않는다 — 조용한 로그와 죽은 링크가 똑같이 보인다.
+    // 핵심 지표는 **프레임 수신 간 최대 공백**이다. 평균은 링크가 반쯤 죽어도 예쁘게 나온다.
+    long long soak_start_ms;      // 프로세스 기동(now_ms)
+    int  ard_sessions;            // ARD 접속 횟수
+    long long sess_start_ms;      // 현 세션 시작. 0 = 세션 없음
+    long long sess_frames;        // 현 세션 수신 줄
+    long long sess_last_line_ms;  // 현 세션 마지막 줄 수신 시각
+    long long sess_max_gap_ms;    // 현 세션 최대 공백
+    long long all_frames;         // 누적 수신 줄
+    long long all_max_gap_ms;     // 누적 최대 공백 — **세션 경계는 넘지 않는다**(끊긴 시간은 공백이 아니다)
+    long long all_max_gap_at;     // 그 공백이 끝난 시각(epoch_ms)
+    long long link_down_ms;       // ARD 연결이 없던 누적 시간
+    long long link_down_since;    // 0 = 연결돼 있음
+    // 재부팅 감지를 **원인별로** 센다. §7.4 는 "새 연결이 1차 신호, uptime 추론은 2차 방어선"이라고
+    // 정했는데, 그 주장이 실기에서 맞는지는 이 두 숫자의 비율로만 확인된다.
+    // (불변식: reboot_by_conn + reboot_by_uptime == resync_count)
+    int  reboot_by_conn;
+    int  reboot_by_uptime;
+    int  offline_episodes;        // 3.5초 무프레임 판정 횟수(§3.4)
+    // ⚠ 아래 셋은 **모순 대조용**이다(죽은 탐지기 규칙 5). 상행만 세면
+    // "조용한 링크"와 "시끄럽지만 전부 버려지는 링크"(AT 잡음 §6.2)가 요약에서 똑같아 보이고,
+    // 상행만 보면 **하행이 통째로 죽어도 요약이 멀쩡하다**(실기에서 +IPD 0건이던 바로 그 경우).
+    // 버린 줄은 **원인별로** 센다. 합만 세면 "전선에서 깨졌다"와 "장치가 프로토콜 아닌 것을
+    // 흘린다"가 같은 숫자가 된다 — 진단이 정반대인데도. 특히 `모름` 이 오르면 AT 응답 같은
+    // 비프로토콜 텍스트가 소켓에 새고 있다는 뜻이라 체크섬 손상과 완전히 다른 사건이다.
+    long long drop_cksum;         // 체크섬 불일치 — 전선/장치에서 바이트가 깨졌다
+    long long drop_overlong;      // 64B 초과 줄(§2.1)
+    long long drop_unknown;       // 모르는 타입 문자 — 비프로토콜 텍스트 유입 의심
+    long long drop_noise;         // LF 없이 64B 초과 → 버퍼 비움(잡음)
+    long long retx_count;         // 하행 재전송 횟수(§7.3)
+    long long ack_fail_count;     // 하행 ACK 최종 실패 횟수
+    bool ard_online;              // 온·오프라인 **엣지** 판정용 직전 상태(§3.4). 아래 루프 주석 참조
+    long long last_report_ms;     // 주기 보고 시각
+
+    // ---------- 복구 계측 (REQ-0072)
+    // 왜 "최대공백"으로 부족한가 — 공백은 **얼마나 나빴나**만 말하고 **스스로 돌아왔나**를
+    // 말하지 않는다. 사용자 요구가 "오류에서 정상으로 복구하는 구조"로 바뀌었으므로
+    // 판정 지표도 바뀌어야 한다: **끊긴 뒤 몇 초 만에 저절로 프레임이 다시 왔는가.**
+    // 이 숫자가 없으면 장치 쪽 복구 사다리(REQ-0071)가 듣는지를 사람이 로그를 눈으로 세어
+    // 판정하게 된다 — 실제로 오늘 그렇게 했다.
+    long long offline_since_ms;   // 오프라인이 **시작된** 시각(now_ms). 0 = 온라인
+    int  offline_at_session;      // 그 순간의 ard_sessions — 같은 연결/재연결 복구를 가른다
+    std::vector<long long> recov_ms;  // 복구시간 표본(중앙값용). RECOV_SAMPLE_MAX 에서 멈춘다
+    long long recov_dropped;      // 상한을 넘겨 못 담은 표본 수 — 조용히 버리지 않는다
+    int  recov_same_conn;         // 같은 TCP 연결에서 프레임이 되돌아왔다(링크가 살아 있었다)
+    int  recov_reconn;            // 재연결한 뒤에야 되돌아왔다(사다리가 소켓을 다시 세웠다)
+    long long recov_worst_ms;     // 최악 복구시간
+    int  zombie_reaps;            // 유휴 마감으로 회수한 소켓 수 — **앱 경로**
+    int  keepalive_reaps;         // ETIMEDOUT 으로 죽은 소켓 수 — **OS 경로**
+
     Server() : lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK), ard(BAD_SOCK),
-               ard_seen(false), ard_last_ms(0), ard_uptime(-1), ard_seq(-1),
-               ard_dev("?"), next_rid(1), base_valid(false), test_armed(false) {
+               aux_conflicts(0), admit_rejects(0),      // 선언 순서와 일치시킨다(-Wreorder)
+               ard_seen(false), ard_last_ms(0), ard_last_epoch_ms(0), ard_uptime(-1), ard_seq(-1),
+               ard_dev("?"), next_rid(1), base_valid(false), test_armed(false),
+               resync_count(0), no_disk(false),
+               soak_start_ms(0), ard_sessions(0), sess_start_ms(0), sess_frames(0),
+               sess_last_line_ms(0), sess_max_gap_ms(0), all_frames(0), all_max_gap_ms(0),
+               all_max_gap_at(0), link_down_ms(0), link_down_since(0),
+               reboot_by_conn(0), reboot_by_uptime(0), offline_episodes(0),
+               drop_cksum(0), drop_overlong(0), drop_unknown(0), drop_noise(0),
+               retx_count(0), ack_fail_count(0),                  // 선언 순서와 일치시킨다(-Wreorder)
+               ard_online(false), last_report_ms(0),
+               offline_since_ms(0), offline_at_session(0), recov_dropped(0),
+               recov_same_conn(0), recov_reconn(0), recov_worst_ms(0),
+               zombie_reaps(0), keepalive_reaps(0) {
         for (int i = 0; i < 10; i++) { base_occ[i] = 0; test_ovr[i] = 0; base_ovr[i] = 0; }
+    }
+
+    // ---------- 소크 관측 보조 (REQ-0065)
+    static std::string hms(long long ms) {
+        if (ms < 0) ms = 0;
+        long long s = ms / 1000;
+        char b[32];
+        snprintf(b, sizeof(b), "%02lld:%02lld:%02lld", s / 3600, (s % 3600) / 60, s % 60);
+        return std::string(b);
+    }
+    static std::string secs(long long ms) {
+        char b[32];
+        snprintf(b, sizeof(b), "%.1f초", ms / 1000.0);
+        return std::string(b);
+    }
+    static std::string clock_at(long long ep_ms) {
+        if (ep_ms <= 0) return std::string("-");
+        time_t tt = (time_t)(ep_ms / 1000);
+        char b[16]; strftime(b, sizeof(b), "%H:%M:%S", localtime(&tt));
+        return std::string(b);
+    }
+
+    // ⚠ **아직 닫히지 않은 침묵도 공백이다.** 공백을 "줄과 줄 사이"로만 세면
+    // 장치가 조용히 멈춘 바로 그 사고가 최대공백에 **안 잡힌다** — 다음 줄이 영영 안 오기 때문이다.
+    // (실제로 겪었다: 22분간 무프레임이었는데 세션 최대공백이 3.3초로 찍혔다.)
+    long long live_gap_ms() const {
+        if (!sess_start_ms || !sess_last_line_ms) return 0;
+        return now_ms() - sess_last_line_ms;
+    }
+    void fold_live_gap() {                       // 진행 중이던 침묵을 확정한다
+        long long g = live_gap_ms();
+        if (g > sess_max_gap_ms) sess_max_gap_ms = g;
+        if (g > all_max_gap_ms) { all_max_gap_ms = g; all_max_gap_at = epoch_ms(); }
+    }
+
+    // ---------- 복구 계측 보조 (REQ-0072)
+    // **평균이 아니라 중앙값을 쓴다.** 복구시간은 한쪽으로 길게 끌리는 분포다(대부분 몇 초,
+    // 가끔 재연결로 수십 초). 평균은 그 꼬리 하나에 끌려가 "보통 얼마나 걸리나"를 못 말한다.
+    // 최악값은 따로 낸다 — 중앙값과 최악을 **같이** 봐야 "대체로 빠른데 가끔 나쁘다"가 읽힌다.
+    long long recov_median_ms() const {
+        if (recov_ms.empty()) return -1;                  // -1 = 표본 없음(0 과 구별한다)
+        std::vector<long long> v = recov_ms;              // 정렬이 원본을 흔들면 안 된다
+        size_t mid = v.size() / 2;
+        std::nth_element(v.begin(), v.begin() + mid, v.end());
+        if (v.size() % 2) return v[mid];
+        long long hi = v[mid];
+        std::nth_element(v.begin(), v.begin() + (mid - 1), v.end());
+        return (v[mid - 1] + hi) / 2;
+    }
+
+    // 아두이노 소켓의 유휴를 재는 기준 시각.
+    // ⚠ **`ard_last_ms`(체크섬을 통과한 S 프레임)를 쓴다.** 이유는 ARD_IDLE_CLOSE_MS 주석에 있다 —
+    // 모든 수신 줄(`sess_last_line_ms`)로 재면 잡음을 흘리는 장치가 영원히 회수되지 않는다.
+    // `sess_start_ms` 와 큰 쪽을 쓰는 이유는 둘이다:
+    //   · 붙기만 하고 **한 줄도 안 보내는** 연결도 회수 대상이다(그 자체로 누수 경로다).
+    //   · `ard_last_ms` 는 세션 경계에서 리셋되지 않는다. 새 연결 직후 옛 값으로 재면
+    //     **갓 붙은 정상 연결을 그 자리에서 끊는다.** sess_start_ms 가 그 사고를 막는다.
+    long long ard_idle_base_ms() const {
+        return (ard_last_ms > sess_start_ms) ? ard_last_ms : sess_start_ms;
+    }
+
+    // 아두이노 소켓에만 keepalive 를 건다. **모든 accept 에 일괄로 걸지 않는다** —
+    // HTTP/WS/폰 연결의 수명 정책은 이 요청의 범위가 아니고, 조용히 바꿀 일도 아니다.
+    //
+    // 반환값은 **OS 가 실제로 받아들인 값을 되읽은 것**이다(요청한 값이 아니다).
+    // setsockopt 는 조용히 무시되거나 값이 잘릴 수 있고, 그러면 "켰다고 믿는데 안 켜진"
+    // 상태가 된다 — 로그에 요청값을 찍으면 그 거짓말을 그대로 기록하게 된다.
+    // 되읽어 찍으면 켜졌는지 아닌지가 로그만 보고 판정된다.
+    static std::string set_keepalive(sock_t s) {
+        int on = 1;
+        if (setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, (const char*)&on, sizeof(on)) != 0)
+            return "keepalive 설정 실패(errno=" + std::to_string(sockerr()) + ")";
+#ifdef _WIN32
+        // ⚠ 윈도우는 SO_KEEPALIVE 만으로는 **기본 유휴가 2시간**이라 사실상 안 걸린다.
+        // 세부 조정은 SIO_KEEPALIVE_VALS(mstcpip.h)가 필요한데 **이 기기에서 컴파일 검증을
+        // 할 수 없어 넣지 않았다.** 그래서 윈도우에서는 OS 경로가 하중을 받지 못하고
+        // 유휴 마감(ARD_IDLE_CLOSE_MS)이 **유일한** 회수 장치가 된다 — 명세에도 그렇게 적었다.
+        // 안 되는 것을 된다고 적는 것보다, 못 한 것을 못 했다고 적는 편이 낫다.
+        return "keepalive on(윈도우 기본 유휴 2시간 — 세부조정 없음, 유휴 마감이 주 장치)";
+#else
+        int idle = KEEPALIVE_IDLE_S, intvl = KEEPALIVE_INTVL_S, cnt = KEEPALIVE_CNT;
+  #ifdef TCP_KEEPIDLE                        // 리눅스
+        setsockopt(s, IPPROTO_TCP, TCP_KEEPIDLE, (const char*)&idle, sizeof(idle));
+        const int IDLE_OPT = TCP_KEEPIDLE;
+  #elif defined(TCP_KEEPALIVE)               // macOS/BSD — 같은 뜻의 다른 이름이다
+        setsockopt(s, IPPROTO_TCP, TCP_KEEPALIVE, (const char*)&idle, sizeof(idle));
+        const int IDLE_OPT = TCP_KEEPALIVE;
+  #endif
+  #ifdef TCP_KEEPINTVL
+        setsockopt(s, IPPROTO_TCP, TCP_KEEPINTVL, (const char*)&intvl, sizeof(intvl));
+  #endif
+  #ifdef TCP_KEEPCNT
+        setsockopt(s, IPPROTO_TCP, TCP_KEEPCNT, (const char*)&cnt, sizeof(cnt));
+  #endif
+        // ---- 되읽기. 여기서 찍는 숫자는 **커널이 들고 있는 값**이다.
+        int ron = 0, ridle = -1, rintvl = -1, rcnt = -1;
+        socklen_t sl = sizeof(int);
+        getsockopt(s, SOL_SOCKET, SO_KEEPALIVE, (char*)&ron, &sl);
+  #if defined(TCP_KEEPIDLE) || defined(TCP_KEEPALIVE)
+        sl = sizeof(int); getsockopt(s, IPPROTO_TCP, IDLE_OPT, (char*)&ridle, &sl);
+  #endif
+  #ifdef TCP_KEEPINTVL
+        sl = sizeof(int); getsockopt(s, IPPROTO_TCP, TCP_KEEPINTVL, (char*)&rintvl, &sl);
+  #endif
+  #ifdef TCP_KEEPCNT
+        sl = sizeof(int); getsockopt(s, IPPROTO_TCP, TCP_KEEPCNT, (char*)&rcnt, &sl);
+  #endif
+        char b[160];
+        snprintf(b, sizeof(b),
+                 "keepalive %s · 유휴 %ds · 간격 %ds · 횟수 %d → 탐지 약 %ds (커널 되읽기)",
+                 ron ? "on" : "**off**", ridle, rintvl, rcnt,
+                 (ridle > 0 && rintvl > 0 && rcnt > 0) ? ridle + rintvl * rcnt : -1);
+        return std::string(b);
+#endif
+    }
+
+    // recv 가 -1 을 준 이유가 **keepalive 가 죽였기 때문인지**를 가른다.
+    // 안 가르면 "수신 오류" 한 문자열에 전부 섞여 keepalive 가 한 번이라도 일했는지
+    // 증명할 길이 없어진다 — 켜 놓고 안 켜진 것과 구별이 안 되는 계측은 계측이 아니다.
+    static bool err_is_timeout(int e) {
+#ifdef _WIN32
+        return e == WSAETIMEDOUT;
+#else
+        return e == ETIMEDOUT;
+#endif
+    }
+
+    // 한 줄로 소크 전체를 재구성할 수 있게 한다. 주기 보고와 종료 요약이 같은 문장을 쓴다.
+    std::string soak_line() const {
+        long long t = now_ms();
+        long long gap_max = all_max_gap_ms;
+        long long live = live_gap_ms();
+        if (live > gap_max) gap_max = live;       // 진행 중인 침묵도 포함해서 보고한다
+        long long down = link_down_ms + (link_down_since ? t - link_down_since : 0);
+        std::string s = "소크 " + hms(t - soak_start_ms)
+            + " · 세션 " + std::to_string(ard_sessions) + "회";
+        if (sess_start_ms) s += "(현재 #" + std::to_string(ard_sessions)
+                                + " 연결중 " + hms(t - sess_start_ms) + ")";
+        else               s += "(현재 끊김)";
+        s += " · 프레임 " + std::to_string(all_frames)
+           + " · 최대공백 " + secs(gap_max) + (live > all_max_gap_ms ? "(진행중)" : "@" + clock_at(all_max_gap_at))
+           + " · 재부팅감지 " + std::to_string(reboot_by_conn + reboot_by_uptime)
+           + "(새연결 " + std::to_string(reboot_by_conn)
+           + " / uptime추론 " + std::to_string(reboot_by_uptime) + ")"
+           + " · 오프라인 " + std::to_string(offline_episodes) + "회"
+           + " · 링크없음 " + hms(down)
+           // 상행만 보면 하행이 통째로 죽어도 요약이 멀쩡하다. 네 숫자를 나란히 둔다.
+           // 버린줄은 합과 원인을 함께 — 원인이 갈리면 진단이 갈린다(잡음 유입 vs 바이트 손상).
+           + " · 버린줄 " + std::to_string(drop_cksum + drop_overlong + drop_unknown + drop_noise)
+           + "(체크섬 " + std::to_string(drop_cksum)
+           + "/과길이 " + std::to_string(drop_overlong)
+           + "/모름 " + std::to_string(drop_unknown)
+           + "/잡음 " + std::to_string(drop_noise) + ")"
+           + " · 재전송 " + std::to_string(retx_count)
+           + " · ACK실패 " + std::to_string(ack_fail_count)
+           + " · " + recovery_phrase()
+           + " · 회수 " + std::to_string(zombie_reaps + keepalive_reaps)
+           + "(유휴 " + std::to_string(zombie_reaps)
+           + "/keepalive " + std::to_string(keepalive_reaps) + ")";
+        return s;
+    }
+
+    // ---------- 복구 지표 문장 (REQ-0072)
+    // **"끊긴 뒤 몇 초 만에 스스로 돌아왔는가"** 를 한 구절로 말한다.
+    //
+    // ⚠ `미복구` 는 정의상 **0 아니면 1**이다. 다음 오프라인 에피소드가 열리려면 그 전에
+    // 온라인으로 올라와야 하고(엣지 판정), 온라인으로 올라왔다는 것이 곧 복구이기 때문이다.
+    // 그래서 "미복구 Z회" 를 여러 건으로 부풀리지 않고 **지금 몇 초째 못 돌아오고 있는지**를
+    // 같이 찍는다 — 요약에서 눈에 띄어야 할 것은 횟수가 아니라 그 진행 시간이다.
+    // (진짜로 여러 번 셀 수 있는 "못 돌아왔다" 지표는 위의 `회수`(유휴 마감) 쪽이다.)
+    std::string recovery_phrase() const {
+        std::string s = "복구 " + std::to_string(recov_same_conn + recov_reconn) + "회";
+        if (recov_same_conn + recov_reconn) {
+            s += "(같은연결 " + std::to_string(recov_same_conn)
+               + "/재연결 " + std::to_string(recov_reconn) + ")";
+            long long med = recov_median_ms();
+            s += " 중앙 " + (med < 0 ? std::string("-") : secs(med))
+               + " 최악 " + secs(recov_worst_ms);
+            if (recov_dropped) s += "(표본상한 초과 " + std::to_string(recov_dropped) + "건 제외)";
+        }
+        // 진행 중인 미복구는 **가장 시끄럽게** 적는다. 이번 사고에서 요약만 보고는 안 보였고
+        // 프레임 수가 멈춘 것을 사람이 눈치채야 했다 — 그 실패를 되풀이하지 않으려는 칸이다.
+        if (offline_since_ms)
+            s += " · 🔴미복구 1회(진행 " + secs(now_ms() - offline_since_ms) + ")";
+        else
+            s += " · 미복구 0";
+        return s;
+    }
+
+    // 세션이 끝나는 길은 두 갈래다(recv 실패, send 실패). 둘 다 이리로 모은다 —
+    // 한쪽만 계측하면 "끊겼는데 세션이 계속 열려 있는" 장부가 만들어진다.
+    // (why 를 const char* 에서 std::string 으로 넓혔다 — 끊긴 이유에 errno 를 실어야
+    //  keepalive 가 죽인 것과 그냥 수신 오류를 로그에서 가를 수 있다. REQ-0072)
+    void end_ard_session(const std::string& why) {
+        if (sess_start_ms) {
+            fold_live_gap();                     // 끝나지 않은 침묵을 공백으로 확정하고 닫는다
+            logf("-ARD", "세션#" + std::to_string(ard_sessions) + " 종료(" + why + ") — 지속 "
+                         + hms(now_ms() - sess_start_ms)
+                         + " · 프레임 " + std::to_string(sess_frames)
+                         + " · 최대공백 " + secs(sess_max_gap_ms));
+            sess_start_ms = 0;
+        }
+        if (!link_down_since) link_down_since = now_ms();
     }
 
     bool device_online() const {
         return ard != BAD_SOCK && ard_seen && (now_ms() - ard_last_ms) < OFFLINE_MS;
+    }
+
+    // ---------- 다중 노드 (REQ-0083) ----------------------------------------
+    // §2.3 `devid ::= 1*8( ALPHA / DIGIT / "_" / "-" )`
+    static bool valid_devid(const std::string& d) {
+        if (d.empty() || d.size() > 8) return false;
+        for (size_t i = 0; i < d.size(); i++) {
+            char c = d[i];
+            bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                      (c >= '0' && c <= '9') || c == '_' || c == '-';
+            if (!ok) return false;
+        }
+        return true;
+    }
+
+    // 한 줄에서 device_id 를 꺼낸다. **체크섬을 통과한 `S` 프레임만 믿는다.**
+    // 접속 직후에는 AT 잡음이 섞여 들어오므로(§6.2) 아무 줄이나 신뢰하면
+    // **쓰레기가 device_id 가 되어** 그 이름으로 노드 자리를 하나 영구히 잡아먹는다.
+    static bool peek_devid(const std::string& line, std::string& out) {
+        std::vector<std::string> f;
+        if (!verify_line(line, f)) return false;
+        if (f.size() < 6 || f[0] != "S") return false;
+        if (!valid_devid(f[5])) return false;
+        out = f[5];
+        return true;
+    }
+
+    // 주차 노드 자리를 넘겨받는다. **옛 소켓 대체는 같은 device_id 일 때만** 일어난다 —
+    // 그것이 REQ-0083 이 고치는 핵심이다(옛 구조는 id 를 모른 채 무조건 대체했다).
+    void adopt_as_parking(sock_t c, const std::string& dev) {
+        if (ard != BAD_SOCK) {
+            closesock(ard); conns.erase(ard);
+            end_ard_session("같은 device_id(" + dev + ") 재접속으로 대체");
+        }
+        ard = c; ard_buf.clear();
+        park_dev = dev;
+        ard_sessions++;
+        sess_start_ms = now_ms();
+        sess_frames = 0; sess_last_line_ms = 0; sess_max_gap_ms = 0;
+        if (link_down_since) { link_down_ms += now_ms() - link_down_since; link_down_since = 0; }
+        reboot_by_conn++;
+        logf("+ARD", "주차 노드 접속 — 세션#" + std::to_string(ard_sessions)
+                     + " · device=" + dev);
+        ard_seq = -1; ard_uptime = -1;
+        base_valid = false;                 // §7.5-1
+        resync_reservations("새 연결");
+    }
+
+    // 보조 노드 자리에 넣는다(상행 전용).
+    void adopt_as_aux(sock_t c, const std::string& dev) {
+        std::map<std::string, AuxNode>::iterator it = aux.find(dev);
+        if (it != aux.end() && it->second.fd != BAD_SOCK) {
+            closesock(it->second.fd);
+            logf("-AUX", "보조 노드 " + dev + " — 같은 device_id 재접속으로 대체 (프레임 "
+                         + std::to_string(it->second.frames) + ")");
+        }
+        AuxNode& a = aux[dev];
+        a.fd = c; a.buf.clear();
+        a.connected_ms = now_ms();
+        a.last_ms = now_ms();               // 유휴 마감 기준선. 0 이면 즉시 회수 대상이 된다
+        a.online = false;
+        logf("+AUX", "보조 노드 접속 — device=" + dev
+                     + " · 현재 노드 " + std::to_string(aux.size() + (ard != BAD_SOCK ? 1 : 0))
+                     + "/" + std::to_string(MAX_ARD_NODES) + " · **상행 전용**(하행 경로 없음)");
+    }
+
+    // 주차 노드 버퍼를 줄 단위로 비운다. 수신 경로와 **똑같은 규칙**이어야 하므로
+    // 승격 직후에도 이걸 부른다(첫 프레임이 1초 늦게 처리되는 일이 없게).
+    void drain_ard_buf() {
+        size_t i;
+        while ((i = ard_buf.find('\n')) != std::string::npos) {
+            std::string line = ard_buf.substr(0, i);
+            ard_buf.erase(0, i + 1);
+            if (!line.empty() && line[line.size()-1] == '\r') line.erase(line.size()-1);
+            if (line.size() + 1 > (size_t)MAX_LINE) { drop_overlong++; logf("!", "64B 초과 줄 — 버림"); continue; }
+            if (!line.empty()) on_ard_line(line);
+        }
+        if (ard_buf.size() > (size_t)MAX_LINE) {
+            drop_noise++;
+            logf("!", "LF 없이 64B 초과 — 버퍼 비움");
+            ard_buf.clear();
+        }
+    }
+
+    // id 미상 소켓 마감 + 보조 노드 유휴 회수 (REQ-0083).
+    // 주차 노드의 유휴 마감(§3.5)과 **같은 근거·같은 상수**를 쓴다 — 노드마다 다른 규칙을 두면
+    // "왜 저 노드만 안 끊기지"를 나중에 아무도 설명 못 한다.
+    void reap_nodes() {
+        long long t = now_ms();
+        for (size_t k = 0; k < unknown.size(); ) {
+            if (unknown[k].fd != BAD_SOCK && t - unknown[k].since_ms >= UNKNOWN_TIMEOUT_MS) {
+                logf("✂", "id 미상 소켓 마감 — " + std::to_string(UNKNOWN_TIMEOUT_MS)
+                          + "ms 안에 유효 프레임이 없었다(§3.4 판정의 2배)");
+                closesock(unknown[k].fd);
+                unknown.erase(unknown.begin() + k);
+            } else k++;
+        }
+        std::vector<std::string> reap;
+        for (std::map<std::string, AuxNode>::iterator it = aux.begin(); it != aux.end(); ++it) {
+            AuxNode& a = it->second;
+            if (a.fd == BAD_SOCK) continue;
+            if (t - a.last_ms >= ARD_IDLE_CLOSE_MS) reap.push_back(it->first);
+            // §3.4 오프라인 엣지 — 노드별로 따로 센다. 합치면 한 노드가 죽어도
+            // 다른 노드에 가려 안 보인다(요청 항목 4).
+            bool on = (t - a.last_ms) < OFFLINE_MS;
+            if (on != a.online) {
+                a.online = on;
+                if (!on) { a.offline_episodes++;
+                    logf("!", "보조 노드 " + it->first + " 오프라인(누적 "
+                              + std::to_string(a.offline_episodes) + "회)"); }
+                else logf("=", "보조 노드 " + it->first + " 온라인 복귀");
+            }
+        }
+        for (size_t k = 0; k < reap.size(); k++) {
+            zombie_reaps++;
+            logf("✂", "보조 노드 " + reap[k] + " 회수 — "
+                      + std::to_string(ARD_IDLE_CLOSE_MS / 1000) + "초 무프레임(유휴 마감)");
+            closesock(aux[reap[k]].fd);
+            aux.erase(reap[k]);
+        }
+    }
+
+    // id 미상 소켓 하나를 승격한다. 반환 false = 자리가 없어 거절했다(소켓은 닫힌다).
+    bool promote_unknown(sock_t c, const std::string& dev) {
+        // (1) 주차 노드가 아직 없다 → first-S-wins 로 이 장치가 주차 노드다
+        // (2) 같은 device_id 의 재접속 → 자리를 물려받는다(옛 동작을 이 경우로 한정한 것)
+        if (park_dev.empty() || park_dev == dev) {
+            if (park_dev.empty())
+                logf("=", "주차 노드 지정 — device=" + dev
+                          + " (first-S-wins: 첫 S 프레임을 보낸 장치가 주차 노드다)");
+            adopt_as_parking(c, dev);
+            return true;
+        }
+        // (3) 이미 아는 보조 노드의 재접속
+        if (aux.count(dev)) { adopt_as_aux(c, dev); return true; }
+        // (4) 새 장치 — 상한 확인
+        size_t total = aux.size() + (ard != BAD_SOCK ? 1 : 0);
+        if (total >= MAX_ARD_NODES) {
+            admit_rejects++;
+            logf("!", "노드 상한(" + std::to_string(MAX_ARD_NODES) + ") 초과 — device=" + dev
+                      + " 거절. **살아 있는 노드를 쫓아내지 않는다.** 누적 "
+                      + std::to_string(admit_rejects) + "회");
+            closesock(c);
+            return false;
+        }
+        adopt_as_aux(c, dev);
+        return true;
     }
     static int slot_index(const std::string& s) {
         for (int i = 0; i < 10; i++) if (s == SLOT_ID[i]) return i;
@@ -423,6 +870,7 @@ struct Server {
         if (ard == BAD_SOCK) return;
         if (!send_raw(ard, line.data(), line.size(), "아두이노")) {
             closesock(ard); ard = BAD_SOCK; ard_buf.clear();
+            end_ard_session("송신 실패");        // 세션 장부를 여기서도 닫는다(REQ-0065)
             push_snapshot();                    // 화면에 "센서 끊김"이 뜨게
             return;
         }
@@ -538,10 +986,17 @@ struct Server {
     }
     std::vector<std::string> log_entries;
     void write_log_if_changed() {
+        if (no_disk) return;                 // --selftest 는 파일을 건드리지 않는다
         // 테스트 상태도 키에 넣는다 — 안 넣으면 무장/주입이 파일에 반영되지 않고
         // 폴백 화면이 낡은 "해제" 상태를 계속 보여 준다(개정 4 가 막으려는 바로 그 증상).
+        // §9.4(개정 9) — **키에 online 을 넣는다.** 안 넣으면 장치가 죽어도 비트열이 그대로라
+        // 파일이 안 써지고 `device.online` 이 영원히 true 로 남는다 — 필드가 거짓말을 한다.
+        // 넣으면 오프라인/복귀 **전이가 그 자체로 상태 변화**가 되어 그 순간 한 건이 기록된다.
+        // (`last_frame_ts` 는 키에 넣지 않는다. 넣으면 매 프레임이 변화가 되어 초당 한 번 쓴다.)
+        bool online_now = device_online();
         std::string key = bits(false) + "|" + bits(true) + "|" + (test_armed ? "A" : "-");
         for (int i = 0; i < 10; i++) key += char('0' + ((test_armed && test_ovr[i]) ? 1 : 0));
+        key += online_now ? "|O" : "|X";
         if (key == last_bits) return;            // §9.4 — 내용이 같으면 안 쓴다
         last_bits = key;
 
@@ -549,6 +1004,11 @@ struct Server {
         e << "{\"ts\":" << epoch_ms() << ",\"device_id\":" << jstr(ard_dev)
           << ",\"uptime\":" << (ard_uptime < 0 ? 0 : ard_uptime)
           << ",\"seq\":" << (ard_seq < 0 ? 0 : ard_seq)
+          // §9.1(개정 9) — 장치 생사. 이게 없으면 폴백 화면이 **죽은 장치의 낡은 값을
+          // 실측처럼 그린다**(개정 4의 test_mode 누락과 같은 종류의 구멍이었다).
+          // last_frame_ts 는 epoch 시각이고 "파일을 쓴 시각"이 아니다 — 둘이 갈리는 게 요점이다.
+          << ",\"device\":{\"online\":" << (online_now ? "true" : "false")
+          << ",\"last_frame_ts\":" << ard_last_epoch_ms << "}"
           << ",\"occupied\":\"" << bits(false) << "\",\"reserved\":\"" << bits(true) << "\"";
         // §9.1(개정 4) — 무장 여부와 칸별 주입 표시를 **파일에도** 넣는다.
         // WS 가 끊기면 브라우저는 이 파일로 폴백하는데, 이 두 필드가 없으면
@@ -684,12 +1144,14 @@ struct Server {
             Pending& p = it->second;
             if (t - p.sent_ms < ACK_TIMEOUT_MS) continue;
             if (p.tries >= ACK_MAX_TRIES) {
+                ack_fail_count++;                         // 하행 건강 지표(소크 요약)
                 logf("!", "ACK 타임아웃 최종 실패 wire_rid=" + std::to_string(p.wire_rid));
                 send_err(p.ws_fd, p.browser_rid, "ack_timeout", "센서가 응답하지 않습니다");
                 dead.push_back(it->first);
                 continue;
             }
             p.tries++;
+            retx_count++;                                 // 하행 건강 지표(소크 요약)
             p.sent_ms = t;
             char buf[64];
             std::string line;
@@ -732,6 +1194,7 @@ struct Server {
 
     // ---------- 아두이노 재부팅 → 재동기화 (§7.4)
     void resync_reservations(const char* why) {
+        resync_count++;                      // --selftest 계측용 (§7.4 오탐 증명)
         std::vector<int> live;
         for (int i = 0; i < 10; i++) if (slots[i].reserved) live.push_back(i);
         logf("⟳", std::string("재부팅 감지(") + why + ") — 살아 있는 예약 "
@@ -743,16 +1206,33 @@ struct Server {
     // ---------- 아두이노 라인 처리
     void on_ard_line(const std::string& line) {
         logf("←ARD", line);
+
+        // ---------- 소크 관측 (REQ-0065) — **체크섬 검사보다 먼저 센다.**
+        // 여기서 재는 것은 "쓸 만한 프레임"이 아니라 **수신 자체의 공백**이다.
+        // 깨진 줄도 링크가 살아 있었다는 증거이므로 공백을 끊는다.
+        {
+            long long t = now_ms();
+            if (sess_last_line_ms) {
+                long long gap = t - sess_last_line_ms;
+                if (gap > sess_max_gap_ms) sess_max_gap_ms = gap;
+                if (gap > all_max_gap_ms) { all_max_gap_ms = gap; all_max_gap_at = epoch_ms(); }
+            }
+            sess_last_line_ms = t;
+            sess_frames++; all_frames++;
+        }
+
         std::vector<std::string> f;
-        if (!verify_line(line, f)) { logf("!", "체크섬 불일치 — 버림"); return; }
+        if (!verify_line(line, f)) { drop_cksum++; logf("!", "체크섬 불일치 — 버림"); return; }
         if (f.empty()) return;
 
         if (f[0] == "S" && f.size() >= 6) {
             long seq = atol(f[1].c_str());
             long long up = atoll(f[4].c_str());
-            bool reboot = (ard_uptime >= 0 && up < ard_uptime) || (ard_seq >= 0 && seq < ard_seq);
+            // §7.4(개정 8) — 순환을 접은 uptime 전진량 하나로 본다.
+            // **seq 는 판정에 쓰지 않는다**: 1Hz 에서 18.2시간마다 합법적으로 0 을 지나간다.
+            bool reboot = uptime_says_reboot(ard_uptime, up);
             ard_seq = seq; ard_uptime = up; ard_dev = f[5];
-            ard_last_ms = now_ms(); ard_seen = true;
+            ard_last_ms = now_ms(); ard_last_epoch_ms = epoch_ms(); ard_seen = true;
 
             int occ[10];
             for (int i = 0; i < 10; i++)
@@ -768,7 +1248,10 @@ struct Server {
                 for (int i = 0; i < 10; i++) ovr[i] = (f[6][i] == '1') ? 1 : 0;
             }
 
-            if (reboot) resync_reservations("uptime/seq 역행");
+            if (reboot) {
+                reboot_by_uptime++;                  // 소크 관측(REQ-0065) — 2차 방어선이 실제로 몇 번 걸리는가
+                resync_reservations("uptime 전진량이 한 바퀴에 가깝다");
+            }
 
             // §7.5 — occupied 1→0 이면 예약 소진.
             // 재부팅했거나 기준선이 없으면 **판정하지 않고 기준선만 세운다**(§7.5-1).
@@ -851,6 +1334,7 @@ struct Server {
             push_snapshot();
         }
         else {
+            drop_unknown++;
             logf("!", "모르는 타입 — 조용히 버림");
         }
     }
@@ -1216,6 +1700,7 @@ struct Server {
     //
     // **이미 있으면 절대 덮지 않는다.** 덮으면 재시작할 때마다 직전 2건이 날아간다.
     void ensure_log_exists() {
+        if (no_disk) return;                 // 시험용 인스턴스는 파일을 만들지도 않는다
         std::ifstream f("data_log.json", std::ios::binary);
         if (f.good()) {
             logf("=", "data_log.json 이 이미 있다 — 그대로 둔다(직전 기록 보존)");
@@ -1242,19 +1727,28 @@ struct Server {
     }
 
     int run() {
-        lsn_ard   = listen_on(PORT_ARDUINO);
-        lsn_http  = listen_on(PORT_HTTP);
-        lsn_phone = listen_on(PORT_PHONE);
+        lsn_ard   = listen_on(PORT_ARDUINO + g_port_offset);
+        lsn_http  = listen_on(PORT_HTTP    + g_port_offset);
+        lsn_phone = listen_on(PORT_PHONE   + g_port_offset);
         if (lsn_ard == BAD_SOCK || lsn_http == BAD_SOCK || lsn_phone == BAD_SOCK) return 1;
-        std::cout << "주차 관제 서버 — 아두이노 TCP " << PORT_ARDUINO
-                  << " · HTTP/WS " << PORT_HTTP
-                  << " · 폰(digitcam) " << PORT_PHONE << "\n"
+        if (g_port_offset)
+            std::cout << "*** 시험 인스턴스 — 포트 +" << g_port_offset
+                      << " 이동됨. 운영이 아니다(REQ-0072 이음매) ***\n";
+        std::cout << "주차 관제 서버 — 아두이노 TCP " << (PORT_ARDUINO + g_port_offset)
+                  << " · HTTP/WS " << (PORT_HTTP + g_port_offset)
+                  << " · 폰(digitcam) " << (PORT_PHONE + g_port_offset) << "\n"
                   << "명세: docs/net/parking-protocol.md\n"
                   << "-----------------------------------------------------------\n";
         std::cout.flush();
         ensure_log_exists();
 
-        while (true) {
+        // 소크 관측(REQ-0065) — 기동 시각과 "아직 링크 없음" 상태를 장부에 연다
+        soak_start_ms = now_ms();
+        last_report_ms = soak_start_ms;
+        link_down_since = soak_start_ms;
+        logf("⏱", "소크 관측 시작 — " + std::to_string(SOAK_REPORT_MS / 1000) + "초마다 요약, 종료(Ctrl-C) 시 한 줄 총평");
+
+        while (!g_stop) {
             fd_set rd; FD_ZERO(&rd);
             sock_t mx = 0;
             FD_SET(lsn_ard, &rd);  if (lsn_ard  > mx) mx = lsn_ard;
@@ -1265,6 +1759,19 @@ struct Server {
                 if (it->first > mx) mx = it->first;
             }
             if (ard != BAD_SOCK) { FD_SET(ard, &rd); if (ard > mx) mx = ard; }
+            // ⚠ REQ-0083 — **여기에 하나라도 빠뜨리면 그 노드는 조용히 귀머거리가 된다.**
+            // 오류도 로그도 없이 영영 readable 이 안 될 뿐이라, 방화벽 신원 사고와 같은 형태다.
+            // 아래 둘(보조 노드·id 미상 소켓)은 select 대상에 **반드시** 들어가야 한다.
+            for (std::map<std::string, AuxNode>::iterator it = aux.begin(); it != aux.end(); ++it) {
+                if (it->second.fd == BAD_SOCK) continue;
+                FD_SET(it->second.fd, &rd);
+                if (it->second.fd > mx) mx = it->second.fd;
+            }
+            for (size_t k = 0; k < unknown.size(); k++) {
+                if (unknown[k].fd == BAD_SOCK) continue;
+                FD_SET(unknown[k].fd, &rd);
+                if (unknown[k].fd > mx) mx = unknown[k].fd;
+            }
             for (std::map<sock_t, Conn>::iterator it = conns.begin(); it != conns.end(); ++it) {
                 FD_SET(it->first, &rd);
                 if (it->first > mx) mx = it->first;
@@ -1274,25 +1781,29 @@ struct Server {
             timeval tv; tv.tv_sec = 0; tv.tv_usec = SELECT_TICK_MS * 1000;
             int n = select((int)mx + 1, &rd, NULL, NULL, &tv);
 
-            bool was_online = device_online();
-
             if (n > 0) {
                 if (FD_ISSET(lsn_ard, &rd)) {
                     sock_t c = accept(lsn_ard, NULL, NULL);
                     if (c != BAD_SOCK) {
+                        // ⚠ REQ-0083 — **여기서 옛 소켓을 끊지 않는다. 그게 조원 배포의 차단 요인이었다.**
+                        // 이 시점엔 device_id 를 모른다(첫 프레임을 받아야 안다). 그런데 옛 구조는
+                        // 모르는 채로 기존 연결을 끊었고, 그래서 **노드 2대가 서로 밀어냈다.**
+                        // 이제는 대기열에 넣고 **첫 유효 프레임에서 승격**한다(promote_unknown).
                         set_send_timeout(c);
-                        if (ard != BAD_SOCK) { closesock(ard); conns.erase(ard); }
-                        ard = c; ard_buf.clear();
-                        logf("+ARD", "아두이노 접속");
-                        // 새 연결 = 재부팅했을 수 있다(§7.4)
-                        ard_seq = -1; ard_uptime = -1;
-                        // **은퇴 기준선도 반드시 버린다**(§7.5-1). 이 줄이 없으면 재부팅 전의
-                        // occupied 를 기준선으로 들고 있다가, 재부팅으로 0 이 된 첫 프레임에서
-                        // 있지도 않은 1→0 전이를 감지해 **방금 재하달한 예약을 그 자리에서 죽인다.**
-                        // (uptime/seq 역행 경로와 달리 여기서는 ard_uptime 이 -1 로 초기화돼
-                        //  reboot 판정이 false 가 되므로, base_valid 를 끄지 않으면 판정이 그대로 돈다.)
-                        base_valid = false;
-                        resync_reservations("새 연결");
+                        std::string ka = set_keepalive(c);
+                        // 상한 초과는 **거절**한다. 살아 있는 노드를 쫓아내지 않는 이유는
+                        // MAX_ARD_NODES 주석에 있다(확실한 것을 버리고 불확실한 것을 얻지 않는다).
+                        if (unknown.size() >= MAX_UNKNOWN_SOCKS) {
+                            admit_rejects++;
+                            logf("!", "id 미상 소켓이 상한(" + std::to_string(MAX_UNKNOWN_SOCKS)
+                                      + ")에 찼다 — 새 연결 거절. 누적 " + std::to_string(admit_rejects) + "회");
+                            closesock(c);
+                        } else {
+                            UnknownSock u; u.fd = c; u.since_ms = now_ms();
+                            unknown.push_back(u);
+                            logf("+?", "연결 수락 — device_id 대기 중(" + std::to_string(UNKNOWN_TIMEOUT_MS / 1000)
+                                       + "초 안에 유효 프레임 없으면 끊는다) · " + ka);
+                        }
                     }
                 }
                 if (FD_ISSET(lsn_http, &rd)) {
@@ -1343,7 +1854,22 @@ struct Server {
                     char b[2048];
                     int r = (int)recv(ard, b, sizeof(b), 0);
                     if (r <= 0) {
-                        logf("-ARD", "아두이노 연결 종료");
+                        // ⚠ 이유를 **원인별로** 남긴다(REQ-0072). keepalive 가 죽인 소켓은
+                        // recv 가 ETIMEDOUT 으로 돌아오는데, 그걸 "수신 오류" 한 문자열에
+                        // 섞으면 keepalive 가 한 번이라도 일했는지 증명할 수 없다 —
+                        // 켠 것과 안 켠 것이 로그에서 똑같아 보이는 계측은 계측이 아니다.
+                        std::string why;
+                        if (r == 0) why = "상대가 닫음";
+                        else {
+                            int e = sockerr();
+                            if (err_is_timeout(e)) {
+                                keepalive_reaps++;
+                                why = "keepalive 시간초과(errno=" + std::to_string(e) + ")";
+                            } else {
+                                why = "수신 오류(errno=" + std::to_string(e) + ")";
+                            }
+                        }
+                        end_ard_session(why);
                         closesock(ard); ard = BAD_SOCK; ard_buf.clear();
                         push_snapshot();
                     } else {
@@ -1353,13 +1879,100 @@ struct Server {
                             std::string line = ard_buf.substr(0, i);
                             ard_buf.erase(0, i + 1);
                             if (!line.empty() && line[line.size()-1] == '\r') line.erase(line.size()-1);
-                            if (line.size() + 1 > (size_t)MAX_LINE) { logf("!", "64B 초과 줄 — 버림"); continue; }
+                            if (line.size() + 1 > (size_t)MAX_LINE) { drop_overlong++; logf("!", "64B 초과 줄 — 버림"); continue; }
                             if (!line.empty()) on_ard_line(line);
                         }
                         if (ard_buf.size() > (size_t)MAX_LINE) {
+                            drop_noise++;
                             logf("!", "LF 없이 64B 초과 — 버퍼 비움");
                             ard_buf.clear();
                         }
+                    }
+                }
+
+                // ---------- id 미상 소켓 (REQ-0083) — 첫 유효 프레임에서 승격
+                {
+                    std::vector<size_t> gone;
+                    for (size_t k = 0; k < unknown.size(); k++) {
+                        sock_t fd = unknown[k].fd;
+                        if (fd == BAD_SOCK || !FD_ISSET(fd, &rd)) continue;
+                        char b[1024];
+                        int r = (int)recv(fd, b, sizeof(b), 0);
+                        if (r <= 0) {
+                            logf("-?", "id 미상 소켓이 승격 전에 끊겼다");
+                            closesock(fd); unknown[k].fd = BAD_SOCK; gone.push_back(k);
+                            continue;
+                        }
+                        unknown[k].buf.append(b, r);
+                        std::string dev, rest;
+                        bool found = false;
+                        size_t i;
+                        while (!found && (i = unknown[k].buf.find('\n')) != std::string::npos) {
+                            std::string line = unknown[k].buf.substr(0, i);
+                            unknown[k].buf.erase(0, i + 1);
+                            if (!line.empty() && line[line.size()-1] == '\r') line.erase(line.size()-1);
+                            if (peek_devid(line, dev)) {
+                                found = true;
+                                // **승격해도 이 프레임을 잃지 않는다.** 되돌려 놓고 넘긴다 —
+                                // 첫 프레임은 §7.4 기준선을 세우는 줄이라 버리면 안 된다.
+                                rest = line + "\n" + unknown[k].buf;
+                            }
+                        }
+                        if (found) {
+                            unknown[k].fd = BAD_SOCK; gone.push_back(k);
+                            if (promote_unknown(fd, dev)) {
+                                if (ard == fd)                      { ard_buf = rest; drain_ard_buf(); }
+                                else if (aux.count(dev) && aux[dev].fd == fd) aux[dev].buf = rest;
+                            }
+                        } else if (unknown[k].buf.size() > (size_t)MAX_LINE * 4) {
+                            // 잡음만 흘리는 소켓이 메모리를 먹지 않게 한다(§6.2)
+                            unknown[k].buf.clear();
+                        }
+                    }
+                    for (size_t j = gone.size(); j > 0; j--) unknown.erase(unknown.begin() + gone[j-1]);
+                }
+
+                // ---------- 보조 노드 (REQ-0083) — **상행 전용**
+                {
+                    std::vector<std::string> dead;
+                    for (std::map<std::string, AuxNode>::iterator it = aux.begin(); it != aux.end(); ++it) {
+                        AuxNode& a = it->second;
+                        if (a.fd == BAD_SOCK || !FD_ISSET(a.fd, &rd)) continue;
+                        char b[1024];
+                        int r = (int)recv(a.fd, b, sizeof(b), 0);
+                        if (r <= 0) { dead.push_back(it->first); continue; }
+                        a.buf.append(b, r);
+                        size_t i;
+                        while ((i = a.buf.find('\n')) != std::string::npos) {
+                            std::string line = a.buf.substr(0, i);
+                            a.buf.erase(0, i + 1);
+                            if (!line.empty() && line[line.size()-1] == '\r') line.erase(line.size()-1);
+                            if (line.empty()) continue;
+                            std::vector<std::string> f;
+                            if (!verify_line(line, f)) { a.drops++; continue; }
+                            a.frames++; a.last_ms = now_ms(); a.last_epoch_ms = epoch_ms();
+                            // 🔴 보조 노드가 `S` 를 보낸다 = **주차 노드가 둘이라는 뜻**이다.
+                            // first-S-wins 가정이 깨지는 순간이므로 조용히 넘기지 않는다.
+                            // (조용히 둘 중 하나를 고르면 "예약이 가끔 엉뚱한 데로 간다"가 되고,
+                            //  그건 며칠 뒤에 원인을 못 찾는 종류의 사고다.)
+                            if (f[0] == "S") {
+                                aux_conflicts++;
+                                if (aux_conflicts <= 3 || aux_conflicts % 200 == 0)
+                                    logf("🔴", "역할 충돌 — 보조 노드 " + it->first
+                                               + " 도 S 를 보낸다(주차 노드는 " + park_dev
+                                               + "). **이 노드에는 하행을 주지 않는다.** 누적 "
+                                               + std::to_string(aux_conflicts)
+                                               + " · 전선에 역할 필드가 없어 생기는 한계다(명세 §2.4-D 참조)");
+                            }
+                        }
+                        if (a.buf.size() > (size_t)MAX_LINE * 2) { a.drops++; a.buf.clear(); }
+                    }
+                    for (size_t k = 0; k < dead.size(); k++) {
+                        logf("-AUX", "보조 노드 " + dead[k] + " 연결 종료 — 프레임 "
+                                     + std::to_string(aux[dead[k]].frames)
+                                     + " · 버린줄 " + std::to_string(aux[dead[k]].drops));
+                        if (aux[dead[k]].fd != BAD_SOCK) closesock(aux[dead[k]].fd);
+                        aux.erase(dead[k]);
                     }
                 }
                 // 준비된 fd 를 먼저 모은 뒤 처리한다. 순회 중에 conns 를 건드리면
@@ -1387,16 +2000,106 @@ struct Server {
             }
 
             reap_dead();                              // 전송 실패로 표시된 연결을 여기서 정리
+            reap_nodes();                             // id 미상 마감 + 보조 노드 회수 (REQ-0083)
             tick();                                   // 소켓이 조용해도 매 주기 돈다
-            if (was_online && !device_online()) {
-                logf("!", "아두이노 오프라인 판정(3.5초 무프레임)");
+
+            // ---------- 좀비 아두이노 소켓 회수 — 유휴 마감 (REQ-0072)
+            // 장치가 FIN 없이 죽으면 이 fd 는 영원히 안 돌아온다. keepalive 는 상대 커널이
+            // 살아 ACK 를 보내면 **원리적으로 못 잡는다**(ESP 가 행에 걸린 바로 그 경우).
+            // 그래서 앱이 직접 마감한다. 기준 시계는 ard_idle_base_ms() — 주석에 이유가 있다.
+            if (ard != BAD_SOCK && sess_start_ms) {
+                long long idle = now_ms() - ard_idle_base_ms();
+                if (idle >= ARD_IDLE_CLOSE_MS) {
+                    zombie_reaps++;
+                    logf("✂", "아두이노 소켓 회수 — " + secs(idle) + " 무프레임(유휴 마감 "
+                              + std::to_string(ARD_IDLE_CLOSE_MS / 1000) + "초) · 누적 "
+                              + std::to_string(zombie_reaps) + "회");
+                    // 닫는 순서는 recv 실패 경로(위)와 **똑같이** 간다. 새 정리 경로를 만들면
+                    // 한쪽만 고쳐지는 장부가 생긴다.
+                    end_ard_session("유휴 마감 " + std::to_string(ARD_IDLE_CLOSE_MS / 1000) + "초");
+                    closesock(ard); ard = BAD_SOCK; ard_buf.clear();
+                    push_snapshot();
+                }
+            }
+            // ---------- 온·오프라인 **엣지** 판정 (§3.4)
+            // ⚠ 옛 코드는 `was_online = device_online()` 을 루프 맨 위에서 재고 맨 아래에서
+            // 다시 재 비교했다. 두 시점의 간격이 마이크로초라 **3.5초 경계는 언제나 두 반복
+            // '사이'에서 넘어간다** — 즉 엣지가 잡히는 반복이 존재하지 않았다.
+            // 그래서 "링크는 열려 있는데 프레임만 끊긴" 경우(ESP 가 조용히 멈춘 바로 그 경우)
+            // 오프라인 판정이 **한 번도 뜨지 않았다.** 소켓이 닫힐 때만 떴고, 그때는
+            // device_online() 이 ard==BAD_SOCK 때문에 뒤집힌 것이라 판정이 아니라 부작용이었다.
+            // 피해는 로그만이 아니다 — 이 자리의 push_snapshot() 이 브라우저에 "센서 끊김"을
+            // 알리는 유일한 경로인데, 장치가 조용하면 다른 이벤트도 없어서
+            // **화면이 마지막 상태를 계속 진짜처럼 보여 준다.**
+            // 상태를 멤버로 들고 비교하는 평범한 엣지 검출로 바꾼다. 복귀도 대칭으로 찍는다.
+            bool now_online = device_online();
+            if (now_online != ard_online) {
+                ard_online = now_online;
+                if (now_online) {
+                    // ---------- 복구시간 확정 (REQ-0072)
+                    // 복구시간 = **오프라인이 시작된 순간 → 다음 프레임이 실제로 도착한 순간.**
+                    // 끝점을 now_ms() 가 아니라 `ard_last_ms`(그 프레임의 수신 시각)로 잡는다 —
+                    // 엣지는 select 주기(200ms) 뒤에 잡히므로 now 로 재면 매번 그만큼 부풀려진다.
+                    std::string extra;
+                    if (offline_since_ms) {
+                        long long r = ard_last_ms - offline_since_ms;
+                        if (r < 0) r = 0;
+                        // 같은 연결에서 되살아났나, 재연결해서 되살아났나 — **이 구분이
+                        // 장치 쪽 복구 사다리(REQ-0071)가 듣는지를 판정한다.** 합쳐 세면
+                        // "링크가 잠깐 조용했다" 와 "소켓을 새로 세워야 했다" 가 같아 보인다.
+                        bool same = (ard_sessions == offline_at_session);
+                        if (same) recov_same_conn++; else recov_reconn++;
+                        if (r > recov_worst_ms) recov_worst_ms = r;
+                        if (recov_ms.size() < RECOV_SAMPLE_MAX) recov_ms.push_back(r);
+                        else recov_dropped++;             // 조용히 버리지 않는다 — 요약에 적힌다
+                        extra = " — 복구 " + secs(r) + (same ? "(같은 연결)" : "(재연결)");
+                        offline_since_ms = 0;
+                    }
+                    logf("=", "아두이노 온라인 복귀" + extra);
+                } else {
+                    offline_episodes++;                   // 소크 관측(REQ-0065)
+                    // 오프라인이 **시작된** 시각을 잡는다. 엣지가 잡힌 시각이 아니다.
+                    //   · 3.5초 무프레임으로 뒤집힌 경우 → 마지막 프레임 + OFFLINE_MS 가 그 순간
+                    //   · 소켓이 닫혀 뒤집힌 경우       → 지금이 그 순간(미래 값을 쓰면 안 되므로 min)
+                    long long t = now_ms();
+                    long long off_at = ard_last_ms ? (ard_last_ms + OFFLINE_MS) : t;
+                    offline_since_ms = (off_at < t) ? off_at : t;
+                    offline_at_session = ard_sessions;
+                    logf("!", "아두이노 오프라인 판정(" + std::to_string(OFFLINE_MS)
+                              + "ms 무프레임) — 누적 " + std::to_string(offline_episodes) + "회");
+                }
+                // ⚠ **파일 쓰기를 여기서 반드시 부른다**(§9.4 개정 9). 다른 두 호출 지점은
+                // 둘 다 on_ard_line 안이라 **장치가 조용하면 아예 실행되지 않는다.**
+                // 이 줄이 없으면 `device.online` 은 키에 넣어도 영영 false 로 기록되지 못한다 —
+                // 필드가 **가장 필요한 순간에** 거짓말을 한다.
+                write_log_if_changed();
                 push_snapshot();
             }
+
+            // 주기 보고 — **조용한 로그와 죽은 서버를 구별할 수 있게** 한다.
+            // 이 줄이 없으면 "2시간 동안 아무 일 없었다"와 "1분 만에 멈췄다"가 같은 모양이다.
+            if (now_ms() - last_report_ms >= SOAK_REPORT_MS) {
+                last_report_ms = now_ms();
+                logf("⏱", soak_line());
+            }
         }
+
+        // ---------- 소크 종료 요약 (REQ-0065) — 한 줄로 끝난다
+        if (sess_start_ms) end_ard_session("서버 종료");
+        logf("▣", "소크 종료 · " + soak_line());
+        return 0;
     }
 };
 
 // ---------------------------------------------------------------- 자가검증
+// §7.4 자가검증용 — `S` 한 줄을 만든다. on_ard_line 이 받는 형태(종단자 없음)다.
+static std::string s_line(long seq, const char* occ, const char* res, long long up) {
+    char b[96];
+    snprintf(b, sizeof(b), "S,%ld,%s,%s,%lld,P1,", seq, occ, res, up);
+    std::string p(b);
+    return p + cksum(p);
+}
+
 static int selftest() {
     int bad = 0;
     // RFC 6455 §1.3 예제 벡터 — SHA-1 과 base64 를 한 번에 검증한다
@@ -1422,12 +2125,86 @@ static int selftest() {
         // v1.4 (개정 5) — 시뮬 한 걸음
         "M,60,4B", "M,65535,7D", "A,60,A3,0,05", "A,60,??,5,72",
     };
-    for (int i = 0; i < 22; i++) {
+    const int NL = (int)(sizeof(L) / sizeof(L[0]));   // 줄을 추가하고 개수를 못 고치는 사고를 막는다
+    for (int i = 0; i < NL; i++) {
         std::vector<std::string> f;
         bool ok = verify_line(L[i], f);
         std::cout << (ok ? "  ✓ " : "  ✗ ") << L[i] << "\n";
         if (!ok) bad++;
     }
+
+    // ---------------- §7.4 (개정 8) 재부팅 판정 — 오탐을 없애면서 정탐을 잃지 않았는가
+    // (A) 판정식 표 — 명세 §7.4 의 표를 그대로 옮겼다.
+    std::cout << "\n[§7.4-A] 판정식 (fwd > " << UPTIME_MAX_FWD << " 이면 재부팅)\n";
+    struct RbCase { long long prev, up; bool want; const char* name; };
+    RbCase RB[] = {
+        { 3600,    3601, false, "평시 1Hz" },
+        { 3600,    4200, false, "링크 침묵 10분" },
+        { 4294966,    1, false, "millis() 49.7일 랩" },
+        { 4294000, 5000, false, "랩을 걸쳐 100분 침묵" },
+        { -1,         5, false, "기준선 없음(첫 프레임)" },
+        { 3600,       2, true,  "진짜 재부팅" },
+        { 3,          1, true,  "부트 루프" },
+        { 1000000,    2, true,  "11.6일 가동 뒤 재부팅" },
+    };
+    for (int i = 0; i < (int)(sizeof(RB) / sizeof(RB[0])); i++) {
+        bool got = uptime_says_reboot(RB[i].prev, RB[i].up);
+        bool ok  = (got == RB[i].want);
+        std::cout << (ok ? "  ✓ " : "  ✗ ") << RB[i].prev << " → " << RB[i].up
+                  << " : " << (got ? "재부팅" : "정상")
+                  << " (기대 " << (RB[i].want ? "재부팅" : "정상") << ")  " << RB[i].name << "\n";
+        if (!ok) bad++;
+    }
+
+    // (B) **실제 호출 지점**까지 통과시킨다. 판정식이 맞아도 호출부가 틀리면 의미가 없으므로
+    //     S 프레임을 만들어 on_ard_line 에 먹이고 resync_reservations 호출 횟수를 센다.
+    std::cout << "\n[§7.4-B] on_ard_line → resync_reservations 실제 호출 횟수\n";
+    const char* OCC = "0110100011";
+    const char* RES = "0000100000";
+    {   // (1) REQ-0062 의 재현 조건 — seq 를 65530 에서 시작시켜 랩을 넘긴다.
+        //     옛 규칙(seq < ard_seq)이었다면 65535→0 프레임에서 반드시 터졌다.
+        Server s; s.no_disk = true;
+        long long up = 3600;
+        long seqv = 65530;
+        for (int k = 0; k < 8; k++) {
+            s.on_ard_line(s_line(seqv, OCC, RES, up));
+            seqv = (seqv + 1) & 0xFFFF;                  // uint16 순환
+            up++;                                        // uptime 은 정상 전진
+        }
+        bool ok = (s.resync_count == 0);
+        std::cout << (ok ? "  ✓ " : "  ✗ ") << "seq 65530→65535→0→1, uptime 정상 : resync="
+                  << s.resync_count << " (기대 0)\n";
+        if (!ok) bad++;
+    }
+    {   // (2) millis() 49.7일 랩도 재동기화를 부르면 안 된다
+        Server s; s.no_disk = true;
+        s.on_ard_line(s_line(100, OCC, RES, 4294966));   // 기준선
+        s.on_ard_line(s_line(101, OCC, RES, 1));         // 랩
+        bool ok = (s.resync_count == 0);
+        std::cout << (ok ? "  ✓ " : "  ✗ ") << "uptime 4294966→1 : resync="
+                  << s.resync_count << " (기대 0)\n";
+        if (!ok) bad++;
+    }
+    {   // (3) 정탐 — 진짜 재부팅은 여전히 잡혀야 한다
+        Server s; s.no_disk = true;
+        s.on_ard_line(s_line(500, OCC, RES, 3600));      // 기준선
+        s.on_ard_line(s_line(501, OCC, RES, 3601));      // 평시
+        s.on_ard_line(s_line(9,   OCC, RES, 2));         // 재부팅(seq 도 작아졌다)
+        bool ok = (s.resync_count == 1);
+        std::cout << (ok ? "  ✓ " : "  ✗ ") << "uptime 3601→2 : resync="
+                  << s.resync_count << " (기대 1)\n";
+        if (!ok) bad++;
+    }
+    {   // (4) 정탐 — seq 가 **앞으로** 가는 재부팅. 옛 규칙은 이걸 놓쳤다.
+        Server s; s.no_disk = true;
+        s.on_ard_line(s_line(60000, OCC, RES, 5000));    // 기준선
+        s.on_ard_line(s_line(60001, OCC, RES, 3));       // 재부팅인데 seq 는 전진
+        bool ok = (s.resync_count == 1);
+        std::cout << (ok ? "  ✓ " : "  ✗ ") << "uptime 5000→3 (seq 전진) : resync="
+                  << s.resync_count << " (기대 1)\n";
+        if (!ok) bad++;
+    }
+
     std::cout << (bad ? "자가검증 실패\n" : "자가검증 통과\n");
     return bad ? 1 : 0;
 }
@@ -1439,7 +2216,25 @@ int main(int argc, char** argv) {
 #else
     signal(SIGPIPE, SIG_IGN);   // 끊긴 소켓에 write 해도 프로세스가 죽지 않게
 #endif
+    // 소크 시험은 Ctrl-C 로 끝난다 — 그때 요약을 남기고 정상 종료한다(REQ-0065)
+    signal(SIGINT,  on_stop_signal);
+    signal(SIGTERM, on_stop_signal);
     int rc;
+    // 시험용 포트 이동(REQ-0072) — 운영 인스턴스를 안 죽이고 두 번째를 띄우기 위한 이음매
+    for (int i = 1; i < argc; i++) {
+        std::string a(argv[i]);
+        if (a.compare(0, 14, "--port-offset=") != 0) continue;
+        int off = atoi(a.c_str() + 14);
+        // ⚠ **범위를 안 보면 조용히 엉뚱한 포트에 붙는다.** 음수면 0번 포트로, 큰 값이면
+        // htons 에서 잘려 아무 포트로 간다 — 그리고 그건 나중에 "서버가 이상하다"로 보고된다.
+        // 시험용 이음매가 그런 식으로 사람을 속이면 안 되므로 **의심스러우면 안 뜬다.**
+        if (off <= 0 || PORT_ARDUINO + off > 65535) {
+            std::cerr << "--port-offset 은 1 ~ " << (65535 - PORT_ARDUINO)
+                      << " 사이여야 한다 (받은 값: " << off << ")\n";
+            return 1;
+        }
+        g_port_offset = off;
+    }
     if (argc > 1 && std::string(argv[1]) == "--selftest") rc = selftest();
     else { Server s; rc = s.run(); }
 #ifdef _WIN32

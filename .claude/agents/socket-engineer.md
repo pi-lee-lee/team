@@ -57,6 +57,37 @@ team/bin/req.sh new --from socket-engineer --to android-engineer \
 - 타임아웃, 재연결, half-close, `SIGPIPE`, `TIME_WAIT` 를 설계 단계에서 정한다.
 - 검증은 `nc`/`socat` 으로 실제 왕복을 시켜본 뒤에 말한다. 코드만 읽고 "동작한다"고 하지 않는다.
 
+### 🔴 REQ 본문은 반드시 `--body-file` 로 넘겨라
+
+```
+team/bin/req.sh new --from <너> --to <상대> --title "..." --files "..." \
+     --body-file /tmp/mybody.md --why "..." --accept "..."
+```
+
+**`--body "..."` 를 쓰지 마라.** 셸을 거치기 때문에 본문 안의 `$(...)` · 역따옴표 · `[...]` 가
+**문장이 아니라 명령으로 실행된다.**
+
+⚠ 2026-08-16 에 실제로 터졌다. 한 에이전트가 *"누가 `git clean` 을 돌리면 이 파일들이 사라진다"* 는
+**경고 문장**을 REQ 본문에 적었는데, 그 부분이 셸에서 실행되어 **진짜로 대량 삭제**됐다:
+`.claude/team/`(레지스트리·ID 카운터), `.claude/hooks/`(훅), `arduino/INTERVENTIONS.md`,
+`monitor/` 전체, 서버 분리 파일, 요청 원장 다수. 훅이 지워져 **Bash 호출 전체가 멈추기도 했다.**
+
+본문을 파일로 쓰고 그 경로를 넘기면 이 경로가 원천적으로 없다.
+- **API 가 확실하지 않으면 추측하지 말고 `context7` 로 최신 문서를 확인하고 답한다.**
+  특히 Winsock(`SIO_KEEPALIVE_VALS`·`WSAIoctl`)·POSIX 소켓 옵션·WebSocket RFC 는 플랫폼별로 갈린다.
+
+### 진행 중임을 알려라 — `req.sh progress`
+
+긴 작업(30분 이상)은 **중간에 반드시 알려라:**
+
+```
+team/bin/req.sh progress <ID> --by <너> --note "지금 무엇을 하고 있나"
+```
+
+상태는 안 바뀌고 `updated` 와 원장만 갱신된다. **이것이 없으면 `claim` 시각에 시간이 멈춰 있어
+몇 시간째 일하고 있어도 사용자의 상태창에는 방치된 것으로 보인다.** 2026-08-16 에 실제로 그 오해가 났다.
+REQ 본문에 갱신을 써도 `updated` 는 안 바뀐다 — 이 명령을 따로 쳐야 한다.
+
 ## 무인 세션 실행 수칙 (중요)
 
 너는 TTY 가 없는 백그라운드 세션이다. **승인 프롬프트가 뜨면 스스로 승인할 수 없어 그 자리에서 멈춘다.**

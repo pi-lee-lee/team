@@ -22,21 +22,72 @@
 
 #include <SoftwareSerial.h>
 #include <avr/pgmspace.h>
+#include <avr/wdt.h>
 #include <stdio.h>
 #include <string.h>
 
 #define DEBUG 1
 
 // ─────────────────────────────────────────────────────────────────────────
+// 부팅 원인 기록 (REQ-0071 사실 4)
+//
+// 지난 소크에서 아두이노가 2회 리셋됐는데(up 4149s→3s, 201s→3s) **왜 리셋됐는지 아무도
+// 몰랐다.** 브라운아웃인지, 워치독인지, 사람이 USB 를 건드린 것인지 로그로 가릴 수단이
+// 없어서 "브라운아웃 부트루프"라는 추측만 남았다. 그 추측을 **다음 판에는 사실로 바꾼다.**
+//
+// MCUSR 은 리셋 원인 비트를 들고 있지만 **부트로더가 지우고 갈 수 있다.** 그래서 앱 코드가
+// 아니라 `.init3`(스택은 잡혔고 .data/.bss 초기화 전)에서 가장 먼저 복사한다.
+// 복사본은 `.noinit` 에 둬야 한다 — 일반 전역이면 그 뒤 .bss 초기화가 0 으로 덮어쓴다.
+//
+// ⚠ optiboot 는 MCUSR 을 읽고 **0 으로 지운 뒤** 앱으로 넘어간다. 그 경우 여기서 0 이 읽히고
+//   원인을 알 수 없다. 그래서 0 을 "원인 없음"이 아니라 **"부트로더가 지웠다(불명)"** 으로
+//   찍는다. 없는 정보를 있는 것처럼 말하지 않기 위해서다.
+//
+// 곁다리로 `wdt_disable()` 도 여기서 한다. 워치독 리셋으로 들어왔다면 WDT 가 켜진 채
+// 짧은 주기로 남아 있을 수 있는데, 그대로 두면 부팅을 마치기 전에 또 리셋된다(벽돌 루프).
+// 6단(ENABLE_WDT)을 켜지 않아도 무해하므로 항상 넣어 둔다 — 방어는 켜기 전부터 있어야 한다.
+// ─────────────────────────────────────────────────────────────────────────
+uint8_t mcusrMirror __attribute__((section(".noinit")));
+void earlyInitCapture(void) __attribute__((naked, used, section(".init3")));
+void earlyInitCapture(void) {
+  mcusrMirror = MCUSR;
+  MCUSR = 0;
+  wdt_disable();
+}
+
+// ── 6단: AVR 워치독 — **기본값 꺼짐. 이유를 읽고 나서 켜라.** ──────────────────
+// 무엇을 고치는가: **아두이노 자신이 행(hang)에 빠졌을 때만**이다.
+// 무엇을 못 고치는가: **ESP 다.** AVR 리셋은 ESP 모듈을 리셋하지 않는다(전원도 RST 도 그대로다).
+//   이번 REQ-0071 에서 관측된 고장은 전부 ESP 쪽이었으므로 이 단의 기대효과는 낮다.
+//
+// 반면 위험은 실재한다: WDT 를 안전하게 처리하지 못하는 옛 부트로더(ATmegaBOOT 계열)에서는
+//   워치독 리셋이 **부트로더가 앱으로 넘어가기 전에 또 리셋을 걸어** 무한 리셋이 된다.
+//   그 상태는 ISP 프로그래머 없이는 되돌릴 수 없다 — 즉 보드가 죽는다.
+//
+// 이 보드가 안전한가: Uno 는 optiboot 를 쓰고 optiboot 는 WDT 안전이다. arduino-cli 가
+//   115200 으로 업로드에 성공한 것이 optiboot 라는 정황 증거다. **그러나 확인하지 않았다.**
+//   낮은 기대효과와 벽돌 위험을 맞바꾸지 않는다 — 그래서 잠가 둔다.
+//
+// 켜기 전 확인 절차(여유 있을 때):
+//   1) 아래를 1 로 바꾸고 굽는다 → 정상 부팅하고 [BOOT] 줄이 나오는지 본다
+//   2) loop() 를 9초 막는 코드를 일부러 넣어 리셋되는지, **그 뒤 정상 부팅하는지** 본다
+//   2)에서 다시 안 올라오면 ISP 가 필요하다. 그래서 2)는 예비 보드로 하는 것이 맞다.
+#define ENABLE_WDT 0
+
+// ─────────────────────────────────────────────────────────────────────────
 // 배선 · 네트워크 상수
 // ─────────────────────────────────────────────────────────────────────────
-static const uint8_t PIN_ESP_RX = 7;   // ESP TX → Uno
-static const uint8_t PIN_ESP_TX = 8;   // Uno → ESP RX
+static const uint8_t PIN_ESP_RX = 8;   // ESP TX → Uno
+static const uint8_t PIN_ESP_TX = 7;   // Uno → ESP RX
 SoftwareSerial wifi(PIN_ESP_RX, PIN_ESP_TX);
 
-#define WIFI_SSID    "3F_302"
-#define WIFI_PASS    "0424719222!!"
-#define SERVER_IP    "192.168.0.29"     // §11 — 명세는 주소를 가정하지 않는다. 현장에서 바꾼다
+#define WIFI_SSID    "SK_WiFiGIGA50DC_2.4G"   // 2026-08-15 새 AP 로 이전(옛 공유기가 원인이었다)
+#define WIFI_PASS    "2011050796"
+// ⚠⚠ **앞뒤 공백을 절대 넣지 마라.** 구운 펌웨어에 `" 192.168.35.21"` 로 앞 공백이 들어가 있었고,
+//    그래서 ESP 가 IP 리터럴로 못 읽고 **호스트명으로 해석해 `DNS Fail`** 을 냈다.
+//    (기기 플래시를 읽어 확인한 실물 문자열: AT+CIPSTART="TCP"," 192.168.35.21",9991)
+//    이 매크로는 그대로 AT 명령에 이어붙으므로 공백 하나가 곧 고장이다.
+#define SERVER_IP    "192.168.35.21"   // §11 — 명세는 주소를 가정하지 않는다. 현장에서 바꾼다
 #define SERVER_PORT  "9991"
 #define DEVICE_ID    "P1"               // §2.3 devid ::= 1*8자. 옛 "ARD_NODE_01"(11자)은 BNF 위반이었다
 
@@ -292,7 +343,15 @@ uint8_t readSlotSensor(uint8_t i) {
 //   pendLine : 송신 중 도착한 줄을 미뤄 두는 곳
 // 하나로 합치면 ACK 송신 중 들어온 바이트가 파싱 중인 버퍼를 덮어써서 조용히 깨진다.
 // ─────────────────────────────────────────────────────────────────────────
-static const uint8_t RX_CAP = 72;
+// RX_CAP 을 72 → 96 으로 올린 근거 (REQ-0064):
+//   수신 줄은 **`+IPD` 접두를 포함한 통짜**로 이 버퍼에 담긴 뒤에야 접두가 벗겨진다.
+//   · `+IPD,63:`  (8자) + 프레임 63자 = 71 = 옛 상한(RX_CAP-1)과 **정확히 같다. 여유 0.**
+//   · `+IPD,0,63:`(10자) + 63자 = 73 → **넘쳐서 프레임이 통째로 버려진다.**
+//   두 번째 형식을 쓰는지 아직 실측하지 못했다(수신 경로가 한 번도 안 돌았다 — `+IPD` 0건).
+//   즉 "안 넘친다"는 **확인된 사실이 아니라 가정**이고, 틀리면 예약이 조용히 사라진다.
+//   비용은 버퍼 3개 × 24B = 72B 이고 RAM 여유는 1100B 이상이다. 이 교환은 명백히 남는다.
+//   ⚠ 여유가 실제로 얼마인지는 아래 ramLow 계측이 소크에서 답한다 — 추정으로 두지 않는다.
+static const uint8_t RX_CAP = 96;
 static char    rxLine[RX_CAP];
 static char    workLine[RX_CAP];
 static char    pendLine[RX_CAP];
@@ -317,6 +376,27 @@ static unsigned long dbgLineCnt  = 0;   // 완성된 줄 수            (B 를 �
 static unsigned long dbgLastDiag = 0;
 static const uint16_t DIAG_PERIOD_MS = 3000;
 #endif
+
+// ─────────────────────────────────────────────────────────────────────────
+// RAM 여유 계측 (REQ-0064) — **버퍼 크기 판단을 추정이 아니라 관측으로 하기 위해서다**
+//
+// RX_CAP 을 72→96 으로 올릴 때 "RAM 여유가 충분하다"는 근거가 필요했는데, 컴파일러가 알려 주는
+// 887B 는 **정적 사용량**일 뿐 실행 중 스택이 얼마나 깊이 내려가는지는 말해 주지 않는다.
+// (`-fstack-usage` 를 붙여 봤으나 이 툴체인에서는 .su 파일이 비어 나왔다.)
+//
+// 그래서 **가장 깊은 호출 지점에서 직접 잰다.** 힙을 쓰지 않으므로(String·malloc 없음)
+// `__heap_start` 부터 현재 스택 포인터까지가 그대로 미사용 영역이다.
+// ⚠ 정확히 말하면 이것은 "계측을 심은 지점에서 관측된 최저 여유"이지 이론적 최악값이 아니다.
+//   그래도 추정보다 훨씬 낫고, 2시간 소크 동안 실제 최악에 매우 가까워진다.
+// ─────────────────────────────────────────────────────────────────────────
+extern uint8_t __heap_start;
+static uint16_t ramLow = 0xFFFF;
+
+static void ramProbe(void) {
+  uint8_t here;
+  uint16_t freeNow = (uint16_t)(&here - (uint8_t*)&__heap_start);
+  if (freeNow < ramLow) ramLow = freeNow;
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 // rid 멱등 캐시 (§4.2) — 최근 8건, 결과까지 같이 들고 있는다
@@ -377,13 +457,81 @@ static bool          netOnline = false;
 static uint8_t       netStep = 0;
 static unsigned long netStepAt = 0;
 static uint16_t      netStepWait = 500;
-// 0~4 는 부팅 순서, 5 는 **복구 전용**이다(부팅 때는 지나가지 않는다).
+
+// ─────────────────────────────────────────────────────────────────────────
+// REQ-0064 — **타이머 구동에서 응답 구동으로.**
+//
+// 실기에서 step=4 정체 + `no ip` 무한반복이 났다. 실측 로그가 원인을 정확히 보여 줬다:
+//
+//   [NET] 2 CWJAP
+//   [AT] "AT+CWJAP="unknowns_network2.4","..."" (55)
+//   [DIAG] offline step=3 rx=170 ... up=6s      ← 응답 없음
+//   [DIAG] offline step=3 rx=170 ... up=9s      ← 응답 없음 (rx 가 12초간 고정)
+//   [NET] 3 CIPMUX=0
+//   [AT] "busy p..." (9)                        ← ★ 거부됐다
+//   [NET] 4 CIPSTART
+//   [AT] "busy p..." (9)                        ← ★ 또 거부
+//   [AT] "FAIL" (4)                             ← ★★ up≈20s, 이제야 CWJAP 의 결과
+//   [AT] "no ip" (5)                            ← 이후 영원히 반복
+//
+// 읽어야 할 것 셋:
+//   1. **이 펌웨어의 CWJAP 는 약 16초 걸린다.** NET_WAIT 의 9000ms 는 턱없이 짧았다.
+//   2. 그 사이 사다리가 타이머만 보고 전진해 CIPMUX·CIPSTART 를 쐈고 **전부 `busy p...` 로 거부**됐다.
+//      → **`AT+CIPMUX=0` 은 한 번도 적용된 적이 없다.** `OK` 가 로그에 없다. 조용한 두 번째 고장이다.
+//   3. `no ip` 는 원인이 아니라 **결과**다. 상류는 CWJAP 실패다.
+//
+// 그래서 각 단계는 이제 **응답이 올 때까지 기다린다.** NET_WAIT 는 "다음 단계로 가는 시각"이 아니라
+// **"이만큼 기다려도 답이 없으면 재시도"** 라는 뜻으로 바뀌었다. 전진은 handleLine() 이
+// netAdvance() 로 시킨다 — 응답을 본 쪽이 다음 단계를 정한다.
+//
+// ⚠ 이 보드의 펌웨어는 **구형 ai-thinker** 다([System Ready, Vendor:www.ai-thinker.com]).
+//   ESP-AT v2.2 문서와 어휘가 다르다. 실측으로 확인된 차이:
+//     · `WIFI CONNECTED` / `WIFI GOT IP` 를 **아예 내지 않는다**
+//     · `+CWJAP:<n>` 사유 코드도 없다 — 성공은 `OK`, 실패는 `FAIL` 한 줄이 전부다
+//   그래서 IP 확보 판정을 문구에 기대지 않고 **`AT+CIFSR` 로 직접 물어본다.**
+//   이것이 펌웨어 세대와 무관하게 동작하는 유일한 방법이다. 신형 문구(GOT IP 등)도
+//   같이 받아 두되, 그것만 믿지는 않는다.
+// ─────────────────────────────────────────────────────────────────────────
 enum {
-  NET_RST = 0, NET_CWMODE, NET_CWJAP, NET_CIPMUX, NET_CIPSTART,
+  NET_RST = 0, NET_CWMODE, NET_CWJAP,
+  NET_CIFSR,                          // ★ IP 를 실제로 받았는지 물어본다 (REQ-0064 ②)
+  NET_CIPMUX, NET_CIPSTART,
   NET_CIPCLOSE,                       // 복구 전용 — 낡은 소켓을 닫는다(REQ-0051)
+  // ── 아래 셋은 **진단 전용 사슬**이다. CWJAP 2회 실패 때 한 번만, 순서대로 지나간다.
+  //    주 사다리(부팅·복구)는 여기를 절대 지나지 않는다 — 검증된 경로를 건드리지 않으려는 것이다.
+  //      GMR → CWCOUNTRY → CWLAP → (CWJAP 재시도)
+  NET_GMR,                            // 펌웨어 판 확정 — ecn 열거 범위와 CWCOUNTRY 지원 여부가 여기서 갈린다
+  NET_CWCOUNTRY,                      // 규제도메인 1~13 우회 시도 (구형이면 ERROR — 그 자체가 결론이다)
+  NET_CWLAP,                          // 주변 AP 목록 (REQ-0064 ⑤)
+  // ⓘ `AT+CWJAP?`(질의형) 단계를 넣었다가 뺐다 — **이 펌웨어는 `ERROR` 로 답한다(실측).**
+  //   미지원 명령을 매 실패마다 쏘면 로그만 더럽힌다. 같은 질문(결합했는가)은
+  //   `AT+CIFSR` 이 실주소를 답하는지로 더 확실하게 답할 수 있다.
+  NET_CWQAP,                          // ★ REQ-0071 2단 — 명시적 결합 해제 후 다시 붙는다
   NET_STEP_COUNT
 };
-static const uint16_t NET_WAIT[NET_STEP_COUNT] = { 2500, 800, 9000, 800, 5000, 800 };
+// 각 단계의 **응답 대기 상한**. 넘으면 그 단계를 다시 시도한다(전진이 아니다).
+//   CWJAP 30000 : 실측 16초 + 여유. 짧게 잡은 것이 이번 사고의 직접 원인이었다
+//   CWLAP  9000 : 스캔은 채널을 훑으므로 오래 걸린다
+//   CWQAP  3000 : 모듈 로컬 동작이라 왕복이 없다. 3초면 넉넉하다
+static const uint16_t NET_WAIT[] = { 2500, 800, 30000, 2500, 1200, 8000, 800, 1500, 1500, 9000, 3000 };
+static_assert(sizeof(NET_WAIT) / sizeof(NET_WAIT[0]) == NET_STEP_COUNT,
+              "NET_WAIT 길이가 단계 수와 다르다 — 새 단계를 넣고 대기시간을 빠뜨렸다");
+
+// 마지막으로 **실제로 쏜** 명령. netStep 은 이미 "답이 없을 때 갈 곳"으로 앞서 가 있으므로,
+// 도착한 응답이 무엇에 대한 답인지는 이 변수로 판정해야 한다.
+static uint8_t netLastSent = 0xFF;
+
+static bool    netHasIp = false;      // ★ CIPSTART 의 전제조건 (REQ-0064 ②)
+static uint8_t cwjapFails = 0;        // CWJAP 연속 실패 횟수 — 2회면 CWLAP 진단을 켠다
+static uint8_t cifsrTries = 0;        // CIFSR 로 IP 를 못 본 횟수 — 3회면 CWJAP 로 되돌아간다
+static bool    lapDone = false;       // CWLAP 은 **한 번만** 쏜다(스캔 중엔 접속을 못 한다)
+static bool    lapFound = false;      // 그 스캔에서 우리 SSID 가 보였는가
+
+static void netAdvance(uint8_t step, uint16_t wait) {
+  netStep = step;
+  netStepAt = millis();
+  netStepWait = wait;
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 // 복구 사다리 상태 (REQ-0051)
@@ -413,6 +561,102 @@ static bool    staleSocket = false;
 static uint8_t closeAttempts = 0;
 static const uint8_t CLOSE_ATTEMPT_LIMIT = 3;
 
+// ═════════════════════════════════════════════════════════════════════════
+// 복구 사다리 (REQ-0071) — **같은 자극을 반복하는 것은 사다리가 아니다**
+//
+// 실측이 말한 것: 45분 정상동작 뒤 한 번 불안해지자 **18분 동안 한 번도 복구하지 못했다.**
+// 그동안 코드가 한 일은 CWJAP 재시도 91회(꼬리에서 19회 연속)가 전부였다.
+// 라우터 관리화면이 이유를 설명했다 — **IP 할당까지는 매번 성공하고 약 12초 뒤 결합이
+// 소실된다.** 즉 `CWJAP FAIL` 은 "AP 에 못 붙었다"가 아니라 **"붙어서 DHCP 까지 받았는데
+// 12초 뒤 끊어졌다"** 이고, 그렇다면 **같은 CWJAP 를 다시 쏘는 것은 같은 12초를 다시
+// 만드는 것**이다. 재시도 횟수를 늘려도 원리적으로 낫지 않는다. 단을 올려야 한다.
+//
+// 원칙 셋(REQ-0071):
+//   1. 실패가 쌓이면 반드시 **더 강한 단**으로 올라간다 — 같은 자극 무한 반복 금지
+//   2. 아래 단을 건너뛰지 않는다 — 건강한 모듈을 하드웨어 리셋으로 두들기지 않는다
+//   3. 모든 단 전이를 시리얼 한 줄(`[LADDER]`)로 남긴다 — 어느 칸에서 죽었는지 로그로 재구성된다
+//
+//   단 0  계측만                        — 항상. CWJAP 소요시간·연속 실패수·**결합 유지시간**
+//   단 1  시리얼 드레인 + CIFSR 재확인   — 쓰레기·동기 어긋남을 씻는다
+//   단 2  AT+CWQAP 로 명시적 결합 해제 후 CWJAP
+//   단 3  AT+RST (모듈 소프트 리셋)
+//   단 4  ESP 하드웨어 리셋선            — 배선 필요(ESP_RST_WIRED). REQ-0063 ② 가 여기 들어왔다
+//   단 5  ESP 전원 재투입                — **부품 미보유로 미구현.** 아래 applyRung() 참조
+//   단 6  AVR 워치독                     — 파일 상단 ENABLE_WDT. REQ-0063 ① 이 여기 들어왔다
+//
+// ── 왜 단이 올라갈수록 쉬는 시간을 늘리는가 ──
+// 근본원인 1순위 후보가 **전원**이다(ESP-01 송신 피크 300~430mA vs Uno 3.3V 핀 공급 50mA).
+// 전원이 원인이라면 **쉬는 시간 자체가 조치**다 — 결합을 시도하지 않는 동안 RF 부하가 사라져
+// 레귤레이터와 커패시터가 회복한다. 백오프는 예의가 아니라 치료의 일부다.
+//   ⚠ 이것은 **정황이지 확정이 아니다.** 전원을 정상화한 뒤 12초 소실이 사라지는지 봐야 확정된다.
+//
+// ── 사다리를 언제 0단으로 되돌리는가 (이 규칙이 없으면 사다리가 무력해진다) ──
+// **온라인이 되자마자 되돌리면 안 된다.** 관측된 고장은 "붙었다가 12초 뒤 끊김"의 반복이라,
+// 붙는 순간 초기화하면 사다리는 영원히 0~1단을 오가며 절대 위로 못 올라간다 —
+// 고치려는 바로 그 무한반복이 이름만 바꿔 되살아난다. 그래서 **연속 30초 온라인**을 요구한다.
+// 30초는 관측된 12초 주기보다 넉넉히 위라, 깜빡이는 링크는 **증명 가능하게** 사다리를 못 내린다.
+// ═════════════════════════════════════════════════════════════════════════
+enum { RUNG_MEASURE = 0, RUNG_RESYNC, RUNG_CWQAP, RUNG_SOFTRST, RUNG_HWRST,
+       RUNG_POWER, RUNG_MAX = RUNG_POWER };
+
+// 그 단에서 몇 번 실패하면 위로 올라가는가.
+//   0단 1회 : 첫 실패는 곧바로 씻어 본다. 가장 싼 조치라 늦출 이유가 없다
+//   1~4단 2회: 한 번은 우연일 수 있지만 두 번이면 그 단으로는 안 되는 것이다
+//              (REQ-0071 표의 "N단이 2회 실패하면 N+1단" 을 그대로 옮겼다)
+//   5단 255 : 종착역이다. 더 올라갈 곳이 없다
+static const uint8_t  RUNG_LIMIT[]      = {    1,    2,    2,     2,     2,   255 };
+// 그 단으로 올라간 뒤 다음 시도까지 쉬는 시간(ms). REQ-0071 권고를 그대로 썼다.
+static const uint16_t RUNG_BACKOFF_MS[] = {    0,    0, 5000, 15000, 30000, 60000 };
+static_assert(sizeof(RUNG_LIMIT) / sizeof(RUNG_LIMIT[0]) == RUNG_MAX + 1,
+              "RUNG_LIMIT 길이가 단 수와 다르다");
+static_assert(sizeof(RUNG_BACKOFF_MS) / sizeof(RUNG_BACKOFF_MS[0]) == RUNG_MAX + 1,
+              "RUNG_BACKOFF_MS 길이가 단 수와 다르다");
+
+static uint8_t       rung = RUNG_MEASURE;
+static uint8_t       rungFails = 0;              // 현재 단에서 쌓인 실패 수
+static bool          ladderEverFailed = false;   // 아래 이중계수 가드의 첫 호출 예외
+static unsigned long lastLadderFailAt = 0;
+
+// 사다리를 0단으로 되돌리기 위해 요구하는 연속 온라인 시간(위 주석 참조)
+static const uint16_t LADDER_RESET_MS = 30000;
+static unsigned long  onlineSince = 0;
+
+// ── 0단 계측 ──
+// cwjapPending 은 **"CWJAP 를 쏴 놓고 아직 OK 도 FAIL 도 못 받았다"** 는 뜻이다.
+// 이게 없으면 응답이 아예 없는 CWJAP(=사고 당시 자주 있었다)가 30초마다 조용히
+// 되풀이될 뿐 실패로 세어지지 않아 **사다리가 영원히 0단에 머문다.** 사다리를 실제로
+// 굴리는 것은 이 한 개의 불리언이다.
+static bool          cwjapPending = false;
+static unsigned long cwjapSentAt = 0;
+// 결합(IP 확보) 시각. 0 이면 결합 없음. **다음 실패 때 "결합 유지 N초"를 찍는 근거**이고,
+// 그 숫자가 12초 근처로 계속 찍히면 사용자 관측(라우터 화면)이 장치 로그로 확증된다.
+static unsigned long assocAt = 0;
+
+// ── 4단 배선: ESP 하드웨어 리셋선 ─────────────────────────────────────────
+// **핀 A2 를 쓴다.** 남는 핀을 다시 세어서 고른 것이지 임의로 뺏은 것이 아니다
+// (위 배선 주석의 금지목록 + SLOT_PIN[] 을 그대로 대조했다):
+//   D0,D1 USB시리얼 / D2~D6 자리 A1~A5 / D7,D8 ESP 시리얼 / D9~D12 자리 B1~B4 /
+//   D13 온보드LED / A0 자리 B5 / A1 난수시드 / A4,A5 I2C 예약
+//   → 남는 것은 **A2 와 A3 둘뿐**이고 그중 A2 를 썼다. **센서 칸은 하나도 옮기지 않았다.**
+// ⚠ 이름 혼동: 여기의 **핀 A2** 는 **자리 A2**(= 핀 D3)와 아무 상관이 없다. 위 §1 주석 참조.
+//
+// ⚠⚠ 전기적으로 가장 중요한 것 — **이 핀을 OUTPUT HIGH 로 만들지 마라.**
+//   Uno 의 HIGH 는 5V 이고 ESP-01 의 RST 는 3.3V 로직이다. 5V 를 밀어넣으면 모듈이 상한다.
+//   그래서 **오픈드레인처럼** 쓴다:
+//     누름(리셋) = pinMode(OUTPUT) + digitalWrite(LOW)
+//     놓음       = pinMode(INPUT)   ← 하이임피던스. 라인은 ESP 쪽 풀업이 HIGH 로 잡는다
+//   (AVR 코어의 pinMode(INPUT) 은 DDR 과 PORT 를 함께 0 으로 만든다 → 내부 풀업도 꺼진다.
+//    즉 이 상태에서 우리 쪽은 라인에 아무 전압도 걸지 않는다.)
+//   ⚠ 그러므로 **RST 쪽에 풀업이 있어야 한다.** 놓았을 때 라인이 뜨면 모듈이 불확정 상태가
+//     되어 4단이 없느니만 못해진다. 모듈에 풀업이 없으면 10kΩ 을 RST↔3.3V 사이에 달아라.
+//   ⚠ 리셋과 놓음의 GND 기준이 같아야 한다 — Uno GND 와 ESP GND 는 이미 공통이어야 정상이다.
+#define ESP_RST_WIRED 0                 // ★ 2026-08-15 A2↔ESP RST 선을 **물리적으로 분리했다** → 되돌림.
+                                        //   1 로 두면 없는 배선을 전제해 4단이 "리셋했다"고 거짓 로그를 남긴다.
+static const uint8_t PIN_ESP_RST = A2;
+
+static bool          espRstHeld = false;
+static unsigned long espRstReleaseAt = 0;
+
 // 무엇을 보냈는지 찍는다(REQ-0042 3순위). 이게 없으면 5초마다 CIPSTART 를 재시도하는지조차
 // 로그로 확인할 수 없다.
 #if DEBUG
@@ -423,16 +667,51 @@ static const uint8_t CLOSE_ATTEMPT_LIMIT = 3;
 
 static void netSendStep(uint8_t s) {
   switch (s) {
-    case 0: wifi.print(F("AT+RST\r\n"));        DBG_NET("0", "RST");      break;
-    case 1: wifi.print(F("AT+CWMODE=1\r\n"));   DBG_NET("1", "CWMODE=1"); break;
-    case 2: wifi.print(F("AT+CWJAP=\"" WIFI_SSID "\",\"" WIFI_PASS "\"\r\n"));
-                                                DBG_NET("2", "CWJAP");    break;
-    case 3: wifi.print(F("AT+CIPMUX=0\r\n"));   DBG_NET("3", "CIPMUX=0"); break;
-    case 4: wifi.print(F("AT+CIPSTART=\"TCP\",\"" SERVER_IP "\"," SERVER_PORT "\r\n"));
-                                                DBG_NET("4", "CIPSTART"); break;
-    case 5: wifi.print(F("AT+CIPCLOSE\r\n"));   DBG_NET("5", "CIPCLOSE (낡은 소켓 닫기)"); break;
+    case NET_RST:     wifi.print(F("AT+RST\r\n"));      DBG_NET("0", "RST");      break;
+    case NET_CWMODE:  wifi.print(F("AT+CWMODE=1\r\n")); DBG_NET("1", "CWMODE=1"); break;
+    case NET_CWJAP:   wifi.print(F("AT+CWJAP=\"" WIFI_SSID "\",\"" WIFI_PASS "\"\r\n"));
+                      DBG_NET("2", "CWJAP (응답까지 최대 30초 기다린다)"); break;
+    case NET_CIFSR:   wifi.print(F("AT+CIFSR\r\n"));    DBG_NET("3", "CIFSR (IP 를 실제로 받았는가)"); break;
+    case NET_CIPMUX:  wifi.print(F("AT+CIPMUX=0\r\n")); DBG_NET("4", "CIPMUX=0"); break;
+    case NET_CIPSTART:wifi.print(F("AT+CIPSTART=\"TCP\",\"" SERVER_IP "\"," SERVER_PORT "\r\n"));
+                      DBG_NET("5", "CIPSTART"); break;
+    case NET_CIPCLOSE:wifi.print(F("AT+CIPCLOSE\r\n")); DBG_NET("6", "CIPCLOSE (낡은 소켓 닫기)"); break;
+    case NET_GMR:     wifi.print(F("AT+GMR\r\n"));      DBG_NET("7", "GMR (펌웨어 판 — 진단)"); break;
+    case NET_CWCOUNTRY:
+                      // 규제도메인을 KR(1~13)로 넓혀 채널 12/13 결합을 열어 보려는 시도.
+                      // 구형 펌웨어에는 이 명령이 없다 → ERROR. 그 ERROR 가 곧 "코드로는 못 고친다"의 확증이다.
+                      wifi.print(F("AT+CWCOUNTRY_DEF=0,\"KR\",1,13\r\n"));
+                      DBG_NET("8", "CWCOUNTRY (채널 12/13 우회 시도 — 진단)"); break;
+    case NET_CWLAP:   wifi.print(F("AT+CWLAP\r\n"));    DBG_NET("9", "CWLAP (주변 AP 목록 — 진단)"); break;
+    case NET_CWQAP:   wifi.print(F("AT+CWQAP\r\n"));    DBG_NET("10", "CWQAP (결합 해제 — 사다리 2단)"); break;
     default: break;
   }
+  // ★ REQ-0071 — CWJAP 의 "답이 오지 않는 경우"를 실패로 세기 위한 표식(위 cwjapPending 주석).
+  //   RST·CWQAP 는 진행 중인 결합 시도를 무효로 만드는 명령이므로 표식을 내린다.
+  //   내리지 않으면 리셋 뒤 첫 틱에서 "무응답"으로 오인되어 한 칸이 공짜로 올라간다.
+  if (s == NET_CWJAP)                        { cwjapPending = true; cwjapSentAt = millis(); }
+  else if (s == NET_RST || s == NET_CWQAP)   { cwjapPending = false; }
+  netLastSent = s;
+}
+
+// "이 줄에 쓸 만한 IPv4 가 들어 있는가" — CIFSR 응답 판정용.
+//   구형: `192.168.0.7` 만 덜렁 온다 / 신형: `+CIFSR:STAIP,"192.168.0.7"`
+// 둘 다 받으려고 문구가 아니라 **숫자 모양**으로 찾는다. 0.0.0.0 은 IP 가 아직 없다는 뜻이다.
+static bool hasUsableIp(const char* s) {
+  for (const char* p = s; *p; p++) {
+    if (*p < '0' || *p > '9') continue;
+    if (p != s && p[-1] >= '0' && p[-1] <= '9') continue;   // 숫자의 중간이면 건너뛴다
+    uint8_t oct = 0, dots = 0, first = 0;
+    const char* q = p;
+    for (;;) {
+      if (*q >= '0' && *q <= '9') { oct = (uint8_t)(oct * 10 + (*q - '0')); q++; continue; }
+      if (dots == 0) first = oct;
+      if (*q == '.') { dots++; oct = 0; q++; continue; }
+      break;
+    }
+    if (dots == 3 && first != 0) return true;               // 0.x.x.x = 아직 IP 없음
+  }
+  return false;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -538,6 +817,230 @@ static void pumpSerialRaw(void) {
   while (wifi.available()) feedRxChar((char)wifi.read());
 }
 
+// ═════════════════════════════════════════════════════════════════════════
+// 복구 사다리 — 조치부 (상태·상수는 위 "복구 사다리 (REQ-0071)" 블록에 있다)
+// ═════════════════════════════════════════════════════════════════════════
+
+// ── 1단 조치: 시리얼 스트림을 씻는다 ──
+// 쓰레기(\xFF\xFE\xFC 계열)나 [DROP-OVF] 가 보인 뒤에는 **줄 경계 자체를 믿을 수 없다.**
+// 남아 있는 바이트를 파싱하지 않고 버리고 조립 상태를 초기화한다.
+// ⚠ 120ms 상한을 둔 이유: 모듈이 끝없이 토하는 상황에서 여기 갇히면 loop() 가 멈춘다(= 행).
+//   오프라인 경로에서만 불리므로 이 정도 정지는 하트비트에 영향이 없다.
+static void drainSerial(void) {
+  unsigned long t0 = millis();
+  uint16_t dropped = 0;
+  while (millis() - t0 < 120UL) {
+    while (wifi.available()) { (void)wifi.read(); if (dropped < 65535) dropped++; }
+  }
+  rxLen = 0;
+  rxOverflow = false;
+  pendReady = false;
+#if DEBUG
+  Serial.print(F("[LADDER] 1단 조치: 시리얼 드레인 "));
+  Serial.print(dropped);
+  Serial.println(F("바이트 버림 + 줄 조립 초기화"));
+#endif
+}
+
+// ── 4단 조치: 하드웨어 리셋선을 잡는다/놓는다 ──
+// 잡고 있는 동안 ESP 는 사실상 꺼진 것과 같아 3.3V 레일이 가장 잘 회복한다 —
+// 그래서 백오프 시간을 **그대로 리셋 유지시간으로 쓴다.** 쉬는 것과 리셋이 한 동작이 된다.
+// static 이 아닌 이유: ESP_RST_WIRED=0 이면 호출자가 전부 사라져 -Wunused-function 이 뜬다.
+// 전역이면 링커의 --gc-sections 가 최종 이미지에서 빼 주므로 플래시도 먹지 않는다
+// (같은 이유로 slotOverrideSet() 등도 전역이다 — 위 "수동 오버라이드" 주석 참조).
+void espRstAssert(uint16_t holdMs) {
+#if ESP_RST_WIRED
+  pinMode(PIN_ESP_RST, OUTPUT);
+  digitalWrite(PIN_ESP_RST, LOW);      // ★ 절대 OUTPUT HIGH 로 놓지 않는다(5V 가 3.3V 핀에 실린다)
+  espRstHeld = true;
+  espRstReleaseAt = millis() + holdMs;
+  netOnline = false;
+  netHasIp = false;
+  cwjapPending = false;
+#else
+  (void)holdMs;
+#endif
+}
+
+// 놓기 — 하이임피던스로 되돌린다. 부팅 직후 ESP 는 다른 보율로 쓰레기를 토하므로 버린다.
+static void espRstService(unsigned long now) {
+  if (!espRstHeld) return;
+  if ((long)(now - espRstReleaseAt) < 0) return;
+#if ESP_RST_WIRED
+  pinMode(PIN_ESP_RST, INPUT);         // 하이임피던스 (위 배선 주석 참조)
+#endif
+  espRstHeld = false;
+  drainSerial();
+  netAdvance(NET_CWMODE, 1500);        // 모듈이 부팅할 시간을 주고 처음부터
+#if DEBUG
+  Serial.println(F("[LADDER] 4단: ESP 리셋 해제 — 부팅을 기다렸다가 CWMODE 부터 다시"));
+#endif
+}
+
+// ── 단이 정한 조치를 실제로 수행한다 ──
+static void applyRung(void) {
+  uint16_t back = RUNG_BACKOFF_MS[rung];
+  switch (rung) {
+    case RUNG_MEASURE:
+      // 조치 없음(계측만). FAIL 이어도 IP 가 살아 있을 수 있으므로 CIFSR 로 확인부터 한다
+      // — REQ-0064 에서 확인된 동작이라 그대로 둔다. 0단은 "지금까지의 코드" 그 자체다.
+      cifsrTries = 0;
+      netAdvance(NET_CIFSR, 300);
+      break;
+
+    case RUNG_RESYNC:
+      drainSerial();
+      cifsrTries = 0;
+      netAdvance(NET_CIFSR, 300);
+      break;
+
+    case RUNG_CWQAP:
+#if DEBUG
+      Serial.print(F("[LADDER] 2단 조치: "));
+      Serial.print(back / 1000U);
+      Serial.println(F("초 쉬고 AT+CWQAP 로 결합을 명시적으로 끊은 뒤 다시 붙는다"));
+#endif
+      netHasIp = false;
+      netAdvance(NET_CWQAP, back);
+      break;
+
+    case RUNG_SOFTRST:
+#if DEBUG
+      Serial.print(F("[LADDER] 3단 조치: "));
+      Serial.print(back / 1000U);
+      Serial.println(F("초 쉬고 AT+RST (모듈 소프트 리셋)"));
+#endif
+      netHasIp = false;
+      netAdvance(NET_RST, back);
+      break;
+
+    case RUNG_HWRST:
+#if ESP_RST_WIRED
+#if DEBUG
+      Serial.print(F("[LADDER] 4단 조치: ESP RST 선을 "));
+      Serial.print(back / 1000U);
+      Serial.println(F("초 동안 잡는다 (그동안 모듈은 꺼진 것과 같다)"));
+#endif
+      espRstAssert(back);
+#else
+      // 배선이 없으면 **있는 척하지 않는다.** 없는 조치를 로그에 성공으로 남기면
+      // 다음 사람이 "4단까지 해 봤는데 안 되더라"는 틀린 결론을 얻는다.
+#if DEBUG
+      // ⚠ 문구를 약하게 쓰지 마라. 20분치 로그를 훑는 사람이 바로 위의 `↑↑ 단 상승 → 4단`
+      //   만 보고 "하드웨어 리셋까지 해 봤는데 안 되더라"는 **틀린 결론**을 얻으면 안 된다.
+      //   그래서 실제로 조치하지 못한 단은 전부 `미실행` 을 달아 둔다 — `grep 미실행` 한 번에 걸린다.
+      Serial.println(F("[LADDER] ⚠4단 미실행: 하드웨어 리셋선이 배선되지 않았다(ESP_RST_WIRED=0)"));
+      Serial.println(F("[LADDER]   → Uno A2 를 ESP 의 RST 에 물리고 ESP_RST_WIRED 를 1 로 바꿔 다시 구워라"));
+      Serial.print(F("[LADDER]   지금은 "));
+      Serial.print(back / 1000U);
+      Serial.println(F("초 쉬고 AT+RST 만 되풀이한다"));
+#endif
+      netHasIp = false;
+      netAdvance(NET_RST, back);
+#endif
+      break;
+
+    default:  // RUNG_POWER
+      // ★ 5단은 **구현하지 않았다.** 전원을 코드로 끊으려면 로우사이드 MOSFET(또는 트랜지스터)
+      //   스위치가 필요한데 그 부품이 없다. 없는 하드웨어를 있는 것처럼 코드만 넣으면
+      //   로그가 거짓말을 하게 된다. 그래서 **단은 이름과 전이만 남기고 조치는 4단을
+      //   최장 백오프로 되풀이하는 것**으로 정직하게 대체한다.
+#if DEBUG
+      Serial.println(F("[LADDER] ⚠5단 미실행: 전원 재투입은 **부품 미보유로 미구현**이다"));
+      Serial.println(F("[LADDER]   필요 부품: 로우사이드 MOSFET 스위치(예: 2N7000/AO3400 + 10k)"));
+      Serial.print(F("[LADDER]   대신 4단 조치를 "));
+      Serial.print(back / 1000U);
+      Serial.println(F("초 백오프로 되풀이한다(종착역)"));
+#endif
+      netHasIp = false;
+#if ESP_RST_WIRED
+      espRstAssert(back);
+#else
+      netAdvance(NET_RST, back);
+#endif
+      break;
+  }
+}
+
+// ── 실패 사건이 들어오는 유일한 문 ──
+// why: 무엇이 실패했는가. 계측 한 줄을 정확히 쓰기 위해서만 쓰인다(단 선택에는 3번만 관여).
+//
+// ⚠ **netTick() 의 switch 안에서 이 함수를 부를 때 주의할 것** — 새 호출 지점을 추가할 사람에게.
+//   그 시점에는 이미 `netSendStep(sent)` 로 명령이 나간 뒤다. 그런데 1단 조치는 `drainSerial()`
+//   이라 **방금 보낸 명령의 응답을 그 자리에서 버린다.** 지금 있는 두 호출 지점은 둘 다 안전하다:
+//     · NET_CIFSR  — 버려도 되는 응답이다(cifsrTries 를 이미 소진해 쓸모없음이 확정됐다)
+//     · NET_CIPCLOSE — LF_AT_JAMMED 는 rung 을 최소 3단으로 올리므로 1단(드레인)에 닿지 않는다
+//   세 번째 호출 지점을 넣는다면 이 두 성질 중 하나가 성립하는지 먼저 확인하라.
+enum { LF_CWJAP_FAIL = 0, LF_CWJAP_TIMEOUT, LF_AT_JAMMED };
+
+static void ladderFail(uint8_t why) {
+  unsigned long now = millis();
+
+  // ★ 이중 계수 방지. 한 번의 실패가 두 경로로 들어오면(예: 응답 FAIL 과 무응답 타임아웃이
+  //   겹치면) 모든 단의 한계가 사실상 절반이 되어 1분 만에 4단까지 치솟는다.
+  //   "건너뛰지 않는다"(원칙 2)를 지키려면 세는 것부터 정확해야 한다.
+  if (ladderEverFailed && (now - lastLadderFailAt) < 1000UL) {
+#if DEBUG
+    Serial.println(F("[LADDER] 1초 안에 들어온 중복 실패 신호 — 세지 않는다"));
+#endif
+    return;
+  }
+  ladderEverFailed = true;
+  lastLadderFailAt = now;
+
+#if DEBUG
+  // ── 0단: 계측. 이 한 줄이 "12초 결합 소실" 가설을 판에서 직접 검증한다 ──
+  Serial.print(F("[LADDER] 실패("));
+  switch (why) {
+    case LF_CWJAP_TIMEOUT: Serial.print(F("CWJAP 무응답")); break;
+    case LF_AT_JAMMED:     Serial.print(F("AT 계층 잠김"));  break;
+    default:               Serial.print(F("CWJAP FAIL"));    break;
+  }
+  Serial.print(F(") CWJAP소요 "));
+  Serial.print((now - cwjapSentAt) / 1000UL);
+  Serial.print(F("s · 연속 "));
+  Serial.print(cwjapFails);
+  Serial.print(F("회 · 결합유지 "));
+  if (assocAt) { Serial.print((now - assocAt) / 1000UL); Serial.print('s'); }
+  else         { Serial.print(F("없음")); }
+  Serial.print(F(" · 현재 "));
+  Serial.print(rung);
+  Serial.print(F("단("));
+  Serial.print(rungFails);
+  Serial.println(F("회 누적)"));
+#endif
+  assocAt = 0;
+
+  // ── 단 올리기 ──
+  if (why == LF_AT_JAMMED && rung < RUNG_SOFTRST) {
+    // AT 명령 자체가 안 먹는 상태다. 결합의 문제가 아니라 모듈이 꼬인 것이므로
+    // 씻기(1단)·결합해제(2단)로는 원리적으로 못 낫는다 → 리셋 단으로 직행한다.
+    // 이것은 "아래 단을 건너뛰지 않는다"의 위반이 아니라 **다른 사다리에 올라탄 것**이다.
+    rung = RUNG_SOFTRST;
+    rungFails = 0;
+#if DEBUG
+    Serial.println(F("[LADDER] ↑ 3단(AT+RST) 직행 — AT 계층이 잠겼으면 아래 단은 의미가 없다"));
+#endif
+  } else {
+    if (rungFails < 254) rungFails++;
+    if (rungFails >= RUNG_LIMIT[rung] && rung < RUNG_MAX) {
+      rung++;
+      rungFails = 0;
+#if DEBUG
+      Serial.print(F("[LADDER] ↑↑ 단 상승 → "));
+      Serial.print(rung);
+      Serial.println(F("단"));
+#endif
+    }
+  }
+
+  // 진단 사슬(GMR→CWCOUNTRY→CWLAP)은 REQ-0064 그대로 **딱 한 번만** 끼워 넣는다.
+  // 사다리와 경쟁시키지 않는다 — 한 번 지나가면 lapDone 이 서서 다시는 오지 않는다.
+  if (cwjapFails >= 2 && !lapDone) { netAdvance(NET_GMR, 500); return; }
+
+  applyRung();
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // 연결 사망 감지 (REQ-0049) — 통보가 안 올 때의 그물
 //
@@ -562,6 +1065,12 @@ static void pumpSerialRaw(void) {
 // ─────────────────────────────────────────────────────────────────────────
 static const uint8_t SEND_FAIL_LIMIT = 3;
 static uint8_t       sendFailStreak = 0;
+
+// 프롬프트를 놓쳐 스트림을 강제 복구한 횟수(아래 sendLine 참조).
+// ★ 이 숫자는 **서버의 `버린줄(모름)` 카운터와 짝을 이룬다.** 더미 줄 하나가 서버에서 한 번
+//   버려지므로 둘이 맞아떨어져야 정상이다. 어긋나면 다른 원인이 더 있다는 뜻이다.
+//   단일 지표는 자기 고장을 증언하지 못한다 — 그래서 처음부터 교차검증이 되게 짰다.
+static uint16_t      promptResyncs = 0;
 
 // 소켓 복구 진입 — **전송이 안 되는 것을 이유로 오프라인이 되는 모든 경로**가 여기를 통과해야 한다.
 // (연속 실패 카운터 / `link is not valid` 둘 다.) 한 곳이라도 CIPSTART 로 바로 가면
@@ -625,6 +1134,10 @@ static bool waitForPrompt(void) {
 
 // line 은 LF 없는 문자열. LF 는 여기서 붙인다(전선 종단은 LF 하나 — §2.1)
 static bool sendLine(const char* line) {
+  // ★ `ramProbe()` 는 **조기 반환보다 앞**에 있어야 한다. 뒤에 두면 오프라인 동안 한 번도 안 불려
+  //   `[RAM]` 이 초기값 65535 를 찍고, 소크 로그를 나중에 읽는 사람이 계측 고장으로 오해한다.
+  //   (실제로 그렇게 찍혔다 — REQ-0064 관측 중 발견.)
+  ramProbe();
   if (!netOnline) return false;
   uint8_t len = (uint8_t)strlen(line);
   if (len == 0 || len > 63) return false;                  // §2.1 한 줄 최대 64바이트(LF 포함)
@@ -640,6 +1153,36 @@ static bool sendLine(const char* line) {
   if (ok) {
     wifi.write((const uint8_t*)line, (size_t)len);
     wifi.write('\n');
+  } else {
+    // ─────────────────────────────────────────────────────────────────────
+    // ★ REQ-0064 — **프롬프트를 놓쳤을 때 스트림 동기를 회복한다.**
+    //
+    // 실기에서 4분마다 링크가 끊긴 원인이 정확히 여기였다. 관측된 사슬:
+    //   `AT+CIPSEND=38` 송신 → 300ms 안에 `>` 못 받음 → 페이로드를 **안 씀**
+    //   → **그런데 ESP 는 여전히 38바이트를 기다린다**
+    //   → 다음 루프의 `AT+CIPSEND=38\r\n` 이 **페이로드로 먹힌다**
+    //   → 로그에 `"...P1,33AT+CIPSEND=38"` 처럼 **두 줄이 붙어 찍힌다**(그 증거)
+    //   → 이후 연쇄 실패 3회 → goOffline → 링크 재수립
+    //
+    // 고치는 방향은 타임아웃 상향이 **아니다.** 그건 증상만 늦출 뿐 같은 사슬이 남는다.
+    // **약속한 길이만큼 버릴 바이트를 채워 진행 중인 CIPSEND 를 끝내고 명령 모드로 되돌린다.**
+    //
+    // 채움 문자를 `#` 으로 고른 이유: 전선 프로토콜의 타입 문자(S·A·R·C·T·M) 어느 것도 아니라
+    // **서버가 반드시 버린다**(§2.1-7 모르는 타입은 조용히 버림). 우연히 유효 프레임으로
+    // 파싱될 가능성이 없다 — 체크섬 이전에 타입에서 걸린다.
+    //
+    // ⚠ ESP 가 실은 명령 모드였다면(CIPSEND 자체가 안 먹힌 경우) 이 바이트들은 AT 명령으로
+    //   해석돼 `ERROR` 한 줄을 낳는다. **무해하다.** 반대쪽(동기 어긋남)은 링크를 끊으므로
+    //   비대칭이 분명하다 — 채우는 쪽이 안전하다.
+    // ─────────────────────────────────────────────────────────────────────
+    for (uint8_t i = 0; i < len; i++) wifi.write('#');
+    wifi.write('\n');                                      // 합계 len+1 = 약속한 길이와 정확히 같다
+    if (promptResyncs < 65535) promptResyncs++;
+#if DEBUG
+    Serial.print(F("[TX-RESYNC] 프롬프트 놓침 → 더미 "));
+    Serial.print((unsigned int)(len + 1));
+    Serial.println(F("바이트로 스트림 복구(서버는 이 줄을 버린다)"));
+#endif
   }
   lastSendEndAt = millis();
   inSend = false;
@@ -787,6 +1330,7 @@ static void processTest(char* f[], char* s0, char* s1, uint8_t* result) {
 }
 
 static void processCommand(char* cand) {
+  ramProbe();                     // 수신 경로의 가장 깊은 지점 — 여기서 재는 것이 의미가 있다
   char*   f[7];
   uint8_t nf = splitFields(cand, f, 7);
   if (nf == 0xFF) return;
@@ -927,6 +1471,29 @@ static bool eqNoCase(const char* a, const char* b, uint8_t n) {
 //   "<n>,CONNECT"  CIPMUX=1 형식의 링크ID 접두. 우리는 CIPMUX=0 이지만 모듈 상태가
 //                  남아 있을 수 있어 벗겨 준다
 //   앞뒤 공백/CR   모듈에 따라 붙어 온다
+// ─────────────────────────────────────────────────────────────────────────
+// ⚠⚠ 구형 ai-thinker 펌웨어(AT v0.018 / SDK 0.9.2)의 **어휘가 다르다.** 실측으로 확인했다.
+//     문서(ESP-AT v2.x)만 보고 문자열을 정하면 이 보드에서는 그 분기가 **영원히 안 걸린다.**
+//
+//   문서/신형          이 보드의 실제 출력        확인된 로그
+//   ─────────────      ────────────────────      ─────────────────────────
+//   ALREADY CONNECT →  **ALREAY CONNECT**        [AT] "ALREAY CONNECT" (14)   ← D 가 빠진 펌웨어 오타
+//   CLOSED          →  **Unlink**                [AT] "Unlink" (6)
+//   CONNECT         →  Linked                    [AT] "Linked" (6)            (이미 처리돼 있었다)
+//
+// 앞의 둘을 못 잡으면 REQ-0051 의 낡은 소켓 사다리와 REQ-0036 의 캐시 비우기가 **둘 다 죽는다.**
+// 실제로 죽어 있었다 — 복구가 되긴 했지만 의도한 즉시 분기가 아니라 CIPSTART 대기 상한(5초)이
+// 만료되는 경로로 우회해서였다. 즉 매 복구마다 불필요한 5초를 태우고 있었다.
+// ─────────────────────────────────────────────────────────────────────────
+static bool isAlreadyConnectLine(const char* s) {
+  // `ALREADY` 와 `ALREAY` 를 함께 받는다. 접두를 요구하므로 평범한 `CONNECT` 는 여기 안 걸린다.
+  return strstr(s, "ALREA") != NULL && strstr(s, "CONNECT") != NULL;
+}
+
+static bool isClosedLine(const char* s) {
+  return strstr(s, "CLOSED") != NULL || strstr(s, "Unlink") != NULL || strstr(s, "UNLINK") != NULL;
+}
+
 static bool isConnectLine(const char* s) {
   while (*s == ' ' || *s == '\t') s++;                       // 앞 공백
   if (s[0] >= '0' && s[0] <= '4' && s[1] == ',') s += 2;     // "<링크ID>," 접두
@@ -938,6 +1505,24 @@ static bool isConnectLine(const char* s) {
   return false;
 }
 
+// 프레임 후보 한 줄을 검사해서 처리한다 (§6.2 3·4단계). `+IPD` 경로와 평문 경로가 **공유**한다.
+static void handleFrameLine(char* cand) {
+  uint8_t len = (uint8_t)strlen(cand);
+  if (len == 0 || len > 63) return;                    // §2.1 한 줄 최대 64바이트(LF 포함)
+
+  // 타입 문자. 모르는 타입은 조용히 버린다(§2.1-7)
+  if (cand[0] != 'R' && cand[0] != 'C' && cand[0] != 'T' && cand[0] != 'M') return;
+
+  // 체크섬. AT 잡음이 우연히 R 로 시작해도 여기서 걸린다
+  if (!checksumOk(cand, len)) {
+#if DEBUG
+    Serial.print(F("[CKSUM NG] ")); Serial.println(cand);
+#endif
+    return;
+  }
+  processCommand(cand);
+}
+
 static void handleLine(char* s) {
 #if DEBUG
   // ★ REQ-0042 1순위: **받은 줄을 전부 찍는다.** 예전에는 WIFI 로 시작하는 줄만 찍어서
@@ -947,9 +1532,228 @@ static void handleLine(char* s) {
   dbgLine(s, (uint8_t)strlen(s));
 #endif
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // ★ 데이터 줄이면 **AT 해석을 일절 거치지 않고** 곧장 프레임 처리로 간다.
+  //
+  // 왜 맨 앞인가 — 이건 결함 하나가 아니라 **결함 유형**을 닫는 자리다.
+  // 아래 AT 해석부는 `Unlink`·`CLOSED`·`busy`·`no ip`·`ERROR`·`SEND FAIL` 같은 문자열을
+  // **부분일치**로 찾는다. 서버가 보낸 프레임 안에 그 단어가 섞이면(특히 userid 같은 자유 필드)
+  // 프레임이 AT 응답으로 오인돼 **통째로 삼켜지고**, 심하면 `netOnline` 까지 뒤집힌다.
+  // 소문자인 `busy`·`no ip` 는 사람이 쓰는 문자열에 섞일 확률이 특히 높다.
+  //
+  // 키워드마다 가드를 하나씩 붙이는 방식은 **다음에 키워드를 추가할 때 또 뚫린다.**
+  // 그래서 개별 방어가 아니라 순서로 막는다: 데이터 줄은 애초에 AT 해석부에 도달하지 않는다.
+  //
+  // 트레이드오프(작지만 기록해 둔다): `Unlink+IPD,...` 처럼 AT 응답과 데이터가 한 줄에 붙어 오면
+  // 이제 AT 쪽을 놓친다. 그러나 링크 이벤트를 놓치는 것은 전송 실패 감지(REQ-0049)가 받아 주는 반면,
+  // 데이터를 링크 이벤트로 오인하는 것은 **상태를 오염시킨다.** 놓치는 쪽이 안전하다.
+  // ═══════════════════════════════════════════════════════════════════════
+  {
+    char* ipd = strstr(s, "+IPD,");
+    if (ipd) {
+      char* colon = strchr(ipd, ':');
+      if (!colon) return;                 // 길이 필드가 안 끝났다 — 쓸 수 없는 줄
+      handleFrameLine(colon + 1);         // `+IPD,<len>:` 도 `+IPD,<id>,<len>:` 도 첫 `:` 뒤가 본문이다
+      return;
+    }
+  }
+
   // (a) 접속 상태 키워드. "WIFI CONNECTED" 를 TCP CONNECT 로 오인하지 않는다.
   //     ⚠ 이 제외는 되살리면 안 되는 버그를 막는 자리다 — 지우지 마라.
-  if (strncmp(s, "WIFI", 4) == 0) return;
+  //
+  //     ★ REQ-0064 ①: **버리기 전에 읽는다.** 예전에는 여기서 곧장 return 이라
+  //     `WIFI GOT IP`(성공)와 `WIFI DISCONNECT`(끊김)까지 같이 버렸고, 그래서 코드에
+  //     "와이파이가 붙었는가"를 알 수단이 아예 없었다. return 은 그대로 두고 — 지우면
+  //     `WIFI CONNECTED` 가 isConnectLine 까지 흘러가 옛 오인 버그가 되살아난다 —
+  //     그 앞에서 상태만 걷어 간다.
+  //     (⚠ 이 보드의 구형 펌웨어는 WIFI * 줄을 내지 않는다. 신형 펌웨어 대비 경로다.)
+  if (strncmp(s, "WIFI", 4) == 0) {
+    if (strstr(s, "GOT IP")) {
+      netHasIp = true;
+      cwjapFails = 0;
+      cwjapPending = false;             // 결합이 끝났다 — 무응답 판정 대상에서 뺀다
+      assocAt = millis();               // 결합 유지시간 계측 시작 (REQ-0071 0단)
+#if DEBUG
+      Serial.println(F("[NET] WIFI GOT IP — IP 확보. 9초 대기창을 끝까지 기다리지 않고 바로 다음 단계로"));
+#endif
+      if (!netOnline) netAdvance(NET_CIFSR, 200);
+    } else if (strstr(s, "DISCONNECT")) {
+      netHasIp = false;                 // ★ 전제조건이 깨졌다 — CIPSTART 를 막는다
+#if DEBUG
+      Serial.println(F("[NET] WIFI DISCONNECT — IP 를 잃었다"));
+#endif
+      // ★ REQ-0071: 여기서 곧장 CWJAP 로 되돌아가던 것이 **같은 자극의 반복**이었다.
+      //   결합이 끊긴 것은 그 자체로 실패 사건이므로 사다리가 다음 조치를 정하게 한다.
+      //   (이 보드의 구형 펌웨어는 WIFI 줄을 내지 않는다 — 신형 대비 경로다.)
+      if (!netOnline) { cwjapPending = false; ladderFail(LF_CWJAP_FAIL); }
+    }
+    return;                             // ★ 유지 (위 경고 참조)
+  }
+
+  // ── (a2) 사다리 응답 처리 (REQ-0064) ─────────────────────────────────────
+  // 어떤 명령에 대한 답인지는 netStep 이 아니라 **netLastSent** 로 본다.
+  // netStep 은 이미 "답이 없으면 갈 곳"으로 앞서 가 있기 때문이다.
+  if (!netOnline && netLastSent < NET_STEP_COUNT) {
+
+    // `busy p...` = **앞 명령이 아직 안 끝났다.** 이번 사고의 핵심 증거다.
+    // 전진하면 안 된다 — 전진했기 때문에 CIPMUX 가 통째로 씹혔다.
+    if (strstr(s, "busy")) {
+#if DEBUG
+      Serial.println(F("[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다"));
+#endif
+      // CWJAP 대기 중이면 재전송도 하지 않는다. 진행 중인 결합을 방해할 뿐이고,
+      // 결과(OK/FAIL)는 어차피 곧 온다.
+      // ⚠ 되쏘아도 되는 단계만 되쏜다.
+      //   · CWJAP  — 진행 중인 결합을 방해할 뿐이다. 결과(OK/FAIL)는 곧 온다
+      //   · CWLAP  — 재스캔은 9초를 통째로 태우고 그동안 결합이 불가능하다.
+      //              lapDone 이 이미 서 있어 "한 번만 스캔한다"는 규칙도 깨진다
+      //   · CIPCLOSE — 사다리 상승 계수(closeAttempts)를 우회해 무한 반복이 된다
+      // ⚠⚠ **`NET_RST` 은 여기 있으면 안 된다. 실측으로 자해가 확인됐다.**
+      //   `busy` 대응의 뜻은 **"기다렸다 다시 물어본다"** 인데, `AT+RST` 는 물어보는 게 아니라
+      //   **"처음부터 다시 시작해라"** 다. 성질이 다른 명령을 같은 목록에 둔 것이 결함이었다.
+      //   실측(REQ-0064): 부팅 직후 ESP 가 앞선 CWJAP 를 처리하는 12초 동안
+      //   **`AT+RST` 를 1.5초마다 8회** 되쏘고 있었다 — **진행 중인 결합을 매번 죽인 것**이다.
+      //   RST 는 되쏘지 않는다. 응답이 없으면 NET_WAIT[NET_RST](2500ms)가 알아서 재시도한다.
+      switch (netLastSent) {
+        case NET_CIFSR: case NET_CIPMUX: case NET_CIPSTART:
+          netAdvance(netLastSent, 1500);   // 이 셋은 되쏴도 상태를 망가뜨리지 않는 질의/설정이다
+          break;
+        default:
+          break;                        // 기다린다 — 해당 단계의 대기 상한이 알아서 처리한다
+      }
+      return;
+    }
+
+    // CWJAP 의 결과
+    if (netLastSent == NET_CWJAP) {
+      // 신형 펌웨어의 사유 코드. 이 보드에는 안 오지만 오면 그대로 사람 말로 찍는다.
+      if (strncmp(s, "+CWJAP:", 7) == 0) {
+#if DEBUG
+        Serial.print(F("[NET] ★ CWJAP 실패 사유: "));
+        switch (s[7]) {
+          case '1': Serial.println(F("접속 시간초과")); break;
+          case '2': Serial.println(F("비밀번호가 틀렸다")); break;
+          case '3': Serial.println(F("그 SSID 의 AP 를 못 찾았다")); break;
+          case '4': Serial.println(F("접속 실패")); break;
+          default:  Serial.println(s); break;
+        }
+#endif
+        return;                          // 계수는 뒤따라오는 FAIL 에서 한다
+      }
+      if (strstr(s, "FAIL") || strstr(s, "ERROR")) {
+        if (cwjapFails < 250) cwjapFails++;
+        netHasIp = false;
+        cwjapPending = false;            // 답이 왔다 — 무응답 판정 대상에서 뺀다
+#if DEBUG
+        Serial.print(F("[NET] ★ CWJAP 실패 "));
+        Serial.print(cwjapFails);
+        Serial.println(F("회 (구형 펌웨어는 사유를 주지 않는다)"));
+#endif
+        // ★ REQ-0071 — 여기가 사다리의 주 입구다.
+        //   예전에는 이 자리에서 곧장 CIFSR→CWJAP 로 돌아갔고, 그래서 91회를 되풀이했다.
+        //   이제는 **몇 번째 실패인지에 따라 조치가 달라진다.** 진단 사슬 1회 삽입도
+        //   ladderFail() 안으로 옮겼다(판정이 한 곳에만 있어야 어긋나지 않는다).
+        ladderFail(LF_CWJAP_FAIL);
+        return;
+      }
+      if (strcmp(s, "OK") == 0) {
+#if DEBUG
+        Serial.println(F("[NET] CWJAP OK — 결합됐다. IP 를 실제로 받았는지 CIFSR 로 확인한다"));
+#endif
+        cwjapFails = 0;
+        cifsrTries = 0;
+        cwjapPending = false;
+        assocAt = millis();              // 결합 유지시간 계측 시작 (REQ-0071 0단)
+        netAdvance(NET_CIFSR, 300);
+        return;
+      }
+    }
+
+    // 2단(CWQAP)의 결과. 구형 펌웨어는 결합이 없으면 `no ap` 를 먼저 내기도 한다 — 셋 다 완료다.
+    if (netLastSent == NET_CWQAP &&
+        (strcmp(s, "OK") == 0 || strstr(s, "ERROR") || strstr(s, "no ap"))) {
+#if DEBUG
+      Serial.println(F("[LADDER] 2단: 결합 해제 완료 → 깨끗한 상태에서 CWJAP 재시도"));
+#endif
+      netAdvance(NET_CWJAP, 500);
+      return;
+    }
+
+    // CIFSR 의 결과 — **여기가 IP 확보의 단일 판정점이다.**
+    if (netLastSent == NET_CIFSR) {
+      if (strncmp(s, "AT+", 3) != 0 && hasUsableIp(s)) {   // 명령 에코는 제외
+        netHasIp = true;
+        cifsrTries = 0;
+        if (!assocAt) assocAt = millis();   // 결합 유지시간 계측 시작 (REQ-0071 0단)
+#if DEBUG
+        Serial.print(F("[NET] ★ IP 확보: "));
+        Serial.println(s);
+#endif
+        netAdvance(NET_CIPMUX, 200);
+        return;
+      }
+    }
+
+    // CIPMUX 의 결과. 구형 펌웨어는 이미 그 값이면 `no change` 로 답한다 — 둘 다 성공이다.
+    if (netLastSent == NET_CIPMUX && (strcmp(s, "OK") == 0 || strstr(s, "no change"))) {
+#if DEBUG
+      Serial.println(F("[NET] CIPMUX=0 적용됨 → CIPSTART"));
+#endif
+      netAdvance(NET_CIPSTART, 200);
+      return;
+    }
+
+    // CWCOUNTRY 우회 시도의 결과. **ERROR 가 나오는 것이 정상이자 결론이다.**
+    if (netLastSent == NET_CWCOUNTRY && (strcmp(s, "OK") == 0 || strstr(s, "ERROR"))) {
+#if DEBUG
+      if (strcmp(s, "OK") == 0) {
+        Serial.println(F("[NET] ★ CWCOUNTRY 가 먹었다 — 규제도메인 1~13. 채널 12 결합이 열렸을 수 있다"));
+      } else {
+        Serial.println(F("[NET] CWCOUNTRY 미지원(ERROR) — 이 펌웨어로는 채널 12/13 을 코드로 못 연다."));
+        Serial.println(F("[NET]   → 공유기 채널을 1/6/11 로 바꾸는 것이 확정 해법이다"));
+      }
+#endif
+      netAdvance(NET_CWLAP, 300);
+      return;
+    }
+
+    // CWLAP 스캔 종료. 이 판정 한 줄이 "비번이냐 AP 냐" 를 가른다.
+    if (netLastSent == NET_CWLAP) {
+      if (strncmp(s, "+CWLAP:", 7) == 0) {
+        if (strstr(s, WIFI_SSID)) lapFound = true;
+        return;                          // 목록 자체는 위 [AT] 로그가 이미 다 찍었다
+      }
+      if (strcmp(s, "OK") == 0 || strstr(s, "ERROR")) {
+        lapDone = true;
+#if DEBUG
+        Serial.println(F("[NET] ── AP 스캔 판정 ──────────────────────────"));
+        if (lapFound) {
+          Serial.println(F("[NET] 설정한 SSID 가 목록에 **있다** → AP 는 보인다. 결합만 거부된다."));
+          // ⚠ 순서 주의: 위 +CWLAP 줄의 **마지막 숫자가 채널**이다. 12 나 13 이면 그것이 1순위다.
+          //   ESP8266 은 12/13 을 스캔으로는 보면서 결합만 막히는 실패 양상이 알려져 있다
+          //   (기본 규제도메인 US=1~11). "보였으니 붙을 수 있다"는 추론은 성립하지 않는다.
+          Serial.println(F("[NET]   1순위: 위 줄의 **마지막 숫자(채널)** 를 봐라. 12/13 이면 공유기를 1/6/11 로 바꿔라"));
+          Serial.println(F("[NET]   2순위: 비밀번호   3순위: PMF(802.11w)/WPA3 전환모드 끄기"));
+        } else {
+          Serial.println(F("[NET] 설정한 SSID 가 목록에 **없다** → 비번 문제가 아니다."));
+          Serial.println(F("[NET]   2.4GHz 인가 / 전파가 닿는가 / SSID 철자가 맞는가를 봐라."));
+        }
+#endif
+        netAdvance(NET_CWJAP, 1000);
+        return;
+      }
+    }
+
+    // `no ip` = IP 없이 CIPSTART 를 쏜 것이다. **재시도가 아니라 CWJAP 로 되돌아간다** (REQ-0064 ④).
+    if (strstr(s, "no ip")) {
+      netHasIp = false;
+#if DEBUG
+      Serial.println(F("[NET] no ip — IP 가 없다. CIPSTART 재시도를 접고 CWJAP 로 되돌아간다"));
+#endif
+      netAdvance(NET_CWJAP, 1000);
+      return;
+    }
+  }
   // ── 멱등 캐시를 비우는 지점이 아래 **두 곳**이다. 중복처럼 보이지만 지우지 마라. ──────
   //
   // 지켜야 할 성질: 서버가 재시작하면 wire_rid 가 1부터 다시 시작하므로, 옛 세션의 rid 가
@@ -971,7 +1775,8 @@ static void handleLine(char* s) {
   //   그건 **기존 연결이 그대로 살아 있다**는 응답이다(서버도 그대로다). netTick() 이 CIPSTART 를
   //   5초마다 재시도하므로, 여기서 비우면 살아 있는 연결의 멱등성이 재시도마다 깨진다.
   // ─────────────────────────────────────────────────────────────────────────
-  if (strstr(s, "ALREADY CONNECT")) {
+  // 여기부터는 **데이터가 아닌 줄**만 도달한다(위 +IPD 조기 처리가 걸러 냈다).
+  if (isAlreadyConnectLine(s)) {
     // ★ REQ-0051: 이 응답의 의미가 **상황에 따라 정반대**다. 둘을 갈라야 한다.
     if (staleSocket) {
       // 전송 실패로 오프라인이 된 뒤라면 "붙어 있다"가 아니라
@@ -988,6 +1793,7 @@ static void handleLine(char* s) {
     // 실제로 성공한 경우라 진짜로 "이미 붙었다"는 뜻이다. 여기서는 그대로 온라인으로 받고
     // **캐시를 비우지 않는다** — 새 연결이 아니므로(REQ-0035 [18]-4 불변식).
     netOnline = true;
+    onlineSince = millis();            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
     sendFailStreak = 0;
     closeAttempts = 0;
 #if DEBUG
@@ -997,23 +1803,35 @@ static void handleLine(char* s) {
   }
   if (isConnectLine(s)) {
     netOnline = true;
+    onlineSince = millis();            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
     sendFailStreak = 0;
     staleSocket = false;               // 진짜로 새로 붙었다 — 낡은 소켓이 아니다
     closeAttempts = 0;
+    // TCP 까지 올라왔다는 것은 그 아래(결합·IP)가 전부 성립했다는 뜻이다 — 진단 카운터를 되돌린다.
+    cwjapFails = 0;
+    cifsrTries = 0;
+    netHasIp = true;
+    if (!assocAt) assocAt = millis();
     cacheClear();
 #if DEBUG
     Serial.println(F("[NET] online (CONNECT) + 캐시 비움"));
 #endif
     return;
   }
-  if (strstr(s, "CLOSED")) {
+  if (isClosedLine(s)) {
     netOnline = false;
     sendFailStreak = 0;
     // 닫혔다는 통보다 — 낡은 소켓 의심이 해소됐다. 사다리도 내려온다.
     staleSocket = false;
     closeAttempts = 0;
     cacheClear();                     // ★ 주 방어선 — 위 주석 참조
-    netStep = NET_CIPSTART; netStepAt = millis(); netStepWait = 1000;   // CIPSTART 만 다시
+    // ★ REQ-0064 — 예전에는 여기서 곧장 CIPSTART 로 갔다. 그런데 **소켓이 죽은 이유가
+    //   와이파이가 끊긴 것일 수 있다**(공유기 재부팅 — 상시가동에서 가장 흔한 경우다).
+    //   이 펌웨어는 `WIFI DISCONNECT` 를 내지 않으므로 netHasIp 는 참으로 남아 있고,
+    //   그러면 문지기를 통과해 IP 없이 CIPSTART 가 나간다 — 고치려던 바로 그 상황이다.
+    //   CIFSR 은 로컬 질의라 300ms 면 끝난다. **재진입 때마다 IP 를 다시 확인한다.**
+    netStep = NET_CIFSR; netStepAt = millis(); netStepWait = 300;
+    cifsrTries = 0;
     return;
   }
 
@@ -1047,32 +1865,10 @@ static void handleLine(char* s) {
     }
   }
 
-  // (b) §6.2 2단계 — +IPD,<n>: 이 있으면 그 뒤부터가 후보
-  char* cand = s;
-  char* ipd = strstr(s, "+IPD,");
-  if (ipd) {
-    char* colon = strchr(ipd, ':');
-    if (!colon) return;
-    cand = colon + 1;
-  }
-
-  uint8_t len = (uint8_t)strlen(cand);
-  if (len == 0 || len > 63) return;                    // §2.1 한 줄 최대 64바이트(LF 포함)
-
-  // (c) 3단계 — 타입 문자. 모르는 타입은 조용히 버린다(§2.1-7)
-  //     T 는 개정 3, M 은 개정 5 에서 추가됐다.
-  //     둘 다 R/C 와 **같은 파서**를 탄다 — 따로 만들지 않는다(§2.4 · §12B.4)
-  if (cand[0] != 'R' && cand[0] != 'C' && cand[0] != 'T' && cand[0] != 'M') return;
-
-  // (d) 4단계 — 체크섬. AT 잡음이 우연히 R 로 시작해도 여기서 걸린다
-  if (!checksumOk(cand, len)) {
-#if DEBUG
-    Serial.print(F("[CKSUM NG] ")); Serial.println(cand);
-#endif
-    return;
-  }
-
-  processCommand(cand);
+  // (b) `+IPD` 가 없는 평문 줄. 한 TCP 세그먼트에 프레임이 여러 개 실려 오면 두 번째 줄부터는
+  //     `+IPD` 접두가 없으므로 이 경로로 들어온다 — 그래서 같은 검사를 그대로 태운다.
+  //     (T 는 개정 3, M 은 개정 5. 넷 다 R/C 와 **같은 파서**를 탄다 — §2.4 · §12B.4)
+  handleFrameLine(s);
 }
 
 static void drainPending(void) {
@@ -1091,15 +1887,108 @@ static void drainPending(void) {
 //              → CIPCLOSE 3회가 안 먹으면 **AT+RST 로 올라가 전체 초기화**
 // 마지막 층이 없으면 또 무한 루프가 된다.
 static void netTick(unsigned long now) {
-  if (netOnline) return;
+  if (netOnline) {
+    // ★ REQ-0071 — 사다리는 **연속 30초 온라인**이라야 0단으로 내려온다.
+    //   붙는 즉시 내리면 "붙었다가 12초 뒤 끊김"이 반복될 때 영원히 0~1단만 오간다.
+    if (rung != RUNG_MEASURE && (long)(now - onlineSince) >= (long)LADDER_RESET_MS) {
+#if DEBUG
+      Serial.print(F("[LADDER] ↓ 30초 연속 온라인 — 사다리를 0단으로 내린다 (직전 "));
+      Serial.print(rung);
+      Serial.println(F("단)"));
+#endif
+      rung = RUNG_MEASURE;
+      rungFails = 0;
+    }
+    return;
+  }
+
+  // ★ 4단이 ESP 를 리셋으로 잡고 있는 동안에는 어떤 AT 명령도 내보내지 않는다.
+  //   (잡고 있는 시간 자체가 백오프다 — 위 espRstAssert 주석 참조)
+  espRstService(now);
+  if (espRstHeld) return;
+
   if (now - netStepAt < netStepWait) return;
+
+  // ★ REQ-0064 ② — **IP 없이는 CIPSTART 를 쏘지 않는다.**
+  //   문지기를 "보내기 직전" 한 곳에 두는 이유: 사다리로 들어오는 길이 여럿(부팅·CLOSED 복구·
+  //   전송실패 복구)이라 각 진입점에서 막으면 언젠가 한 곳을 빠뜨린다. 여기 하나면 전부 지난다.
+  if (netStep == NET_CIPSTART && !netHasIp) {
+#if DEBUG
+    Serial.println(F("[NET] IP 가 없다 → CIPSTART 를 보내지 않고 CWJAP 로 되돌아간다"));
+#endif
+    netStep = NET_CWJAP;
+  }
+
+  // ★★ REQ-0071 — **답이 오지 않은 CWJAP 도 실패다.**
+  //   여기까지 왔는데 아직 cwjapPending 이면, 직전 CWJAP 가 대기 상한(30초)을 넘도록
+  //   OK 도 FAIL 도 내지 않았다는 뜻이다. 예전 코드는 이 경우 아무 계수 없이 CWJAP 를
+  //   다시 쐈다 — **사다리가 절대 올라가지 못하는 구멍**이 정확히 여기였다.
+  //   사다리가 다음 단계를 정하므로 이번 틱은 전송하지 않고 넘긴다.
+  if (netStep == NET_CWJAP && cwjapPending) {
+    cwjapPending = false;
+    if (cwjapFails < 250) cwjapFails++;
+    ladderFail(LF_CWJAP_TIMEOUT);
+    return;
+  }
 
   uint8_t sent = netStep;
   netSendStep(sent);
   netStepAt = now;
   netStepWait = NET_WAIT[sent];
 
+  // ⚠ 아래 분기가 정하는 것은 **"응답이 안 왔을 때 갈 곳"** 이다(예전처럼 무조건 갈 곳이 아니다).
+  //   정상 전진은 handleLine() 이 응답을 보고 netAdvance() 로 시킨다.
   switch (sent) {
+    case NET_CWJAP:
+      // 답이 없으면 그냥 다시 묻는다. **전진하지 않는다** — 그게 이번 사고의 원인이었다.
+      netStep = NET_CWJAP;
+      break;
+
+    case NET_CIFSR:
+      // CIFSR 은 로컬 질의라 답이 빠르다. 세 번 물어도 쓸 IP 가 없으면 결합부터 다시.
+      if (++cifsrTries >= 3) {
+        cifsrTries = 0;
+#if DEBUG
+        Serial.println(F("[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시"));
+#endif
+        netStep = NET_CWJAP;
+        // ★★ REQ-0071 — 여기가 사다리의 **두 번째 구멍**이었다.
+        //   `CWJAP 는 OK 인데 CIFSR 은 IP 가 없다`가 계속되면 CWJAP↔CIFSR 사이를 영원히 돈다.
+        //   CWJAP 가 FAIL 을 내지 않으므로 위의 두 입구(FAIL·무응답) 어느 쪽도 열리지 않는다.
+        //   이것도 명백한 실패 사건이므로 사다리에 알린다.
+        ladderFail(LF_CWJAP_FAIL);
+        // 0·1단의 조치는 "CIFSR 로 다시 확인"인데, 방금 세 번 물어서 없다는 것을 확인했다.
+        // 그 경우에만 기존 동작(결합부터 다시)으로 되돌린다. 2단 이상의 강한 조치는 그대로 둔다.
+        if (netStep == NET_CIFSR) netAdvance(NET_CWJAP, 1000);
+      } else {
+        netStep = NET_CIFSR;
+      }
+      break;
+
+    case NET_CIPMUX:
+      // 응답이 없어도 CIPSTART 로는 간다(구형 펌웨어가 조용한 경우가 있다).
+      // 대신 `busy` 였다면 handleLine 이 이미 같은 단계로 되돌려 놓는다.
+      netStep = NET_CIPSTART;
+      break;
+
+    // ── 진단 사슬은 응답이 없어도 다음 칸으로 넘어간다(진단이 결합을 오래 막으면 안 된다) ──
+    case NET_GMR:       netStep = NET_CWCOUNTRY; break;
+    case NET_CWCOUNTRY: netStep = NET_CWLAP;     break;
+
+
+    case NET_CWLAP:
+      // 스캔이 조용히 끝나는 펌웨어도 있다. 한 번 쐈으면 진단은 끝난 것으로 본다.
+      lapDone = true;
+      netStep = NET_CWJAP;
+      break;
+
+    case NET_CWQAP:
+      // ⚠ 이 case 는 반드시 있어야 한다. 없으면 아래 default 가 `sent + 1` 로 가는데
+      //   CWQAP 는 열거의 **마지막**이라 NET_STEP_COUNT 가 되어 NET_WAIT[] 를 범위 밖으로
+      //   읽는다(조용한 메모리 오류). 답이 없어도 결합 해제는 시도된 것으로 보고 넘어간다.
+      netStep = NET_CWJAP;
+      break;
+
     case NET_CIPCLOSE:
       closeAttempts++;
       if (closeAttempts >= CLOSE_ATTEMPT_LIMIT) {
@@ -1112,11 +2001,18 @@ static void netTick(unsigned long now) {
         netStep = NET_RST;
         staleSocket = false;         // RST 가 모듈 상태를 통째로 지운다
         closeAttempts = 0;
-        netStepWait = 200;           // 곧 RST 를 쏜다
+        netStepWait = 200;           // 곧 RST 를 쏜다 (사다리가 더 긴 백오프로 덮어쓸 수 있다)
+        // ★ REQ-0071 — 로컬 명령이 세 번 연속 안 먹은 것은 **AT 계층이 잠긴 것**이다.
+        //   이것도 실패 사건이므로 사다리에 알린다. 이 통보가 없으면 소켓 복구는
+        //   CIPCLOSE↔RST 사이를 자기들끼리 영원히 돌 뿐 3단 위로 올라가지 못한다.
+        //   (사다리가 이미 3단 이상이면 여기서 4단으로 올라간다 = 소프트 리셋이 안 먹었다는 뜻)
+        ladderFail(LF_AT_JAMMED);
       } else {
-        // CLOSED 가 오면 handleLine 이 CIPSTART 로 보낸다.
-        // 안 오더라도 **CIPSTART 로 넘어가는 길은 남겨 둔다**(닫힘 통보가 없는 모듈도 있다).
-        netStep = NET_CIPSTART;
+        // CLOSED 가 오면 handleLine 이 CIFSR 로 보낸다.
+        // 안 오더라도 **다시 올라가는 길은 남겨 둔다**(닫힘 통보가 없는 모듈도 있다).
+        // 여기도 CIPSTART 가 아니라 CIFSR 이다 — 이유는 위 CLOSED 분기의 주석과 같다.
+        netStep = NET_CIFSR;
+        cifsrTries = 0;
       }
       break;
 
@@ -1191,12 +2087,41 @@ void setup() {
   // 이 값은 **트리거를 받기 전까지 그대로 유지된다**(§12B.1 — 자율 전진 없음).
   simOcc = (uint16_t)((1U << 1) | (1U << 2) | (1U << 8));
 
+  // ★ REQ-0071 4단 — 리셋선은 **놓은 상태(하이임피던스)로 시작**한다.
+  //   전원 인가 직후 AVR 핀은 원래 INPUT 이라 이미 떠 있지만, "여기서 명시적으로 놓는다"를
+  //   코드로 남겨 둔다. 실수로 OUTPUT LOW 로 두면 ESP 가 영원히 리셋에 잡혀 아무 일도 안 난다.
+#if ESP_RST_WIRED
+  pinMode(PIN_ESP_RST, INPUT);
+#endif
+
   netStep = 0;
   netStepAt = millis();
   netStepWait = 500;
 
 #if DEBUG
   Serial.println(F("\n[PARKING NODE] proto v1 / 10 slots / dev=" DEVICE_ID));
+
+  // ── 부팅 원인 (REQ-0071 사실 4) — 추측을 사실로 바꾸는 한 줄 ──
+  Serial.print(F("[BOOT] 리셋 원인: "));
+  if (mcusrMirror == 0) {
+    Serial.println(F("불명 (부트로더가 MCUSR 을 지우고 넘어왔다)"));
+  } else {
+    if (mcusrMirror & _BV(PORF))  Serial.print(F("전원인가(POR) "));
+    if (mcusrMirror & _BV(EXTRF)) Serial.print(F("외부리셋(버튼/DTR) "));
+    if (mcusrMirror & _BV(BORF))  Serial.print(F("**브라운아웃(전원부족)** "));
+    if (mcusrMirror & _BV(WDRF))  Serial.print(F("워치독 "));
+    Serial.println();
+  }
+  Serial.print(F("[BOOT] 사다리 4단(ESP 하드리셋선) "));
+  Serial.print(ESP_RST_WIRED ? F("배선됨(A2)") : F("미배선 — A2 를 ESP RST 에 물리고 ESP_RST_WIRED=1"));
+  Serial.print(F(" · 6단(워치독) "));
+  Serial.println(ENABLE_WDT ? F("켬") : F("끔"));
+#endif
+
+#if ENABLE_WDT
+  // 8초. SoftwareSerial 비트뱅잉과 waitForPrompt(300ms)를 넉넉히 덮는다.
+  // (가장 긴 정지는 drainSerial 의 120ms 다 — 8초와는 두 자릿수 차이라 오발이 없다.)
+  wdt_enable(WDTO_8S);
 #endif
 }
 
@@ -1211,6 +2136,11 @@ static void diagTick(unsigned long now) {
   if (now - dbgLastDiag < DIAG_PERIOD_MS) return;
   dbgLastDiag = now;
   Serial.print(F("[DIAG] offline step="));  Serial.print(netStep);
+  // ★ REQ-0071 — 사다리의 현재 칸을 같이 찍는다. 이게 없으면 3초마다 같은 줄이 흘러갈 뿐
+  //   "지금 무엇을 하며 기다리는 중인가"를 로그에서 알 수 없다.
+  Serial.print(F(" 사다리="));              Serial.print(rung);
+  Serial.print('/');                        Serial.print(rungFails);
+  if (espRstHeld) Serial.print(F(" [ESP리셋유지중]"));
   Serial.print(F(" rx="));                  Serial.print(dbgRxBytes);
   Serial.print(F(" lines="));               Serial.print(dbgLineCnt);
   Serial.print(F(" up="));                  Serial.print(now / 1000UL);
@@ -1218,7 +2148,25 @@ static void diagTick(unsigned long now) {
 }
 #endif
 
+#if DEBUG
+// RAM 최저 여유를 1분에 한 줄. **온라인일 때도 찍는다** — [DIAG] 는 오프라인 전용이라
+// 정작 2시간 소크(=계속 온라인) 동안 아무것도 안 보이기 때문이다.
+static unsigned long lastRamReport = 0;
+static void ramTick(unsigned long now) {
+  if (now - lastRamReport < 60000UL) return;
+  lastRamReport = now;
+  Serial.print(F("[RAM] 최저 여유 "));
+  Serial.print(ramLow);
+  Serial.print(F(" B · 프롬프트 재동기 "));
+  Serial.print(promptResyncs);
+  Serial.println(F("회 (서버의 '버린줄' 과 맞아야 한다)"));
+}
+#endif
+
 void loop() {
+#if ENABLE_WDT
+  wdt_reset();                      // 6단 — 여기 못 오면(=행) 8초 뒤 AVR 이 리셋된다
+#endif
   unsigned long now = millis();
   netTick(now);
   pumpSerialRaw();
@@ -1227,5 +2175,6 @@ void loop() {
   statusTick(now);
 #if DEBUG
   diagTick(now);
+  ramTick(now);
 #endif
 }
