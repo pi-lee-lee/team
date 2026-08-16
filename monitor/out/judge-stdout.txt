@@ -1,4 +1,0 @@
-→ monitor/out/judge-report.md
-→ monitor/out/judge-report.json
-  old       15.86h  frames= 47571 (49.99/min)  realS_drop=0 drops=16  close=56 e54=12 upreg=7
-  judge      4.00h  frames= 12660 (52.75/min)  realS_drop=0 drops=0  close=2 e54=2 upreg=0

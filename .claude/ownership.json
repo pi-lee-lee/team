@@ -162,41 +162,6 @@
       "note": "서버를 OS별/계층별 파일로 쪼갤 때 확장자 규칙에 걸려 cpp-engineer 로 새는 것을 막는다"
     },
     {
-      "glob": "조별과제샘플/nextgen/server*",
-      "owner": "socket-engineer",
-      "note": "nextgen 사본의 서버/전선 파일. 하위폴더라 상위 규칙이 안 걸린다"
-    },
-    {
-      "glob": "조별과제샘플/nextgen/server*",
-      "owner": "socket-engineer",
-      "note": "nextgen 사본의 서버/전선 파일. 하위폴더라 상위 규칙이 안 걸린다"
-    },
-    {
-      "glob": "조별과제샘플/nextgen/Esp*",
-      "owner": "arduino-engineer",
-      "note": "nextgen 사본의 EspLink 헤더. .h 확장자 규칙(cpp)을 경로로 덮는다"
-    },
-    {
-      "glob": "조별과제샘플/nextgen/Esp*",
-      "owner": "arduino-engineer",
-      "note": "nextgen 사본의 EspLink 헤더. .h 확장자 규칙(cpp)을 경로로 덮는다"
-    },
-    {
-      "glob": "조별과제샘플/nextgen/*.ino",
-      "owner": "arduino-engineer",
-      "note": "nextgen 사본 스케치"
-    },
-    {
-      "glob": "조별과제샘플/nextgen/*.ino",
-      "owner": "arduino-engineer",
-      "note": "nextgen 사본 스케치"
-    },
-    {
-      "glob": "monitor/**",
-      "owner": "monitor-engineer",
-      "note": "관측 전담의 유일한 소유 경로. 도메인 코드를 구조적으로 못 고치게 한다"
-    },
-    {
       "glob": "monitor/**",
       "owner": "monitor-engineer",
       "note": "관측 전담의 유일한 소유 경로. 도메인 코드를 구조적으로 못 고치게 한다"

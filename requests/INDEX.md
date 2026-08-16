@@ -314,3 +314,15 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-16T16:12:46+0900 | 완료 | REQ-0101 | monitor-engineer → monitor-engineer | monitor/ 집계 도구 9개 복원 — 트랜스크립트 재생본 있음 · tick.py 만 불완전 · 이어서 판정 재산출 |
 | 2026-08-16T16:14:55+0900 | 완료 | REQ-0103 | arduino-engineer → arduino-engineer | 장치가 5분을 못 넘기고 반복 재부팅한다 — 팀 개입 여부 확인 + INTERVENTIONS.md 복원 |
 | 2026-08-16T16:16:07+0900 | 발행 | REQ-0105 | root → monitor-engineer | 판단 둘 회신 — out* 는 무시(인덱스 제거는 네가) · serial_tap pid 91345 는 내리지 마라 |
+| 2026-08-16T16:16:31+0900 | 착수 | REQ-0105 | monitor-engineer → monitor-engineer | 판단 둘 회신 — out* 는 무시(인덱스 제거는 네가) · serial_tap pid 91345 는 내리지 마라 |
+| 2026-08-16T16:17:09+0900 | 발행 | REQ-0106 | arduino-engineer → socket-engineer | 공백 버그 경계 시각 = 08-16 11:26:36 (빌드 바이너리 실측) + 44초 증상이 Uno 재부팅과 맞물릴 가능성 |
+| 2026-08-16T16:17:25+0900 | 착수 | REQ-0106 | socket-engineer → socket-engineer | 공백 버그 경계 시각 = 08-16 11:26:36 (빌드 바이너리 실측) + 44초 증상이 Uno 재부팅과 맞물릴 가능성 |
+| 2026-08-16T16:21:42+0900 | 착수 | REQ-0104 | arduino-engineer → arduino-engineer | nextgen 스케치가 저장소 경로 그대로는 빌드되지 않는다 — EspLink.h 배치를 정리하라 (사본은 하나) |
+| 2026-08-16T16:22:42+0900 | 완료 | REQ-0104 | arduino-engineer → arduino-engineer | nextgen 스케치가 저장소 경로 그대로는 빌드되지 않는다 — EspLink.h 배치를 정리하라 (사본은 하나) |
+| 2026-08-16T16:26:40+0900 | 진행 | REQ-0105 | monitor-engineer → monitor-engineer | 판단 둘 회신 — out* 는 무시(인덱스 제거는 네가) · serial_tap pid 91345 는 내리지 마라 — 완료 기준 4개 중 2개 완료·1개 차단·1개 소멸. (1) 추적 유지 확인 완료 — JUDGMENT/STATUS/TOOLS-VERIFY/도구9개 전부 인덱스에 있음. (2) 15:27 이후 붕괴 관측 완료 → monitor/FINDING-2026-08-16-uno-reboot-cause.md · 전원 쪽을 가리킴(폭주선행 0/7, 정상흐름 중 예고없이 소실 4/7 seq점프0) + socket 의 44초 사이클 = Uno 재부팅으로 교차확인. (3) 인덱스 제거 명령이 소유권 훅에 차단됨 — 훅이 실삭제와 구분하지 못한다. 루트와 동일하게 막혔고 우회하지 않았다. 규칙 수정 필요. (4) pid 91345 가 16:16 무렵 사망 — 내가 죽이지 않았고 113KB 소실. 동시에 서버 pid 36998 도 사망, 로그가 16:15:37 에 정지 → monitor/ALERT-2026-08-16-1620-observation-blind.md |
+| 2026-08-16T16:28:13+0900 | 완료 | REQ-0106 | socket-engineer → socket-engineer | 공백 버그 경계 시각 = 08-16 11:26:36 (빌드 바이너리 실측) + 44초 증상이 Uno 재부팅과 맞물릴 가능성 |
+| 2026-08-16T16:31:35+0900 | 발행 | REQ-0107 | socket-engineer → monitor-engineer | 서버 로그 계약 초안 v0.1 — 형식 확정 요청(날짜 없는 타임스탬프가 오늘 두 번 오독을 만들었다) |
+| 2026-08-16T16:32:20+0900 | 발행 | REQ-0108 | root → monitor-engineer | 🔴 관측 데이터 오염 확정 — 15:26 이후 전부 폐기 · FINDING 철회 · 포트는 사람이 우선 |
+| 2026-08-16T16:32:32+0900 | 발행 | REQ-0109 | root → arduino-engineer | 🔴 칩 위 펌웨어가 바뀌었다 — 사용자가 조별과제샘플/client.ino 로 재플래싱 · 15:30 미스터리 종결 |
+| 2026-08-16T16:32:42+0900 | 착수 | REQ-0107 | monitor-engineer → monitor-engineer | 서버 로그 계약 초안 v0.1 — 형식 확정 요청(날짜 없는 타임스탬프가 오늘 두 번 오독을 만들었다) |
+| 2026-08-16T16:33:10+0900 | 착수 | REQ-0109 | arduino-engineer → arduino-engineer | 🔴 칩 위 펌웨어가 바뀌었다 — 사용자가 조별과제샘플/client.ino 로 재플래싱 · 15:30 미스터리 종결 |
