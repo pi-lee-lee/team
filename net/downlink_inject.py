@@ -70,6 +70,7 @@ class Injector:
         self.n_not_injected = 0
         self.n_timeout = 0
         self.n_reconnect = 0
+        self.n_error = 0
 
     def log(self, mark, msg):
         line = "%s  %s %s" % (stamp(), mark, msg)
@@ -178,6 +179,17 @@ class Injector:
                 self.n_reconnect += 1
                 # 재접속을 즉시 반복하지 않는다. 서버가 죽어 있으면 초당 수십 번 두드리게 된다.
                 time.sleep(min(self.a.interval, 10))
+            except Exception as e:                      # noqa: BLE001
+                # 🔴 **무엇이 터지든 이 루프는 안 죽는다.**
+                # 8시간 무인으로 도는 물건이라, 예상 못 한 예외 하나로 프로세스가 사라지면
+                # **그 시점부터 창 끝까지 하행 칸이 조용히 빈다.** 그런데 로그에는
+                # "주입이 멈췄다"가 안 남아서, 아침에 보면 **D3(미실행)와 구별이 안 된다.**
+                # 죽는 것보다 **시끄럽게 살아 있는 것**이 낫다.
+                self.n_error += 1
+                self.log("!", "🔴 예상 못 한 예외(%s: %s) — 기록하고 계속한다"
+                         % (type(e).__name__, e))
+                self.close()
+                time.sleep(min(self.a.interval, 10))
 
             next_at += self.a.interval
             sleep_for = next_at - time.time()
@@ -191,9 +203,9 @@ class Injector:
 
     def summary(self):
         self.log("▣", "주입 종료 · 시도 %d · ACK(result=4) %d · ACK(다른 result) %d · "
-                       "미주입(서버거절) %d · 응답없음 %d · 재접속 %d"
+                       "미주입(서버거절) %d · 응답없음 %d · 재접속 %d · 예외 %d"
                  % (self.n_sent, self.n_ack, self.n_ack_other,
-                    self.n_not_injected, self.n_timeout, self.n_reconnect))
+                    self.n_not_injected, self.n_timeout, self.n_reconnect, self.n_error))
         self.log("▣", "⚠ 이 숫자는 **서버 왕복**만 말한다. 장치가 실제로 받았는지(②)는 "
                       "시리얼 로그가 있어야 갈린다 — D1 과 D2 는 monitor 가 가른다")
         self.log("▣", "🔴 **분모는 '시도'가 아니라 '시도 − 미주입' 이다.** 미주입은 서버가 "
