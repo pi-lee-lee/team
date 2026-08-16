@@ -5,7 +5,7 @@ from: root
 to: socket-engineer
 status: claimed
 created: 2026-08-16T17:43:21+0900
-updated: 2026-08-16T18:45:45+0900
+updated: 2026-08-16T18:58:56+0900
 files: ["조별과제샘플/server.cpp", "docs/net/plan-windows-and-mapping.md"]
 parent: none
 ---

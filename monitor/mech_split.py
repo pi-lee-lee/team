@@ -54,6 +54,13 @@ EV_CUT = "전송 3회 연속 실패".encode()        # 사건의 단위
 MARK_BUSY = b"busy"
 MARK_BANNER = b"System Ready"
 MARK_NOIP = b"0.0.0.0"
+# 🔑 펌웨어 **자신의 결론** 줄. 위 셋과 성격이 다르다 —
+#    ESP 의 원시 응답을 우리가 해석한 것이 아니라, 펌웨어가 3회 확인 끝에 내린 판정이다.
+#    그래서 UART 가 가비지를 뿜는 순간에도 이 줄은 온전하다.
+#    실측 반례가 이걸 찾게 했다: 18:48:12 리셋은 `AT+CIFSR` **응답 자체가 손상**돼
+#    `0.0.0.0` 문자열이 아예 안 찍혔다. `0.0.0.0` 은 정밀하지만 **완전하지 않다.**
+MARK_NOIP_FW = "CIFSR 3회에도 IP 가 없다".encode()
+MARK_REJOIN = b"CWJAP OK"                     # Wi-Fi 재결합 = 결합을 실제로 잃었다
 
 # 사건 시각 기준 탐색 창.
 #  뒤(-)로 넓게 보는 이유: 실패 1/3 은 3/3 보다 2~4초 앞서고 `busy`·배너가 그 사이에 온다.
@@ -126,19 +133,33 @@ def main() -> int:
         near = [r for tt, r in rows if a <= tt <= b]
         n_busy = sum(1 for r in near if MARK_BUSY in r)
         has_banner = any(MARK_BANNER in r for r in near)
-        has_noip = any(MARK_NOIP in r for r in near)
+        has_noip = any(MARK_NOIP in r for r in near) or any(MARK_NOIP_FW in r for r in near)
+        has_rejoin = any(MARK_REJOIN in r for r in near)
 
-        if has_noip:
-            mech, why = "B.리셋", "CIFSR 0.0.0.0"
-            if has_banner:
-                why += " + 배너"
-        elif has_banner:
-            # 배너만 있고 IP 소실이 없다 — 리셋일 수 있으나 판별자가 하나뿐이다.
-            mech, why = "B?.리셋의심", "배너만(0.0.0.0 없음)"
+        # ⚠ 라벨을 강제하지 않는다. 2026-08-16 18:55 에 이진 분류가 실제로 틀렸다 —
+        #   17:41 사건은 `busy`×12 와 IP 소실 표지를 **둘 다** 가졌는데
+        #   앞선 판(자해/리셋 택일)은 그것을 `자해` 한 칸에 밀어 넣고 IP 소실을 지웠다.
+        #   증거가 겹치면 겹친 대로 적는다. 라벨은 표지의 **요약**이지 그 반대가 아니다.
+        reset_like = has_banner or has_noip
+        if reset_like and n_busy:
+            mech = "AB.혼합"     # 두 기전의 표지가 같이 있다. 한쪽으로 세면 안 된다
+        elif reset_like:
+            mech = "B.리셋계열"
         elif n_busy:
-            mech, why = "A.자해", f"busy×{n_busy}, 리셋 표지 없음"
+            mech = "A.자해"
         else:
-            mech, why = "?.미상", "표지 없음"
+            mech = "?.미상"
+
+        ev = []
+        if n_busy:
+            ev.append(f"busy×{n_busy}")
+        if has_banner:
+            ev.append("배너")
+        if has_noip:
+            ev.append("IP소실")
+        if has_rejoin:
+            ev.append("Wi-Fi재결합")
+        why = " + ".join(ev) if ev else "표지 없음"
         out.append((t, mech, why, n_busy))
 
     print(f"\n## 사건(`전송 3회 연속 실패`) {len(events)}건")
@@ -154,7 +175,7 @@ def main() -> int:
         tally[mech] = tally.get(mech, 0) + 1
 
     print("\n## 갈래별 집계")
-    for k in ("A.자해", "B.리셋", "B?.리셋의심", "?.미상"):
+    for k in ("A.자해", "B.리셋계열", "AB.혼합", "?.미상"):
         n = tally.get(k, 0)
         rate = f"{n / hours:.2f}/h" if hours > 0 else "-"
         print(f"  {k:<12} {n:3d}   {rate}")
@@ -168,7 +189,11 @@ def main() -> int:
 
     print("\n## 읽는 법")
     print("  · `A.자해` 는 REQ-0116(busy 를 실패로 세지 않기)으로 사라질 것으로 기대되는 사건이다.")
-    print("  · `B.리셋` 은 카운터를 고쳐도 **안 사라진다.** 원인이 펌웨어 밖에 있다.")
+    print("  · `B.리셋계열` 은 카운터를 고쳐도 **안 사라진다.** 원인이 펌웨어 밖에 있다.")
+    print("  · 🔴 `AB.혼합` 을 어느 한쪽으로 밀어 넣지 마라. 표지가 겹친 것이고,")
+    print("       겹친 이유(리셋이 busy 를 유발했나, 그 반대인가)는 아직 안 밝혀졌다.")
+    print("  · IP소실 표지는 둘이다: `0.0.0.0`(정밀·불완전) + 펌웨어의 `CIFSR 3회에도 IP 없다`.")
+    print("       UART 가 가비지를 뿜으면 앞의 것은 놓친다 — 그래서 둘을 OR 로 본다.")
     print("  · 표본이 작으면 비율로 인용하지 마라. 건수와 구간 길이를 같이 적어라.")
     print("  · pre-A(16:59:54~17:53:07) 와 A 를 합산하지 마라 — 서버 인스턴스 수가 다르다.")
     return 0
