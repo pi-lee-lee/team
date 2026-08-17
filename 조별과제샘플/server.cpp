@@ -1344,6 +1344,29 @@ struct Server {
         return (long long)DOWN_BATCH_CAP_B * (DOWNQ_WAIT_CAP_MS / DOWN_SLOT_MS);
     }
 
+    // ── 🔴 **큐를 떠난 뒤의 최악 예산** (REQ-0166 · web 지적으로 추가)
+    //
+    // `expires_ms` 가 재는 것은 **큐 대기까지**다. 그러면 **이탈 후를 덮는 값이 화면 쪽에만
+    // 있게 되는데**, web 의 그 값(6000)이 내 실제 최악보다 작았다. 화면이 서버보다 먼저
+    // 롤백하면 사용자가 다시 누르고 **새 rid 로 큐에 한 건 더** 쌓인다 — 우리가 닫으려던 고리다.
+    // → **서버가 이 값을 같이 준다.** 화면은 받은 값을 쓰고 짐작하지 않는다.
+    //
+    // 🔑 **리터럴을 쓰지 않고 상수에서 계산한다.** 그래야 `ACK_TIMEOUT_MS`·`ACK_MAX_TRIES`·
+    // `DOWN_DMAX_MS` 를 나중에 누가 바꿔도 **이 값이 조용히 틀릴 수 없다.**
+    // (web 이 제시한 (다)안 — 합의 상수를 화면에 박기 — 의 약점이 정확히 "값이 바뀌면
+    //  조용히 틀린다" 였다. 계산으로 두면 그 약점이 구조적으로 사라진다.)
+    //
+    // 시도 한 번의 최악 = `ACK_TIMEOUT_MS` + **틱 해상도**(`SELECT_TICK_MS`).
+    //   ⚠ 내가 처음 6900 이라 적을 때 **이 틱 해상도를 안 셌다.** 타임아웃은 `tick()` 이
+    //   발견하는데 그건 최대 200ms 늦게 돈다. 3회면 600ms 가 빠져 있었다.
+    // 시도 사이의 창 대기 최악 = `DOWN_DMAX_MS`.
+    //   ⚠ 평시엔 한 슬롯(1200)이지만 **장치가 침묵하면 창 포기 경로(2400)가 상한**이다.
+    //   그 경로를 안 세면 하필 병리 구간에서 예산이 모자란다.
+    long long ack_budget_ms() const {
+        return (long long)ACK_MAX_TRIES * (ACK_TIMEOUT_MS + SELECT_TICK_MS)
+             + (long long)(ACK_MAX_TRIES - 1) * DOWN_DMAX_MS;
+    }
+
     // 큐에 있던 항목을 **전선에 못 내보낸 채** 끝낼 때.
     // 🔴 설계 §4-B 의 보장: **`queued` 를 보냈으면 그 뒤에 반드시 `ack` 또는 `error` 가 간다.**
     // 그 보장이 없으면 화면의 중간 상태가 영구가 된다.
@@ -1697,7 +1720,12 @@ struct Server {
           << ",\"slot\":" << (q.slot.empty() || q.slot == "??" ? std::string("null")
                                                               : std::string("\"") + q.slot + "\"")
           << ",\"ahead\":" << ahead
-          << ",\"expires_ms\":" << left << "}";
+          << ",\"expires_ms\":" << left
+          // 🔴 **이탈 후 예산**(REQ-0166). `expires_ms` 는 큐 대기까지만 덮으므로
+          // 이 둘을 더한 것이 화면이 기다려야 하는 전부다. **화면이 짐작하지 않는다.**
+          // ⚠ 필드를 더하는 것이 안전한 이유: `queued` 자체가 새 타입이라
+          // **모르는 화면은 프레임 통째로 무시한다** — 옛 화면을 깨뜨리는 경로가 없다.
+          << ",\"ack_budget_ms\":" << ack_budget_ms() << "}";
         if (q.ws_fd != BAD_SOCK && conns.count(q.ws_fd)) ws_send(q.ws_fd, o.str());
     }
     void send_ack(sock_t fd, const std::string& rid, const std::string& slot, int result,
