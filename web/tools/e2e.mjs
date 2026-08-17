@@ -19,7 +19,13 @@ const argv = process.argv.slice(2);
 const arg = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
 const PORT = arg('--port', null);
 const HEAD = argv.includes('--head');
-const LOG = arg('--log', '/Users/idong-u/parking-logs/parking-server.test+100.log');
+/* 🔴 로그 경로는 **포트에서 유도한다**(10500 → 오프셋 +600 → `test+600.log`).
+   전에는 `test+100` 이 기본값이었는데, +600 인스턴스에 붙였을 때 **엉뚱한 파일을 조용히 읽어**
+   "서버가 R 을 안 내보냈다"는 거짓 실패를 냈다(2026-08-17 실측). 예약은 멀쩡히 성공했고
+   화면도 "내 예약"이었는데 로그만 다른 데를 본 것이다.
+   ⚠ 이건 socket 이 고친 "기본값이 운영 포트" 사고와 같은 형태다 — **기본값이 딴 데를 가리키면
+   도구가 조용히 틀린 답을 낸다.** 그래서 기본값을 없애는 대신 **대상에서 유도**한다. */
+const LOG = arg('--log', process.env.HOME + '/parking-logs/parking-server.test+' + (Number(PORT) - 9900) + '.log');
 const OUT = new URL('../artifacts/', import.meta.url);
 
 if (!PORT) { console.error('--port 를 반드시 줘라 (기본값 없음: 운영 포트를 실수로 집지 않게 하려는 것)'); process.exit(2); }

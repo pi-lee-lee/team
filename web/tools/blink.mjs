@@ -103,6 +103,15 @@ function diff(a, b) {
 
 const log = [];
 const say = (s) => { console.log(s); log.push(s); };
+const note = (s) => say('  · ' + s);
+let failed = 0;
+/** 합격/불합격을 세는 단언. e2e.mjs 와 같은 형태로 맞춘다(초록이 곧 통과). */
+function check(name, cond, detail) {
+  const ok = !!cond;
+  if (!ok) failed++;
+  say('  ' + (ok ? '✅' : '❌') + ' ' + name + (detail !== undefined ? '  → ' + detail : ''));
+  return ok;
+}
 
 const client = await launch({ headless: true });
 try {
@@ -258,6 +267,73 @@ try {
       say('  최종 화면 = ' + JSON.stringify(await evaluate(client, tgt(free))));
       writeFileSync(new URL('blink-C' + i + '-log.txt', OUT), fresh.join('\n'));
       say('  이 회차의 서버 로그 조각 web/artifacts/blink-C' + i + '-log.txt');
+    }
+  }
+
+  if (CASE === 'D') {
+    /* D. 1초 아이들이 **실제 WS 경로**에서 도는가.
+       지금까지는 데모 경로(`demo.send`)로만 봤다 — 실제는 `ws.send` 이고, 둘 다 같은
+       stamp() 를 지난다는 것은 **판독**이었다. 그것을 실측으로 바꾼다. */
+    const tileOf = (slot) => `(() => { const b = document.querySelector('.tile[data-slot="${slot}"]');
+      return b ? { state: b.querySelector('.tile__state').textContent.trim(),
+                   meta: b.querySelector('.tile__meta').textContent.trim(),
+                   dis: b.getAttribute('aria-disabled') } : null; })()`;
+    const lockedCount = `[...document.querySelectorAll('.tile')].filter(x => x.getAttribute('aria-disabled')==='true').length`;
+
+    /* 0) 장치가 정말 붙어 있는가 — 얼었나 진동하나(§3.1.1). 측정 전에 이것부터 본다. */
+    const lfs = [];
+    for (let i = 0; i < 12; i++) { lfs.push(await evaluate(client, `(state.snapshot&&state.snapshot.device.last_frame_ts)||null`)); await sleep(250); }
+    const uniq = [...new Set(lfs)].length;
+    check('장치가 붙어 있다 (last_frame_ts 가 진동한다 — 얼어 있으면 부재)', uniq > 2, uniq + '개의 서로 다른 값 / 12표본');
+
+    const free = await evaluate(client, `(() => {
+      const b = [...document.querySelectorAll('.tile')].find(x =>
+        /빈 자리/.test(x.querySelector('.tile__state').textContent) && x.getAttribute('aria-disabled') !== 'true');
+      return b ? b.dataset.slot : null; })()`);
+    if (!free) { say('🔴 누를 수 있는 빈 자리가 없다'); }
+    else {
+      const before = await evaluate(client, `${lockedCount}`);
+      say('\n[D] ' + free + ' 예약 — 실제 WS 경로');
+      await click(client, `.tile[data-slot="${free}"]`);
+      await waitFor(client, `!!document.getElementById('confirm-dialog').open`, { what: '대화상자', timeout: 5000 });
+      await click(client, '#confirm-dialog button[value="ok"]');
+      const t0 = Date.now();
+
+      /* 아이들이 즉시 걸리는가 — 여기가 데모/WS 가 갈릴 수 있던 자리다 */
+      await sleep(150);
+      const during = await evaluate(client, tileOf(free));
+      const lockedDuring = await evaluate(client, `${lockedCount}`);
+      check('보내자마자 아이들이 걸린다 (칸 전체가 잠긴다)', lockedDuring === 10, lockedDuring + '칸 잠김 (누르기 전 ' + before + ')');
+      const other = await evaluate(client, `(() => { const b=[...document.querySelectorAll('.tile')].find(x=>x.dataset.slot!=='${free}');
+        return b ? b.querySelector('.tile__meta').textContent.trim() : ''; })()`);
+      check('남은 시간이 **다른 칸에도** 보인다 (전역이라는 증거)', /잠시 뒤 가능/.test(other), JSON.stringify(other));
+      note('예약한 칸 = ' + JSON.stringify(during));
+
+      /* 카운트다운이 실제로 줄어드는가 */
+      await sleep(500);
+      const mid = await evaluate(client, `(() => { const b=[...document.querySelectorAll('.tile')].find(x=>x.dataset.slot!=='${free}');
+        return b ? b.querySelector('.tile__meta').textContent.trim() : ''; })()`);
+      note('+0.65초 즈음 = ' + JSON.stringify(mid));
+
+      /* 스스로 풀리는가 */
+      await waitFor(client, `[...document.querySelectorAll('.tile')].filter(x => x.getAttribute('aria-disabled')==='true').length < 10`,
+                    { what: '아이들 해제', timeout: 5000 });
+      const releasedAt = Date.now() - t0;
+      check('아이들이 스스로 풀린다', releasedAt >= 900 && releasedAt <= 2000, releasedAt + 'ms 만에 해제');
+
+      /* 예약 자체는 정상으로 끝났는가 — 아이들이 왕복을 깨지 않았다는 확인 */
+      const after = await evaluate(client, tileOf(free));
+      check('예약이 정상 처리됐다 (아이들이 왕복을 깨지 않는다)', /내 예약/.test(after.state), JSON.stringify(after));
+
+      /* 정리 — 시험이 상태를 남기지 않는다 */
+      if (/내 예약/.test(after.state)) {
+        await click(client, `.tile[data-slot="${free}"]`);
+        await waitFor(client, `!!document.getElementById('confirm-dialog').open`, { what: '취소 대화상자', timeout: 5000 });
+        await click(client, '#confirm-dialog button[value="ok"]');
+        await waitFor(client, `!/내 예약/.test((document.querySelector('.tile[data-slot="${free}"]').querySelector('.tile__state').textContent))`,
+                      { what: '예약 해제', timeout: 15000 }).catch(() => {});
+        say('  정리: ' + JSON.stringify(await evaluate(client, tileOf(free))));
+      }
     }
   }
 
