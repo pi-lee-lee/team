@@ -406,6 +406,27 @@ static bool    pendReady = false;
 //   ⚠ 읽으면 지워지므로 **하한**이다(여러 번 넘쳐도 확인 지점 사이에서는 1로 뭉친다).
 //   ⚠ `rxOverflow` 와 **다른 것**이다: 저건 "줄이 너무 길다", 이건 "우리가 늦게 꺼냈다".
 static uint16_t ssOverflows = 0;
+
+// 🔴 2026-08-17 (REQ-0174 ①) — **줄의 첫 바이트가 도착한 시점의 슬롯 오프셋.**
+//
+// 왜 필요한가 — **앞 판본은 도착이 아니라 *처리* 시각을 찍고 있었다.**
+//   `[SLOT-OOW]` 를 `handleLine` 안에서 뜨는데, **송신 중 완성된 줄은 `pendLine` 에 갇혔다가
+//   송신이 끝난 뒤에야 처리된다**(아래 `feedRxChar`). 즉 **위험 구간에 도착한 것이
+//   바로 그 이유로 늦게 찍혀** 판정에서 빠졌다. **재려던 사건을 측정 지점이 밀어냈다.**
+//   실측 반증: 서버 재전송이 난 구간에서 `oow` 가 0 이었다(socket, 2차 주입).
+//
+// ⚠ **오프셋을 그 자리에서 계산해 저장한다.** 시각(`millis()`)을 저장했다가 나중에
+//   `slotStart` 와 빼면, 그 사이 `statusTick` 이 `slotStart` 를 전진시켜 **언더플로**가 난다
+//   (원장 §8.7 이 `lastTxOkAt` 에서 겪은 그것 — "앞 함수가 갱신하는 시각 변수"의 함정).
+//   **뺄셈을 도착 순간에 끝내면 그 위험이 원천적으로 없다.**
+static uint16_t rxLineOff   = 0;   // 지금 조립 중인 줄
+static uint16_t workLineOff = 0;   // handleLine 이 지금 보는 줄
+static uint16_t pendLineOff = 0;   // 송신 중이라 미뤄 둔 줄
+
+// ★ REQ-0174 ② — 체크섬 불일치 수. **`DEBUG` 밖에서 읽혀야 한다.**
+//   없으면 창 B 에서 "무손실"이 서버 계수만으로 선언된다 — 창 A 에서 실제로 그럴 뻔했다
+//   (서버는 무손실, 시리얼에는 `CKSUM NG` 4건).
+static uint16_t cksumNg = 0;
 static bool    inSend = false;         // 송신 중에는 줄을 처리하지 않고 미룬다(재진입 방지)
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -907,16 +928,21 @@ static void feedRxChar(char c) {
     uint8_t n = rxLen;
     rxLen = 0;                       // ★ 파싱 전에 먼저 비운다 — 아래에서 다시 채워질 수 있다
     if (inSend) {
-      if (!pendReady) { memcpy(pendLine, rxLine, (size_t)n + 1); pendReady = true; }
+      // ★ REQ-0174 — 줄과 **그 줄의 도착 오프셋**을 같이 미룬다. 여기서 오프셋을 안 들고 가면
+      //   나중에 처리 시각으로 계산돼 위험 구간이 통째로 보이지 않는다(위 `rxLineOff` 주석).
+      if (!pendReady) { memcpy(pendLine, rxLine, (size_t)n + 1); pendLineOff = rxLineOff; pendReady = true; }
       // 두 번째 줄은 버린다. 서버가 재전송하므로(§7.3) 잃지 않는다
     } else {
       memcpy(workLine, rxLine, (size_t)n + 1);
+      workLineOff = rxLineOff;
       handleLine(workLine);
     }
     return;
   }
   if (c == '\r') return;                                   // AT 응답의 CR. 명세는 CR 을 보내지 않는다
   if (rxLen >= RX_CAP - 1) { rxOverflow = true; return; }  // 넘치는 줄은 통째로 버린다
+  // ★ REQ-0174 — **줄의 첫 바이트**에서 슬롯 오프셋을 확정한다. 이것이 진짜 도착 시각이다.
+  if (rxLen == 0) rxLineOff = (uint16_t)((uint32_t)millis() - slotStart);
   rxLine[rxLen++] = c;
 }
 
@@ -1450,6 +1476,8 @@ static void cntTick(uint32_t now) {
   Serial.print(F(" smiss="));        Serial.print(slotMissed);      // 송신 기회를 놓친 슬롯
   // ★ REQ-0167 — SoftwareSerial 링버퍼(64B) 넘침. **하한이다**(읽으면 플래그가 지워진다).
   Serial.print(F(" ssovf="));        Serial.print(ssOverflows);
+  // ★ REQ-0174 — 체크섬 불일치(하행 프레임 파괴). 서버 계수로는 안 보이는 손실이다.
+  Serial.print(F(" cksumng="));      Serial.print(cksumNg);
   Serial.print(F(" skip="));         Serial.print(sendSkips);
   Serial.print(F(" online="));       Serial.println(netOnline ? 1 : 0);
 }
@@ -2165,6 +2193,10 @@ static void handleFrameLine(char* cand) {
 
   // 체크섬. AT 잡음이 우연히 R 로 시작해도 여기서 걸린다
   if (!checksumOk(cand, len)) {
+    // ★ REQ-0174 ② — **계수는 `DEBUG` 밖.** 원문 출력만 안이다(원장 §8.4-2 의 경계:
+    //   정수 계수는 밖 · 장문 진단은 안). 이 칸이 없으면 창 B 에서 손으로 못 찾고,
+    //   그러면 "무손실"이 서버 계수만으로 선언된다.
+    if (cksumNg < 65535) cksumNg++;
 #if DEBUG
     Serial.print(F("[CKSUM NG] ")); Serial.println(cand);
 #endif
@@ -2209,10 +2241,13 @@ static void handleLine(char* s) {
       //     `0` 은 "설계가 먹었다"와 "못 셌다"를 구별하지 못한다(원장 §5.1·§8.2-5).
       //     **이 표지가 그 둘을 가르는 유일한 줄이다.**
       //
-      //   ⚠ `millis()` 를 **새로 뜬다.** `loop()` 의 `now` 는 낡았고 `slotStart` 는
-      //     `statusTick()`(이 함수보다 **뒤**)에서 전진한다 — 낡은 값으로 판정하면
-      //     경계 근처에서 틀린다. 원장 §8.7-7 이 정확히 이 형태의 결함이었다.
-      const uint32_t sinceSlot = (uint32_t)(millis() - slotStart);
+      //   🔴 **2026-08-17 (REQ-0174) — 여기서 `millis()` 를 뜨면 안 된다.**
+      //     송신 중 도착한 줄은 `pendLine` 에 갇혔다가 **송신이 끝난 뒤** 이 함수에 온다.
+      //     그러면 **위험 구간에 도착한 것이 바로 그 이유로 늦게 찍혀 판정에서 빠진다** —
+      //     재려던 사건을 측정 지점이 밀어내는 것이다.
+      //     실측 반증: 서버 재전송이 난 구간에서 `oow` 가 0 이었다(socket, 2차 주입).
+      //   ✅ 이제 **줄의 첫 바이트를 받은 순간 확정된 오프셋**을 쓴다(`feedRxChar` 참조).
+      const uint32_t sinceSlot = (uint32_t)workLineOff;
       if (sinceSlot < TX_WINDOW_MS) {
         if (slotOow < 65535) slotOow++;
 #if DEBUG
@@ -2587,6 +2622,9 @@ static void handleLine(char* s) {
 static void drainPending(void) {
   if (!pendReady) return;
   memcpy(workLine, pendLine, RX_CAP);
+  // ★ REQ-0174 — **도착 오프셋을 같이 넘긴다.** 이 경로가 정확히 "송신 중 도착"이라
+  //   여기서 오프셋을 안 들고 오면 `[SLOT-OOW]` 가 위험 구간을 통째로 놓친다.
+  workLineOff = pendLineOff;
   pendReady = false;
   handleLine(workLine);
 }

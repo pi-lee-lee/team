@@ -90,6 +90,10 @@ static void arm(const char* refuse /* nullptr 이면 정상 프롬프트 */) {
   ackqClear();
   ssOverflows    = 0;        // ★ REQ-0167 — 여기도 같이 늘린다(위 주석이 시키는 대로)
   slotSent       = false;
+  cksumNg        = 0;        // ★ REQ-0174
+  rxLen          = 0;
+  pendReady      = false;
+  rxLineOff = workLineOff = pendLineOff = 0;
 }
 
 static const char* FRAME = "S,1,0000000000,0000000000,1,P1,";
@@ -471,21 +475,29 @@ int main() {
   //   내려지고 체크섬 검사는 그 뒤다. 그래서 로그에 `[CKSUM NG]` 가 떠도 이 시험과 무관하다.
   //   ★ 그래도 **왜 무관한지를 적어 둔다** — 원장 §8.2-15 에서 손으로 쓴 체크섬 때문에
   //     "ACK 가 안 나갔다"를 코드 결함으로 오독한 적이 있다. 무관함은 확인하고 쓰는 것이다.
+  // ✏️ **2026-08-17 개정 (REQ-0174)** — 원래 `handleLine()` 을 직접 불렀다.
+  //   그때는 `handleLine` 안에서 `millis()` 를 떠서 동작했지만, **실기 경로를 안 탔다.**
+  //   이제 도착 오프셋은 `feedRxChar` 가 **첫 바이트에서** 잡으므로 그 경로로 먹여야 한다.
+  //   ★ 수정이 이 사실을 드러냈다 — **시험이 실기와 다른 길로 들어가고 있었다.**
   printf("\n[19] 슬롯 위반 표지 — 송신 창에 하행이 오면 oow 가 오른다\n");
   arm(nullptr);
+  g_clockAutoAdvance = false;
   slotStart = millis();                         // 지금이 슬롯 시작 = 우리 송신 창
   slotOow = 0;
   {
-    char ipd[] = "+IPD,20:R,301,A1,u1,7B";
-    handleLine(ipd);
+    const char* line = "+IPD,20:R,301,A1,u1,7B";
+    for (const char* p = line; *p; ++p) feedRxChar(*p);
+    feedRxChar('\n');
     ok(slotOow == 1,            "★★ 송신 창에 도착한 하행이 위반으로 계상된다 (오른다!)");
   }
   {
     g_millis += TX_WINDOW_MS + 50;              // 수신 창으로 이동
-    char ipd2[] = "+IPD,20:R,302,A1,u1,78";
-    handleLine(ipd2);
+    const char* line2 = "+IPD,20:R,302,A1,u1,78";
+    for (const char* p = line2; *p; ++p) feedRxChar(*p);
+    feedRxChar('\n');
     ok(slotOow == 1,            "★★ 수신 창 도착은 위반이 아니다 (안 오른다)");
   }
+  g_clockAutoAdvance = true;
   // ── [20] 🔴 송신이 **창 안에서 끝나야** 한다 — 시작만으로는 부족하다 ────────
   //   창 끝자락에 시작하면 배치가 흐르는 동안 수신 창을 침범한다.
   //   (socket 이 flush 위치를 묻다가 드러난 실제 구멍이다. fdtest 엔 있던 가드가 본체에 없었다.)
@@ -528,6 +540,53 @@ int main() {
   wifi.injectOverflow();                        // 확인 사이에 두 번 넘쳤다
   pumpSerialRaw();
   ok(ssOverflows == 2,          "★★ 두 번 넘쳐도 1 만 오른다 — 뭉친다(하한의 근거)");
+
+  // ── [22] 🔴 `[SLOT-OOW]` 는 **도착** 시각을 재야 한다 — 처리 시각이 아니라 (REQ-0174)
+  //   앞 판본은 `handleLine` 에서 `millis()` 를 떴다. 송신 중 도착한 줄은 `pendLine` 에
+  //   갇혔다가 송신 후에 처리되므로 **위험 구간 도착이 바로 그 이유로 판정에서 빠졌다.**
+  //   ⚠ 이 시험은 **수정 전 판본에서 반드시 실패한다** — 그래야 무언가를 재는 시험이다(§8.2-15).
+  printf("\n[22] 송신 중 도착한 하행도 도착 시각으로 판정된다 (pendLine 우회로 보존)\n");
+  arm(nullptr);
+  g_clockAutoAdvance = false;
+  slotStart = millis();
+  slotOow = 0;
+  {
+    // 송신 창 한복판(=위험 구간)에 하행이 도착하되, **우리가 송신 중**이라 pendLine 으로 간다.
+    inSend = true;
+    g_millis += 100;                            // 슬롯 시작 +100ms 에 첫 바이트
+    const char* line = "+IPD,20:R,401,A1,u1,7B";
+    for (const char* p = line; *p; ++p) feedRxChar(*p);
+    g_millis += 400;                            // 송신이 길어져 처리 시점은 +500ms
+    feedRxChar('\n');                           // 줄 완성 — inSend 라 pendLine 에 갇힌다
+    ok(pendReady,                 "송신 중이라 줄이 미뤄졌다");
+    ok(slotOow == 0,              "아직 처리 전이라 계상되지 않았다");
+
+    inSend = false;
+    g_millis += 200;                            // 처리 시점은 +700ms = 수신 창(위험 구간 아님)
+    drainPending();
+    ok(slotOow == 1,
+       "★★ 처리 시각(+700ms)이 아니라 **도착 시각(+100ms)** 으로 판정된다");
+    //   ⚠ 수정 전에는 여기서 0 이었다 — 처리 시각 700ms 가 TX_WINDOW_MS(600) 밖이라
+    //     "안전한 도착"으로 분류됐다. **위험 구간 도착을 정확히 놓치는 형태였다.**
+  }
+  g_clockAutoAdvance = true;
+
+  // ── [23] `cksumng` 계수 (REQ-0174 ②) ──────────────────────────────────────
+  printf("\n[23] 체크섬 불일치가 cksumng 에 계상된다\n");
+  arm(nullptr);
+  cksumNg = 0;
+  {
+    char bad[] = "R,501,A1,u1,00";              // 체크섬을 일부러 틀리게 둔다
+    handleFrameLine(bad);
+    ok(cksumNg == 1,             "★★ 파괴된 프레임이 계수된다 (서버 계수로는 안 보이는 손실)");
+  }
+  {
+    char good[32];
+    snprintf(good, sizeof(good), "R,502,A1,u1,");
+    appendChecksum(good, (uint8_t)strlen(good));
+    handleFrameLine(good);
+    ok(cksumNg == 1,             "★ 정상 프레임은 올리지 않는다");
+  }
 
   // ── [13] SEND FAIL 은 실패로 센다 — **원래 있던 구멍** ─────────────────────
   // 프롬프트까지 받고 페이로드도 썼는데 전송이 실패한 것이라 `busy` 와 전혀 다르다.
