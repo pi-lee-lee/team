@@ -55,8 +55,18 @@ def stamp():
 
     `HH:MM:SS` 만 찍으면 읽는 사람이 **반드시** 오독한다. 관측자는 로그를 잘라 읽으므로
     "부분 문자열만 봐도 절대시각이 확정되는 것"이 이 형식의 전부다.
+
+    🔴 **ms 를 붙인다 (2026-08-18, monitor 요청)** — 형식 `YYYY-MM-DD HH:MM:SS.mmm`.
+    **초 해상도로는 갈리지 않는 것이 있다**: 창 A2 에서 `[SLOT-OOW]` 도착 오프셋의
+    **130ms 아래가 비어** 있는데, *"그 위상에 안 왔다"* 와 *"와서 흔적 없이 사라졌다"* 를
+    구별할 수 없었다. **내 발신 시각이 ms 면 기대 도착 오프셋을 계산해 `+IPD` 없는 건을 셀 수 있다**
+    (`wire_rid=1086` — 3회 소진인데 monitor 로그에 `CKSUM NG` 도 `+IPD` 도 없던 건 — 이 그 사각의 증거다).
+
+    ⚠ **형식 변경은 계약 변경이다**(원장 §6). 뒤에 `.mmm` 이 붙는 것만 다르고 앞은 그대로이므로
+    `YYYY-MM-DD HH:MM:SS` 로 자르는 파서는 그대로 동작한다. **monitor 에 형식을 통보한다.**
     """
-    return time.strftime("%Y-%m-%d %H:%M:%S")
+    t = time.time()
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(t)) + ".%03d" % int((t % 1) * 1000)
 
 
 class Injector:
