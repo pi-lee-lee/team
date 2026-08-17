@@ -91,5 +91,31 @@ console.log('\n[5] 🔴 회귀 방지 — 시험 인스턴스에서 운영 포�
      /const url = wsTargetUrl\(\);/.test(src) && r === 'ws://127.0.0.1:10000/ws');
 }
 
+console.log('\n[6] 🔴 하행 큐 거절 코드 둘이 자기 문구를 갖는다 (REQ-0155 계약 · 원본 DESIGN-server-slot-queue.md §4-B)');
+{
+  /* 파일에서 실제 객체를 뽑는다 — 복사본을 두면 검사가 거짓말을 한다([2] 와 같은 이유).
+     이 검사의 형태가 중요하다: 코드가 없던 동안 빨간불이고 넣으면 저절로 초록이며
+     그 뒤로는 회귀 감시가 된다. "결함이 있다"를 단언하는 검사는 고치는 순간
+     거짓 경보가 된다 — 그 함정을 한 번 밟았다(LEDGER §5.3). */
+  const lit = grab(/const ERROR_TEXT = \{[\s\S]*?\n\};/, 'ERROR_TEXT');
+  let T = null;
+  try { T = new Function(lit + '\nreturn ERROR_TEXT;')(); }
+  catch (e) { ok('ERROR_TEXT 를 파일에서 뽑아 평가했다', false, e.message); }
+
+  if (T) {
+    for (const code of ['queue_full', 'already_pending']) {
+      const v = T[code];
+      ok(code + ' 에 문구가 있다', typeof v === 'string' && v.trim().length > 0,
+         '없으면 화면이 "오류가 발생했습니다" 로 떨어져 사용자 잘못으로 읽힌다 → 재클릭 → 큐 증폭');
+    }
+    // 계약이 요구하는 것은 "있다"가 아니라 **갈린다**는 것이다(시스템 사정 대 사용자 잘못 아님).
+    ok('두 문구가 서로 다르다', T.queue_full !== T.already_pending, JSON.stringify(T.queue_full));
+    // 복사-붙여넣기로 다른 코드의 문구를 재사용하면 원인을 못 가른다.
+    const vals = Object.values(T);
+    ok('모든 error code 가 서로 다른 문구를 쓴다 (' + vals.length + '개)',
+       new Set(vals).size === vals.length, JSON.stringify(vals));
+  }
+}
+
 console.log('\n' + (fail === 0 ? '통과' : '실패') + ' — ' + pass + ' pass / ' + fail + ' fail\n');
 process.exit(fail === 0 ? 0 : 1);
