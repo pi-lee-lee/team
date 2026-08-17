@@ -1,0 +1,4 @@
+# winA 상시 요약 — 원본 monitor/serial-winA.log · **누적값**이다(구간값 아님).
+# 판정 자료가 아니라 생존 눈금이다. 갈래·λ·도달률을 여기서 만들지 마라.
+iso	ser_bytes	ser_lines	ser_last	fail3	banner	txresync	txwait_skip	txwait_okto	busy	tx	sendok	ipd	stall	srv_accept	srv_sframe	srv_ack	srv_down	tap_pids	grew
+2026-08-17T21:12:47	745267	17499	21:12:47	0	1	0	239	13	2	4	2344	693	1	3160	3159	1060	0	44	62821	1158	1271	51860	?

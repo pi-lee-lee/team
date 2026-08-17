@@ -75,7 +75,19 @@ SER_MARKS = {
     "txresync": b"[TX-RESYNC]",                   # ⚠ [CNT] resync= 와 다르다
     "txdrop": b"[TX-DROP]",                       # ⚠ [CNT] drop= 와 다르다 ← 사고를 낸 칸
     "txwait_skip": "이번 주기는 건너뛴다".encode(),  # ⚠ [CNT] skip= 와 다르다
-    "txwait_okto": "상한 초과".encode(),           # ⚠ [CNT] okto= 와 다르다
+    # 🔴 2026-08-17 21:1x 정정 — `상한 초과` 는 **slot2 에서 안 찍히는 문구다.**
+    #   창 A 에서 이 칸이 16,183줄을 훑고도 `0` 이었는데 `[CNT] okto=13` 이었다.
+    #   즉 **계수기는 오르는데 내 감시는 0** — 조용히 낡은 칸이다(원장 7.102 계열).
+    #   slot2 의 실제 문구는 둘로 갈렸다:
+    #     `★ T1 초과 — 그래도 계속 기다린다`      = [CNT] okto  (창 A 13건 ↔ okto=13 일치)
+    #     `★★ T2 초과 — … → 링크를 다시 세운다`   = [CNT] stuck (창 A  2건 ↔ stuck=2 일치)
+    "txwait_okto": "T1 초과".encode(),             # ⚠ [CNT] okto= 와 같은 사건, 다른 계층
+    "txwait_t2": "T2 초과".encode(),               # 🔴 링크 재수립 방아쇠 = 창 A 링크 사건 2건
+    # 🔴 하행 프레임 파괴 — 창 A 의 핵심 발견이 이 줄이었는데 감시 칸이 없어서 손으로 찾았다.
+    #   장치가 스스로 내린 체크섬 판정이라 내 로그의 문자 손상에 안 흔들린다.
+    "cksumng": "[CKSUM NG]".encode(),
+    "slotline": "[SLOT] n=".encode(),              # 분모(슬롯 수) — `ack=0` 슬롯도 찍힌다
+    "slotoow": "[SLOT-OOW]".encode(),              # ⚠ 오프셋은 **처리 시각**이다(원장 7.104)
     "busy": b'"busy ',
     "tx": b"[TX] ",
     "sendok": b'"SEND OK"',
@@ -193,7 +205,11 @@ def main() -> int:
             #    파일명과 내용이 어긋나면 나중에 어느 창 자료인지 다투게 된다(원장 1.5).
             f.write(f"# {_stem} 상시 요약 — 원본 {SER} · **누적값**이다(구간값 아님).\n")
             f.write("# 판정 자료가 아니라 생존 눈금이다. 갈래·λ·도달률을 여기서 만들지 마라.\n")
+            # 🔴 칸을 추가할 때는 **머리글과 값 쓰기를 같이** 고쳐라 — 2026-08-17 21:1x 에
+            #   값만 넣고 머리글을 안 고쳐서 **칸이 밀린 TSV** 를 한 주기 썼다.
+            #   그 파일은 열 수가 안 맞아 **조용히 틀린 표**가 된다(형식이 방어하지 못하는 자리다).
             f.write("iso\tser_bytes\tser_lines\tser_last\tfail3\tbanner\ttxresync\ttxwait_skip\ttxwait_okto\t"
+                    "txwait_t2\tcksumng\tslotline\tslotoow\t"
                     "busy\ttx\tsendok\tipd\tstall\tsrv_accept\tsrv_sframe\tsrv_ack\tsrv_down\t"
                     "tap_pids\tgrew\n")
     prev = -1
@@ -221,6 +237,7 @@ def main() -> int:
             f.write("\t".join(str(x) for x in [
                 now.strftime("%Y-%m-%dT%H:%M:%S"), s["_bytes"], s["_lines"], s["_last_ts"],
                 s["fail3"], s["banner"], s["txresync"], s["txwait_skip"], s["txwait_okto"],
+                s["txwait_t2"], s["cksumng"], s["slotline"], s["slotoow"],
                 s["busy"], s["tx"], s["sendok"], s["ipd"], s["stall"],
                 v["srv_accept"], v["srv_sframe"], v["srv_ack"], v["srv_down"],
                 ",".join(pids) or "-", grew]) + "\n")
