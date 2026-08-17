@@ -74,6 +74,8 @@ class Injector:
         # 큐 도입(REQ-0158) 뒤 생긴 **중간 상태**. 결말이 아니므로 다른 칸과 합치지 않는다 —
         # 합치면 "아직 전선에 안 나간 것"이 성공이나 실패로 세어진다.
         self.n_queued = 0
+        self.streak_offline = 0     # `device_offline` 연속 — `check_stop` 만 갱신한다
+        self.stopped_reason = None  # 중단 조건으로 멈췄으면 그 이유. None = 정상 종료
 
     def log(self, mark, msg):
         line = "%s  %s %s" % (stamp(), mark, msg)
@@ -185,6 +187,51 @@ class Injector:
                  % (rid, self.a.ack_timeout))
         return "timeout"
 
+    # ═══ 중단 조건 — **조건과 검사 코드가 같은 자리에 있다** ══════════════════════════
+    #
+    # 🔴 **왜 여기 모아 두는가**: 2026-08-17 창 A 에서 내가 중단 조건을 REQ 파일에 적어 두고
+    # **그 조건이 걸린 칸을 한 번도 폴링하지 않았다.** 조건은 21:00:37 에 충족됐는데 주입은
+    # 21:03:14 까지 약 130건 더 돌았다. 원인은 **"움직일 것으로 기대한 칸만 봤고
+    # 멈추라고 정해 둔 칸은 안 봤다"** 였다.
+    #
+    # > **조건을 적는 것과 그 조건을 보는 감시를 만드는 것은 다르다.**
+    #
+    # 상수만 딴 데 두고 검사를 사람에게 맡기면 **같은 일이 또 난다.**
+    # 그래서 **문턱·검사·문구가 이 함수 하나에 있다.** 고칠 때도 한 자리만 본다.
+    #
+    # ⚠ **내가 볼 수 없는 것은 조건으로 두지 않는다.** 예: "장치 세션 종료 N회"는
+    # 서버 로그에만 있고 내 WS 에는 안 온다 — 그건 monitor 의 몫이고, 여기 적어 두면
+    # **검사되지 않는 조건이 검사되는 것처럼 보인다.** 그게 이 결함의 원래 모양이다.
+    #   → 다만 장치가 오프라인이 되면 서버가 내 주입을 `device_offline` 로 거절하므로
+    #     아래 ①이 **그 사건의 대리 지표**가 된다.
+    def check_stop(self, kind):
+        """방금 주입의 결과(`kind`)를 반영하고, 멈춰야 하면 이유 문자열을 돌려준다."""
+        # 연속 카운터는 여기서만 갱신한다 — 갱신과 검사가 갈라지면 또 어긋난다.
+        if kind == "not_injected":
+            self.streak_offline += 1
+        else:
+            self.streak_offline = 0
+
+        a = self.a
+        # ① 장치 오프라인 연속 — **장치가 없는데 넣으면 분모만 오염시킨다**
+        if a.stop_offline_streak and self.streak_offline >= a.stop_offline_streak:
+            return ("장치 오프라인 %d건 연속 (문턱 %d) — 서버가 전선에 안 내보내고 있다"
+                    % (self.streak_offline, a.stop_offline_streak))
+        # ② `result` 가 4 가 아니다 — **무장돼 있으면 이 주입이 상태를 바꾼다**
+        if a.stop_bad_result and self.n_ack_other >= a.stop_bad_result:
+            return ("result≠4 가 %d건 (문턱 %d) — 무장 상태를 의심해라. 상태를 바꾸고 있을 수 있다"
+                    % (self.n_ack_other, a.stop_bad_result))
+        # ③ 응답없음 누적 — **하행이 실제로 실패하고 있다**(3회 재전송까지 소진된 것)
+        #    🔴 창 A 3차가 이 칸에서 3 을 찍었다. 이 규칙이 있었으면 그때 멈췄다.
+        if a.stop_timeouts and self.n_timeout >= a.stop_timeouts:
+            return ("응답없음 %d건 (문턱 %d) — 하행이 재전송까지 소진하고 실패하고 있다"
+                    % (self.n_timeout, a.stop_timeouts))
+        # ④ 알 수 없는 거절·예외·재접속 — **모르는 것이 반복되면 멈추고 사람이 본다**
+        if a.stop_errors and (self.n_error + self.n_reconnect) >= a.stop_errors:
+            return ("알 수 없는 거절/예외/재접속 합 %d건 (문턱 %d)"
+                    % (self.n_error + self.n_reconnect, a.stop_errors))
+        return None
+
     def _wait_with_heartbeat(self, total):
         """첫 주입까지 기다리면서 주기적으로 살아 있음을 남긴다."""
         if total <= 0:
@@ -228,7 +275,7 @@ class Injector:
             try:
                 if self.sock is None:
                     self.connect()
-                self.inject(rid)
+                kind = self.inject(rid)
                 # 🔴 **주입이 끝나면 즉시 닫는다. 연결을 주기 내내 붙들지 않는다.**
                 #
                 # 서버는 **S 프레임마다 스냅샷을 WS 로 밀어 준다**(약 1KB · 1Hz).
@@ -245,6 +292,14 @@ class Injector:
                 # 부수 효과로 **주입마다 연결이 독립**된다 — 상한 소켓이 남긴 상태가
                 # 다음 주입의 판정을 오염시키지 못한다(가짜 `미주입`이 안 생긴다).
                 self.close()
+                # 🔴 **매 주기 검사한다.** 사람이 보는 것에 맡기지 않는다 — 그게 창 A 의 결함이었다.
+                reason = self.check_stop(kind)
+                if reason:
+                    self.stopped_reason = reason
+                    # **조용히 멈추지 않는다.** 안 남기면 "끝났나 죽었나"를 못 가른다(§5.2).
+                    self.log("🛑", "**중단 조건 충족 — 주입을 멈춘다** (i=%d/%s) · %s"
+                             % (i, (str(self.a.count) if self.a.count else "무한"), reason))
+                    break
             except (OSError, ConnectionError) as e:
                 self.log("!", "연결 문제(%s) — 재접속한다" % e)
                 self.close()
@@ -274,6 +329,13 @@ class Injector:
         self.summary()
 
     def summary(self):
+        # 🔴 **정상 종료와 중단을 요약에서 갈라 준다.** 안 갈라 두면 `시도 130` 이
+        # "그만큼만 계획했다"인지 "멈췄다"인지 구별되지 않는다 — §5.2 의 그 자리다.
+        if self.stopped_reason:
+            self.log("🛑", "**중단으로 끝났다** — %s" % self.stopped_reason)
+            self.log("🛑", "⚠ 이 회차의 표본은 계획보다 적다. **분모를 `시도` 로 쓰고 계획 수로 쓰지 마라**")
+        else:
+            self.log("▣", "계획대로 끝났다(중단 조건 미충족)")
         self.log("▣", "주입 종료 · 시도 %d · ACK(result=4) %d · ACK(다른 result) %d · "
                        "미주입(서버거절) %d · 응답없음 %d · 재접속 %d · 예외 %d · 큐대기통보 %d"
                  % (self.n_sent, self.n_ack, self.n_ack_other,
@@ -301,6 +363,16 @@ def main():
     ap.add_argument("--ack-timeout", type=float, default=30.0,
                     help="ACK 마감(초). monitor 짝짓기 시한과 같은 30초")
     ap.add_argument("--count", type=int, default=0, help="주입 횟수(0=무한)")
+    # ── 중단 조건 문턱. **검사 코드는 `check_stop()` 안에 있고 문구도 거기 있다.**
+    #    🔴 문턱만 여기 두고 검사를 사람에게 맡기는 것이 창 A 의 결함이었다. 0 = 그 규칙 끔.
+    ap.add_argument("--stop-offline-streak", type=int, default=5,
+                    help="장치 오프라인 연속 N건이면 스스로 멈춘다 (0=끔)")
+    ap.add_argument("--stop-bad-result", type=int, default=2,
+                    help="result≠4 가 누적 N건이면 멈춘다 — 상태를 바꾸고 있다는 뜻 (0=끔)")
+    ap.add_argument("--stop-timeouts", type=int, default=3,
+                    help="응답없음 누적 N건이면 멈춘다. **창 A 3차가 이 칸에서 3 을 찍었다** (0=끔)")
+    ap.add_argument("--stop-errors", type=int, default=5,
+                    help="알 수 없는 거절+예외+재접속 합 N건이면 멈춘다 (0=끔)")
     ap.add_argument("--rid-prefix", default="inj",
                     help="rid 접두. **회차를 갈라야 할 때 바꿔라**(예: inj2). "
                          "기본값이면 실행마다 rid 가 1 부터 다시 시작해 "
