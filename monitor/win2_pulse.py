@@ -85,7 +85,10 @@ SER_MARKS = {
     "txwait_t2": "T2 초과".encode(),               # 🔴 링크 재수립 방아쇠 = 창 A 링크 사건 2건
     # 🔴 하행 프레임 파괴 — 창 A 의 핵심 발견이 이 줄이었는데 감시 칸이 없어서 손으로 찾았다.
     #   장치가 스스로 내린 체크섬 판정이라 내 로그의 문자 손상에 안 흔들린다.
-    "cksumng": "[CKSUM NG]".encode(),
+    # 🔴 이름을 `cksumng` 으로 두면 **펌웨어 `[CNT] cksumng=` 과 같은 이름**이 된다.
+    #   `WIN4-STATUS` 의 `drop` 사고(로그 줄 수를 펌웨어 계수기로 읽고 가설을 세웠다)와
+    #   같은 자리다. → **`_lines` 접미로 층을 이름에 박는다**(루트 지적 21:2x).
+    "cksumng_lines": "[CKSUM NG]".encode(),
     "slotline": "[SLOT] n=".encode(),              # 분모(슬롯 수) — `ack=0` 슬롯도 찍힌다
     "slotoow": "[SLOT-OOW]".encode(),              # ⚠ 오프셋은 **처리 시각**이다(원장 7.104)
     "busy": b'"busy ',
@@ -209,7 +212,7 @@ def main() -> int:
             #   값만 넣고 머리글을 안 고쳐서 **칸이 밀린 TSV** 를 한 주기 썼다.
             #   그 파일은 열 수가 안 맞아 **조용히 틀린 표**가 된다(형식이 방어하지 못하는 자리다).
             f.write("iso\tser_bytes\tser_lines\tser_last\tfail3\tbanner\ttxresync\ttxwait_skip\ttxwait_okto\t"
-                    "txwait_t2\tcksumng\tslotline\tslotoow\t"
+                    "txwait_t2\tcksumng_lines\tslotline\tslotoow\t"
                     "busy\ttx\tsendok\tipd\tstall\tsrv_accept\tsrv_sframe\tsrv_ack\tsrv_down\t"
                     "tap_pids\tgrew\n")
     prev = -1
@@ -237,7 +240,7 @@ def main() -> int:
             f.write("\t".join(str(x) for x in [
                 now.strftime("%Y-%m-%dT%H:%M:%S"), s["_bytes"], s["_lines"], s["_last_ts"],
                 s["fail3"], s["banner"], s["txresync"], s["txwait_skip"], s["txwait_okto"],
-                s["txwait_t2"], s["cksumng"], s["slotline"], s["slotoow"],
+                s["txwait_t2"], s["cksumng_lines"], s["slotline"], s["slotoow"],
                 s["busy"], s["tx"], s["sendok"], s["ipd"], s["stall"],
                 v["srv_accept"], v["srv_sframe"], v["srv_ack"], v["srv_down"],
                 ",".join(pids) or "-", grew]) + "\n")
@@ -284,7 +287,7 @@ def main() -> int:
             f.write(f"| 시리얼 마지막 줄 시각 | `{s['_last_ts'] or '-'}` |\n")
             f.write(f"| 시리얼 크기 | {s['_bytes']:,} B · {s['_lines']:,} 줄 |\n\n")
             f.write("## 시리얼 누계 — 🔴 **로그 줄 수다. 펌웨어 `[CNT]` 계수기가 아니다**\n\n")
-            f.write("> `txdrop`·`txresync`·`txwait_skip`·`txwait_okto` 는 `[CNT]` 의 같은 이름\n")
+            f.write("> `txdrop`·`txresync`·`txwait_skip`·`txwait_okto`·`cksumng_lines`·`slotoow` 는\n"                    "`[CNT]` 의 같은/비슷한 이름\n")
             f.write("> 필드와 **다른 것을 센다.** 펌웨어 값은 아래 `[CNT]` 줄을 그대로 봐라.\n\n")
             f.write("| 표지(줄 수) | 누계 | 찾은 문자열 |\n|---|---|---|\n")
             # 🔴 `0` 규약 — 0 이면 **찾은 문자열과 분모**를 같이 보여 준다(원장 7.44).
