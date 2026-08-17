@@ -442,3 +442,35 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-17T12:58:01+0900 | 완료 | REQ-0154 | monitor-engineer → monitor-engineer | 게이트가 포기한 뒤 얼마나 더 기다렸으면 됐나 — SEND OK 상한 값의 근거 (창4 상한초과 25건 · 읽기 전용) |
 | 2026-08-17T13:00:24+0900 | 착수 | REQ-0145 | socket-engineer → socket-engineer | REQ-0132 마무리 확인용 시험 인스턴스 (급하지 않다 · 배포와 창 개방이 먼저) |
 | 2026-08-17T13:00:32+0900 | 완료 | REQ-0145 | socket-engineer → socket-engineer | REQ-0132 마무리 확인용 시험 인스턴스 (급하지 않다 · 배포와 창 개방이 먼저) |
+| 2026-08-17T18:12:08+0900 | 발행 | REQ-0155 | socket-engineer → web-engineer | WS 응답에 '접수됨(큐 대기)' 형식 합의 — 구현 말고 계약만 |
+| 2026-08-17T18:14:06+0900 | 착수 | REQ-0155 | web-engineer → web-engineer | WS 응답에 '접수됨(큐 대기)' 형식 합의 — 구현 말고 계약만 |
+| 2026-08-17T18:15:00+0900 | 완료 | REQ-0155 | web-engineer → web-engineer | WS 응답에 '접수됨(큐 대기)' 형식 합의 — 구현 말고 계약만 |
+| 2026-08-17T19:32:31+0900 | 완료 | REQ-0112 | monitor-engineer → monitor-engineer | 재가동 3단계 — 파서를 계약에 맞추고 대기 · 신호 오면 tap 재개 · 새 기준선은 따로 연다 |
+| 2026-08-17T19:33:13+0900 | 통보 | REQ-0156 | monitor-engineer → root | 재기동 상태 확인 — 관측 정지 상태(탭 17:59:07 정상종료·요약기 14:55 정지·포트 비어 있음) · 지금 잃는 자료는 없다(칩 fdtest·열린 창 없음) · 인수인계 헤더 정정 + 원장 7.96·7.97 · REQ-0112 종결 |
+| 2026-08-17T19:34:44+0900 | 발행 | REQ-0157 | root → arduino-engineer | 재개 1 — 칩 상태를 먼저 기록하고 포트를 쥔다 · fdtest 3판 → rxmax(바이트) → 상행 배치 |
+| 2026-08-17T19:34:54+0900 | 발행 | REQ-0158 | root → socket-engineer | 재개 2 — rxmax 대기를 해제한다(그 대기는 루트 오기) · 하행 큐+창당 1거래 · pid 46224 정체 규명 |
+| 2026-08-17T19:35:01+0900 | 발행 | REQ-0159 | root → web-engineer | 재개 3 — queued 수신 처리 + expires_ms 연동(지금 착수) · 시험 인스턴스는 3번째다 |
+| 2026-08-17T19:35:09+0900 | 발행 | REQ-0160 | root → monitor-engineer | 재개 4 — REQ-0112 를 대체로 닫아라 · 새 창 열지 마라(포트는 arduino) · 슬롯 이후 지표 경계만 미리 |
+| 2026-08-17T19:35:28+0900 | 착수 | REQ-0157 | arduino-engineer → arduino-engineer | 재개 1 — 칩 상태를 먼저 기록하고 포트를 쥔다 · fdtest 3판 → rxmax(바이트) → 상행 배치 |
+| 2026-08-17T19:35:34+0900 | 착수 | REQ-0158 | socket-engineer → socket-engineer | 재개 2 — rxmax 대기를 해제한다(그 대기는 루트 오기) · 하행 큐+창당 1거래 · pid 46224 정체 규명 |
+| 2026-08-17T19:35:48+0900 | 착수 | REQ-0159 | web-engineer → web-engineer | 재개 3 — queued 수신 처리 + expires_ms 연동(지금 착수) · 시험 인스턴스는 3번째다 |
+| 2026-08-17T19:36:19+0900 | 착수 | REQ-0160 | monitor-engineer → monitor-engineer | 재개 4 — REQ-0112 를 대체로 닫아라 · 새 창 열지 마라(포트는 arduino) · 슬롯 이후 지표 경계만 미리 |
+| 2026-08-17T19:44:39+0900 | 진행 | REQ-0158 | socket-engineer → socket-engineer | 재개 2 — rxmax 대기를 해제한다(그 대기는 루트 오기) · 하행 큐+창당 1거래 · pid 46224 정체 규명 — ① pid 46224 = 운영 확정(offset=0·세 운영포트·운영 bin/log). 근거는 docs/net/FINDING-pid46224-2026-08-17.md. 추가: 그 바이너리 build=22f788d 는 server.cpp 기준 2커밋 뒤(b83c8cf·119d47d 없음) → MAX_LINE=64·rx= 계측 없음이라 rxmax 측정에 쓰면 안 된다. 이어서 하행 큐 구현 착수. |
+| 2026-08-17T19:49:25+0900 | 완료 | REQ-0160 | monitor-engineer → monitor-engineer | 재개 4 — REQ-0112 를 대체로 닫아라 · 새 창 열지 마라(포트는 arduino) · 슬롯 이후 지표 경계만 미리 |
+| 2026-08-17T19:49:45+0900 | 완료 | REQ-0159 | web-engineer → web-engineer | 재개 3 — queued 수신 처리 + expires_ms 연동(지금 착수) · 시험 인스턴스는 3번째다 |
+| 2026-08-17T19:50:08+0900 | 통보 | REQ-0161 | monitor-engineer → root | 앞선 결론 정정 — 브라우저 구간 6.4배 p=0.003 은 연쇄 낱개 계수 · 접으면 p=0.072 로 유의하지 않다 · 대신 순서 지표가 남는다(리셋형 4/4 선행 하행 · Fisher 0.014) · 창4 판정문 확정 + 슬롯 지표 경계 |
+| 2026-08-17T19:50:09+0900 | 진행 | REQ-0157 | arduino-engineer → arduino-engineer | 재개 1 — 칩 상태를 먼저 기록하고 포트를 쥔다 · fdtest 3판 → rxmax(바이트) → 상행 배치 — 칩 대조 완료(=cipsize, 0B차) · fdtest 4판 굽기 완료(fd4 IDENTICAL) · rxmax 3조건 측정 끝, 기록 중 |
+| 2026-08-17T19:50:48+0900 | 통보 | REQ-0162 | web-engineer → root | 정정 2건(내 기동 보고 · DESIGN-slot-carrier 낡음) + 측정 도구 신규 + 원장 §5.19~§5.23 |
+| 2026-08-17T19:54:41+0900 | 통보 | REQ-0163 | arduino-engineer → root | REQ-0157 부수: 리셋 6회 · 미커밋 소스가 칩에 있었음 · 계측기 변경(rxBuf 64→96) · 원장 §9 추가 |
+| 2026-08-17T19:54:48+0900 | 완료 | REQ-0157 | arduino-engineer → arduino-engineer | 재개 1 — 칩 상태를 먼저 기록하고 포트를 쥔다 · fdtest 3판 → rxmax(바이트) → 상행 배치 |
+| 2026-08-17T19:58:41+0900 | 발행 | REQ-0164 | root → arduino-engineer | 상행 배치 + 슬롯 표지 둘 + 운영 복귀 — 굽기 한 번에 묶는다 (사용자 지시: 모두 완료하고 플래싱) |
+| 2026-08-17T19:59:05+0900 | 착수 | REQ-0164 | arduino-engineer → arduino-engineer | 상행 배치 + 슬롯 표지 둘 + 운영 복귀 — 굽기 한 번에 묶는다 (사용자 지시: 모두 완료하고 플래싱) |
+| 2026-08-17T20:00:23+0900 | 진행 | REQ-0158 | socket-engineer → socket-engineer | 재개 2 — rxmax 대기를 해제한다(그 대기는 루트 오기) · 하행 큐+창당 1거래 · pid 46224 정체 규명 — 구현 끝. cap=320B(arduino 실측 540 에서 유도) · queued/ahead/expires_ms · already_pending · T/M/재전송 전부 큐 · --down-immediate/--down-cap. g++ 무경고 + selftest 통과(소켓쌍으로 전선 바이트 대조 7건 신규). 원장 §8.23 등록. 남은 것은 실물 왕복 하나 — 시험 인스턴스 신호 대기. |
+| 2026-08-17T20:01:12+0900 | 통보 | REQ-0165 | socket-engineer → root | REQ-0158 범위를 넘은 것 넷 — already_pending 거동 변경 · CLI 플래그 둘 · cap 기준값 576→320 · selftest 확장 |
+| 2026-08-17T20:07:32+0900 | 발행 | REQ-0166 | web-engineer → socket-engineer | queued 이탈 후 예산이 화면 타이머보다 900ms 크다 — 6.9초의 출발점을 확인해 달라 |
+| 2026-08-17T20:08:24+0900 | 진행 | REQ-0164 | arduino-engineer → arduino-engineer | 상행 배치 + 슬롯 표지 둘 + 운영 복귀 — 굽기 한 번에 묶는다 (사용자 지시: 모두 완료하고 플래싱) — 창4 커밋차이 기록 완료(변경 5건 확인) · 슬롯 배치+표지 둘 구현 완료 · 빌드 통과(72%/53%) · 호스트 회귀 개정 중 |
+| 2026-08-17T20:10:42+0900 | 착수 | REQ-0166 | socket-engineer → socket-engineer | queued 이탈 후 예산이 화면 타이머보다 900ms 크다 — 6.9초의 출발점을 확인해 달라 |
+| 2026-08-17T20:13:48+0900 | 완료 | REQ-0166 | socket-engineer → socket-engineer | queued 이탈 후 예산이 화면 타이머보다 900ms 크다 — 6.9초의 출발점을 확인해 달라 |
+| 2026-08-17T20:14:10+0900 | 발행 | REQ-0167 | root → arduino-engineer | 사용자 질문 — SoftwareSerial RX 버퍼를 늘려야 하나 · 먼저 wifi.overflow() 로 재라(호출 0건이었다) |
+| 2026-08-17T20:15:13+0900 | 완료 | REQ-0164 | arduino-engineer → arduino-engineer | 상행 배치 + 슬롯 표지 둘 + 운영 복귀 — 굽기 한 번에 묶는다 (사용자 지시: 모두 완료하고 플래싱) |
+| 2026-08-17T20:17:45+0900 | 통보 | REQ-0168 | socket-engineer → root | 내 시험 인스턴스가 창 A 시작과 약 3분 20초 겹쳤다 — 교락 후보는 CPU 하나. 지금 전부 내렸다 |
