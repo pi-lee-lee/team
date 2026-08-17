@@ -98,6 +98,34 @@ SRV_MARKS = {
     "srv_down": "→ARD ".encode(),
     "srv_offline": "무프레임 판정".encode(),
 }
+# 🔴 사람 조작 감시 (루트 개입 2026-08-17 12:56 · index.html 을 ~/parking-bin 에 복사)
+#   그 전까지 **운영 포트에서 화면이 안 나오는 것이 사실상 보호**였다(브라우저가 운영에 못 붙었다).
+#   이제 붙을 수 있고, **예약을 누르면 하행이 나간다. 하행은 링크를 끊는다(실측 2/2).**
+#   → 주입기가 멈춰 있으므로 **하행이 보이면 그것은 사람이다.** 자연 사건으로 세면 안 된다.
+HUMAN_CUT = "2026-08-17 12:56:00"
+# ⚠ 정규식을 쓰지 않는다 — 바이트 정규식에 비ASCII 를 못 넣고, raw 문자열의 `\u2192` 는
+#   화살표가 아니라 글자 여섯이라 **두 번 연달아 틀렸다**(그 사이 요약기가 죽어 있었다).
+#   → 평범한 부분문자열 검사로 간다. 느리지도 않고 함정도 없다.
+HUMAN_MARKS = ["\u2192ARD R,", "\u2192ARD C,", "\u2192ARD T,", "\u2190WS "]
+
+
+def human_hits(path: str, cut: str):
+    out = []
+    try:
+        with open(path, "rb") as f:
+            for line in f:
+                t = line.decode("utf-8", "replace").rstrip()
+                if len(t) < 19 or not t.startswith("2026-"):
+                    continue
+                if t[:19] < cut:
+                    continue
+                if any(k in t for k in HUMAN_MARKS):
+                    out.append(t[:100])
+    except OSError:
+        pass
+    return out
+
+
 CNT_RE = re.compile(rb"\[CNT\]([^\n]*)")
 TS_RE = re.compile(rb"^(\d\d:\d\d:\d\d)\s")
 
@@ -173,6 +201,18 @@ def main() -> int:
         now = datetime.now()
         s = count(SER, SER_MARKS)
         v = count(SRV, SRV_MARKS)
+
+        # 12:56 이후 하행/WS = 사람 조작 후보 (주입기는 멈춰 있다)
+        human = human_hits(SRV, HUMAN_CUT)
+        if human:
+            with open(f"monitor/ALERT-{_stem}-human.md", "w", encoding="utf-8") as hf:
+                hf.write(f"# 🔴 사람 조작 후보 {len(human)}건 — {now:%Y-%m-%d %H:%M:%S}\n\n")
+                hf.write(f"`{HUMAN_CUT}` 이후 운영 로그에 **하행(`→ARD R/C/T`) 또는 `←WS`** 가 나타났다.\n")
+                hf.write("**주입기는 멈춰 있다 → 이것은 사람의 조작이다. 자연 사건으로 세지 마라.**\n\n")
+                hf.write("🔴 **하행은 링크를 끊는다(실측 2/2).** 이후 끊김은 조작과 분리해서 세라.\n\n")
+                for h in human[:40]:
+                    hf.write(f"    {h}\n")
+
         pids = tap_pids()
         grew = "?" if prev < 0 else ("yes" if s["_bytes"] > prev else "NO")
         prev = s["_bytes"]

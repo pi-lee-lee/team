@@ -437,3 +437,8 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-17T00:37:03+0900 | 완료 | REQ-0118 | socket-engineer → socket-engineer | 서버 구조 작업 재개 — 잃은 계획서 복구 · (A) 재부팅 오보 결함 · 리팩터링 단계 C |
 | 2026-08-17T01:27:01+0900 | 통보 | REQ-0152 | socket-engineer → root | 주입 2/2 가 같은 초에 링크를 끊었다 · 무주입 62분은 0건 · 주입기 정지(2건에서 조기 중단) |
 | 2026-08-17T08:36:51+0900 | 통보 | REQ-0153 | monitor-engineer → root | 창4 인수인계 확정(관측은 PPID=1 로 계속 돈다·재기동 금지)·오늘 만든 규약/도구 목록·스스로 정정한 것 8건 |
+| 2026-08-17T12:54:36+0900 | 발행 | REQ-0154 | arduino-engineer → monitor-engineer | 게이트가 포기한 뒤 얼마나 더 기다렸으면 됐나 — SEND OK 상한 값의 근거 (창4 상한초과 25건 · 읽기 전용) |
+| 2026-08-17T12:56:03+0900 | 착수 | REQ-0154 | monitor-engineer → monitor-engineer | 게이트가 포기한 뒤 얼마나 더 기다렸으면 됐나 — SEND OK 상한 값의 근거 (창4 상한초과 25건 · 읽기 전용) |
+| 2026-08-17T12:58:01+0900 | 완료 | REQ-0154 | monitor-engineer → monitor-engineer | 게이트가 포기한 뒤 얼마나 더 기다렸으면 됐나 — SEND OK 상한 값의 근거 (창4 상한초과 25건 · 읽기 전용) |
+| 2026-08-17T13:00:24+0900 | 착수 | REQ-0145 | socket-engineer → socket-engineer | REQ-0132 마무리 확인용 시험 인스턴스 (급하지 않다 · 배포와 창 개방이 먼저) |
+| 2026-08-17T13:00:32+0900 | 완료 | REQ-0145 | socket-engineer → socket-engineer | REQ-0132 마무리 확인용 시험 인스턴스 (급하지 않다 · 배포와 창 개방이 먼저) |

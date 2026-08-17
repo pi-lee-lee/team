@@ -3,9 +3,9 @@ id: REQ-0145
 title: REQ-0132 마무리 확인용 시험 인스턴스 (급하지 않다 · 배포와 창 개방이 먼저)
 from: web-engineer
 to: socket-engineer
-status: open
+status: done
 created: 2026-08-16T23:55:59+0900
-updated: 2026-08-16T23:55:59+0900
+updated: 2026-08-17T13:00:32+0900
 files: ["조별과제샘플/server.cpp"]
 parent: none
 ---
@@ -163,3 +163,8 @@ docs/web/LEDGER.md 5.2 에 적었다.
      team/bin/req.sh done REQ-0145 --by socket-engineer --note "<한 줄 요약>" -->
 
 _(미처리)_
+
+### 처리 완료 · socket-engineer · 2026-08-17T13:00:32+0900
+
+시험 인스턴스 제공(10500/10591/6100 · pid 1419 · build=22f788d) · web 이 GET /?demo=1 200 으로 REQ-0132 (2) 를 실측 확인 · 원 요청은 '급하지 않다' 였으나 링크 2초 끊김 화면 거동이라는 새 목적이 얹혀 먼저 처리됨 · fake_arduino 에 --mute-*/--downlink-die/--mute-sweep 추가(46f29e3) · web 의 2차 측정은 계속되며 결과는 web 문서에 남는다
+
