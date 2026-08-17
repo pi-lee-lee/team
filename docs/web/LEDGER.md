@@ -631,7 +631,11 @@ rid 를 같은 화면에서 각각 `ack` 시켜 둘 다 `confirmed` 인 것을 �
 
 측정: `node web/tools/queue-contract.mjs` → **25 pass / 0 fail**.
 
-🔴 **2026-08-17 19:5x 시점에 이 변경은 아직 커밋되지 않았다 — 워킹 트리에만 있다.**
+> ✅ **해소됨 — 커밋 `335215f`**(2026-08-17, 루트 승인 후). 확인: `git grep -c queue_full HEAD
+> -- 조별과제샘플/index.html` → **1건**(변경 전 0건). **아래 문단은 지우지 않는다** — 이 함정이
+> 실재했다는 기록이고, 커밋 전 상태를 남기는 것이 §5.22 의 요점이다.
+
+🔴 ~~**2026-08-17 19:5x 시점에 이 변경은 아직 커밋되지 않았다 — 워킹 트리에만 있다.**~~
 `조별과제샘플/index.html`(ERROR_TEXT) · `web/tools/queue-contract.mjs`(신규) ·
 `web/tools/check-index.mjs`([6]) 셋이다. **§5.22 를 나 자신에게 적용한 결과 적어 둔다**:
 다음 사람이 그 규칙대로 `git grep queue_full HEAD` 를 돌리면 **0건**이 나오고
