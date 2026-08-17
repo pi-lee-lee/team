@@ -1,0 +1,70 @@
+[PEER] up=  2 tx=34 rx=12 gap=6 bad=0 win=1 txb/win=568 starve=167 txps=16 rxps=5
+[PEER] up=  4 tx=100 rx=28 gap=9 bad=0 win=3 txb/win=563 starve=419 txps=24 rxps=6
+[PEER] up=  6 tx=132 rx=45 gap=15 bad=0 win=4 txb/win=566 starve=689 txps=21 rxps=7
+       [FD2] up=6 slots=5 tx=42 rx=129 gap=0 bad=0 defer=35 qdrop=15 availhi=27 rxmax=32 rxmaxb=534
+[PEER] up=  8 tx=196 rx=57 gap=20 bad=0 win=6 txb/win=570 starve=992 txps=24 rxps=7
+       [FD2] up=6 slots=5 tx=42 rx=129 gap=0 bad=0 defer=35 qdrop=15 availhi=27 rxmax=32 rxmaxb=534
+[PEER] up= 10 tx=260 rx=73 gap=23 bad=0 win=8 txb/win=571 starve=1193 txps=25 rxps=7
+       [FD2] up=6 slots=5 tx=42 rx=129 gap=0 bad=0 defer=35 qdrop=15 availhi=27 rxmax=32 rxmaxb=534
+[PEER] up= 12 tx=292 rx=90 gap=29 bad=0 win=9 txb/win=572 starve=1475 txps=24 rxps=7
+       [FD2] up=12 slots=10 tx=87 rx=289 gap=0 bad=0 defer=69 qdrop=29 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 14 tx=356 rx=101 gap=34 bad=0 win=11 txb/win=573 starve=1792 txps=25 rxps=7
+       [FD2] up=12 slots=10 tx=87 rx=289 gap=0 bad=0 defer=69 qdrop=29 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 16 tx=420 rx=118 gap=37 bad=0 win=13 txb/win=573 starve=1975 txps=26 rxps=7
+       [FD2] up=12 slots=10 tx=87 rx=289 gap=0 bad=0 defer=69 qdrop=29 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 18 tx=452 rx=135 gap=43 bad=0 win=14 txb/win=573 starve=2250 txps=25 rxps=7
+       [FD2] up=18 slots=15 tx=132 rx=449 gap=0 bad=0 defer=103 qdrop=43 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 20 tx=516 rx=146 gap=48 bad=0 win=16 txb/win=574 starve=2565 txps=25 rxps=7
+       [FD2] up=18 slots=15 tx=132 rx=449 gap=0 bad=0 defer=103 qdrop=43 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 22 tx=580 rx=163 gap=51 bad=0 win=18 txb/win=574 starve=2750 txps=26 rxps=7
+       [FD2] up=18 slots=15 tx=132 rx=449 gap=0 bad=0 defer=103 qdrop=43 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 24 tx=612 rx=179 gap=57 bad=0 win=19 txb/win=574 starve=3012 txps=25 rxps=7
+       [FD2] up=24 slots=20 tx=177 rx=609 gap=0 bad=0 defer=137 qdrop=57 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 26 tx=676 rx=191 gap=62 bad=0 win=21 txb/win=574 starve=3310 txps=25 rxps=7
+       [FD2] up=24 slots=20 tx=177 rx=609 gap=0 bad=0 defer=137 qdrop=57 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 28 tx=740 rx=208 gap=65 bad=0 win=23 txb/win=574 starve=3496 txps=26 rxps=7
+       [FD2] up=24 slots=20 tx=177 rx=609 gap=0 bad=0 defer=137 qdrop=57 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 30 tx=772 rx=224 gap=71 bad=0 win=24 txb/win=574 starve=3779 txps=25 rxps=7
+       [FD2] up=30 slots=25 tx=222 rx=769 gap=0 bad=0 defer=171 qdrop=71 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 32 tx=836 rx=235 gap=73 bad=0 win=26 txb/win=575 starve=4079 txps=26 rxps=7
+       [FD2] up=30 slots=25 tx=222 rx=769 gap=0 bad=0 defer=171 qdrop=71 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 34 tx=900 rx=253 gap=79 bad=0 win=28 txb/win=575 starve=4235 txps=26 rxps=7
+       [FD2] up=30 slots=25 tx=222 rx=769 gap=0 bad=0 defer=171 qdrop=71 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 36 tx=932 rx=269 gap=85 bad=0 win=29 txb/win=575 starve=4513 txps=25 rxps=7
+       [FD2] up=36 slots=30 tx=267 rx=929 gap=0 bad=0 defer=205 qdrop=85 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 38 tx=996 rx=280 gap=87 bad=0 win=31 txb/win=575 starve=4803 txps=26 rxps=7
+       [FD2] up=36 slots=30 tx=267 rx=929 gap=0 bad=0 defer=205 qdrop=85 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 40 tx=1056 rx=298 gap=93 bad=0 win=33 txb/win=574 starve=4986 txps=26 rxps=7
+       [FD2] up=36 slots=30 tx=267 rx=929 gap=0 bad=0 defer=205 qdrop=85 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 42 tx=1086 rx=314 gap=99 bad=0 win=34 txb/win=574 starve=5278 txps=25 rxps=7
+       [FD2] up=42 slots=35 tx=312 rx=1084 gap=0 bad=0 defer=239 qdrop=99 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 44 tx=1146 rx=325 gap=101 bad=0 win=36 txb/win=574 starve=5624 txps=26 rxps=7
+       [FD2] up=42 slots=35 tx=312 rx=1084 gap=0 bad=0 defer=239 qdrop=99 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 46 tx=1203 rx=343 gap=107 bad=0 win=38 txb/win=572 starve=5789 txps=26 rxps=7
+       [FD2] up=42 slots=35 tx=312 rx=1084 gap=0 bad=0 defer=239 qdrop=99 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 48 tx=1236 rx=359 gap=113 bad=0 win=39 txb/win=574 starve=6057 txps=25 rxps=7
+       [FD2] up=48 slots=40 tx=357 rx=1234 gap=0 bad=0 defer=273 qdrop=113 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 50 tx=1296 rx=370 gap=115 bad=0 win=41 txb/win=574 starve=6388 txps=25 rxps=7
+       [FD2] up=48 slots=40 tx=357 rx=1234 gap=0 bad=0 defer=273 qdrop=113 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 52 tx=1356 rx=388 gap=121 bad=0 win=43 txb/win=573 starve=6560 txps=26 rxps=7
+       [FD2] up=48 slots=40 tx=357 rx=1234 gap=0 bad=0 defer=273 qdrop=113 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 54 tx=1386 rx=404 gap=127 bad=0 win=44 txb/win=573 starve=6848 txps=25 rxps=7
+       [FD2] up=54 slots=45 tx=402 rx=1384 gap=0 bad=0 defer=307 qdrop=127 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 56 tx=1446 rx=415 gap=129 bad=0 win=46 txb/win=573 starve=7151 txps=25 rxps=7
+       [FD2] up=54 slots=45 tx=402 rx=1384 gap=0 bad=0 defer=307 qdrop=127 availhi=40 rxmax=32 rxmaxb=540
+[PEER] up= 58 tx=1506 rx=433 gap=135 bad=0 win=48 txb/win=573 starve=7360 txps=25 rxps=7
+       [FD2] up=54 slots=45 tx=402 rx=1384 gap=0 bad=0 defer=307 qdrop=127 availhi=40 rxmax=32 rxmaxb=540
+
+=== 상대(맥) 최종 ===
+프레임 크기 18B (pad=8) · 창당 예산 576B
+보냄 1536 · 받음 448 · 유실(번호 건너뜀) 141 · 손상(체크섬) 0
+내 창 49회 · 창당 실제 송신 573B · 예산 소진 후 대기 7651
+초당 보냄 26 · 초당 받음 7
+
+⚠ **장치의 `rxmaxb` 와 위 '창당 실제 송신'을 나란히 봐라.**
+   둘이 가까우면 장치가 다 꺼낸 것이고, 장치 쪽이 작으면 그 차이가 창 경계로 샌 것이다.
+   (내 창은 장치 프레임 도착으로 잡으므로 전파 지연만큼 장치 창보다 늦다 — 계통 오차다)
+
+⚠ 판정은 **양쪽 보고를 같이** 봐야 한다 — 한쪽만 보면 어느 방향이 잃었는지 모른다.
+⚠ 그리고 이 값을 A 창의 12,920건과 **나란히 놓지 마라** — 상대·부하·보율이 다르다.
+   묻는 것은 손실률 비교가 아니라 **구조적으로 되는가/안 되는가** 하나다.
