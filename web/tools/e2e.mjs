@@ -12,7 +12,7 @@
  * 사용: node web/tools/e2e.mjs --port 10000 [--head]
  */
 import { launch, evaluate, waitFor, sleep, freePort } from './cdp.mjs';
-import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 
 /* ── 인자 ─────────────────────────────────────────────────────── */
 const argv = process.argv.slice(2);
@@ -25,7 +25,13 @@ const HEAD = argv.includes('--head');
    화면도 "내 예약"이었는데 로그만 다른 데를 본 것이다.
    ⚠ 이건 socket 이 고친 "기본값이 운영 포트" 사고와 같은 형태다 — **기본값이 딴 데를 가리키면
    도구가 조용히 틀린 답을 낸다.** 그래서 기본값을 없애는 대신 **대상에서 유도**한다. */
+/* 🔴 **유도만으로는 부족했다(2026-08-17 두 번째 사고).** 포트에서 유도한 이 경로가
+   `~/parking-logs/parking-server.test+600.log` 인데, 시험 인스턴스가 `net/slotq-test-….log` 로
+   쓰기 시작하자 **또 엉뚱한 데를 봤다.** 유도는 **이름 규칙이 안 바뀔 때만** 맞는다.
+   → 그래서 이번에는 **경로를 반드시 찍고, 없으면 "제품 실패"가 아니라 "하니스 실패"로 말한다.**
+   조용히 빈 배열을 돌려주는 것이 이 사고의 본체였다. */
 const LOG = arg('--log', process.env.HOME + '/parking-logs/parking-server.test+' + (Number(PORT) - 9900) + '.log');
+const LOG_OK = existsSync(LOG);
 const OUT = new URL('../artifacts/', import.meta.url);
 
 if (!PORT) { console.error('--port 를 반드시 줘라 (기본값 없음: 운영 포트를 실수로 집지 않게 하려는 것)'); process.exit(2); }
@@ -173,8 +179,22 @@ try {
 
   /* ── 3. 🔴 예약 왕복 — 브라우저 → 서버 → 장치 → 화면 ── */
   console.log('\n[3] 🔴 예약 왕복 — 이 구간이 오늘의 목적이다');
-  const target = (cells.find(c => c.state.includes('빈자리')) || cells[0]).slot;
-  note('대상 칸 ' + target);
+  /* 🔴 **문구로 칸을 고르지 않는다.** 예전 코드는 `c.state.includes('빈자리')` 였는데 화면 문구는
+     `'빈 자리'`(공백 있음)라 **한 번도 안 맞았고**, `|| cells[0]` 폴백이 그것을 가렸다.
+     A1 이 우연히 빈 날에는 36/0 으로 통과해서 **깨진 줄 몰랐다.** A1 이 "사용 중"으로 나온 날
+     비로소 "확인 대화상자가 안 뜬다"는 **거짓 실패**가 났다(제품은 멀쩡했다).
+     → **동작(`data-action`)으로 고른다.** 문구는 바뀌고 동작은 계약이다. 그리고 못 찾으면
+     **폴백하지 않고 멈춘다** — 조용히 엉뚱한 칸을 고르는 것이 이 결함의 본체였다. */
+  const target = await evaluate(client, `(() => {
+    const b = [...document.querySelectorAll('.tile')].find(x =>
+      x.dataset.action === 'reserve' && x.getAttribute('aria-disabled') !== 'true');
+    return b ? b.dataset.slot : null;
+  })()`);
+  if (!target) throw new Error('예약 가능한 빈 칸이 없다 — 10칸이 다 차 있거나 장치가 끊겼다');
+  note('대상 칸 ' + target + ' (동작으로 골랐다 · 문구 아님)');
+  /* 🔴 **도구는 자기가 어디를 보는지 말해야 한다**(§5.17 의 뿌리). 이 한 줄이 없어서
+     엉뚱한 로그를 읽고 있다는 것을 두 번이나 출력만 보고는 알 수 없었다. */
+  note('서버 로그 = ' + LOG + (LOG_OK ? '' : '   ← 🔴 없다! 전선 구간은 검사 못 한다'));
   const logBefore = tailLog(200).length;
   const user = await evaluate(client, `document.getElementById('user-id').textContent`);
   note('브라우저 사용자 ' + user);
@@ -202,11 +222,22 @@ try {
 
   await sleep(1500);   // 장치 ACK 가 로그에 찍힐 여유
   const tail = tailLog(60).join('\n');
-  check('서버가 장치로 R 을 내보냈다 (→ARD R,…,' + target + ')',
-        new RegExp('→ARD R,\\d+,' + target).test(tail),
-        (tail.match(new RegExp('→ARD R,[^\\n]*')) || ['없음'])[0]);
-  check('장치가 A 로 응답했다 (←ARD A)',
-        /←ARD A,\d+,/.test(tail), (tail.match(/←ARD A,[^\n]*/g) || ['없음']).slice(-1)[0]);
+  /* 🔴 **로그를 못 읽는 것과 서버가 안 보낸 것은 다른 사건이다.**
+     예전에는 둘이 같은 `❌ 서버가 장치로 R 을 내보냈다 → 없음` 으로 나왔고, 그래서
+     **하니스 결함이 제품 실패로 위장**했다(2026-08-17 두 번, 두 번 다 예약은 성공했다).
+     아직 빨강인 것은 맞다 — "검사 못 했다"를 초록으로 넘기면 분모가 사라진다.
+     달라진 것은 **누가 틀렸는지 문장이 말한다**는 것이다. */
+  if (!LOG_OK) {
+    check('[하니스] 서버 로그를 찾지 못했다 — 전선 구간은 검사하지 못했다', false,
+          '경로: ' + LOG + '  ← 이 인스턴스의 로그가 아니다. `--log <실제 경로>` 로 지정해라. '
+          + '**제품 판정이 아니다** — 화면·ACK 검사가 통과했다면 왕복 자체는 된 것이다');
+  } else {
+    check('서버가 장치로 R 을 내보냈다 (→ARD R,…,' + target + ')',
+          new RegExp('→ARD R,\\d+,' + target).test(tail),
+          (tail.match(new RegExp('→ARD R,[^\\n]*')) || ['없음'])[0]);
+    check('장치가 A 로 응답했다 (←ARD A)',
+          /←ARD A,\d+,/.test(tail), (tail.match(/←ARD A,[^\n]*/g) || ['없음']).slice(-1)[0]);
+  }
 
   const acked = wsFrames.filter(f => f.dir === 'rx' && f.data.includes('"ack"')).map(f => f.data);
   check('서버 ACK 가 브라우저까지 돌아왔다', acked.length > 0, acked.slice(-1)[0]);
