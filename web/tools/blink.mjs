@@ -113,6 +113,10 @@ function check(name, cond, detail) {
   return ok;
 }
 
+/* ⚠ 2026-08-17: markRun() 을 정의만 해 놓고 **호출을 안 해서** 첫 창의 조각 시각을 파일로
+   못 남겼다(monitor 에게 "이번엔 파일로 찍는다"고 말해 둔 것이 안 지켜졌다).
+   선언과 호출은 다른 일이다 — 도구를 만들었다고 도구가 도는 것이 아니다. */
+markRun('시작');
 const client = await launch({ headless: true });
 try {
   await client.send('Page.enable');
@@ -346,4 +350,6 @@ try {
   process.exitCode = 1;
 } finally {
   await client.close();
+  markRun('종료 (' + (failed ? failed + '건 실패' : '통과') + ')');
+  say('\n' + (failed ? '실패 — ' + failed + '건' : '통과') + ' · 구간 기록 web/artifacts/blink-runs.tsv');
 }
