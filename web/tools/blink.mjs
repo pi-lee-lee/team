@@ -345,6 +345,13 @@ try {
   say('\n종료 시점: online=' + end.online + ' conn=' + JSON.stringify(end.conn));
   writeFileSync(new URL('blink-' + CASE + '.log', OUT), log.join('\n'));
 } catch (e) {
+  /* 🔴 2026-08-17: 여기서 `failed` 를 안 올려서 **죽은 실행이 "통과"로 찍혔다.**
+     `failed` 는 check() 만 올리는데, 예외로 중단되면 check() 가 아예 안 돈다 →
+     0건 실패 → "통과". **아무것도 못 쟀는데 초록이 나오는 검사기**였다.
+     `process.exitCode` 로는 사람이 읽는 줄과 tsv 가 안 고쳐진다. 발견 경위:
+     monitor 의 "도구를 만들면 돌아간 증거 한 줄을 같이 내라"를 따라 실제로 돌려 봤더니
+     첫 줄에 💥 가 뜨는데 마지막 줄이 "통과"였다. **안 돌려 봤으면 못 봤다.** */
+  failed++;
   say('💥 ' + e.message);
   writeFileSync(new URL('blink-' + CASE + '.log', OUT), log.join('\n'));
   process.exitCode = 1;
