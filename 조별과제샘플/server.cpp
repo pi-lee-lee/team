@@ -108,6 +108,52 @@ static const int  ACK_TIMEOUT_MS = 1500;    // §7.3
 static const int  ACK_MAX_TRIES  = 3;       // 최초 + 재전송 2회
 static const int  OFFLINE_MS     = 3500;    // §3.4
 static const int  SELECT_TICK_MS = 200;     // 타이머를 돌리기 위한 select 최대 대기
+
+// ── 하행 슬롯(반송파) 상수 — `docs/net/DESIGN-server-slot-queue.md`
+//
+// 🔑 **이벤트가 전송을 만들지 않는다.** 명령은 큐에 담기고 **장치 프레임이 도착한 순간**
+// (= 내 창의 시작) 큐 전부가 **한 거래로 묶여** 나간다. 창 시작은 시계가 아니라 사건이므로
+// 장치가 느려지면 내 창도 같이 밀린다 — **자기교정된다**(원장 §8.19).
+static const int  DOWN_SLOT_MS       = 1200;  // 슬롯 주기(사용자 확정: 1.2초)
+static const int  DOWN_WIN_MS        = 600;   // 내 창의 이론 폭(0.6초). RTT 를 여기서 깎는다
+static const int  DOWN_WIN_MARGIN_MS = 50;    // 여유 — 내 처리시간·타이머 해상도
+static const int  DOWN_WIN_MIN_MS    = 150;   // W_srv 하한. RTT 가 튀어도 창이 0 이 되면 안 된다
+// `S` 가 안 오면 창이 영영 안 열린다 → 포기하고 쏜다(설계 §3).
+// 🔴 **`OFFLINE_MS`(3500)보다 작아야 한다** — 그 뒤에 쏘면 서버가 이미 "장치 없음"으로
+// 판단한 상태에 쏘는 것이다. 2슬롯 = 2400 은 그 조건을 만족한다.
+static const int  DOWN_DMAX_MS       = 2 * DOWN_SLOT_MS;
+// 한 줄 상한. `RX_CAP=96`(client.ino:368) 안에 `"+IPD,<n>:"` 접두(8~9B)가 **포함된다**.
+// **배치 전체가 아니라 줄 하나의 제약**이다.
+static const int  DOWN_LINE_MAX_B    = 87;
+
+// 🔴🔴 **이 값은 "무엇에 의존하는가"를 같이 읽어야 한다.** 원장 `docs/net/LEDGER.md` §8.23.
+//
+// ⚠ 초안은 `576 = 600ms × 960 B/s`(9600 baud **가정**)였다. **계산값이었고 임시였다.**
+// arduino 4판이 **실측**을 냈다(`docs/arduino/MEASURE-2026-08-17-rxmax-bytes.md`):
+//   **창(0.6초)당 540 바이트** · 물리 상한 576B 의 94% ·
+//   🔑 프레임 크기를 3.4배 바꾸니 **건수는 9~32 로 갈렸고 바이트는 ±1%** — 불변량이 바이트임이 관측됐다.
+//
+// **그래도 540 을 박지 않는다.** 실측에서 빼야 할 것이 셋이고, 하나는 정량화가 안 됐다:
+//   ① `SoftwareSerial` — 이 측정은 **하드웨어 UART(맥 직결)** 다. 실기는 `cli()` 가 남는다.
+//      **540 은 상한이지 보장이 아니다.** 페널티는 **아직 안 쟀다** → 그 미지분을 여유로 남긴다.
+//   ② `+IPD,<n>:` 접두 9B — ESP 가 **TCP 조각마다** 붙인다(배치가 이걸 아낀다).
+//   ③ 한 줄 상한 87B(`RX_CAP=96` − 접두) — 배치 전체가 아니라 **줄 하나**의 제약(위 상수).
+//
+// 🔑 **그리고 도메인이 이미 상한을 준다 — 자리가 10개뿐이다.**
+//   최악의 하행 버스트는 "예약 전부 재하달" = 10 × 28B = **280B** 다. 그 위로는 실익이 없다.
+//   → `320B` = 도메인 최악(280) + 여유, 실측 상한(540)의 59%. **크게 잡을 이유가 없는 쪽으로 잡는다.**
+//   넘치면 버리는 게 아니라 **다음 창으로 미룬다** — 상한을 보수적으로 잡는 비용이 낮다.
+// → 실기(`SoftwareSerial`) 재측정이 오면 `--down-cap=<B>` 로 재빌드 없이 갈아끼운다.
+static int        DOWN_BATCH_CAP_B   = 320;
+// 큐 깊이는 **독립 상수가 아니라 유도값이다** — "마감 안에 나갈 수 있는 양".
+//   깊이(B) = cap(B/창) × (마감 ÷ 슬롯주기) = 576 × 4 = 2304
+// 그래서 `cap` 이 바뀌면 깊이가 저절로 따라온다. 두 값이 따로 놀면 마감을 넘긴 항목이
+// 큐에 남는데 아무도 그걸 설명 못 한다.
+static const int  DOWNQ_WAIT_CAP_MS  = 4 * DOWN_SLOT_MS;   // 4.8초 — 큐 대기 마감(임시)
+// 🔴 착지 위상을 **의도적으로 겨냥하는 시험**을 위해 옛 거동(즉시 송신)을 남긴다.
+// 원장 §8.17 이 아직 못 갈랐다고 적어 둔 물음("`R`/`C` 라서 안전한가, 착지가 좋았던 것인가")은
+// 하행을 원하는 순간에 쏠 수단이 없으면 **영영 못 가른다.** 기본값은 off 다.
+static bool       DOWN_IMMEDIATE     = false;
 static const int  SOAK_REPORT_MS = 60000;   // 소크 관측 주기 보고(REQ-0065)
 static const int  LOG_KEEP       = 2;       // §9.1 최신 2건
 static const uint64_t WS_MAX_FRAME = 64 * 1024;  // 클라이언트가 선언한 길이의 상한
@@ -502,6 +548,15 @@ struct Pending {             // 아두이노에 내려보내고 ACK 를 기다�
     char top;                // kind=='T' 일 때의 op: 'A'|'D'|'S'|'X'
     long long sent_ms;
     int tries;
+    // 🔴 **큐에 있는 동안은 ACK 시계를 돌리지 않는다.** 하행이 창을 기다리는 사이에
+    // `ACK_TIMEOUT_MS` 가 흐르면 **전선에 나가기도 전에 재전송이 걸린다** — 그러면
+    // 같은 rid 가 큐에 두 번 들어가고, 내가 없애려던 증폭이 큐 안에서 다시 생긴다.
+    // `tick()` 은 이 값이 true 인 항목을 건너뛴다. `sent_ms` 는 **실제 송신 시각**이다.
+    bool queued;
+    // 🔴 ctor 가 없어서 `dispatch` 가 `top`·`queued` 를 안 세운 채 복사해 왔다.
+    // 지금은 모든 경로가 곧바로 덮으므로 실동작은 맞지만 **`-Wall -Wextra` 가 이걸 안 잡는다** —
+    // `Server` 의 여섯 칸이 무경고로 통과했던 것과 같은 이유다. 여기서 닫는다.
+    Pending() : wire_rid(0), ws_fd(BAD_SOCK), kind(0), top(0), sent_ms(0), tries(0), queued(false) {}
 };
 
 struct Conn {
@@ -549,8 +604,32 @@ struct Server {
     long long downq_bytes;
     long long batch_count;       // 배치 거래 수
     long long batch_lines;       // 배치로 나간 줄 수
+    // 🔴 **정반대인 둘을 한 칸에 세지 않는다**(원장 §8.16 이 `error` 에서 겪은 그것이다).
+    //   `q_rejected` = 큐가 넘쳤다 → **설계 문제**(cap·깊이를 다시 봐야 한다)
+    //   `q_nodev`    = 장치가 없다 → **링크 문제**(cap 과 아무 상관 없다)
+    // 합쳐 두면 `큐거절 3` 을 보고 cap 을 올리려 하는데 실제로는 장치가 없었던 것일 수 있다.
     long long q_rejected;        // queue_full 로 거절한 수
+    long long q_nodev;           // 장치 연결이 없어 거절한 수
     long long q_dup;             // already_pending 로 거절한 수
+    // ⚠ **창 수**다(창당 1). 줄 수로 세면 같은 줄이 창마다 다시 세어져 누계가 부풀려진다 —
+    // 원장 §4.2 의 "28건은 실질 3개 사건" 과 같은 형태의 함정이다.
+    long long q_deferred;        // 바이트 상한에 걸려 뭔가를 남긴 **창의 수**
+    long long q_dropped_link;    // 세션이 끝나 큐에서 버린 줄 수 — **조용히 사라지지 않게 센다**
+    // ⚠ **RTT 를 추측하지 않는다.** `pend` 에 `sent_ms` 가 있고 ACK 도착 시각을 아니까
+    // **왕복이 실측으로 쌓인다.** 그 값은 `RTT + 장치 처리시간` 이라 **RTT 의 상한**이고,
+    // 창을 좁히는 방향이라 **보수적 = 안전**하다.
+    // 🔑 세션마다 초기화한다 — 옛 세션의 병리적 한 건이 새 세션의 창을 영구히 조이면 안 된다.
+    long long rtt_max_ms;        // 이 세션의 최대 왕복(창 계산에 쓰는 값)
+    long long rtt_last_ms;       // 마지막 왕복 — 보고용
+    long long rtt_n;             // 표본 수. **0 이면 "안 쟀다"이지 "0ms"가 아니다**
+    long long win_skips;         // 창을 이미 지나 다음 `S` 를 기다린 횟수
+    long long dmax_flushes;      // `S` 가 안 와서 창을 포기하고 쏜 횟수
+    // 🔴 **창 포기도 박자를 지킨다.** `tick()` 은 200ms 마다 도는데 조건이 "조용하다" 하나면
+    // 장치가 침묵하는 내내 **200ms 버스트**가 된다(재전송이 1500ms 마다 큐를 채우므로 상시화된다).
+    // 그러면 **장치가 가장 힘들어하는 구간에서 슬롯 규율이 통째로 꺼진다** —
+    // ⚠ **서버에 조용한 것은 장치가 송신 안 한다는 뜻이 아니다**(`busy s...`·`[TX-RESYNC]` 가
+    // 정확히 그 상태다). 설계 §3 의 "포기하고 쏜다"는 단수다. 슬롯당 1회로 묶는다.
+    long long last_dmax_ms;
     // §9.1 `device.last_frame_ts` 전용 — **epoch 시각**이다. ard_last_ms 를 쓰면 안 된다:
     // 그건 now_ms() 기반(윈도우에서는 부팅 후 경과)이라 바깥으로 나가면 수십 년짜리 값이 된다(28행 경고).
     long long ard_last_epoch_ms;
@@ -671,7 +750,15 @@ struct Server {
 
     Server() : lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK), ard(BAD_SOCK),
                aux_conflicts(0), admit_rejects(0),      // 선언 순서와 일치시킨다(-Wreorder)
-               ard_seen(false), ard_last_ms(0), ard_last_epoch_ms(0), ard_uptime(-1), ard_seq(-1),
+               ard_seen(false), ard_last_ms(0),
+               // 🔴 이 여섯(+다섯)은 **선언만 돼 있고 초기화 목록에 없었다.** 쓰기 시작하는 순간
+               // 쓰레기값이 지표로 나간다 — 원장이 통째로 경고하는 그 형태다. 여기서 닫는다.
+               downq_bytes(0), batch_count(0), batch_lines(0),
+               q_rejected(0), q_nodev(0), q_dup(0),
+               q_deferred(0), q_dropped_link(0),
+               rtt_max_ms(0), rtt_last_ms(0), rtt_n(0), win_skips(0), dmax_flushes(0),
+               last_dmax_ms(0),
+               ard_last_epoch_ms(0), ard_uptime(-1), ard_seq(-1),
                ard_dev("?"),
                xs_uptime(-1), xs_last_ms(0), xs_dev(""),
                xs_reconnect_reboot(0), xs_reconnect_link(0),
@@ -862,6 +949,27 @@ struct Server {
            + "(버퍼비움 " + std::to_string(drop_prepromo_buf) + ")"
            + " · 재전송 " + std::to_string(retx_count)
            + " · ACK실패 " + std::to_string(ack_fail_count)
+           // ── 하행 슬롯 큐. **분모를 같이 찍는다** — `거절 0` 이 "건강"인지 "한 번도 안 돌았다"인지
+           // 갈리려면 `배치` 가 옆에 있어야 한다(원장 §5.2). 배치 0 이면 하행이 아예 없었던 것이다.
+           + " · 배치 " + std::to_string(batch_count)
+           + "(줄 " + std::to_string(batch_lines)
+           + "/미룬창 " + std::to_string(q_deferred)
+           + "/창포기 " + std::to_string(dmax_flushes)
+           + "/창놓침 " + std::to_string(win_skips) + ")"
+           // 🔴 **네 칸을 갈라 둔다** — 합치면 `큐거절 3` 을 보고 cap 을 올리려 하는데
+           // 실제로는 장치가 없었던 것일 수 있다. 원인이 갈리면 진단이 갈린다.
+           + " · 큐넘침 " + std::to_string(q_rejected)
+           + "(장치없음 " + std::to_string(q_nodev)
+           + "/중복 " + std::to_string(q_dup)
+           + "/링크버림 " + std::to_string(q_dropped_link) + ")"
+           + " · 대기 " + std::to_string(downq.size())
+           + "줄(" + std::to_string(downq_bytes) + "B/" + std::to_string(downq_max_b()) + "B)"
+           // 🔴 `RTT` 는 **실측이고 표본 수를 같이 낸다.** `n=0` 이면 그 값은 "0ms"가 아니라
+           // **"안 쟀다"** 이고, 그때 `W_srv` 는 상한(600−여유)에 그대로 앉아 있다.
+           + " · 왕복 최대 " + std::to_string(rtt_max_ms) + "ms"
+           + "(마지막 " + std::to_string(rtt_last_ms)
+           + "/n=" + std::to_string(rtt_n) + ")"
+           + " · W_srv " + std::to_string(w_srv()) + "ms"
            + " · " + recovery_phrase()
            + " · 회수 " + std::to_string(zombie_reaps + keepalive_reaps)
            + "(유휴 " + std::to_string(zombie_reaps)
@@ -910,6 +1018,9 @@ struct Server {
             sess_start_ms = 0;
         }
         if (!link_down_since) link_down_since = now_ms();
+        // 설계 §2 — **세션이 끝나면 하행 큐를 비운다.** 옛 큐를 새 세션에 쏘면 장치가 모르는
+        // 상태에 명령이 떨어진다. 비운 항목은 `device_offline` 로 **반드시 답한다**(§4-B 보장).
+        clear_downq("세션 종료");
     }
 
     bool device_online() const {
@@ -953,12 +1064,19 @@ struct Server {
         ard_sessions++;
         sess_start_ms = now_ms();
         sess_frames = 0; sess_last_line_ms = 0; sess_max_gap_ms = 0;
+        // 창 계산에 쓰는 왕복 표본은 **세션마다 새로 쌓는다** — 옛 세션의 병리적 한 건이
+        // 새 세션의 창을 영구히 조이면, 창이 좁아진 이유를 나중에 아무도 설명 못 한다.
+        rtt_max_ms = 0; rtt_last_ms = 0; rtt_n = 0;
         if (link_down_since) { link_down_ms += now_ms() - link_down_since; link_down_since = 0; }
         reboot_by_conn++;
         logf("+ARD", "주차 노드 접속 — 세션#" + std::to_string(ard_sessions)
                      + " · device=" + dev);
         ard_seq = -1; ard_uptime = -1;
         base_valid = false;                 // §7.5-1
+        // 🔴 **재하달을 담기 전에 큐를 비운다.** `ard` 가 이미 BAD_SOCK 이었던 경로에서는
+        // `end_ard_session()` 이 안 불렸을 수 있어 **옛 큐가 새 세션으로 넘어온다.**
+        // 그 경우 장치는 자기가 모르는 rid 의 명령을 받는다(설계 §2).
+        clear_downq("새 세션 시작");
         resync_reservations("새 연결");
     }
 
@@ -1164,14 +1282,19 @@ struct Server {
         }
         return true;
     }
+    // 아두이노 송신 실패 뒷정리. **두 경로(`send_ard`·`flush_downq`)가 여기로 모인다** —
+    // 한쪽만 정리하면 "끊겼는데 세션이 열려 있는" 장부가 만들어진다(§899 와 같은 이유).
+    void ard_send_failed() {
+        closesock(ard); ard = BAD_SOCK; ard_buf.clear();
+        end_ard_session("송신 실패");        // 세션 장부를 여기서도 닫는다(REQ-0065)
+        // 단계 C: 직접 호출 → 이벤트. ⚠ **이 자리는 복구된 이음매 표에 없었다** —
+        // 표는 5곳이라 했지만 실제로는 여기가 여섯 번째다. 표를 지도로 믿지 마라.
+        emit_dev(DEV_DISCONNECT, park_dev, "송신 실패");
+    }
     void send_ard(const std::string& line) {
         if (ard == BAD_SOCK) return;
         if (!send_raw(ard, line.data(), line.size(), "아두이노")) {
-            closesock(ard); ard = BAD_SOCK; ard_buf.clear();
-            end_ard_session("송신 실패");        // 세션 장부를 여기서도 닫는다(REQ-0065)
-            // 단계 C: 직접 호출 → 이벤트. ⚠ **이 자리는 복구된 이음매 표에 없었다** —
-            // 표는 5곳이라 했지만 실제로는 여기가 여섯 번째다. 표를 지도로 믿지 마라.
-            emit_dev(DEV_DISCONNECT, park_dev, "송신 실패");
+            ard_send_failed();
             return;
         }
         // ---------- 착지 위상 계측 (DESIGN-downlink-window.md §3.5)
@@ -1198,6 +1321,192 @@ struct Server {
                 snprintf(ph, sizeof(ph), " (S+%lldms)", (long long)(now_ms() - ard_last_ms));
             logf("→ARD", line.substr(0, line.size() - 1) + ph);
             return;
+        }
+    }
+
+    // ═══════ 하행 슬롯 큐 (docs/net/DESIGN-server-slot-queue.md) ═══════════════
+    //
+    // 🔑 **이 구조는 위상을 추정하지 않는다.** `S` 도착이 트리거이므로 장치가 알려준다.
+    // 스케줄이면 병리 구간(`SEND OK` 가 2~5초)에서 예측이 가장 크게 틀리는데,
+    // **가장 크게 틀리는 때가 하필 가장 위험한 때다.** 트리거는 그 문제가 없다.
+
+    // 내 창의 실제 폭. `W_srv = 600 − RTT − 여유`.
+    // 🔴 **`RTT` 는 상수가 아니라 실측이다.** 값을 박으면 Wi-Fi 가 붐빌 때 조용히 깨진다.
+    // `rtt_max_ms` 는 ACK 왕복의 최대값이고 그건 `RTT + 장치 처리시간` 이라 **RTT 의 상한**이다 —
+    // 창을 좁히는 방향이므로 **보수적 = 안전**하다.
+    long long w_srv() const {
+        long long w = (long long)DOWN_WIN_MS - rtt_max_ms - DOWN_WIN_MARGIN_MS;
+        if (w < DOWN_WIN_MIN_MS) w = DOWN_WIN_MIN_MS;
+        return w;
+    }
+    // 큐 깊이(바이트). **유도값이다** — "마감 안에 나갈 수 있는 양".
+    long long downq_max_b() const {
+        return (long long)DOWN_BATCH_CAP_B * (DOWNQ_WAIT_CAP_MS / DOWN_SLOT_MS);
+    }
+
+    // 큐에 있던 항목을 **전선에 못 내보낸 채** 끝낼 때.
+    // 🔴 설계 §4-B 의 보장: **`queued` 를 보냈으면 그 뒤에 반드시 `ack` 또는 `error` 가 간다.**
+    // 그 보장이 없으면 화면의 중간 상태가 영구가 된다.
+    // ⚠ 코드는 `device_offline` 이다 — **전선에 안 나갔다는 뜻**이고 원장 §8.16 이 요구하는 구분이다.
+    // `ack_timeout` 을 쓰면 "나갔는데 응답이 없다"는 **거짓 문장**이 로그에 남는다.
+    void fail_down_item(const DownQ& q, const char* code, const char* msg) {
+        std::map<uint16_t, Pending>::iterator it = pend.find(q.wire_rid);
+        if (it != pend.end()) pend.erase(it);
+        if (q.ws_fd != BAD_SOCK) send_err(q.ws_fd, q.brid, code, msg);
+    }
+
+    // 세션이 끝나면 큐를 비운다(설계 §2). **옛 큐를 새 세션에 쏘면 안 된다** —
+    // 장치는 자기 번호를 새로 시작하고, 그 사이 상태도 우리가 모른다.
+    void clear_downq(const char* why) {
+        if (downq.empty()) return;
+        char b[192];
+        snprintf(b, sizeof(b), "하행 큐 비움(%s) — %zu줄 · %lldB. **전선에 나가지 않았다**",
+                 why, downq.size(), downq_bytes);
+        logf("✂", b);
+        q_dropped_link += (long long)downq.size();
+        // 🔴 **먼저 떼어낸다.** `send_err` 가 `dead` 를 건드리고, 실패 경로가 다시
+        // `end_ard_session` → `clear_downq` 로 들어올 수 있다. 비운 뒤에 답하면 재진입이 안전하다.
+        std::vector<DownQ> tmp;
+        tmp.swap(downq);
+        downq_bytes = 0;
+        for (size_t i = 0; i < tmp.size(); i++)
+            fail_down_item(tmp[i], "device_offline", "센서 연결이 끊겨 요청이 취소되었습니다");
+    }
+
+    // 하행 한 줄을 큐에 넣는다. **여기서 전송은 일어나지 않는다.**
+    //   announce : 브라우저에 `queued` 를 보내나 (재전송은 안 보낸다 — §expires_ms 단조성)
+    //   force    : 깊이 상한을 무시하나 (재전송은 이미 약속한 것이므로 거절하지 않는다)
+    // 반환값 false = 거절했다(호출자가 `pend` 에서 지워야 한다).
+    bool enqueue_down(Pending& p, const std::string& line, bool announce, bool force) {
+        // 🔴 **장치가 없으면 큐에 담지 않는다.** 담으면 아무도 빼가지 않아 다음 세션까지
+        // 살아남고, 그러면 **장치가 모르는 상태에 옛 명령이 떨어진다**(설계 §2 가 금지한 것).
+        // 옛 거동은 `send_ard` 가 조용히 no-op 해서 **아무 말 없이 사라졌다** — 그건 더 나쁘다.
+        // (폰 경로 `on_plate()` 가 장치 없이도 `dispatch` 를 부를 수 있어 실제로 도달한다.
+        //  selftest 에서 큐가 쌓이는 것을 보고 찾았다 — 소켓 없는 경로가 그 모양이다.)
+        if (ard == BAD_SOCK) {
+            q_nodev++;                 // 🔴 `q_rejected`(큐 넘침)와 **다른 칸**이다
+            logf("!", "장치 연결이 없다 — 하행 거절 rid=" + std::to_string(p.wire_rid));
+            if (p.ws_fd != BAD_SOCK)
+                send_err(p.ws_fd, p.browser_rid, "device_offline", "센서가 연결되어 있지 않습니다");
+            return false;
+        }
+        // 옛 거동 — **착지 위상을 의도적으로 겨냥하는 시험 전용**(원장 §8.17 의 미해결 물음).
+        if (DOWN_IMMEDIATE) {
+            p.queued = false; p.tries = (p.tries < 1 ? 1 : p.tries); p.sent_ms = now_ms();
+            send_ard(line);
+            return true;
+        }
+        // 한 줄 상한 감시선. `RX_CAP=96` 에서 `+IPD` 접두를 뺀 87B 다. 우리 줄은 30B 안쪽이라
+        // 정상적으로는 안 걸린다 — **걸리면 그건 새 프레임 종류가 들어온 신호다.**
+        if ((long long)line.size() > (long long)DOWN_LINE_MAX_B + 1) {
+            char b[128];
+            snprintf(b, sizeof(b), "하행 한 줄이 %zuB — 장치 RX_CAP(96, 접두 포함) 위험. 그대로 보낸다",
+                     line.size());
+            logf("!", b);
+        }
+        if (!force && downq_bytes + (long long)line.size() > downq_max_b()) {
+            q_rejected++;
+            char b[160];
+            snprintf(b, sizeof(b), "하행 큐 상한(%lldB) 초과 — 거절 rid=%u (대기 %zu줄 %lldB)",
+                     downq_max_b(), p.wire_rid, downq.size(), downq_bytes);
+            logf("!", b);
+            // 🔴 **조용히 버리지 않는다.** 버림과 거절은 다르다(원장 §8.20) —
+            // 버림은 아무도 모르게 사라지고, **거절은 사용자에게 말한다.**
+            if (p.ws_fd != BAD_SOCK)
+                send_err(p.ws_fd, p.browser_rid, "queue_full", "요청이 밀려 있습니다. 잠시 후 다시 눌러 주세요");
+            return false;
+        }
+        DownQ q;
+        q.line = line; q.ws_fd = p.ws_fd; q.brid = p.browser_rid; q.slot = p.slot;
+        q.wire_rid = p.wire_rid;
+        // 마감은 **enqueue 때 한 번만 박는다.** 그래야 `expires_ms = deadline − now` 가
+        // 같은 rid 에 대해 **단조 비증가**가 된다(설계 §4-B). `ahead` 로 다시 계산하면
+        // 앞이 밀릴 때 값이 늘어 단조성이 깨진다.
+        q.deadline_ms = now_ms() + DOWNQ_WAIT_CAP_MS;
+        downq.push_back(q);
+        downq_bytes += (long long)line.size();
+        // 🔴 **`tries` 를 건드리지 않는다.** 재전송이 이 함수를 다시 타므로 여기서 0 으로 밀면
+        // 재시도 횟수가 영구히 리셋되어 **ACK_MAX_TRIES 가 무력해지고 무한 재전송이 된다.**
+        // "전선에 나갔나"는 `queued` 하나로 표현한다 — 표시자를 두 개 두면 반드시 갈린다.
+        p.queued = true;
+        if (announce && p.ws_fd != BAD_SOCK) send_queued(q);
+        return true;
+    }
+
+    // 창이 열렸다(= `S` 가 도착했다). **큐 전부를 한 거래로 묶어** 내보낸다.
+    //   ignore_window : `S` 가 안 와서 창을 포기하는 경로(설계 §3)
+    void flush_downq(const char* why, bool ignore_window) {
+        if (downq.empty() || ard == BAD_SOCK) return;
+        long long t = now_ms();
+        if (!ignore_window && ard_seen) {
+            // 창 안으로 얼마나 들어왔나. 지났으면 **다음 `S` 를 기다린다** —
+            // 늦게 쏘면 장치의 송신 구간을 침범하고, 그게 §8.15 의 UART 혼재다.
+            long long into = t - ard_last_ms;
+            if (into >= w_srv()) {
+                win_skips++;
+                char b[160];
+                snprintf(b, sizeof(b), "창을 지났다(S+%lldms ≥ W_srv %lldms) — 다음 S 를 기다린다"
+                                       " · 대기 %zu줄 (%s)", into, w_srv(), downq.size(), why);
+                logf("…", b);
+                return;
+            }
+        }
+        // 바이트 상한까지만 담는다. **남은 것은 버리지 않고 다음 창으로 미룬다.**
+        std::string payload;
+        std::vector<DownQ> batch;
+        while (!downq.empty()) {
+            const DownQ& q = downq.front();
+            // ⚠ 첫 줄은 상한을 넘어도 담는다 — 안 그러면 큰 줄 하나가 큐를 영구히 막는다.
+            if (!payload.empty() &&
+                payload.size() + q.line.size() > (size_t)DOWN_BATCH_CAP_B) break;
+            payload += q.line;
+            batch.push_back(q);
+            downq_bytes -= (long long)q.line.size();
+            downq.erase(downq.begin());
+        }
+        if (downq_bytes < 0) downq_bytes = 0;
+        if (batch.empty()) return;
+
+        if (!send_raw(ard, payload.data(), payload.size(), "아두이노")) {
+            // 🔴 떼어낸 배치는 이미 큐에 없다 — **여기서 따로 닫아야** 화면의 중간 상태가 안 남는다.
+            // (실패 경로가 `clear_downq` 로 나머지를 닫는다. 순서상 이 둘이 겹치지 않는다.)
+            for (size_t i = 0; i < batch.size(); i++)
+                fail_down_item(batch[i], "device_offline", "센서로 보내지 못했습니다");
+            ard_send_failed();
+            return;
+        }
+        batch_count++;
+        batch_lines += (long long)batch.size();
+
+        // 🔑 **줄마다 따로 찍는다.** 배치 요약만 남기면 장치 쪽 `+IPD` 도착 위상과
+        // **짝지을 식별자가 사라진다**(어느 rid 가 언제 나갔나). 그 짝이 반쪽이면 위상 계측이 죽는다.
+        for (size_t i = 0; i < batch.size(); i++) {
+            std::map<uint16_t, Pending>::iterator it = pend.find(batch[i].wire_rid);
+            if (it != pend.end()) {
+                it->second.queued = false;
+                it->second.sent_ms = t;                       // ACK 시계는 **여기서** 시작한다
+                if (it->second.tries < 1) it->second.tries = 1;
+            }
+            char ph[64];
+            if (!ard_seen) snprintf(ph, sizeof(ph), " (S미수신)");
+            else           snprintf(ph, sizeof(ph), " (S+%lldms)", (long long)(t - ard_last_ms));
+            std::string l = batch[i].line;
+            if (!l.empty() && l[l.size()-1] == '\n') l.erase(l.size()-1);
+            logf("→ARD", l + ph);
+        }
+        {
+            char b[192];
+            snprintf(b, sizeof(b), "배치 %zu줄 · %zuB · 한 거래 (%s) · cap %dB · 남은 큐 %zu줄",
+                     batch.size(), payload.size(), why, DOWN_BATCH_CAP_B, downq.size());
+            logf("⇉", b);
+        }
+        // 미룬 것을 **조용히 미루지 않는다** — 안 적으면 지연이 아무 데도 안 보인다(원장 §5.2).
+        if (!downq.empty()) {
+            q_deferred++;
+            char b[160];
+            snprintf(b, sizeof(b), "바이트 상한에 걸려 %zu줄(%lldB)을 다음 창으로 미뤘다",
+                     downq.size(), downq_bytes);
+            logf("…", b);
         }
     }
 
@@ -1364,6 +1673,33 @@ struct Server {
           << ",\"code\":\"" << code << "\",\"message\":" << jstr(msg) << "}";
         if (fd != BAD_SOCK && conns.count(fd)) ws_send(fd, o.str());
     }
+    // §4-B (REQ-0155 에서 web 과 합의한 계약) — **"받았고 아직 안 보냈다"**
+    //
+    // 🔴 **별도 타입이어야 한다. `ack` 에 필드로 얹으면 안 된다.** web 의 dispatcher 는
+    // 모르는 타입을 조용히 무시하므로 별도 타입은 옛 화면에서 안전하지만, `ack` 에 얹으면
+    // **옛 화면이 `type==='ack'` 만 보고 pending 을 지우며 "예약되었습니다"를 띄운다** —
+    // **전선에 나가지도 않은 요청을 성공으로 선언한다.**
+    //
+    // `ahead`      : 앞에 몇 건. "대기 중"만으로는 **멈춘 것과 밀린 것**을 못 가른다.
+    // `expires_ms` : 🔴 **지속시간이다. 절대 시각이 아니다.** epoch 로 주면 시계 어긋난 만큼 틀린다.
+    //   그리고 이 값이 재는 것은 **"큐에서 나갈 때까지"**이고 **최종 결말까지가 아니다** —
+    //   web 이 자기 타이머를 `expires_ms + 6초` 로 잡으므로, 여기에 총예산을 넣으면 **이중 계산**이 된다.
+    void send_queued(const DownQ& q) {
+        int ahead = 0;
+        for (size_t i = 0; i < downq.size(); i++) {
+            if (downq[i].wire_rid == q.wire_rid) break;
+            ahead++;
+        }
+        long long left = q.deadline_ms - now_ms();
+        if (left < 0) left = 0;                 // 마감을 넘겨도 음수를 내보내지 않는다
+        std::ostringstream o;
+        o << "{\"type\":\"queued\",\"rid\":" << jstr(q.brid)
+          << ",\"slot\":" << (q.slot.empty() || q.slot == "??" ? std::string("null")
+                                                              : std::string("\"") + q.slot + "\"")
+          << ",\"ahead\":" << ahead
+          << ",\"expires_ms\":" << left << "}";
+        if (q.ws_fd != BAD_SOCK && conns.count(q.ws_fd)) ws_send(q.ws_fd, o.str());
+    }
     void send_ack(sock_t fd, const std::string& rid, const std::string& slot, int result,
                   char kind = 'R') {
         const char* m = "예약되었습니다";
@@ -1510,7 +1846,8 @@ struct Server {
         // 실제로 그 버그를 냈다: `R,1,B2,980가4568,F7` 이 나가 아두이노가 죽었다.
         if (kind == 'R') snprintf(buf, sizeof(buf), "R,%u,%s,%s,", rid, slot.c_str(), p.user_id.c_str());
         else             snprintf(buf, sizeof(buf), "C,%u,%s,", rid, slot.c_str());
-        send_ard(build_line(buf));
+        // 🔑 **전송하지 않는다. 큐에 담는다.** 나가는 것은 다음 창(= 다음 `S` 도착)이다.
+        if (!enqueue_down(pend[rid], build_line(buf), true, false)) pend.erase(rid);
     }
 
     // §2.4 `T` — 테스트 모드 제어. R/C 와 같은 pend 표·재전송·타임아웃을 그대로 탄다.
@@ -1525,7 +1862,11 @@ struct Server {
         p.top = op;
         p.sent_ms = now_ms(); p.tries = 1;
         pend[rid] = p;
-        send_ard(build_line(test_prefix(p)));
+        // ⚠ **`T` 도 같은 큐를 탄다** — 하행이면 규율을 지킨다(설계 §7 은 "안 정했다"였고
+        // 여기서 정한다). 대가가 있다: `T` 는 §8.7·§8.17 에서 **착지 타이밍을 재는 도구**였는데
+        // 큐에 태우면 안전한 창으로 강제되어 **"착지 시점을 의도적으로 맞춘 시험"의 수단이 사라진다.**
+        // → 그 시험이 필요하면 `--down-immediate` 로 옛 거동을 쓴다. **도구가 바뀐 사실은 원장 §8.23.**
+        if (!enqueue_down(pend[rid], build_line(test_prefix(p)), true, false)) pend.erase(rid);
     }
     // §12B — 시뮬레이터 한 걸음. **무장 여부로 막지 않는다**(테스트 모드와 별개).
     void dispatch_sim(sock_t ws_fd, const std::string& brid) {
@@ -1536,7 +1877,7 @@ struct Server {
         p.kind = 'M'; p.top = 0;
         p.sent_ms = now_ms(); p.tries = 1;
         pend[rid] = p;
-        send_ard(build_line(sim_prefix(p)));
+        if (!enqueue_down(pend[rid], build_line(sim_prefix(p)), true, false)) pend.erase(rid);
     }
     static std::string sim_prefix(const Pending& p) {
         char buf[32];
@@ -1553,9 +1894,27 @@ struct Server {
     // ---------- 타이머 (§7.3 재전송 / §3.4 offline)
     void tick() {
         long long t = now_ms();
+        // ── 창을 포기하고 쏘는 경로 (설계 §3)
+        // `S` 가 안 오면 창이 영영 안 열려 **하행이 조용히 사라진다.** 안 쏘는 것보다
+        // 나가서 실패하는 것이 낫다 — 조용한 소실이 더 나쁘다.
+        // ⚠ `DOWN_DMAX_MS`(2400) < `OFFLINE_MS`(3500) 이므로, 서버가 "장치 없음"으로
+        // 판단하기 **전에** 한 번은 시도한다.
+        // ⚠ `ard_seen` 이 false 면 `ard_last_ms` 는 의미 없는 0 이라 이 조건이 즉시 참이다 —
+        // **그게 맞다.** 승격 직후 재하달은 창 개념이 없고, 보통은 같은 틱의 첫 `S` 처리가
+        // 먼저 내보내므로 여기까지 오지 않는다.
+        // ⚠ **슬롯당 1회로 묶는다**(위 `last_dmax_ms` 주석). 안 묶으면 200ms 버스트가 된다.
+        if (!downq.empty() && ard != BAD_SOCK && (t - ard_last_ms) > DOWN_DMAX_MS
+            && (t - last_dmax_ms) >= DOWN_SLOT_MS) {
+            last_dmax_ms = t;
+            dmax_flushes++;            // 그래서 이 수가 "몇 번 포기했나"로 읽힌다
+            flush_downq("S 가 안 온다 — 창 포기", true);
+        }
         std::vector<uint16_t> dead;
         for (std::map<uint16_t, Pending>::iterator it = pend.begin(); it != pend.end(); ++it) {
             Pending& p = it->second;
+            // 🔴 **큐에서 기다리는 동안은 ACK 시계가 안 돈다.** 안 그러면 전선에 나가기도 전에
+            // 재전송이 걸려 같은 rid 가 큐에 두 번 들어간다 — 큐가 없애려던 증폭이 큐 안에서 생긴다.
+            if (p.queued) continue;
             if (t - p.sent_ms < ACK_TIMEOUT_MS) continue;
             if (p.tries >= ACK_MAX_TRIES) {
                 ack_fail_count++;                         // 하행 건강 지표(소크 요약)
@@ -1579,8 +1938,25 @@ struct Server {
                 line = buf;
             }
             logf("↻", "재전송 " + std::to_string(p.tries) + "/" + std::to_string(ACK_MAX_TRIES)
-                      + " (같은 wire_rid=" + std::to_string(p.wire_rid) + ")");
-            send_ard(build_line(line));
+                      + " (같은 wire_rid=" + std::to_string(p.wire_rid) + ") — 큐에 다시 넣는다");
+            // 🔴 **재전송도 하행이다 — 같은 큐를 탄다.** 창 밖에서 쏘면 규율이 무의미해진다.
+            //   announce=false : `queued` 를 다시 보내면 같은 rid 의 `expires_ms` 가 **늘어나** 단조성이 깨진다
+            //   force=true     : 이미 약속한 건이므로 깊이 상한으로 거절하지 않는다
+            // ⚠ 대가: 재시도 간격이 창 주기에 종속된다. `ACK_TIMEOUT_MS`(1500) + 창 대기(≤1200)
+            //   → 3회 소진이 최악 ≈6.9초(전에는 4.5초). web 타이머는 `expires_ms(≤4800) + 6000`
+            //   = 10.8초라 **아직 안 겹친다.** `ACK_TIMEOUT_MS` 는 **일부러 안 건드렸다** —
+            //   한 교체에 변경 둘을 넣으면 깨질 때 어느 것 때문인지 못 가른다(원장 §6).
+            // 🔴 **반환값을 봐야 한다.** 링크가 끊긴 뒤에는 `end_ard_session` 이 큐만 비우고
+            // **전선에 나가 있던 pend 는 남는다.** 그 건이 여기로 와서 거절되면(`ard==BAD_SOCK`)
+            // 이미 `device_offline` 로 답이 갔는데, 반환값을 무시하면 `pend` 에 남아
+            // 몇 틱 뒤 **`ack_timeout` 으로 한 번 더** 답한다.
+            // ⚠ 그 이름은 **"전선에 나갔다. 3회 재전송까지 했다"** 를 뜻한다(§8.16) —
+            // 서버가 스스로 거절한 건에 붙이면 **로그에 거짓 문장이 남고 `ack_fail_count` 도 오염된다.**
+            // 08-17 07:54:40 줄이 정확히 그 형태였다. 같은 것을 새 코드에 만들지 않는다.
+            if (!enqueue_down(p, build_line(line), false, true)) {
+                dead.push_back(it->first);   // ⚠ 루프 안에서 erase 하면 반복자가 무효화된다
+                continue;
+            }
         }
         for (size_t i = 0; i < dead.size(); i++) pend.erase(dead[i]);
     }
@@ -1755,6 +2131,24 @@ struct Server {
             }
             write_log_if_changed();
             push_snapshot();
+
+            // ═══ 내 창이 열렸다. 큐 전부를 한 거래로 내보낸다 ═══════════════════════
+            //
+            // 🔴 **왜 S 분기의 맨 끝인가**: 이 분기 안에서 하행이 새로 생긴다 —
+            // 불일치 감지(`dispatch('C')`)와 uptime 재동기화(`resync_reservations`)가 그것이다.
+            // flush 를 `ard_last_ms` 갱신 직후(위쪽)에 두면 **그 치유 `C` 가 다음 창까지 밀려**
+            // 원장 §8.21 이 실측한 "갈린 구간 ≈1초"가 조용히 ≈2.2초로 늘어난다.
+            // **실측값을 낡게 만드는 배치를 고르지 않는다.**
+            //
+            // ⚠ 그리고 이 자리 때문에 **승격 직후 두 줄의 순서가 뒤집힌다**(원장 §7.2):
+            //     전: `⟳ 재하달` → `→ARD R` → `←ARD S`
+            //     후: `⟳ 재하달`(큐) → `←ARD S` → `→ARD R`   ← **같은 틱이다**
+            // `adopt_as_parking()` 이 `resync_reservations()` 를 부른 직후 `drain_ard_buf()` 가
+            // 첫 프레임을 같은 틱에서 처리하므로 지연은 사실상 0 이고, **순서만 바뀐다.**
+            // 🔑 **이것은 회귀가 아니라 이 설계의 정의다** — 서버는 장치가 말한 뒤에 말한다.
+            // 면제(승격 시 즉시 송신)를 두지 않은 이유: 그 순간의 위상은 `ard_last_ms` 가
+            // 아직 옛 세션 값이라 **측정할 수 없고**, 측정 못 하는 순간에 쏘는 것이 §8.15 다.
+            flush_downq("S 도착 — 창 시작", false);
         }
         else if (f[0] == "A" && f.size() >= 4) {
             uint16_t rid = (uint16_t)atoi(f[1].c_str());
@@ -1764,6 +2158,18 @@ struct Server {
             if (it == pend.end()) { logf("!", "모르는 rid 의 ACK — 무시 (재전송 중복일 수 있다)"); return; }
             Pending p = it->second;
             pend.erase(it);
+
+            // ── 왕복 실측 (설계 §1) — **`W_srv` 를 상수로 두지 않기 위한 유일한 입력**
+            // 이 값은 `RTT + 장치 처리시간` 이라 **RTT 의 상한**이고, 창을 좁히는 방향이라
+            // 보수적 = 안전하다. **재전송된 건은 표본에서 뺀다** — `sent_ms` 가 마지막 시도
+            // 시각이라 값은 맞지만, 병리 구간이 섞이면 창이 그 최악에 영구히 묶인다.
+            if (!p.queued && p.sent_ms > 0 && p.tries <= 1) {
+                long long rtt = now_ms() - p.sent_ms;
+                if (rtt >= 0 && rtt < DOWN_SLOT_MS * 4) {   // 그 이상은 표본이 아니라 사건이다
+                    rtt_last_ms = rtt; rtt_n++;
+                    if (rtt > rtt_max_ms) rtt_max_ms = rtt;
+                }
+            }
 
             // result=3 이면 slot 은 "??" 다(§2.4). 전선의 자리 값을 믿지 않고
             // **매핑표의 원래 자리**를 쓴다 — 상관 키는 rid 이고 원본은 서버가 들고 있다.
@@ -1920,6 +2326,20 @@ struct Server {
         }
         if (!device_online()) {                                   // §7.1
             send_err(fd, rid, "device_offline", "센서가 연결되어 있지 않습니다");
+            return;
+        }
+        // 🔴 같은 자리에 이미 진행 중인 하행이 있으면 **명시적으로 거절한다**(설계 §4-B).
+        // 지금까지 이 검사는 `1721`·`1750`(S 프레임 판정)에서만 쓰였고 **브라우저 경로에는
+        // 없었다** — 그래서 연타가 그대로 `dispatch` 를 여러 번 만들었다. 큐가 생긴 뒤에는
+        // 그것이 곧 큐에 여러 건이 쌓이는 경로다.
+        // ⚠ 이제 `pend` 는 **큐에서 기다리는 건까지 포함**하므로(dispatch 가 먼저 `pend` 를
+        // 만든다) 이 검사가 큐 대기분도 덮는다.
+        // ⚠ **`queue_full` 과 코드를 갈라 둔다** — 화면 문구가 완전히 다르다:
+        // 하나는 시스템 사정이고 하나는 "이미 처리 중"이다. 지금까지는 둘 다 `error` 라 못 갈랐다.
+        if (has_pending_for(slot)) {
+            q_dup++;
+            logf("!", "같은 자리에 진행 중인 하행이 있다 — 거절 " + slot);
+            send_err(fd, rid, "already_pending", "그 자리는 이미 처리 중입니다");
             return;
         }
         // 서버가 아는 상태로 미리 거를 수도 있지만, 최종 판정은 아두이노 ACK 다(§7.2).
@@ -2755,6 +3175,127 @@ static int selftest() {
         if (!ok) bad++;
     }
 
+#ifndef _WIN32
+    // ══ (5) 하행 슬롯 큐 — **코드 판독이 아니라 바이트를 받아 본다** ═══════════════════
+    //
+    // 🔑 `socketpair` 를 `ard` 자리에 꽂는다. `send_raw` 가 진짜 `send()` 를 하고 내가 반대편에서
+    // 읽으므로 **"한 거래로 나갔는가"를 전선 바이트로 확인**할 수 있다.
+    // ⚠ 이것은 **실물 왕복이 아니다** — 장치도 ESP 도 없다. 검증하는 것은 **내 큐 규율**이고,
+    // 실기 도달은 시험 인스턴스(루트 순서)에서 따로 봐야 한다. 두 개를 같은 확신도로 말하지 않는다.
+    {
+        std::cout << "\n[슬롯 큐] socketpair 로 전선 바이트 대조\n";
+        int sv[2];
+        if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) != 0) {
+            std::cout << "  ! socketpair 실패 — 이 묶음을 건너뛴다\n";
+        } else {
+            Server s; s.no_disk = true;
+            s.ard = sv[0]; s.park_dev = "P1";
+            s.ard_seen = true; s.ard_last_ms = now_ms();
+            char b[1024];
+
+            // ① **이벤트가 전송을 만들지 않는다** — dispatch 3건 뒤에도 전선은 조용해야 한다
+            s.dispatch('R', BAD_SOCK, "", "A1", "00000000");
+            s.dispatch('R', BAD_SOCK, "", "A2", "00000000");
+            s.dispatch('C', BAD_SOCK, "", "B3", "");
+            int r0 = (int)recv(sv[1], b, sizeof(b), MSG_DONTWAIT);
+            bool ok1 = (s.downq.size() == 3 && s.batch_count == 0 && r0 < 0);
+            std::cout << (ok1 ? "  ✓ " : "  ✗ ") << "dispatch 3건 → 큐 " << s.downq.size()
+                      << "줄 · 전선 " << (r0 < 0 ? 0 : r0) << "B (기대: 큐 3 · 전선 0)\n";
+            if (!ok1) bad++;
+
+            // ② 창이 열리면 **한 거래**로 나간다 — recv 한 번에 세 줄이 다 들어온다
+            s.flush_downq("selftest 창", false);
+            int r1 = (int)recv(sv[1], b, sizeof(b), MSG_DONTWAIT);
+            std::string got(b, r1 > 0 ? r1 : 0);
+            int lf = 0;
+            for (size_t i = 0; i < got.size(); i++) if (got[i] == '\n') lf++;
+            bool ok2 = (lf == 3 && s.batch_count == 1 && s.batch_lines == 3 && s.downq.empty());
+            std::cout << (ok2 ? "  ✓ " : "  ✗ ") << "flush → 한 거래에 " << lf << "줄 · "
+                      << (r1 > 0 ? r1 : 0) << "B · 배치 " << s.batch_count
+                      << " (기대: 3줄 · 배치 1)\n";
+            if (!ok2) bad++;
+
+            // ③ FIFO — 예약/취소가 뒤집히면 안 된다
+            size_t pA1 = got.find("R,1,A1"), pA2 = got.find("R,2,A2"), pB3 = got.find("C,3,B3");
+            bool ok3 = (pA1 != std::string::npos && pA2 != std::string::npos &&
+                        pB3 != std::string::npos && pA1 < pA2 && pA2 < pB3);
+            std::cout << (ok3 ? "  ✓ " : "  ✗ ") << "FIFO 순서 R,A1 → R,A2 → C,B3\n";
+            if (!ok3) bad++;
+
+            // ④ 바이트 상한 — 넘치면 **버리지 않고 미룬다**
+            int save_cap = DOWN_BATCH_CAP_B;
+            DOWN_BATCH_CAP_B = 40;                    // 한 줄(약 20B)이 두 개면 넘는 값
+            s.ard_last_ms = now_ms();
+            s.dispatch('R', BAD_SOCK, "", "A3", "00000000");
+            s.dispatch('R', BAD_SOCK, "", "A4", "00000000");
+            s.dispatch('R', BAD_SOCK, "", "A5", "00000000");
+            size_t before = s.downq.size();
+            s.flush_downq("selftest cap", false);
+            int r2 = (int)recv(sv[1], b, sizeof(b), MSG_DONTWAIT);
+            bool ok4 = (r2 > 0 && r2 <= 44 && !s.downq.empty() && s.downq.size() < before
+                        && s.q_deferred == 1);
+            std::cout << (ok4 ? "  ✓ " : "  ✗ ") << "cap 40B → 전선 " << (r2 > 0 ? r2 : 0)
+                      << "B · 남은 큐 " << s.downq.size() << "줄 · 미룬창 " << s.q_deferred
+                      << " (기대: 남은 큐 >0 · 미룬창 1 · 버림 0)\n";
+            if (!ok4) bad++;
+            DOWN_BATCH_CAP_B = save_cap;
+
+            // ⑤ 창을 지나면 **다음 S 를 기다린다**(장치 송신 구간을 침범하지 않는다)
+            s.ard_last_ms = now_ms() - (DOWN_WIN_MS + 10);
+            long long skips0 = s.win_skips;
+            s.flush_downq("selftest 창밖", false);
+            int r3 = (int)recv(sv[1], b, sizeof(b), MSG_DONTWAIT);
+            bool ok5 = (s.win_skips == skips0 + 1 && r3 < 0);
+            std::cout << (ok5 ? "  ✓ " : "  ✗ ") << "창 밖 flush → 창놓침 " << s.win_skips
+                      << " · 전선 " << (r3 < 0 ? 0 : r3) << "B (기대: +1 · 0B)\n";
+            if (!ok5) bad++;
+
+            // ⑥ 🔴 **재전송이 `tries` 를 리셋하지 않는다** — 이 검사가 없으면 무한 재전송을
+            //    그냥 내보냈을 것이다(구현 중에 실제로 그 코드를 썼고 여기서 막았다).
+            s.ard_last_ms = now_ms();
+            s.flush_downq("selftest 잔여", true);
+            while (recv(sv[1], b, sizeof(b), MSG_DONTWAIT) > 0) {}   // 전선 비우기
+            uint16_t rid = 0;
+            for (std::map<uint16_t, Pending>::iterator it = s.pend.begin();
+                 it != s.pend.end(); ++it)
+                if (!it->second.queued) { rid = it->first; break; }
+            bool ok6 = false;
+            if (rid) {
+                int t0 = s.pend[rid].tries;
+                s.pend[rid].sent_ms = now_ms() - (ACK_TIMEOUT_MS + 50);
+                s.tick();                                    // 재전송 → 큐로
+                bool requeued = s.pend.count(rid) && s.pend[rid].queued;
+                int t1 = s.pend.count(rid) ? s.pend[rid].tries : -1;
+                s.ard_last_ms = now_ms();
+                s.flush_downq("selftest 재전송", false);
+                int t2 = s.pend.count(rid) ? s.pend[rid].tries : -1;
+                ok6 = (requeued && t1 == t0 + 1 && t2 == t1);
+                std::cout << (ok6 ? "  ✓ " : "  ✗ ") << "재전송: tries " << t0 << "→" << t1
+                          << "→" << t2 << " · 큐 경유 " << (requeued ? "예" : "아니오")
+                          << " (기대: 1→2→2 · 큐 경유)\n";
+            } else {
+                std::cout << "  ✗ 재전송 검사용 pend 를 못 찾았다\n";
+            }
+            if (!ok6) bad++;
+
+            // ⑦ 세션이 끝나면 큐를 비우고 **답을 남긴다**(조용히 사라지지 않는다)
+            s.ard_last_ms = now_ms();
+            s.dispatch('R', BAD_SOCK, "", "B1", "00000000");
+            size_t q0 = s.downq.size();
+            long long dropped0 = s.q_dropped_link;
+            s.clear_downq("selftest 세션종료");
+            bool ok7 = (s.downq.empty() && s.downq_bytes == 0 &&
+                        s.q_dropped_link == dropped0 + (long long)q0);
+            std::cout << (ok7 ? "  ✓ " : "  ✗ ") << "세션 종료 → 큐 비움 · 링크버림 "
+                      << s.q_dropped_link << " (기대: 큐 0 · 버린 수가 세어짐)\n";
+            if (!ok7) bad++;
+
+            s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
+            closesock(sv[0]); closesock(sv[1]);
+        }
+    }
+#endif
+
     std::cout << (bad ? "자가검증 실패\n" : "자가검증 통과\n");
     return bad ? 1 : 0;
 }
@@ -2789,6 +3330,27 @@ int main(int argc, char** argv) {
                 std::cerr << "--max-line 은 64~1024 여야 한다 (받은 값: " << a.substr(11) << ")\n";
                 return 2;
             }
+        }
+        // 🔴 **임시값을 갈아끼우는 손잡이.** arduino 의 `rxmax`(바이트)가 나오면 이걸로 넣는다 —
+        // 재빌드가 필요하면 "나중에 하자"가 되고, 그러면 임시값이 영구값이 된다.
+        if (a.compare(0, 11, "--down-cap=") == 0) {
+            int v = atoi(a.substr(11).c_str());
+            if (v >= 32 && v <= 4096) {
+                DOWN_BATCH_CAP_B = v;
+                std::cout << "*** --down-cap=" << v << "B — 하행 배치 상한(창당). "
+                          << "큐 깊이는 " << (v * (DOWNQ_WAIT_CAP_MS / DOWN_SLOT_MS))
+                          << "B 로 같이 움직인다 ***\n";
+            } else {
+                std::cerr << "--down-cap 은 32~4096 이어야 한다 (받은 값: " << a.substr(11) << ")\n";
+                return 2;
+            }
+        }
+        // 🔴 옛 거동(이벤트 시점에 즉시 송신). **착지 위상을 겨냥하는 시험 전용**이다 —
+        // 원장 §8.17 의 미해결 물음이 이 수단 없이는 영영 안 갈린다.
+        if (a == "--down-immediate") {
+            DOWN_IMMEDIATE = true;
+            std::cout << "*** --down-immediate — 하행이 **창을 무시하고 즉시** 나간다. "
+                      << "슬롯 규율이 꺼진 상태다(시험 전용) ***\n";
         }
     }
     // 시험용 포트 이동(REQ-0072) — 운영 인스턴스를 안 죽이고 두 번째를 띄우기 위한 이음매
