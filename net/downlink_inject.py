@@ -71,6 +71,9 @@ class Injector:
         self.n_timeout = 0
         self.n_reconnect = 0
         self.n_error = 0
+        # 큐 도입(REQ-0158) 뒤 생긴 **중간 상태**. 결말이 아니므로 다른 칸과 합치지 않는다 —
+        # 합치면 "아직 전선에 안 나간 것"이 성공이나 실패로 세어진다.
+        self.n_queued = 0
 
     def log(self, mark, msg):
         line = "%s  %s %s" % (stamp(), mark, msg)
@@ -154,6 +157,16 @@ class Injector:
                               "전선에 나갔는지 여부를 server.cpp 에서 확인하고 칸을 정해라"
                          % (rid, code))
                 return "unknown"
+
+            # ⚠ 큐가 들어온 뒤 생긴 중간 상태. **성공도 실패도 아니다** —
+            # "받았고 아직 전선에 안 내보냈다"이므로 **어느 칸에도 세지 않고 계속 기다린다.**
+            # 이것을 결말로 세면 **아직 나가지도 않은 하행을 판정해 버린다.**
+            if o.get("type") == "queued":
+                self.n_queued += 1
+                self.log("=", "큐 대기 %s — ahead=%s · expires_ms=%s · ack_budget_ms=%s "
+                              "(결말 아님. 계속 기다린다)"
+                         % (rid, o.get("ahead"), o.get("expires_ms"), o.get("ack_budget_ms")))
+                continue
 
             if o.get("type") == "ack":
                 result = o.get("result")
@@ -258,9 +271,10 @@ class Injector:
 
     def summary(self):
         self.log("▣", "주입 종료 · 시도 %d · ACK(result=4) %d · ACK(다른 result) %d · "
-                       "미주입(서버거절) %d · 응답없음 %d · 재접속 %d · 예외 %d"
+                       "미주입(서버거절) %d · 응답없음 %d · 재접속 %d · 예외 %d · 큐대기통보 %d"
                  % (self.n_sent, self.n_ack, self.n_ack_other,
-                    self.n_not_injected, self.n_timeout, self.n_reconnect, self.n_error))
+                    self.n_not_injected, self.n_timeout, self.n_reconnect, self.n_error,
+                    self.n_queued))
         self.log("▣", "⚠ 이 숫자는 **서버 왕복**만 말한다. 장치가 실제로 받았는지(②)는 "
                       "시리얼 로그가 있어야 갈린다 — D1 과 D2 는 monitor 가 가른다")
         self.log("▣", "🔴 **분모는 '시도'가 아니라 '시도 − 미주입' 이다.** 미주입은 서버가 "
