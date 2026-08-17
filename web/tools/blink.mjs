@@ -10,7 +10,7 @@
  *       node web/tools/blink.mjs --port 10500 --case B --n 3
  */
 import { launch, evaluate, waitFor, sleep } from './cdp.mjs';
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync, appendFileSync } from 'node:fs';
 
 const argv = process.argv.slice(2);
 const arg = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
@@ -29,6 +29,17 @@ if (FORBIDDEN.includes(String(PORT))) {
 }
 const BASE = 'http://127.0.0.1:' + PORT + '/';
 mkdirSync(OUT, { recursive: true });
+
+/* 서버 로그 — **장치 쪽을 읽는 유일한 창**이다(§6.1). 화면만 봐서는 장치가 무엇을 들고
+   있는지 알 수 없다. 기본 경로는 포트 오프셋에서 유도한다: 10500 → +600 → test+600.log */
+const LOG = arg('--log', process.env.HOME + '/parking-logs/parking-server.test+' + (Number(PORT) - 9900) + '.log');
+const logLines = () => { try { return readFileSync(LOG, 'utf8').split('\n'); } catch (e) { return ['(로그를 못 읽었다: ' + e.message + ')']; } };
+
+/* 🔴 개입 구간을 파일에 남긴다 — 1차 창에서 두 조각의 시각을 "추정"으로 넘겨야 했다.
+   monitor 는 이 값으로 관측을 가른다. 사람 기억이 아니라 파일이 원천이어야 한다. */
+const stamp = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
+const RUNLOG = new URL('blink-runs.tsv', OUT);
+const markRun = (what) => { try { appendFileSync(RUNLOG, stamp() + '\t' + PORT + '\t' + CASE + '\t' + what + '\n'); } catch { } };
 
 /* 화면에서 한 번에 걷어 오는 것 — M1~M7 전부. 사전 등록한 항목만 본다. */
 const SAMPLE = `(() => {
@@ -188,6 +199,65 @@ try {
         const back = await evaluate(client, SAMPLE);
         say('  정리: ' + (back.tiles.find(t => t.startsWith(free + ':')) || '(없음)'));
       }
+    }
+  }
+
+  if (CASE === 'C') {
+    /* C. 예약은 장치에 반영됐는데 ack 이 유실된다 (`fake_arduino --drop-rate 1.0`).
+       사전 등록 §6.1 — **불일치 = 화면이 "예약 아님"으로 그리는 동안 장치는 예약을 들고 있음.**
+       화면은 브라우저에서, 장치 쪽은 **서버 로그**에서 읽는다. 두 계측기의 시계가 다르다. */
+    const tgt = (slot) => `(() => { const b = document.querySelector('.tile[data-slot="${slot}"]');
+      return b ? { state: b.querySelector('.tile__state').textContent.trim(), view: b.dataset.view || '', dis: b.getAttribute('aria-disabled') } : null; })()`;
+
+    for (let i = 1; i <= N; i++) {
+      say('\n[C' + i + '] 예약을 보내고 ack 이 유실되는 것을 본다');
+      await waitFor(client, `(typeof state !== 'undefined' && state.snapshot && state.snapshot.device.online === true)`,
+                    { what: '장치 연결', timeout: 30000 });
+      const free = await evaluate(client, `(() => {
+        const b = [...document.querySelectorAll('.tile')].find(x =>
+          /빈 자리/.test(x.querySelector('.tile__state').textContent) && x.getAttribute('aria-disabled') !== 'true');
+        return b ? b.dataset.slot : null; })()`);
+      if (!free) { say('  누를 수 있는 빈 자리가 없다 — 건너뛴다'); break; }
+
+      const logBefore = logLines().length;
+      await click(client, `.tile[data-slot="${free}"]`);
+      await waitFor(client, `!!document.getElementById('confirm-dialog').open`, { what: '대화상자', timeout: 5000 });
+      await click(client, '#confirm-dialog button[value="ok"]');
+      const tSend = Date.now();
+      say('  ' + free + ' 예약 송신 (' + stamp() + ')');
+
+      /* C1·C2 — 롤백까지 몇 초, 그리고 문구가 무엇인가 */
+      let tRollback = null, rollMsg = '';
+      while (Date.now() - tSend < 20000) {
+        const t = await evaluate(client, tgt(free));
+        if (t && !/pending/.test(t.view) && !/요청|예약 중/.test(t.state) && Date.now() - tSend > 1500) {
+          if (!/내 예약/.test(t.state)) {
+            tRollback = Date.now();
+            rollMsg = await evaluate(client, `document.getElementById('messages').textContent.replace(/\\s+/g,' ').slice(-200)`);
+            break;
+          }
+        }
+        await sleep(250);
+      }
+      if (tRollback === null) { say('  🔴 20초 안에 롤백이 안 왔다 — 이 회차 무효'); continue; }
+
+      const dt = tRollback - tSend;
+      say('  C1 롤백까지 = ' + dt + 'ms → ' + (dt < 5200 ? '**서버 실패 응답(≈4.5초)이 이겼다**' : '**내 자체 타임아웃(6초)이 이겼다**'));
+      say('  C2 문구 = ' + JSON.stringify(rollMsg.slice(-150)));
+      say('  화면의 그 칸 = ' + JSON.stringify(await evaluate(client, tgt(free))));
+
+      /* C3·C4·C5 — 장치 쪽. 자가 치유가 돈다면 다음 S 프레임(~1.1초)에 로그가 말한다 */
+      await sleep(6000);
+      const fresh = logLines().slice(logBefore);
+      const mism = fresh.filter(l => /불일치/.test(l));
+      const redis = fresh.filter(l => /재하달|dispatch|→ARD C/.test(l));
+      say('  C5 서버 로그의 불일치 줄 = ' + (mism.length ? mism.length + '건' : '**0건**'));
+      for (const l of mism.slice(0, 3)) say('     ' + l.trim());
+      for (const l of redis.slice(0, 3)) say('     ' + l.trim());
+      say('  C3/C4 판정 근거 — 위 줄이 있으면 불일치가 감지·치유된 것이고, 0건이면 **아무도 안 고쳤다**');
+      say('  최종 화면 = ' + JSON.stringify(await evaluate(client, tgt(free))));
+      writeFileSync(new URL('blink-C' + i + '-log.txt', OUT), fresh.join('\n'));
+      say('  이 회차의 서버 로그 조각 web/artifacts/blink-C' + i + '-log.txt');
     }
   }
 

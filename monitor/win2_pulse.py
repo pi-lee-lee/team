@@ -185,34 +185,33 @@ def main() -> int:
                 v["srv_accept"], v["srv_sframe"], v["srv_ack"], v["srv_down"],
                 ",".join(pids) or "-", grew]) + "\n")
 
-        # 🔴 기전 C 경보 — 무주입인데 정지 감지가 뜨면 전제가 깨진 것이다(루트 지시)
+        # 🔴🔴 기전 C 경보 — 2026-08-17 12:4x **두 곳을 고쳤다. 둘 다 실제로 사고를 냈다.**
+        #
+        #  결함1) 경로가 `ALERT-win3-stall.md` 로 **하드코딩**돼 있었다 → 창4 경보가
+        #         엉뚱한 파일로 갔고 `ALERT-win4-stall.md` 는 **존재조차 안 했다.**
+        #         (원장 7.27 에 "창 이름 하드코딩 금지"를 적어 놓고 여기만 빠뜨렸다.)
+        #  결함2) 판정식이 `stall <= ipd + connect` 였다. 창4 실측 `stall=2 · ipd=0 · connect=6`
+        #         → `2 <= 6` → **경보 안 뜸.** 그런데 그 둘(09:02:15 · 09:13:55)은
+        #         **진짜 정지**였다(값 `10000ms`, 언더플로 `2^32-64` 아님). 링크가 끊겼다.
+        #         🔴 오류의 정체: **CONNECT 를 "설명" 쪽에 뒀다.** 수정 이후에는
+        #         **정지가 재접속을 일으킨다** — 인과가 반대다. 그러면 **모든 정지가
+        #         자기가 만든 재접속으로 면죄된다.** 원장 7.29("설명이 사건을 흡수한다")를
+        #         내가 경보식에 심은 것이다.
+        #  → 새 규칙: **`정지 감지` 는 1건이라도 알린다.** `ipd`·`connect` 는 맥락으로만 찍는다.
         if s["stall"]:
-            with open("monitor/ALERT-win3-stall.md", "w", encoding="utf-8") as af:
+            with open(f"monitor/ALERT-{_stem}-stall.md", "w", encoding="utf-8") as af:
                 af.write(f"# 🔴 `★ 정지 감지` {s['stall']}건 — {now:%Y-%m-%d %H:%M:%S} 자동 기록\n\n")
-                af.write("**기전 C(계측기 자해 · 부호 없는 뺄셈 언더플로)의 표지다.**\n")
-                af.write("근거: `monitor/FINDING-2026-08-17-0125-underflow.md`\n\n")
                 af.write(f"| | |\n|---|---|\n")
-                af.write(f"| `★ 정지 감지` 누계 | **{s['stall']}** |\n")
-                af.write(f"| `+IPD`(하행 수신) 누계 | **{s['ipd']}** |\n")
-                af.write(f"| `CONNECT`(재접속) 누계 | **{s['connect']}** |\n")
-                af.write(f"| **알려진 경로 합** | **{s['ipd'] + s['connect']}** |\n\n")
-                # 🔴 판정 기준은 `정지 감지 > 하행` 이다 — 하행 1건당 거의 1건이 알려진 거동이므로,
-                #    그 수를 **넘는** 순간이 "하행 없이도 발동한다"의 증거다. (ipd==0 은 그 특수한 경우)
-                # ⚠ `espbanner` 는 경보식에 안 쓴다(우리 DTR 분이 섞인다). 참고로만 찍는다.
-                known = s["ipd"] + s["connect"]
-                if s["stall"] > known:
-                    af.write("## 🔴🔴 **전제가 깨졌다 — 즉시 알려라**\n\n")
-                    af.write(f"`정지 감지 {s['stall']}` > `하행 {s['ipd']} + 재접속 {s['connect']} = {known}`.\n")
-                    af.write("루트·arduino 의 전제는 *\"하행 ACK 가 있어야 발동한다\"* 였다.\n")
-                    af.write("`drainPending()` 말고 **다른 경로**가 `lastTxOkAt` 을 갱신한다는 뜻이다\n")
-                    af.write("(arduino 가 `sensorTick()` 을 의심하고 확인 중이었다).\n\n")
-                    af.write("**즉 지금 도는 무주입 λ 측정이 이 결함에 오염된다.**\n")
-                    af.write("판정에서 이 사건들을 **기전 C 로 따로 빼야 한다.**\n")
-                else:
-                    af.write(f"✅ `정지 감지 {s['stall']}` <= `하행 {s['ipd']} + 재접속 {s['connect']}"
-                             f" = {known}` — **알려진 경로(C-1 하행 · C-2 재접속)로 설명된다.**\n")
-                    af.write("⚠ 이 수를 **넘는 순간** 전제가 깨진 것이다. 이 파일이 그때 바뀐다.\n")
-                af.write("\n원문을 열어라:\n```\ngrep -a -n '정지 감지' monitor/serial-win3.log\n```\n")
+                af.write(f"| `★ 정지 감지` | **{s['stall']}** |\n")
+                af.write(f"| `+IPD`(하행) | {s['ipd']} |\n")
+                af.write(f"| `CONNECT`(재접속) | {s['connect']} |\n\n")
+                af.write("## 🔴 값을 먼저 봐라 — 그것이 기전을 가른다\n\n")
+                af.write("- `10000ms` 같은 **정상 범위** → **진짜 정지**(TX_STALL_MS 도달). **실제 사건이다**\n")
+                af.write("- `4294967232ms`(=2^32-64) → **언더플로 재발**(기전 C). arduino 에 즉시 알려라\n\n")
+                if s["stall"] > s["ipd"]:
+                    af.write(f"⚠ `정지 감지 {s['stall']}` > `하행 {s['ipd']}` — **하행으로 설명되지 않는다.**\n\n")
+                af.write("⚠ **재접속 수를 면죄부로 쓰지 마라** — 정지가 재접속을 일으킨다(인과 반대).\n")
+                af.write(f"\n원문:\n```\ngrep -a -n '정지 감지' {SER}\n```\n")
 
         alive = "🟢 살아 있다" if pids else "🔴 **tap 프로세스가 없다**"
         growing = {"yes": "🟢 자라는 중", "NO": "🔴 **안 자란다**", "?": "⏳ 첫 주기"}[grew]

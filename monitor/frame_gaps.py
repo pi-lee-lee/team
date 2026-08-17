@@ -126,11 +126,19 @@ def main() -> int:
     log, since, until = sys.argv[1], datetime.fromisoformat(sys.argv[2]), datetime.fromisoformat(sys.argv[3])
     injf = sys.argv[4] if len(sys.argv) > 4 else None
     radius = int(sys.argv[5]) if len(sys.argv) > 5 else 5
-    serlog = sys.argv[6] if len(sys.argv) > 6 else "monitor/serial-win3.log"
+    # 🔴 2026-08-17 12:5x — 기본값이 `serial-win3.log` 로 **하드코딩**돼 있었다.
+    #   창4 자료에 그냥 돌리면 **엉뚱한 창의 skip 을 빼고** 조용히 틀린 답을 낸다.
+    #   (원장 7.27 "창 이름 하드코딩 금지" 를 적어 놓고 이 자리도 빠뜨렸다 — 두 번째다.)
+    #   → 기본값을 없앤다. 안 주면 **skip 보정을 끄고 그 사실을 크게 찍는다.**
+    serlog = sys.argv[6] if len(sys.argv) > 6 else None
 
     # 시리얼에서 `skip` 시각을 긁는다 — 서버 로그로는 맥놀이와 못 가른다(위 주석)
     skips = []
-    if os.path.exists(serlog):
+    if serlog is None:
+        print("\n🔴 **시리얼 로그를 안 줬다 → `skip` 보정 꺼짐.**")
+        print("   `2s`·`3s` 공백에 `skip`(2단계 게이트)이 섞인 채로 나온다 — **그대로 인용하지 마라.**")
+        print("   6번째 인자로 그 창의 시리얼 로그를 줘라: `… <끝> auto 5 monitor/serial-win4.log`")
+    elif os.path.exists(serlog):
         base = since.date()
         with open(serlog, "rb") as f:
             for raw in f:
