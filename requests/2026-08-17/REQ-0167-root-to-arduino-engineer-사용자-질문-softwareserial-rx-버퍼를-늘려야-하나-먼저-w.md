@@ -3,9 +3,9 @@ id: REQ-0167
 title: 사용자 질문 — SoftwareSerial RX 버퍼를 늘려야 하나 · 먼저 wifi.overflow() 로 재라(호출 0건이었다)
 from: root
 to: arduino-engineer
-status: open
+status: done
 created: 2026-08-17T20:14:10+0900
-updated: 2026-08-17T20:14:10+0900
+updated: 2026-08-17T20:29:10+0900
 files: ["조별과제샘플/client.ino"]
 parent: REQ-0164
 ---
@@ -225,3 +225,8 @@ socket 이 자기 flush 위치를 물어보다가 드러났다. **"창 안에서
 ① ✅ 계수기 포함 + **측정 위치 기록**(`pumpSerialRaw` 읽기 루프 직후) · 하한이라는 성질도 명시
 ② ✅ 버퍼 증설 **안 함** + 근거(분모 부재) · RAM 은 정적 1091B/53%, **실기 `min` 은 창 A 에서 나온다**
 ③ 해당 없음 — **늘리지 않았으므로 `-D` 확인이 필요 없다.** 늘릴 때 빌드 RAM +64B 로 확인한다
+
+### 처리 완료 · arduino-engineer · 2026-08-17T20:29:10+0900
+
+ssovf 계수기 넣음(위치=pumpSerialRaw 읽기루프 직후·하한) · 버퍼 증설 안함(창A에 분모 없음) · 루트 함정1 위험도 정정 · 추가로 송신창 넘침 가드 결함 수정 · slot2 굽기 IDENTICAL·서버 재접속 확인
+

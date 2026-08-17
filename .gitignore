@@ -87,3 +87,22 @@ arduino/test/*.dSYM/
 #   **결론이 될 만한 것은 여기 두지 말고 날짜 붙은 추적 경로로 승격시켜라.**
 #   (측정값과 판독은 docs/web/FINDING-*.md 에, 그림이 필요하면 docs/web/evidence-<날짜>/ 로)
 web/artifacts/
+
+# ── 2026-08-17 · 빌드 산출물과 실행 파일 (재생성된다) ────────────────────────
+# arduino/.burn/ 은 **갈린다**: hex 덤프(chip-*.hex)는 "칩에 무엇이 올라갔나"의
+# 유일한 근거라 추적한다 — 2026-08-17 에 그 대조가 "미커밋 소스가 칩에 있었다"를
+# 밝혔고, 굽고 나면 칩에서 사라지므로 hex 밖에는 되찾을 길이 없다.
+# 반면 스케치별 빌드 디렉터리는 소스에서 재생성되므로 두지 않는다.
+arduino/.burn/*/
+arduino/.slotbuild/
+arduino/.s2build/
+arduino/.basefw/
+# socket 의 시험용 서버 실행 파일. server.cpp 에서 재생성된다(224KB).
+net/srv_slotq_test
+# 시험 인스턴스 로그. 결론이 될 만한 것은 docs/net/FINDING-*.md 로 승격시킨다.
+net/slotq-test-*.log
+# 시험 인스턴스가 cwd 에 만드는 런타임 상태 — 레포의 같은 이름 파일과 다른 것이다.
+net/data_log.json
+net/index.html
+# req.sh 의 --body-file 임시 산출물
+requests/.body-*.md

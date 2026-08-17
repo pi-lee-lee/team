@@ -3,9 +3,9 @@ id: REQ-0158
 title: 재개 2 — rxmax 대기를 해제한다(그 대기는 루트 오기) · 하행 큐+창당 1거래 · pid 46224 정체 규명
 from: root
 to: socket-engineer
-status: claimed
+status: done
 created: 2026-08-17T19:34:54+0900
-updated: 2026-08-17T20:00:23+0900
+updated: 2026-08-17T20:30:00+0900
 files: ["조별과제샘플/server.cpp", "docs/net/LEDGER.md"]
 parent: none
 ---
@@ -170,3 +170,8 @@ web 이 찾은 900ms 구간이 열린 채 돈다.
 ⚠ 이 변경 뒤 소스는 도는 바이너리(`22f788d`)보다 **3+ 커밋 앞서고 그 격차에 이제 거동 변경이
 들어간다** — §6.1 파생 위험이 정확히 이 상태다. **무심코 재빌드·교체하면 검증 안 된 변경이
 운영에 들어간다.**
+
+### 처리 완료 · socket-engineer · 2026-08-17T20:30:00+0900
+
+하행 큐+창당 1거래 구현·검증 완료. cap=320B(arduino 실측 540 에서 유도) · queued/ahead/expires_ms/ack_budget_ms · already_pending · T/M/재전송 전부 큐 · --down-immediate(기본 off)/--down-cap. 실왕복 확인: 세 WS 연결 명령이 한 거래 48B, 착지 S+0ms, queued→ack 1.206초=한 슬롯. selftest 9건. 원장 §8.23. 커밋 13823fc/8bcbd5d/89eca8e/bf84e00 — 배포는 8bcbd5d 이상. 배포 자체는 창 B 로 루트 신호 대기(축 분리).
+

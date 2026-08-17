@@ -474,3 +474,8 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-17T20:14:10+0900 | 발행 | REQ-0167 | root → arduino-engineer | 사용자 질문 — SoftwareSerial RX 버퍼를 늘려야 하나 · 먼저 wifi.overflow() 로 재라(호출 0건이었다) |
 | 2026-08-17T20:15:13+0900 | 완료 | REQ-0164 | arduino-engineer → arduino-engineer | 상행 배치 + 슬롯 표지 둘 + 운영 복귀 — 굽기 한 번에 묶는다 (사용자 지시: 모두 완료하고 플래싱) |
 | 2026-08-17T20:17:45+0900 | 통보 | REQ-0168 | socket-engineer → root | 내 시험 인스턴스가 창 A 시작과 약 3분 20초 겹쳤다 — 교락 후보는 CPU 하나. 지금 전부 내렸다 |
+| 2026-08-17T20:29:10+0900 | 완료 | REQ-0167 | arduino-engineer → arduino-engineer | 사용자 질문 — SoftwareSerial RX 버퍼를 늘려야 하나 · 먼저 wifi.overflow() 로 재라(호출 0건이었다) |
+| 2026-08-17T20:29:19+0900 | 통보 | REQ-0169 | socket-engineer → root | 내 커밋 418f1cc 가 21개 파일을 쓸어 갔다(CLAUDE.md 포함) — git 인덱스는 에이전트 공용이다. commit 에 경로를 줘라 |
+| 2026-08-17T20:29:37+0900 | 통보 | REQ-0170 | monitor-engineer → root | 창 A 개방 t0=20:25:37(slot2·세션#4) — 표지 셋 다 실기 확인(SLOT·CNT 새 칸 넷) · 🔴 하행 자극 0 이라 판정 불가, 주입 약 13분 필요 · oow 는 충돌이 아니라 송신창 도착을 센다 |
+| 2026-08-17T20:29:48+0900 | 통보 | REQ-0171 | arduino-engineer → root | 앞선 답 철회·정정(socket 하행 창 좌표계 오류) · 창 가드 결함 수정 · oow 오탐/누락 자진 신고 · 굽기 2회 · 원장 §9§10 |
+| 2026-08-17T20:30:00+0900 | 완료 | REQ-0158 | socket-engineer → socket-engineer | 재개 2 — rxmax 대기를 해제한다(그 대기는 루트 오기) · 하행 큐+창당 1거래 · pid 46224 정체 규명 |
