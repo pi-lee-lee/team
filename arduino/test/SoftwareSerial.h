@@ -37,6 +37,15 @@ class SoftwareSerial {
   // 테스트가 서버인 척 밀어 넣는다 (+IPD 포장은 호출자가 한다)
   void deliver(const std::string& s) { for (char c : s) rx.push_back(c); }
 
+  // ★ REQ-0167 — 실기 `SoftwareSerial::overflow()` 를 흉내낸다.
+  //   ⚠ **읽으면 지워진다.** 라이브러리가 그렇게 돼 있다:
+  //       `bool overflow() { bool ret = _buffer_overflow; if (ret) _buffer_overflow = false; return ret; }`
+  //   그 성질까지 재현해야 **"이 계수는 사건 수가 아니라 하한"** 이라는 것을 시험이 확인할 수 있다.
+  //   재현 안 하면 시험이 "매번 세진다"고 믿게 되고, 그건 실기와 다른 계측기다.
+  bool overflow() { bool r = ovf; ovf = false; return r; }
+  void injectOverflow() { ovf = true; }    // 시험이 넘침을 만든다
+  bool ovf = false;
+
   // ★ 시험 간 격리 (2026-08-16 추가).
   //   이게 없으면 **앞 시험이 남긴 바이트가 다음 시험을 오염시킨다.** 실제로 겪었다:
   //   프롬프트 거부 시험에서 더미 `#` 들이 `\r\n` 없이 `atLine` 에 쌓였고, 다음 시험의

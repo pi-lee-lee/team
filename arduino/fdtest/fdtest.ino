@@ -1,5 +1,22 @@
 // fdtest — **슬롯 구조에서 동시 송수신이 손실 없이 되는가**를 재는 최소 스케치
 //
+// ── 4판 (2026-08-17 · REQ-0157) ──────────────────────────────────────────────
+// 3판은 `rxmax=16`(**건수**)을 냈다. 그 수를 하행 상한으로 쓸 수 없다:
+//   **한 건의 크기가 바뀌면 건수 상한은 즉시 거짓이 된다.** 불변량은 바이트다(설계문서 §165).
+//
+// 4판이 바꾼 것 셋:
+//   1. `rxmaxb` — 수신 창 안에 처리한 **바이트**의 최대. (건수 `rxmax` 도 남긴다 — 비교용)
+//   2. `rxBuf` 64 → **96** (실기 `RX_CAP` 과 동일). 큰 프레임을 담기 위해서다.
+//   3. 상대(`peer.py`)가 **프레임 크기 가변 + 창당 바이트 예산**으로 민다.
+//      3판은 100ms 이벤트로 창당 약 12건을 보냈다 — **회선을 안 채운다.**
+//      그 상태로는 `rxmaxb` 가 "장치가 꺼낼 수 있는 양"이 아니라 **"상대가 보낸 양"** 을 잰다.
+//      (원장 §8.2-5 와 같은 형태: 분모를 안 만들어 놓고 분자를 읽는 것)
+//
+// 🔴 **미리 등록하는 예측** (자료 보기 전 · 2026-08-17 19:4x):
+//   프레임 크기를 20/34/60B 로 바꿔도 **`rxmaxb` 는 540~576B 부근으로 수렴**하고,
+//   **`rxmax`(건수)는 크게 갈린다**(≈27 / ≈16 / ≈9).
+//   → 그러면 "바이트가 불변량"이 **관측으로** 뒷받침된다. 수렴하지 않으면 그 전제가 틀린 것이다.
+//
 // ── 이 판(2판)이 앞 판과 다른 점 ──────────────────────────────────────────
 // 1판은 양쪽이 **쉬지 않고** 밀었다. 결과:
 //     맥 gap=0 · 장치 gap=36 bad=32 **availhi=63**
@@ -45,7 +62,10 @@ static uint32_t rxBad  = 0;        // 체크섬 불일치 = 손상
 static uint32_t txDeferred = 0;    // 슬롯 경계를 넘길 것 같아 미룬 송신
 static uint32_t qDrops = 0;        // 큐가 넘쳐 버린 것
 static uint8_t  availHi = 0;       // RX 링버퍼 최고 수위 (63 이면 넘침 위험)
-static uint16_t rxInSlot = 0, rxInSlotMax = 0;   // 🔴 한 수신 창에 처리한 건수 · 그 최대
+static uint16_t rxInSlot = 0, rxInSlotMax = 0;   // 한 수신 창에 처리한 **건수** · 그 최대
+// 🔴 4판 산출 — **바이트**로 센다. 건수는 프레임 크기가 바뀌면 거짓이 된다(설계문서 §165).
+//   전선 비용으로 센다: 줄 길이 + LF 1. (실기에는 여기에 `+IPD,<n>:` 접두 8~9B 가 더 붙는다)
+static uint16_t rxInSlotB = 0, rxInSlotBMax = 0;
 static uint32_t nextExpect = 0;
 static bool     haveFirst = false;
 
@@ -69,7 +89,10 @@ static void qPush(uint32_t v) {
   qbuf[(uint8_t)((qHead + qCount) % QN)] = v; qCount++;
 }
 
-static char     rxBuf[64];
+// 🔴 4판 — 64 → 96. **실기 `RX_CAP`(client.ino:368)과 같은 값으로 맞춘다.**
+//   4판은 프레임 크기를 바꿔가며 재므로 64B 로는 큰 프레임을 담지 못한다.
+//   ⚠ **계측기가 3판과 달라졌다는 뜻이다** — 측정 조건에 반드시 같이 적어라(원장 §5.5 "누가 만들었는가").
+static char     rxBuf[96];
 static uint8_t  rxLen = 0;
 static uint32_t txSeq = 0;
 static uint32_t slotStart = 0;
@@ -103,7 +126,13 @@ static void onLine(char* s, uint8_t n) {
   // 🔴 3판 정정 — **수신 창(0.6s) 안에서만 센다.**
   //   2판은 슬롯 경계에서만 리셋해서 **1.2초 전체**를 셌다 → `rxmax=30` 이 회선 상한(28.8)과
   //   같아 보였을 뿐, 우리가 알고 싶던 "창당 처리량"이 아니었다. **자리가 틀렸다.**
-  if ((uint32_t)(millis() - slotStart) >= TX_WINDOW_MS) rxInSlot++;
+  // 🔴 4판 — 같은 자리에서 **바이트도** 센다. 창 판정 규칙은 3판과 같게 유지한다
+  //   (줄의 마지막 바이트가 도착한 시각 기준 = 창 경계 걸침은 창 안으로 친다).
+  //   규칙을 같이 두어야 3판의 `rxmax` 와 4판의 `rxmax` 를 나란히 볼 수 있다.
+  if ((uint32_t)(millis() - slotStart) >= TX_WINDOW_MS) {
+    rxInSlot++;
+    rxInSlotB = (uint16_t)(rxInSlotB + n + 1);      // +1 = LF. 전선에 실제로 흐른 바이트
+  }
   if (!haveFirst) { haveFirst = true; nextExpect = seq + 1; return; }
   if (seq != nextExpect) rxGaps += (seq > nextExpect) ? (seq - nextExpect) : 1;
   nextExpect = seq + 1;
@@ -162,8 +191,9 @@ void loop() {
 
   if (used >= SLOT_MS) {                       // ── 슬롯 경계 ─────────────────
     slotStart += SLOT_MS;                      // ⚠ 누적 드리프트를 막으려고 **더한다**(§3.4 의 교훈)
-    if (rxInSlot > rxInSlotMax) rxInSlotMax = rxInSlot;
-    rxInSlot = 0;
+    if (rxInSlot  > rxInSlotMax)  rxInSlotMax  = rxInSlot;
+    if (rxInSlotB > rxInSlotBMax) rxInSlotBMax = rxInSlotB;
+    rxInSlot = 0; rxInSlotB = 0;
     firstInSlot = true; slots++;
     reportDue = (slots % 5 == 0);              // 보고는 5슬롯(6초)마다 — 대역을 덜 먹는다
   }
@@ -190,7 +220,8 @@ void loop() {
       Serial.print(F(" defer="));      Serial.print(txDeferred);
       Serial.print(F(" qdrop="));      Serial.print(qDrops);
       Serial.print(F(" availhi="));    Serial.print(availHi);
-      Serial.print(F(" rxmax="));      Serial.println(rxInSlotMax);   // 🔴 이 시험의 산출
+      Serial.print(F(" rxmax="));      Serial.print(rxInSlotMax);     // 건수 — 3판과 비교용
+      Serial.print(F(" rxmaxb="));     Serial.println(rxInSlotBMax);  // 🔴 4판의 산출 (바이트)
     }
   }
   // ── 600~1200ms : **수신 전용.** 아무것도 쓰지 않는다 ──────────────────────

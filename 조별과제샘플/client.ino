@@ -101,11 +101,40 @@ SoftwareSerial wifi(PIN_ESP_RX, PIN_ESP_TX);
 // ─────────────────────────────────────────────────────────────────────────
 // 타이밍 (§3.4, §6.3)
 // ─────────────────────────────────────────────────────────────────────────
-static const uint16_t HEARTBEAT_MS     = 1000;  // §3.4 1Hz
+static const uint16_t HEARTBEAT_MS     = 1000;  // §3.4 1Hz — ⚠ 슬롯 구조에서는 안 쓴다(아래)
 static const uint16_t DEBOUNCE_MS      = 100;   // §3.4 변화 디바운스
 static const uint16_t PROMPT_TIMEOUT_MS= 300;   // '>' 프롬프트 대기 상한 ("수백 ms")
 static const uint16_t SEND_FAIL_BACKOFF_MS = 500; // 전송 실패 후 재시도 최소 간격
 static const uint8_t  SEND_GAP_MS      = 80;    // 연속 CIPSEND 사이 최소 간격 (busy p... 회피)
+
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴 반송파 슬롯 (2026-08-17 · 사용자 결정 · `docs/DESIGN-slot-carrier-2026-08-17.md`)
+//
+//        슬롯 1200ms
+//   ├───────────────┬───────────────┤
+//   │  0 ~ 600ms    │  600 ~ 1200ms │
+//   │  장치 송신     │  수신 전용     │
+//   └───────────────┴───────────────┘
+//
+// **이벤트가 전송을 만들지 않는다. 전송이 상수이고 이벤트는 화물이다.**
+//   옛 구조: 이벤트↑ → 전송↑ → 귀 막힘↑ → ACK 실패↑ → 서버 재전송↑ → (처음으로)
+//            ⇒ 양의 되먹임. 임계를 넘으면 ESP 리셋까지 간다.
+//   새 구조: 이벤트↑ → 전송 횟수 그대로 → **한 프레임의 크기만↑**
+//            ⇒ 구조적으로 커질 수 없다.
+//
+// 🔑 **수신 창에는 한 바이트도 쓰지 않는다.** 이것이 손실 0 의 직접 원인이다
+//   (fdtest 1판 `gap=36 bad=32` → 2판 `gap=0 bad=0`).
+//   `SoftwareSerial` 은 송신 중 `cli()` 로 인터럽트를 끄고 수신은 그 인터럽트로만 받는다 —
+//   **겹치는 순간 우리는 귀가 닫힌다.** 슬롯은 그 겹침 자체를 없앤다.
+//
+// ⚠ 슬롯 시작은 **시계가 아니라 사건**이다 — 장치의 프레임 도착이 서버의 t0 다.
+//   그래서 시계 동기가 필요 없고, 장치가 느려지면 서버 슬롯도 같이 밀린다(자기교정).
+static const uint16_t SLOT_MS          = 1200;  // 한 슬롯
+static const uint16_t TX_WINDOW_MS     = 600;   // 0~600 우리 차례 · 600~1200 수신 전용
+// 배치 버퍼 — **한 거래에 여러 줄**을 담는다. 줄 하나의 64B 상한(§2.1)은 그대로다.
+//   최대 = S 프레임 63 + LF + ACKQ_N × (ACK 최대 ~20 + LF)
+//   ⚠ `AT+CIPSEND` 는 300B 까지 조용한 잘림이 없음이 실측 확인됐다(커밋 `1299286`, 18/18).
+static const uint8_t  BATCH_CAP        = 160;
 
 // ─────────────────────────────────────────────────────────────────────────
 // 자리 (§1)
@@ -370,8 +399,13 @@ static char    rxLine[RX_CAP];
 static char    workLine[RX_CAP];
 static char    pendLine[RX_CAP];
 static uint8_t rxLen = 0;
-static bool    rxOverflow = false;
+static bool    rxOverflow = false;     // ★ 우리 **줄 조립 버퍼**(RX_CAP) 넘침 — 아래와 다른 계층이다
 static bool    pendReady = false;
+// 🔴 2026-08-17 (REQ-0167) — **SoftwareSerial 링버퍼(64B) 넘침 수.**
+//   `wifi.overflow()` 는 라이브러리가 이미 들고 있던 플래그인데 이 스케치가 한 번도 안 읽었다.
+//   ⚠ 읽으면 지워지므로 **하한**이다(여러 번 넘쳐도 확인 지점 사이에서는 1로 뭉친다).
+//   ⚠ `rxOverflow` 와 **다른 것**이다: 저건 "줄이 너무 길다", 이건 "우리가 늦게 꺼냈다".
+static uint16_t ssOverflows = 0;
 static bool    inSend = false;         // 송신 중에는 줄을 처리하지 않고 미룬다(재진입 방지)
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -510,6 +544,18 @@ static unsigned long changeAt = 0;
 // "필드 없음(=해제)" 표식으로 쓸 수 있다 — 어떤 실제 값과도 겹치지 않는다.
 static const uint16_t TMASK_ABSENT = 0xFFFF;
 static uint16_t       sentTmask = 0xFFFE;   // 실제 값·ABSENT 어느 쪽과도 다른 초기값
+
+// ─────────────────────────────────────────────────────────────────────────
+// 슬롯 상태
+// ─────────────────────────────────────────────────────────────────────────
+// ⚠ `slotStart` 는 **더해서** 전진시킨다(`+= SLOT_MS`). `= now` 로 하면 매 슬롯 오차가
+//   누적돼 주기가 스스로 늘어난다 — 원장 §3.4 가 `lastStatusAt = millis()` 로 겪은 그것이다.
+//   ★ 그 결함이 실측 주기를 1.000s 가 아니라 **1.113s** 로 만들었다. 같은 실수를 반복하지 않는다.
+static uint32_t slotStart   = 0;
+static uint32_t slotNo      = 0;
+static bool     slotSent    = false;   // 이번 슬롯에서 이미 보냈다(슬롯당 정확히 1거래)
+static uint16_t slotOow     = 0;       // 수신 창 **밖**에 하행이 도착한 수 — 설계 위반 계수
+static uint16_t slotMissed  = 0;       // 송신 창을 통째로 놓친 슬롯 수(보낼 기회를 못 씀)
 
 // ─────────────────────────────────────────────────────────────────────────
 // 접속 상태 기계 (논블로킹 — loop() 를 막지 않는다)
@@ -876,6 +922,24 @@ static void feedRxChar(char c) {
 
 static void pumpSerialRaw(void) {
   while (wifi.available()) feedRxChar((char)wifi.read());
+  // ─────────────────────────────────────────────────────────────────────────
+  // 🔴 2026-08-17 (REQ-0167) — **SoftwareSerial 링버퍼가 넘쳤는가.** 계측기가 이미 있었다.
+  //   `SoftwareSerial::overflow()` 는 라이브러리가 들고 있는 플래그인데
+  //   **이 스케치에서 호출이 0건**이었다. RAM 0바이트로 답이 나오는 자리다.
+  //
+  // ⚠ **읽으면 플래그가 지워진다**(`if (ret) _buffer_overflow = false`, 라이브러리 확인).
+  //   그래서 이 수는 **사건 수가 아니라 "내가 확인한 지점들 사이에 한 번이라도 넘쳤나"의 수**다.
+  //   → **하한이다.** `0 이 아니다`는 강한 신호지만 `0` 은 "그 지점들 사이엔 안 넘쳤다"까지만 말한다.
+  //
+  // ★ 위치를 여기로 고른 이유: **읽기 루프 직후**라 "우리가 다 빼낸 뒤에도 넘쳐 있었나"를 본다.
+  //   그리고 `pumpSerialRaw` 는 `loop()`·`waitForPrompt()` 양쪽에서 자주 불려 확인 간격이 짧다 —
+  //   플래그가 지워지는 계측기라 **자주 볼수록 뭉침이 줄어든다.**
+  //
+  // ⚠⚠ **이름을 `rxOverflow` 와 헷갈리지 마라 — 다른 계층이다.**
+  //   `rxOverflow`(L402) = 우리 **줄 조립 버퍼**(`RX_CAP`=96) 가 넘쳤다 → 그 줄을 버린다
+  //   `ssOverflows`(이것) = **SoftwareSerial 링버퍼**(64B) 가 넘쳤다 → 바이트가 사라졌다
+  //   전자는 "너무 긴 줄", 후자는 "우리가 늦게 꺼냈다". **원인도 대응도 다르다.**
+  if (wifi.overflow()) { if (ssOverflows < 65535) ssOverflows++; }
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -1378,6 +1442,14 @@ static void cntTick(uint32_t now) {
   Serial.print(F(" stuck="));        Serial.print(sendOkGiveups);   // T2 초과 → 링크 재수립
   Serial.print(F(" ackq="));         Serial.print(ackqCount);       // 지금 보류 중인 ACK
   Serial.print(F(" ackdrop="));      Serial.print(ackqDrops);       // 큐가 넘쳐 버린 ACK
+  // ★ 2026-08-17 슬롯 — **정수 계수는 `DEBUG` 밖**이다(원장 §8.4-2 의 경계).
+  //   `[SLOT]` 줄은 매 슬롯 나가 대역을 먹으므로 `DEBUG` 안에 두지만, **누적은 여기 남긴다.**
+  //   그래야 `DEBUG=0` 시연 빌드에서도 슬롯이 지켜졌는지 셀 수 있다.
+  Serial.print(F(" slot="));         Serial.print(slotNo);          // 지난 슬롯 수 = **분모**
+  Serial.print(F(" oow="));          Serial.print(slotOow);         // 수신 창 밖 하행 = 설계 위반
+  Serial.print(F(" smiss="));        Serial.print(slotMissed);      // 송신 기회를 놓친 슬롯
+  // ★ REQ-0167 — SoftwareSerial 링버퍼(64B) 넘침. **하한이다**(읽으면 플래그가 지워진다).
+  Serial.print(F(" ssovf="));        Serial.print(ssOverflows);
   Serial.print(F(" skip="));         Serial.print(sendSkips);
   Serial.print(F(" online="));       Serial.println(netOnline ? 1 : 0);
 }
@@ -1500,14 +1572,26 @@ static uint8_t waitForPrompt(void) {
 }
 
 // line 은 LF 없는 문자열. LF 는 여기서 붙인다(전선 종단은 LF 하나 — §2.1)
-static bool sendLine(const char* line) {
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴 2026-08-17 — 몸통을 `sendPayload()` 로 뺐다. **한 거래에 여러 줄**을 담기 위해서다.
+//
+// 왜 나눴나: 슬롯 구조는 **슬롯당 정확히 1거래**다. 3건을 보내려면 묶는 것 말고 방법이 없다
+//   (안 묶으면 3건에 3.6초가 걸린다). **배치는 최적화가 아니라 구조적 필수다.**
+//
+// ⚠ **한 줄 64B 상한(§2.1)은 그대로다.** 바뀐 것은 "한 CIPSEND 에 줄이 몇 개인가"뿐이고
+//   줄 자체의 규약은 안 건드린다 — 서버 파서는 LF 로 가르므로 그대로 동작한다.
+//
+// ⚠⚠ **길이를 먼저 확정하고 그 길이만큼 정확히 쓴다.** `AT+CIPSEND=N` 을 선언한 뒤 N 과 다르게
+//   쓰면 스트림이 어긋나고, 그것이 원장 §1.4 가 설명하는 (a)/(b) 갈래를 우리 손으로 만드는 것이다.
+//   → 그래서 배치는 **호출 전에 버퍼에 완성**되어 있어야 한다. `waitForPrompt()` 안에서
+//     `pumpSerialRaw()` 가 돌아 **캐시가 바뀔 수 있으므로** 길이를 나중에 다시 계산하면 안 된다.
+static bool sendPayload(const char* line, uint16_t len) {
   // ★ `ramProbe()` 는 **조기 반환보다 앞**에 있어야 한다. 뒤에 두면 오프라인 동안 한 번도 안 불려
   //   `[RAM]` 이 초기값 65535 를 찍고, 소크 로그를 나중에 읽는 사람이 계측 고장으로 오해한다.
   //   (실제로 그렇게 찍혔다 — REQ-0064 관측 중 발견.)
   ramProbe();
   if (!netOnline) return false;
-  uint8_t len = (uint8_t)strlen(line);
-  if (len == 0 || len > 63) return false;                  // §2.1 한 줄 최대 64바이트(LF 포함)
+  if (len == 0 || len > BATCH_CAP) return false;
 
   // ── 2단계: 앞 전송이 아직 안 끝났으면 **이번 주기는 보내지 않는다** ────────
   // ⚠ 이것은 **실패가 아니다.** ESP 가 아직 보내는 중이라 우리가 스스로 양보한 것이다.
@@ -1632,7 +1716,7 @@ static bool sendLine(const char* line) {
     //   여기 남은 것은 **정말로 아무 답이 없었던 경우**뿐이고, 그때는 ESP 가 데이터 모드일
     //   수 있으므로 채우는 쪽이 여전히 안전하다.
     // ─────────────────────────────────────────────────────────────────────
-    for (uint8_t i = 0; i < len; i++) wifi.write('#');
+    for (uint16_t i = 0; i < len; i++) wifi.write('#');
     wifi.write('\n');                                      // 합계 len+1 = 약속한 길이와 정확히 같다
     if (promptResyncs < 65535) promptResyncs++;
 #if DEBUG
@@ -1671,6 +1755,14 @@ static bool sendLine(const char* line) {
   return ok;
 }
 
+// ★ 한 줄 래퍼 — **기존 규약을 그대로 유지한다**(§2.1 한 줄 최대 64바이트, LF 포함).
+//   호출부(`sendAck` 등)는 이 함수를 그대로 쓴다. 배치는 `sendPayload` 를 직접 쓴다.
+static bool sendLine(const char* line) {
+  const size_t n = strlen(line);
+  if (n == 0 || n > 63) return false;
+  return sendPayload(line, (uint16_t)n);
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // S — 상태 프레임 (§2.4)
 // ─────────────────────────────────────────────────────────────────────────
@@ -1684,8 +1776,9 @@ static void bitsToStr(uint16_t mask, char* out11) {
 //   실제 최장은 tmask 를 실은 S 프레임이고, devid 8자 기준 61B(LF 포함) = 60자 + NUL = **61바이트**.
 //   → 여유 3바이트. 우리 devid 는 "P1"(2자)이라 실제로는 55B(LF 포함)까지만 나간다.
 //   넘칠 일은 없지만 snprintf 반환값을 검사해 넘치면 프레임을 버린다(잘린 줄을 내보내지 않는다).
-static bool sendStatus(void) {
-  char buf[64];
+// S 프레임 **본문만** 만든다(체크섬 포함, LF 없음). 배치가 이것을 첫 줄로 쓴다.
+//   길이를 돌려준다. 0 이면 만들지 못한 것이다.
+static uint8_t buildStatus(char* buf, uint8_t cap) {
   char occ[SLOT_N + 1], res[SLOT_N + 1];
   bitsToStr(occMask, occ);
   bitsToStr(resMask, res);
@@ -1696,18 +1789,25 @@ static bool sendStatus(void) {
     // occupied 에는 주입값이 이미 반영돼 있고, tmask 는 "그게 진짜인가"만 알려준다.
     char tm[SLOT_N + 1];
     bitsToStr(ovrActive, tm);
-    n = snprintf(buf, sizeof(buf), "S,%u,%s,%s,%lu,%s,%s,",
+    n = snprintf(buf, cap, "S,%u,%s,%s,%lu,%s,%s,",
                  (unsigned int)seqNo, occ, res,
                  (unsigned long)(millis() / 1000UL), DEVICE_ID, tm);
   } else {
     // 해제 상태면 필드를 통째로 생략한다(옛 형식과 같다 — §2.4 "필드 없음 = 해제").
-    n = snprintf(buf, sizeof(buf), "S,%u,%s,%s,%lu,%s,",
+    n = snprintf(buf, cap, "S,%u,%s,%s,%lu,%s,",
                  (unsigned int)seqNo, occ, res,
                  (unsigned long)(millis() / 1000UL), DEVICE_ID);
   }
-  if (n <= 0 || (unsigned)n + 3 > sizeof(buf)) return false;
+  if (n <= 0 || (unsigned)n + 3 > cap) return 0;
   appendChecksum(buf, (uint8_t)n);
-  return sendLine(buf);
+  return (uint8_t)strlen(buf);
+}
+
+static bool sendStatus(void) {
+  char buf[64];
+  const uint8_t n = buildStatus(buf, sizeof(buf));
+  if (n == 0) return false;
+  return sendPayload(buf, n);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1727,25 +1827,75 @@ static bool sendAck(uint16_t rid, char s0, char s1, uint8_t result) {
   return ok;
 }
 
-// ★ 보류된 ACK 를 한 번에 하나씩 내보낸다. **게이트가 열려 있을 때만 나간다.**
-//   `loop()` 에서 `drainPending()`(하행) 뒤 `statusTick()`(상행) **앞**에 부른다 —
-//   기존의 "하행이 상행보다 앞" 순서를 그대로 따른다.
-static void ackqDrain(void) {
-  if (ackqCount == 0 || !netOnline) return;
-  const uint16_t rid = ackq[ackqHead];
-  const int8_t   hit = cacheFind(rid);
-  // ⚠ **먼저 뺀다.** 빼지 않고 보내면, 실패했을 때 `sendAck` 이 다시 넣으려다
-  //   중복 제거에 걸려 **영원히 안 나가는 상태**가 된다. 빼고 보내면 실패 시 꼬리로 다시 들어온다.
-  ackqHead = (uint8_t)((ackqHead + 1) % ACKQ_N);
-  ackqCount--;
-  if (hit < 0) {                       // 캐시에서 밀려났다 — 내용을 만들 수 없다
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴 슬롯 배치 — **S 프레임 + 밀린 ACK 를 한 거래로 묶는다** (2026-08-17 · REQ-0164)
+//
+//   [CIPSEND]  S,912,0110...,P1,3F\nA,7,A1,1,2C\nA,8,B3,1,5D
+//
+// 왜 묶나: **슬롯당 정확히 1거래**가 규칙이다. 3건을 보내려면 묶는 것 말고 방법이 없다
+//   (안 묶으면 3건에 3.6초가 걸린다). **배치는 최적화가 아니라 구조적 필수다.**
+//   ⚠ 속도 이득은 1.4배이지 1.9배가 아니다(설계문서 정정). **근거는 속도가 아니라 구조다.**
+//
+// ⚠ **ACK 는 캐시에서 재생성한다 — 재생(replay)이 아니다.** 큐에는 `rid` 만 있고
+//   내용은 멱등 캐시가 갖고 있다. 옛 바이트를 그대로 다시 보내는 것이 아니라 지금 다시 만든다.
+//
+// 🔑 **성공했을 때만 큐에서 소비한다.** 만들 때는 `peek` 만 하고, `sendPayload` 가 참을
+//   돌려준 뒤에 그만큼 뺀다. **실패하면 ACK 가 큐에 그대로 남아 다음 슬롯에 다시 나간다.**
+//   (옛 `ackqDrain` 은 먼저 빼고 실패 시 되넣는 방식이었다 — 배치에서는 순서가 뒤집힐 수 있어
+//    쓸 수 없다. 이쪽이 손실 경로가 아예 없다.)
+static bool sendSlotBatch(uint8_t* ackOut, uint16_t* bytesOut) {
+  char buf[BATCH_CAP + 1];
+
+  // ── 1) 반송파: S 프레임은 **보낼 게 없어도 나간다** ─────────────────────
+  //   이 한 프레임이 셋을 겸한다: 반송파 · 생존 신호 · **슬롯 시작 통보**(서버의 t0).
+  const uint8_t sn = buildStatus(buf, 64);
+  if (sn == 0) return false;
+  uint16_t used = sn;
+
+  // ── 2) head 쪽에서 **만들 수 없는 것**부터 걷어낸다 ──────────────────────
+  //   캐시에서 밀려났으면 내용을 만들 방법이 없다. 큐도 캐시도 FIFO 라 오래된 쪽에서 난다.
+  while (ackqCount > 0 && cacheFind(ackq[ackqHead]) < 0) {
+    ackqHead = (uint8_t)((ackqHead + 1) % ACKQ_N);
+    ackqCount--;
     if (ackqDrops < 65535) ackqDrops++;
 #if DEBUG
-    Serial.println(F("[ACKQ] 캐시에서 밀려나 보낼 수 없다 — 버린다"));
+    Serial.println(F("[ACKQ] 캐시에서 밀려나 만들 수 없다 — 버린다"));
 #endif
-    return;
   }
-  sendAck(cache[hit].rid, cache[hit].slot[0], cache[hit].slot[1], cache[hit].result);
+
+  // ── 3) 담을 수 있는 만큼 이어 붙인다 (아직 큐에서 빼지 않는다) ───────────
+  uint8_t take = 0;
+  while (take < ackqCount) {
+    const uint16_t rid = ackq[(uint8_t)((ackqHead + take) % ACKQ_N)];
+    const int8_t   hit = cacheFind(rid);
+    if (hit < 0) break;                       // 중간 미스 — 다음 슬롯에서 걷어낸다
+
+    char one[24];
+    int m = snprintf(one, sizeof(one), "A,%u,%c%c,%u,",
+                     (unsigned int)cache[hit].rid,
+                     cache[hit].slot[0], cache[hit].slot[1],
+                     (unsigned int)cache[hit].result);
+    if (m <= 0 || (unsigned)m + 3 > sizeof(one)) break;
+    appendChecksum(one, (uint8_t)m);
+    const uint8_t ol = (uint8_t)strlen(one);
+
+    if (used + 1 + ol > BATCH_CAP) break;     // 이번 배치엔 자리가 없다 — 다음 슬롯으로 민다
+    buf[used++] = '\n';                       // 줄 구분자. 서버 파서는 LF 로 가른다
+    memcpy(buf + used, one, ol);
+    used += ol;
+    take++;
+  }
+
+  const bool ok = sendPayload(buf, used);
+
+  // ── 4) **성공했을 때만** 소비한다 ────────────────────────────────────────
+  if (ok && take) {
+    ackqHead = (uint8_t)((ackqHead + take) % ACKQ_N);
+    ackqCount = (uint8_t)(ackqCount - take);
+  }
+  if (ackOut)   *ackOut   = take;
+  if (bytesOut) *bytesOut = used;
+  return ok;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -2051,6 +2201,27 @@ static void handleLine(char* s) {
   {
     char* ipd = strstr(s, "+IPD,");
     if (ipd) {
+      // ── 🔴 슬롯 위반 표지 (2026-08-17 · REQ-0164 ②) ───────────────────────
+      //   설계상 하행은 **수신 창(600~1200ms)** 에만 와야 한다. 우리 송신 창에 오면
+      //   `SoftwareSerial` 반이중 때문에 **우리가 귀를 닫고 있는 동안** 도착한 것이다.
+      //
+      //   ⚠⚠ **이 줄이 없으면 설계 위반이 조용하다.** 슬롯이 성공하면 지표는 `0` 이 되는데,
+      //     `0` 은 "설계가 먹었다"와 "못 셌다"를 구별하지 못한다(원장 §5.1·§8.2-5).
+      //     **이 표지가 그 둘을 가르는 유일한 줄이다.**
+      //
+      //   ⚠ `millis()` 를 **새로 뜬다.** `loop()` 의 `now` 는 낡았고 `slotStart` 는
+      //     `statusTick()`(이 함수보다 **뒤**)에서 전진한다 — 낡은 값으로 판정하면
+      //     경계 근처에서 틀린다. 원장 §8.7-7 이 정확히 이 형태의 결함이었다.
+      const uint32_t sinceSlot = (uint32_t)(millis() - slotStart);
+      if (sinceSlot < TX_WINDOW_MS) {
+        if (slotOow < 65535) slotOow++;
+#if DEBUG
+        //   ⚠ 문구에 다른 표지 문자열을 넣지 마라(`SEND OK`·`busy`·`[TX]`).
+        Serial.print(F("[SLOT-OOW] +"));
+        Serial.print(sinceSlot);
+        Serial.println(F("ms"));
+#endif
+      }
       char* colon = strchr(ipd, ':');
       if (!colon) return;                 // 길이 필드가 안 끝났다 — 쓸 수 없는 줄
       handleFrameLine(colon + 1);         // `+IPD,<len>:` 도 `+IPD,<id>,<len>:` 도 첫 `:` 뒤가 본문이다
@@ -2597,10 +2768,37 @@ static void statusTick(unsigned long now) {
   if (changed && !changePending) { changePending = true; changeAt = now; }
   if (!changed) changePending = false;
 
-  bool heartbeatDue = (now - lastStatusAt >= HEARTBEAT_MS);
+  // ── 🔴 슬롯 경계 (2026-08-17) ──────────────────────────────────────────
+  //   ⚠ `slotStart += SLOT_MS` — **더한다.** `= now` 로 하면 매 슬롯 오차가 누적돼
+  //     주기가 스스로 늘어난다(원장 §3.4 의 `lastStatusAt = millis()` 가 그것이다 —
+  //     그 결함이 실측 주기를 1.000s 가 아니라 **1.113s** 로 만들었다).
+  //   ⚠ while 인 이유: 오래 막혀 여러 슬롯이 지났으면 **전부 소진**해야 위상이 맞는다.
+  //     그렇지 않으면 밀린 만큼 계속 뒤처진 위상으로 돈다.
+  while ((uint32_t)(now - slotStart) >= SLOT_MS) {
+    slotStart += SLOT_MS;
+    slotNo++;
+    if (netOnline && !slotSent) { if (slotMissed < 65535) slotMissed++; }  // 보낼 기회를 못 썼다
+    slotSent = false;
+  }
+  const uint32_t slotUsed = (uint32_t)(now - slotStart);
+  // **우리 차례는 0~600ms 뿐이다.** 그 뒤는 수신 전용이라 한 바이트도 쓰지 않는다.
+  //
+  // 🔴 2026-08-17 — **"창 안에서 시작한다"로는 부족하다. 창 안에서 *끝나야* 한다.**
+  //   (socket 이 flush 위치를 물어보다가 드러났다 — 내 구현의 실제 구멍이었다.)
+  //   창 끝자락(예: 590ms)에 시작하면 배치가 흐르는 동안 **수신 창을 침범한다:**
+  //     최악 배치 `BATCH_CAP`(160B) + `AT+CIPSEND=..` 약 18B = 178B @9600bps ≈ **185ms**
+  //     → 590 + 185 = 775ms. **175ms 를 남의 창에서 쓴다.**
+  //   그러면 그 순간 도착하는 하행과 정확히 겹치고, 그것이 우리가 없애려는 바로 그 조합이다.
+  //   ⚠ fdtest 에는 이 가드가 있었는데(`canSend`) 실기로 옮기며 빠뜨렸다.
+  //     **최소 표본에서 옳았던 것이 본체로 오면서 사라지는 것** — 흔한 자리다.
+  static const uint16_t SLOT_TX_RESERVE_MS = 200;   // 최악 배치 실측 상한(185ms)에 여유를 더한 값
+  const bool inTxWindow = (slotUsed + SLOT_TX_RESERVE_MS <= TX_WINDOW_MS);
+  bool heartbeatDue = inTxWindow && !slotSent;
   // changeAt 은 전송 실패 시 **미래 시각**으로 밀린다. unsigned 뺄셈으로 비교하면
   // 언더플로로 곧장 참이 되어 백오프가 통째로 무력화된다 → 부호 있는 비교로 본다.
-  bool debounced    = changePending && ((long)(now - changeAt) >= (long)DEBOUNCE_MS);
+  // ⚠ 2026-08-17 — `debounced` 는 **더 이상 전송을 트리거하지 않는다**(슬롯이 주기를 정한다).
+  //   `changePending`/`changeAt` 자체는 남긴다 — 실패 백오프와 `sentOcc` 갱신이 아직 쓴다.
+  (void)DEBOUNCE_MS;
 
   // ★ REQ-0116 — 살아있음 불변식. **이유를 묻지 않는다.**
   //   "온라인이라면서 TX_STALL_MS 동안 한 줄도 못 내보냈다"면 그 자체로 링크 이상이다.
@@ -2652,10 +2850,35 @@ static void statusTick(unsigned long now) {
     return;
   }
 
-  if (!netOnline || !(heartbeatDue || debounced)) return;
+  // 🔴 **이벤트는 전송을 만들지 않는다.** `debounced`(변화 감지)는 이제 "지금 보내라"가
+  //   아니라 "이번 슬롯 화물에 실려 나간다"는 뜻이다 — 어차피 S 프레임이 매 슬롯 나가므로
+  //   변화는 다음 슬롯에 자동으로 실린다. **그래서 조건에서 뺀다.**
+  //   ⚠ 이것이 설계의 핵심이다: 부하가 바꿀 수 있는 것은 **화물의 크기**뿐이고 전송 횟수가 아니다.
+  //     옛 구조에서는 여기서 이벤트가 추가 전송을 만들어 양의 되먹임 고리가 열렸다.
+  if (!netOnline || !heartbeatDue) return;
 
   uint16_t occSnap = occMask, resSnap = resMask, tmaskSnap = tmaskNow;
-  bool ok = sendStatus();
+  uint8_t  batchAcks = 0;
+  uint16_t batchBytes = 0;
+  const uint32_t sendAt = (uint32_t)(millis() - slotStart);   // 슬롯 시작 기준 실제 송신 시각
+  bool ok = sendSlotBatch(&batchAcks, &batchBytes);
+
+  // ★ 슬롯당 정확히 1거래 — 성패와 무관하게 이번 슬롯의 기회는 썼다.
+  //   ⚠ 실패했다고 같은 슬롯에서 다시 쏘면 **슬롯당 1거래 규칙이 깨지고** 수신 창을 침범한다.
+  //     재시도는 다음 슬롯이다. 그것이 이 설계가 폭주를 막는 방식이다.
+  slotSent = true;
+
+#if DEBUG
+  // ★ monitor 계수용 표지 — **매 슬롯 찍는다. `ack=0` 인 슬롯도 찍는다.**
+  //   ⚠ 그래야 `0` 이 "묶을 것이 없었다"이지 "못 셌다"가 아니게 된다(원장 §5.1).
+  //   ⚠ 문구에 다른 표지의 문자열(`SEND OK`·`busy`·`+IPD`·`[TX]`)을 넣지 마라 —
+  //     2026-08-17 에 monitor 파서가 우리 산문 안의 `SEND OK` 를 세어 `0/7` 을 냈다.
+  Serial.print(F("[SLOT] n="));   Serial.print(slotNo);
+  Serial.print(F(" tx="));        Serial.print(batchBytes);
+  Serial.print(F(" ack="));       Serial.print(batchAcks);
+  Serial.print(F(" due="));       Serial.print(sendAt);
+  Serial.println(ok ? F(" r=1") : F(" r=0"));
+#endif
 
   lastStatusAt = millis();          // §3.4 어떤 이유로든 S 를 보내면 타이머 리셋 (타이머는 하나)
   if (ok) {
@@ -2673,6 +2896,10 @@ static void statusTick(unsigned long now) {
 void setup() {
   Serial.begin(115200);
   wifi.begin(9600);                 // §3.3 AT+UART_DEF 로 보율을 바꾸지 않는다
+
+  // ★ 슬롯 위상의 원점. **반드시 여기서 잡는다** — 0 으로 두면 첫 `statusTick` 에서
+  //   `now - 0` 만큼의 슬롯을 한꺼번에 소진하느라 while 이 헛돈다(부팅 몇 초면 수 회).
+  slotStart = millis();
 
   // 시드는 A1 에서 뽑는다 — 어디에도 안 물린 핀이라야 노이즈가 나온다.
   // (A0 은 자리 B5 의 센서 입력으로 배정했으므로 쓰면 안 된다.)
@@ -2774,7 +3001,8 @@ void loop() {
   netTick(now);
   pumpSerialRaw();
   drainPending();
-  ackqDrain();                      // ★ 보류된 ACK 를 상행보다 **먼저** 내보낸다 (2026-08-17)
+  // ⚠ 2026-08-17 — `ackqDrain()` 을 뺐다. **보류 ACK 는 이제 슬롯 배치에 실려 나간다**
+  //   (`sendSlotBatch`). 여기서 따로 내보내면 슬롯당 1거래 규칙이 깨지고 수신 창을 침범한다.
   sensorTick();
   statusTick(now);
   cntTick(now);                     // ★ DEBUG 밖 — 운영 빌드에서도 관측이 남는다

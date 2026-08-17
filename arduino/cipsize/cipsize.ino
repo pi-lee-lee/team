@@ -24,7 +24,10 @@ SoftwareSerial wifi(PIN_ESP_RX, PIN_ESP_TX);
 #define WIFI_SSID   "SK_WiFiGIGA50DC_2.4G"
 #define WIFI_PASS   "2011050796"
 #define SERVER_IP   "192.168.35.81"
-#define SERVER_PORT "10500"                 // socket 시험 인스턴스
+#define SERVER_PORT "10791"                 // socket 시험 인스턴스 `+800` · `--max-line=1024`
+// ⚠ 이 값은 **socket 이 정해 준 것**이다. 내가 처음에 `10500` 으로 박아 뒀는데 **추측이었다** —
+//   추측한 상수를 실측 도구에 넣으면 "서버가 못 받았다"가 나오고 원인을 엉뚱한 데서 찾게 된다.
+//   (오늘 창2 가 `SERVER_IP` 하나로 죽은 것과 같은 형태다.)
 
 // 재 볼 크기. **작은 것부터 올라간다** — 큰 것부터 하면 어디서 깨졌는지 못 가른다.
 //
@@ -71,10 +74,14 @@ static void probe(uint16_t size, uint8_t rep) {
   const uint16_t id = ++probeId;
   int h = snprintf(line, sizeof(line), "Z,%u,%u,%u,", (unsigned)id, (unsigned)size, (unsigned)rep);
   if (h <= 0 || (uint16_t)h + 3 > size) return;
-  uint8_t sum = 0;
   for (uint16_t i = (uint16_t)h; i < size - 3; i++) line[i] = (char)('A' + (i % 26));
-  for (uint16_t i = 0; i < size - 3; i++) sum = (uint8_t)(sum ^ (uint8_t)line[i]);
   line[size - 3] = ',';
+  // 🔴 체크섬 범위 — **마지막 쉼표를 포함한다.** 서버 `checksumOk()` 가 그렇게 센다
+  //   (`xorRange(s, lastComma + 1)`). 처음에 쉼표 앞까지만 XOR 했는데 **그러면 온전히 도착해도
+  //   서버가 버린다** — 그리고 그 증상이 ③(조용한 잘림)과 **구별되지 않는다.**
+  //   ⚠ 계측 도구가 대상의 규칙을 틀리게 구현하면, 그 오차가 표적과 같은 칸에 들어온다.
+  uint8_t sum = 0;
+  for (uint16_t i = 0; i < size - 2; i++) sum = (uint8_t)(sum ^ (uint8_t)line[i]);
   line[size - 2] = "0123456789ABCDEF"[(sum >> 4) & 0x0F];
   line[size - 1] = "0123456789ABCDEF"[sum & 0x0F];
   line[size]     = 0;
@@ -110,6 +117,15 @@ static void probe(uint16_t size, uint8_t rep) {
   Serial.print(F(" sendok="));         Serial.print(ok ? F("y") : F("n"));
   Serial.print(F(" okms="));           Serial.println(okMs);
   Serial.println(F("   ⚠ 이 줄만으로는 ③(조용한 잘림)을 못 본다 — 서버의 rx 와 같은 id 로 대조해야 끝난다"));
+  // 🔑 대조 규약 (socket 과 합의 · 2026-08-17):
+  //     서버의 `rx` 는 **LF 를 뺀 값**, 내 `sent` 는 **LF 포함**이다 → **정상은 `rx + 1 == sent`**.
+  //   판정:
+  //     sendok=y · rx+1 == sent                    ✅ 그 길이는 안전
+  //     sendok=y · rx+1 <  sent                    🔴 ③ 조용한 잘림 (이 시험의 표적)
+  //     sendok=y · rx+1 >  sent · 줄에 Z 머리 둘 이상  🔴 ③의 변종 — **LF 까지 잘려 다음 줄과 합쳐졌다**
+  //     prompt=n / sendok=n                        ①/② — 위 [CIPSIZE] 줄에서 이미 보인다
+  // ⚠ 셋째 경우는 socket 이 짚어 줬다. 내 판정표에 없었다 —
+  //   **꼬리만 잘리면 짧아지지만, 구분자까지 잘리면 오히려 길어진다.** 방향이 반대라 놓치기 쉽다.
 }
 
 void setup() {
@@ -125,7 +141,32 @@ void setup() {
   Serial.println(F("\n>> AT+CWJAP"));
   Serial.println(waitFor("OK", 30000) ? F("   [ok]") : F("   [timeout]"));
   at("AT+CIPMUX=0", "OK", 3000);
-  at("AT+CIPSTART=\"TCP\",\"" SERVER_IP "\"," SERVER_PORT, "CONNECT", 8000);
+  // ⚠ 이 ESP 는 `CONNECT` 가 아니라 **`Linked`** 로 답한다(실측 19:05). 바늘이 틀리면
+  //   **8초를 헛기다리고, 그 8초 안에 서버가 미등록 소켓을 걷어낸다**(마감 7초).
+  //   실제로 그렇게 됐다: `Linked` → `Unlink` → 이후 전부 `link is not valid`.
+  at("AT+CIPSTART=\"TCP\",\"" SERVER_IP "\"," SERVER_PORT, "Linked", 8000);
+
+  // 🔴 **등록 프레임을 먼저 보낸다.** 서버는 `device_id` 를 못 본 소켓을 마감(7초)에 닫는다.
+  //   프로브가 자기를 밝히지 않으면 **크기를 재기도 전에 소켓이 사라진다** — 첫 회차가 그렇게 죽었다.
+  //   ⚠ 이건 "크기 상한"과 무관한 준비 단계다. 여기서 실패하면 그 아래 결과는 전부 무의미하다.
+  {
+    char reg[48];
+    int n = snprintf(reg, sizeof(reg), "S,0,0000000000,0000000000,1,P1,");
+    uint8_t ck = 0;
+    for (int i = 0; i < n; i++) ck = (uint8_t)(ck ^ (uint8_t)reg[i]);   // 쉼표까지 포함
+    reg[n]     = "0123456789ABCDEF"[(ck >> 4) & 0x0F];
+    reg[n + 1] = "0123456789ABCDEF"[ck & 0x0F];
+    reg[n + 2] = 0;
+    Serial.print(F("\n>> 등록 프레임: ")); Serial.println(reg);
+    wifi.print(F("AT+CIPSEND=")); wifi.print((unsigned)(n + 3)); wifi.print(F("\r\n"));
+    if (waitFor(">", 1000)) {
+      wifi.print(reg); wifi.write('\n');
+      Serial.println(waitFor("SEND OK", 5000) ? F("\n   [등록 ok]") : F("\n   [등록 실패]"));
+    } else {
+      Serial.println(F("\n   🔴 등록 프롬프트 없음 — 아래 결과는 읽지 마라"));
+    }
+    delay(800);
+  }
 
   for (uint8_t s = 0; s < NSIZES; s++)
     for (uint8_t r = 1; r <= REPEAT; r++) { probe(SIZES[s], r); delay(1200); }

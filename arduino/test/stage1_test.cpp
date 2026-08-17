@@ -88,6 +88,8 @@ static void arm(const char* refuse /* nullptr 이면 정상 프롬프트 */) {
   cifsrRefused   = false;
   ackqDrops      = 0;
   ackqClear();
+  ssOverflows    = 0;        // ★ REQ-0167 — 여기도 같이 늘린다(위 주석이 시키는 대로)
+  slotSent       = false;
 }
 
 static const char* FRAME = "S,1,0000000000,0000000000,1,P1,";
@@ -298,14 +300,81 @@ int main() {
   ok(ackqCount == 1,            "★★ 못 보낸 ACK 가 큐에 남는다 (예전엔 사라졌다)");
 
   // ── [12d] 게이트가 열리면 보류된 ACK 가 나간다 ─────────────────────────────
-  printf("\n[12d] 게이트가 열리면 보류된 ACK 가 나간다\n");
+  // ✏️ **2026-08-17 개정 (슬롯 구조 · REQ-0164)** — 원래 `ackqDrain()` 을 불렀다.
+  //   그 함수는 **없어졌다**: 보류 ACK 를 한 건씩 따로 내보내면 **슬롯당 1거래 규칙이 깨지고
+  //   수신 창을 침범한다.** 이제 `sendSlotBatch()` 가 S 프레임과 **함께** 실어 보낸다.
+  //   ★ **시험의 목적은 그대로다** — "보류된 ACK 가 실제로 나간다". 부르는 함수만 바뀌었다.
+  //   (원장 §8.2-15-2: 거동을 바꾸는 수정은 옛 시험이 실패하는 것이 정상이다.
+  //    지우지 말고 개정 사유와 **원래 목적이 어디로 갔는지**를 남긴다.)
+  printf("\n[12d] 게이트가 열리면 보류된 ACK 가 나간다 (슬롯 배치로 개정)\n");
   {
     char sendok[] = "SEND OK";
     handleLine(sendok);                     // 게이트가 열린다
   }
   ok(!awaitingSendOk,           "게이트가 열렸다");
-  ackqDrain();
-  ok(ackqCount == 0,            "★★ 보류된 ACK 가 실제로 나간다");
+  {
+    uint8_t  acks = 0;
+    uint16_t bytes = 0;
+    const size_t before = wifi.sentLines.size();
+    const bool sent = sendSlotBatch(&acks, &bytes);
+    ok(sent,                    "배치가 나갔다");
+    ok(acks == 1,               "★★ 보류된 ACK 1건이 그 배치에 실렸다");
+    ok(ackqCount == 0,          "★★ 성공했으므로 큐에서 소비됐다");
+    ok(wifi.sentLines.size() == before + 1,
+                                "★ 거래는 **한 번**이다 (ACK 를 따로 보내지 않는다)");
+  }
+
+  // ── [12h] 🔴 배치에 S 와 ACK 가 **한 거래**로 같이 담긴다 ──────────────────
+  //   이것이 슬롯 설계의 핵심이다. 확인하지 않으면 "묶었다"가 주장으로만 남는다.
+  printf("\n[12h] 배치 — S 프레임과 ACK 들이 한 거래에 함께 담긴다\n");
+  arm(nullptr);
+  ackqClear();
+  sendLine(FRAME);                          // 게이트를 닫아 ACK 를 큐에 쌓는다
+  feedDown("R,201,A1,u1,");
+  feedDown("R,202,A2,u1,");
+  ok(ackqCount == 2,            "ACK 2건이 큐에 있다");
+  {
+    char sendok[] = "SEND OK";
+    handleLine(sendok);                     // 게이트를 연다
+  }
+  {
+    uint8_t  acks = 0;
+    uint16_t bytes = 0;
+    const size_t before = wifi.sentLines.size();
+    sendSlotBatch(&acks, &bytes);
+    ok(acks == 2,               "★★ ACK 2건이 **한 배치**에 담겼다");
+    ok(wifi.sentLines.size() == before + 1,
+                                "★★ 거래는 한 번뿐이다 (3건을 3거래로 보내지 않는다)");
+    const std::string& s = wifi.sentLines.back();
+    ok(s.compare(0, 2, "S,") == 0,
+                                "★ 첫 줄은 S 프레임이다 (반송파 · 슬롯 시작 통보)");
+    ok(s.find("\nA,") != std::string::npos,
+                                "★★ 같은 거래 안에 ACK 줄이 LF 로 이어 붙어 있다");
+    ok(bytes == s.size(),       "★ 선언한 길이와 실제 쓴 바이트가 같다 (스트림 어긋남 방지)");
+  }
+
+  // ── [12i] 🔴 **실패하면 ACK 를 잃지 않는다** — 성공했을 때만 소비한다 ───────
+  //   옛 `ackqDrain` 은 먼저 빼고 실패 시 되넣었다. 배치에서는 순서가 뒤집힐 수 있어
+  //   그 방식을 못 쓴다. **손실 경로가 아예 없는지**를 시험이 직접 확인한다.
+  printf("\n[12i] 배치 전송이 실패하면 ACK 가 큐에 남는다\n");
+  arm(nullptr);
+  ackqClear();
+  sendLine(FRAME);
+  feedDown("R,211,A3,u1,");
+  {
+    char sendok[] = "SEND OK";
+    handleLine(sendok);
+  }
+  ok(ackqCount == 1,            "ACK 1건이 큐에 있다");
+  wifi.refusePrompt = true;                 // 이번 거래는 실패시킨다
+  wifi.refuseReply  = "busy s...\r\n";
+  {
+    uint8_t  acks = 0;
+    uint16_t bytes = 0;
+    const bool sent = sendSlotBatch(&acks, &bytes);
+    ok(!sent,                   "배치가 실패했다");
+    ok(ackqCount == 1,          "★★ 실패했으므로 ACK 가 큐에 그대로 남는다 (잃지 않는다)");
+  }
 
   // ── [12e] 큐가 넘치면 버리되 **세어서 드러낸다** ───────────────────────────
   // ⚠ 조용히 버리면 지금과 같아진다 — 폐기 경로가 안 보이면 그게 다음 사고가 된다.
@@ -328,6 +397,137 @@ int main() {
   ok(ackqCount > 0,             "끊기 전에는 보류가 남아 있다");
   startSocketRecovery();
   ok(ackqCount == 0,            "★★ 소켓 재수립 시 큐가 비워진다");
+
+  // ══ 슬롯 구조 (2026-08-17 · REQ-0164) ═════════════════════════════════════
+  // ⚠ 이 시험들은 **수정 전 판본에서 컴파일되지 않는다**(새 심볼을 쓴다).
+  //   원장 §8.2-15-2: **컴파일 실패를 시험 실패로 쓰지 마라.** 그래서 여기서 보이는 것은
+  //   "옛 판본이 깨진다"가 아니라 **"새 거동이 실제로 그렇게 도는가"** 다.
+
+  // ── [15] 🔴 슬롯당 정확히 1거래 ───────────────────────────────────────────
+  printf("\n[15] 슬롯당 정확히 1거래 — 같은 슬롯에서 두 번 보내지 않는다\n");
+  arm(nullptr);
+  g_clockAutoAdvance = false;
+  slotStart = millis();
+  slotNo = 0; slotSent = false; slotOow = 0; slotMissed = 0;
+  {
+    const size_t before = wifi.sentLines.size();
+    statusTick(millis());                       // 슬롯 시작 직후 — 우리 차례다
+    ok(wifi.sentLines.size() == before + 1, "송신 창에서 한 번 보낸다");
+    ok(slotSent,                            "이번 슬롯의 기회를 썼다고 표시된다");
+    statusTick(millis());                       // 같은 슬롯에서 또 부른다
+    ok(wifi.sentLines.size() == before + 1, "★★ 같은 슬롯에서 두 번째는 나가지 않는다");
+  }
+
+  // ── [16] 🔴 수신 창(600~1200ms)에는 한 바이트도 쓰지 않는다 ────────────────
+  //   **이것이 손실 0 의 직접 원인이다.** `SoftwareSerial` 은 송신 중 `cli()` 로 귀를 닫는다.
+  printf("\n[16] 수신 창에는 쓰지 않는다\n");
+  {
+    g_millis += TX_WINDOW_MS + 10;              // 수신 창으로 넘어간다
+    const size_t before = wifi.sentLines.size();
+    statusTick(millis());
+    ok(wifi.sentLines.size() == before,     "★★ 수신 창에서는 아무것도 안 나간다");
+  }
+
+  // ── [17] 🔴 다음 슬롯이 오면 다시 보낸다 + **위상이 드리프트하지 않는다** ──
+  //   ⚠ `slotStart += SLOT_MS` 여야 한다. `= now` 로 하면 매 슬롯 오차가 쌓여
+  //     주기가 스스로 늘어난다 — 원장 §3.4 의 1.113s 결함이 정확히 그것이었다.
+  //
+  // ⚠⚠ **게이트를 먼저 연다.** [15] 의 송신이 `awaitingSendOk` 를 세워 둔 상태라
+  //   열지 않으면 이 슬롯이 통째로 건너뛰어진다(`[SLOT] r=0`).
+  //   ★ 이것은 시험 편의가 아니라 **실기 사실을 그대로 반영한 것**이다:
+  //     **`SEND OK` 를 못 받으면 다음 슬롯은 나가지 않는다.** 슬롯이 와도 게이트가 먼저다.
+  //     정상 동작에서는 `SEND OK` 가 같은 초에 오므로(실측 99.7%) 이 충돌이 안 난다.
+  printf("\n[17] 다음 슬롯 · 위상 드리프트 없음\n");
+  {
+    char sendok[] = "SEND OK";
+    handleLine(sendok);
+  }
+  {
+    const uint32_t firstStart = slotStart;
+    g_millis += SLOT_MS - TX_WINDOW_MS;         // 다음 슬롯 초입으로
+    const size_t before = wifi.sentLines.size();
+    statusTick(millis());
+    ok(wifi.sentLines.size() == before + 1, "★ 새 슬롯에서 다시 보낸다");
+    ok(slotNo == 1,                         "슬롯 번호가 하나 올라갔다");
+    ok(slotStart == firstStart + SLOT_MS,
+       "★★ 슬롯 시작이 정확히 SLOT_MS 만큼 전진했다 (= now 가 아니라 += 다)");
+  }
+
+  // ── [18] 🔴 오래 막혀 여러 슬롯이 지나도 **위상이 유지된다** ───────────────
+  printf("\n[18] 여러 슬롯을 건너뛴 뒤에도 위상이 유지된다\n");
+  {
+    const uint32_t base = slotStart;
+    g_millis += SLOT_MS * 5 + 100;              // 5슬롯을 통째로 넘긴다
+    statusTick(millis());
+    ok(slotStart == base + SLOT_MS * 5,
+       "★★ 밀린 슬롯을 전부 소진해 위상이 격자에 남는다");
+    ok(slotMissed > 0,                      "★ 놓친 슬롯이 smiss 에 계상된다");
+  }
+
+  // ── [19] 🔴 `[SLOT-OOW]` — **계수기가 실제로 오르는 것**을 확인한다 ────────
+  //   ⚠ 원장 §8.2-15-1: "안 오른다"만 시험하면 **영원히 0 인 계수기도 통과한다.**
+  //     그래서 **오르는 시험**을 반드시 같이 둔다.
+  // ⚠ 여기서는 **체크섬을 맞추지 않아도 된다** — `[SLOT-OOW]` 판정은 `+IPD` 를 보는 즉시
+  //   내려지고 체크섬 검사는 그 뒤다. 그래서 로그에 `[CKSUM NG]` 가 떠도 이 시험과 무관하다.
+  //   ★ 그래도 **왜 무관한지를 적어 둔다** — 원장 §8.2-15 에서 손으로 쓴 체크섬 때문에
+  //     "ACK 가 안 나갔다"를 코드 결함으로 오독한 적이 있다. 무관함은 확인하고 쓰는 것이다.
+  printf("\n[19] 슬롯 위반 표지 — 송신 창에 하행이 오면 oow 가 오른다\n");
+  arm(nullptr);
+  slotStart = millis();                         // 지금이 슬롯 시작 = 우리 송신 창
+  slotOow = 0;
+  {
+    char ipd[] = "+IPD,20:R,301,A1,u1,7B";
+    handleLine(ipd);
+    ok(slotOow == 1,            "★★ 송신 창에 도착한 하행이 위반으로 계상된다 (오른다!)");
+  }
+  {
+    g_millis += TX_WINDOW_MS + 50;              // 수신 창으로 이동
+    char ipd2[] = "+IPD,20:R,302,A1,u1,78";
+    handleLine(ipd2);
+    ok(slotOow == 1,            "★★ 수신 창 도착은 위반이 아니다 (안 오른다)");
+  }
+  // ── [20] 🔴 송신이 **창 안에서 끝나야** 한다 — 시작만으로는 부족하다 ────────
+  //   창 끝자락에 시작하면 배치가 흐르는 동안 수신 창을 침범한다.
+  //   (socket 이 flush 위치를 묻다가 드러난 실제 구멍이다. fdtest 엔 있던 가드가 본체에 없었다.)
+  printf("\n[20] 창 끝자락에서는 시작하지 않는다 (배치가 수신 창을 침범하지 않게)\n");
+  arm(nullptr);
+  g_clockAutoAdvance = false;
+  slotStart = millis();
+  slotSent = false;
+  {
+    g_millis += TX_WINDOW_MS - 50;              // 창 끝 50ms 전 — 배치(≈185ms)가 못 끝난다
+    const size_t before = wifi.sentLines.size();
+    statusTick(millis());
+    ok(wifi.sentLines.size() == before,
+       "★★ 남은 시간이 배치를 못 끝내면 아예 시작하지 않는다");
+  }
+  {
+    slotStart = millis(); slotSent = false;     // 창 시작으로 되돌린다
+    const size_t before = wifi.sentLines.size();
+    statusTick(millis());
+    ok(wifi.sentLines.size() == before + 1,
+       "★ 창 시작에서는 정상적으로 보낸다 (가드가 과하지 않다)");
+  }
+  g_clockAutoAdvance = true;
+
+  // ── [21] 🔴 SoftwareSerial 링버퍼 넘침 계수 (REQ-0167) ─────────────────────
+  //   ⚠ 계측기가 이미 라이브러리에 있었는데 이 스케치가 **한 번도 안 읽었다.**
+  //   ⚠ **읽으면 플래그가 지워진다** — 그래서 이 수는 사건 수가 아니라 **하한**이다.
+  //     스텁이 그 성질까지 재현하므로 여기서 그것을 직접 확인한다.
+  printf("\n[21] SoftwareSerial 링버퍼 넘침 — ssovf 가 오르고, 그 값은 하한이다\n");
+  arm(nullptr);
+  ssOverflows = 0;
+  pumpSerialRaw();
+  ok(ssOverflows == 0,          "넘침이 없으면 오르지 않는다");
+  wifi.injectOverflow();
+  pumpSerialRaw();
+  ok(ssOverflows == 1,          "★★ 넘치면 계수가 오른다 (계측기가 실제로 동작한다)");
+  pumpSerialRaw();
+  ok(ssOverflows == 1,          "★★ 플래그는 읽으면 지워진다 → 이 수는 **하한**이다");
+  wifi.injectOverflow();
+  wifi.injectOverflow();                        // 확인 사이에 두 번 넘쳤다
+  pumpSerialRaw();
+  ok(ssOverflows == 2,          "★★ 두 번 넘쳐도 1 만 오른다 — 뭉친다(하한의 근거)");
 
   // ── [13] SEND FAIL 은 실패로 센다 — **원래 있던 구멍** ─────────────────────
   // 프롬프트까지 받고 페이로드도 썼는데 전송이 실패한 것이라 `busy` 와 전혀 다르다.
