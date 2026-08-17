@@ -387,6 +387,16 @@ try {
   await client.close();
 }
 
-console.log('\n' + (failed === 0 ? '통과' : '실패') + ' — ' + results.filter(r => r.ok === true).length +
-            ' pass / ' + failed + ' fail\n');
+/* 🔴 분모를 먼저 본다 (2026-08-17 · monitor 지적 · blink.mjs 에서 실제로 터진 형태).
+   `실패 0건` 은 (a)건강 (b)미실행 (c)못셈 중 무엇인지 구별이 안 된다. 검사가 **한 건도 안
+   돌았으면** 그건 통과가 아니라 **아무것도 못 잰 것**이고, 그 상태로 초록을 내면 아무도
+   안 쫓는다. 실패 경로를 열거하는 대신 **분모가 0 인 것 하나로** 전부 잡는다. */
+const passed = results.filter(r => r.ok === true).length;
+const ranChecks = passed + failed;
+if (ranChecks === 0) {
+  console.log('\n🔴 검사 0건 — 아무것도 재지 못했다 (통과가 아니다)\n');
+  process.exit(1);
+}
+console.log('\n' + (failed === 0 ? '통과' : '실패') + ' — 검사 ' + ranChecks + '건 중 ' +
+            passed + ' pass / ' + failed + ' fail\n');
 process.exit(failed === 0 ? 0 : 1);

@@ -105,12 +105,30 @@ const log = [];
 const say = (s) => { console.log(s); log.push(s); };
 const note = (s) => say('  · ' + s);
 let failed = 0;
+let ran = 0;          // 🔴 **분모**. 이게 없으면 `실패 0건` 이 건강인지 미실행인지 안 갈린다
 /** 합격/불합격을 세는 단언. e2e.mjs 와 같은 형태로 맞춘다(초록이 곧 통과). */
 function check(name, cond, detail) {
+  ran++;
   const ok = !!cond;
   if (!ok) failed++;
   say('  ' + (ok ? '✅' : '❌') + ' ' + name + (detail !== undefined ? '  → ' + detail : ''));
   return ok;
+}
+
+/**
+ * 판정 한 줄. **분자만 찍지 않는다.**
+ *
+ * 🔴 2026-08-17 (monitor 지적) — `catch` 에서 실패를 올리는 것만으로는 안 닫힌다.
+ * `check()` 를 한 번도 안 도는 **새 경로**가 생기면 또 `실패 0건 → 통과` 가 된다.
+ * `0` 이 (a)건강 (b)미실행 (c)못셈 중 무엇인지 구별이 안 되는 것이 원인이고,
+ * **분모를 같이 찍으면 경로를 열거하지 않아도 전부 잡힌다**:
+ *
+ *     검사 12건 중 실패 1건
+ *     검사 0건 중 실패 0건      ← 그 자체로 빨강. 조건문이 필요 없다
+ */
+function verdict() {
+  if (ran === 0) return '🔴 검사 0건 — 아무것도 재지 못했다 (통과가 아니다)';
+  return (failed ? '실패' : '통과') + ' — 검사 ' + ran + '건 중 실패 ' + failed + '건';
 }
 
 /* ⚠ 2026-08-17: markRun() 을 정의만 해 놓고 **호출을 안 해서** 첫 창의 조각 시각을 파일로
@@ -144,6 +162,9 @@ try {
       samples.push(await evaluate(client, SAMPLE));
       await sleep(250);
     }
+    /* 관측 전용 케이스라도 **단언이 하나는 있어야 한다.** 0표본은 "조용했다"가 아니라
+       "재지 못했다"이고, 그 둘을 안 가르면 미실행이 관측으로 보고된다. */
+    check('표본을 실제로 걷었다', samples.length > 0, samples.length + '표본');
     const ages = samples.map(s => s.age).filter(v => typeof v === 'number');
     const changes = [];
     for (let i = 1; i < samples.length; i++) {
@@ -254,6 +275,7 @@ try {
       }
       if (tRollback === null) { say('  🔴 20초 안에 롤백이 안 왔다 — 이 회차 무효'); continue; }
 
+      check('C1 롤백이 실제로 왔다', true, (tRollback - tSend) + 'ms');
       const dt = tRollback - tSend;
       say('  C1 롤백까지 = ' + dt + 'ms → ' + (dt < 5200 ? '**서버 실패 응답(≈4.5초)이 이겼다**' : '**내 자체 타임아웃(6초)이 이겼다**'));
       say('  C2 문구 = ' + JSON.stringify(rollMsg.slice(-150)));
@@ -264,6 +286,10 @@ try {
       const fresh = logLines().slice(logBefore);
       const mism = fresh.filter(l => /불일치/.test(l));
       const redis = fresh.filter(l => /재하달|dispatch|→ARD C/.test(l));
+      /* 단언으로 올린다 — say() 로만 적으면 **분모에 안 잡히고**, 그러면 이 케이스가
+         통째로 안 돌아도 "검사 0건"이 아니라 조용히 지나간다. */
+      check('C5 서버가 불일치를 감지했다 (0건이면 socket 의 소스 판독이 틀린 것이고 불일치가 영구다)',
+            mism.length > 0, mism.length + '건');
       say('  C5 서버 로그의 불일치 줄 = ' + (mism.length ? mism.length + '건' : '**0건**'));
       for (const l of mism.slice(0, 3)) say('     ' + l.trim());
       for (const l of redis.slice(0, 3)) say('     ' + l.trim());
@@ -357,6 +383,10 @@ try {
   process.exitCode = 1;
 } finally {
   await client.close();
-  markRun('종료 (' + (failed ? failed + '건 실패' : '통과') + ')');
-  say('\n' + (failed ? '실패 — ' + failed + '건' : '통과') + ' · 구간 기록 web/artifacts/blink-runs.tsv');
+  /* 판정을 적는 곳이 넷이다(콘솔·로그 파일·구간 기록·종료 코드). **전부 같은 값을 봐야 한다** —
+     하나만 맞으면 맞는 쪽은 아무도 안 본다. 종료 코드는 셸이 보고 사람은 마지막 줄을 본다. */
+  const v = verdict();
+  if (ran === 0) process.exitCode = 1;
+  markRun('종료 · ' + v);
+  say('\n' + v + ' · 구간 기록 web/artifacts/blink-runs.tsv');
 }
