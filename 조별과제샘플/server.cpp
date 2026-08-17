@@ -96,7 +96,14 @@ static const int  PORT_PHONE     = 5500;    // digitcam 폰 수신 (docs/net/dig
 // 폰 프레임은 JSON 이라 아두이노 라인(64B)보다 길다. digitcam 명세 §9 가 권하는 방어적 상한.
 static const size_t MAX_PHONE_LINE = 1024;
 static const size_t MAX_PLATE_BYTES = 32;   // 번호판 저장 상한(신형 10B, 여유 포함)
-static const int  MAX_LINE       = 64;      // §2.1
+// §2.1 — 명세값은 64 다. **명세를 바꾸는 것이 아니라 계측기를 넓히는 수단**으로
+// `--max-line N` 을 둔다(시험 인스턴스 전용).
+//
+// 🔴 왜 필요한가: `AT+CIPSEND` 의 실제 최대 길이를 재려면 장치가 64B 를 넘겨 보내야 하는데,
+// 서버가 그것을 **체크섬 검사 전에** `과길이` 로 버리면 **AT 잘림이 아니라 내 상수를 재게 된다.**
+// 그리고 `ard_buf` 를 도착 도중에 비우므로 **몇 바이트까지 왔는지조차 안 남는다** —
+// 그게 정확히 그 시험이 재려는 값이다.
+static int        MAX_LINE       = 64;      // §2.1 (기본값. --max-line 으로만 바뀐다)
 static const int  ACK_TIMEOUT_MS = 1500;    // §7.3
 static const int  ACK_MAX_TRIES  = 3;       // 최초 + 재전송 2회
 static const int  OFFLINE_MS     = 3500;    // §3.4
@@ -521,6 +528,29 @@ struct Server {
     std::string ard_buf;
     bool  ard_seen;
     long long ard_last_ms;
+
+    // ── 하행 슬롯 큐 (docs/net/DESIGN-server-slot-queue.md · 반송파 슬롯 구조)
+    //
+    // **이벤트가 전송을 만들지 않는다.** 명령이 생기면 큐에 담고, **장치 프레임이 도착한
+    // 순간(= 내 창의 시작)** 에 큐 전부를 **한 거래로 묶어** 보낸다.
+    //
+    // 🔑 **창 시작은 시계가 아니라 사건이다** — 장치가 느려지면 내 창도 같이 밀린다(자기교정).
+    // 그래서 위상을 추정할 필요가 없다. 추정은 상대가 정상일 때만 맞는데, 우리가 고치려는
+    // 것은 상대가 비정상인 순간이다(원장 §8.19).
+    struct DownQ {
+        std::string line;        // 전선에 나갈 완성된 줄(LF 포함)
+        sock_t      ws_fd;
+        std::string brid;        // 브라우저 rid
+        std::string slot;
+        uint16_t    wire_rid;
+        long long   deadline_ms; // enqueue 때 **한 번 박는다**
+    };
+    std::vector<DownQ> downq;
+    long long downq_bytes;
+    long long batch_count;       // 배치 거래 수
+    long long batch_lines;       // 배치로 나간 줄 수
+    long long q_rejected;        // queue_full 로 거절한 수
+    long long q_dup;             // already_pending 로 거절한 수
     // §9.1 `device.last_frame_ts` 전용 — **epoch 시각**이다. ard_last_ms 를 쓰면 안 된다:
     // 그건 now_ms() 기반(윈도우에서는 부팅 후 경과)이라 바깥으로 나가면 수십 년짜리 값이 된다(28행 경고).
     long long ard_last_epoch_ms;
@@ -958,7 +988,16 @@ struct Server {
             std::string line = ard_buf.substr(0, i);
             ard_buf.erase(0, i + 1);
             if (!line.empty() && line[line.size()-1] == '\r') line.erase(line.size()-1);
-            if (line.size() + 1 > (size_t)MAX_LINE) { drop_overlong++; logf("!", "64B 초과 줄 — 버림"); continue; }
+            // 🔑 **버릴 때도 길이를 남긴다.** 예전에는 "64B 초과" 라고만 적고 버려서
+            // **몇 바이트였는지**를 못 봤다 — `AT+CIPSEND` 잘림 시험에서 그것이 측정값이다.
+            if (line.size() + 1 > (size_t)MAX_LINE) {
+                drop_overlong++;
+                char b[96];
+                snprintf(b, sizeof(b), "상한(%dB) 초과 줄 — 버림 · **rx=%zuB**",
+                         MAX_LINE, line.size());
+                logf("!", b);
+                continue;
+            }
             if (!line.empty()) on_ard_line(line);
         }
         if (ard_buf.size() > (size_t)MAX_LINE) {
@@ -1580,7 +1619,15 @@ struct Server {
 
     // ---------- 아두이노 라인 처리
     void on_ard_line(const std::string& line) {
-        logf("←ARD", line);
+        // 🔑 **받은 바이트 수를 같이 남긴다** — `AT+CIPSEND` 조용한 잘림(③)의 유일한 판별자다.
+        // 장치는 `SEND OK` 를 받으면 **성공으로 세므로 잘린 것을 모른다.**
+        // **서버가 "몇 바이트 받았나"를 적어야 "보낸 만큼 왔나"를 대조할 수 있다.**
+        // ⚠ 64B 이하에서는 값이 뻔하지만, **긴 줄 시험에서 이 한 칸이 시험의 본체**가 된다.
+        {
+            char rb[24];
+            snprintf(rb, sizeof(rb), " (rx=%zuB)", line.size());
+            logf("←ARD", line + rb);
+        }
 
         // ---------- 소크 관측 (REQ-0065) — **체크섬 검사보다 먼저 센다.**
         // 여기서 재는 것은 "쓸 만한 프레임"이 아니라 **수신 자체의 공백**이다.
@@ -2342,7 +2389,16 @@ struct Server {
                             std::string line = ard_buf.substr(0, i);
                             ard_buf.erase(0, i + 1);
                             if (!line.empty() && line[line.size()-1] == '\r') line.erase(line.size()-1);
-                            if (line.size() + 1 > (size_t)MAX_LINE) { drop_overlong++; logf("!", "64B 초과 줄 — 버림"); continue; }
+                            // 🔑 **버릴 때도 길이를 남긴다.** 예전에는 "64B 초과" 라고만 적고 버려서
+            // **몇 바이트였는지**를 못 봤다 — `AT+CIPSEND` 잘림 시험에서 그것이 측정값이다.
+            if (line.size() + 1 > (size_t)MAX_LINE) {
+                drop_overlong++;
+                char b[96];
+                snprintf(b, sizeof(b), "상한(%dB) 초과 줄 — 버림 · **rx=%zuB**",
+                         MAX_LINE, line.size());
+                logf("!", b);
+                continue;
+            }
                             if (!line.empty()) on_ard_line(line);
                         }
                         if (ard_buf.size() > (size_t)MAX_LINE) {
@@ -2721,6 +2777,19 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; i++) {
         std::string a(argv[i]);
         if (a.compare(0, 6, "--log=") == 0) log_path = a.substr(6);
+        // 🔴 **계측기를 넓히는 수단이지 명세 변경이 아니다**(§2.1 은 64 그대로).
+        // `AT+CIPSEND` 최대 길이 시험에서만 쓴다 — 서버가 64B 초과를 **체크섬 검사 전에**
+        // 버리면 **AT 잘림이 아니라 이 상수를 재게 된다.**
+        if (a.compare(0, 11, "--max-line=") == 0) {
+            int v = atoi(a.substr(11).c_str());
+            if (v >= 64 && v <= 1024) {
+                MAX_LINE = v;
+                std::cout << "*** --max-line=" << v << " — **시험용**이다. 명세 §2.1 은 64 다 ***\n";
+            } else {
+                std::cerr << "--max-line 은 64~1024 여야 한다 (받은 값: " << a.substr(11) << ")\n";
+                return 2;
+            }
+        }
     }
     // 시험용 포트 이동(REQ-0072) — 운영 인스턴스를 안 죽이고 두 번째를 띄우기 위한 이음매
     for (int i = 1; i < argc; i++) {
