@@ -220,7 +220,11 @@ class Injector:
         next_at = time.time()
         while self.a.count == 0 or i < self.a.count:
             i += 1
-            rid = "inj-%d" % i
+            # 🔴 회차를 `rid` 자체로 가른다(원장 §8.13). 기본값 `inj` 로 두면 **실행마다 `inj-1`
+            # 부터 다시 시작**하고, append-only 로그를 회차 구분 없이 `grep` 하면 **직전 실행분에
+            # 걸린다** — 2026-08-17 에 내 감시기가 실제로 그렇게 걸렸다.
+            # 시각으로 자르는 것도 되지만 **식별자가 유일하면 자르는 것을 잊어도 안전하다.**
+            rid = "%s-%d" % (self.a.rid_prefix, i)
             try:
                 if self.sock is None:
                     self.connect()
@@ -297,6 +301,10 @@ def main():
     ap.add_argument("--ack-timeout", type=float, default=30.0,
                     help="ACK 마감(초). monitor 짝짓기 시한과 같은 30초")
     ap.add_argument("--count", type=int, default=0, help="주입 횟수(0=무한)")
+    ap.add_argument("--rid-prefix", default="inj",
+                    help="rid 접두. **회차를 갈라야 할 때 바꿔라**(예: inj2). "
+                         "기본값이면 실행마다 rid 가 1 부터 다시 시작해 "
+                         "append-only 로그에서 직전 회차와 짝이 섞인다(원장 §8.13)")
     ap.add_argument("--heartbeat", type=float, default=300.0,
                     help="첫 주입 대기 중 살아있음을 찍는 주기(초). 기본 300")
     ap.add_argument("--log", default=None, help="주입 기록 파일 경로(append)")
