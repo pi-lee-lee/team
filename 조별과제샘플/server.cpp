@@ -1135,7 +1135,31 @@ struct Server {
             emit_dev(DEV_DISCONNECT, park_dev, "송신 실패");
             return;
         }
-        logf("→ARD", line.substr(0, line.size() - 1));
+        // ---------- 착지 위상 계측 (DESIGN-downlink-window.md §3.5)
+        //
+        // **하행이 장치 주기의 어디에 떨어졌는가**를 ms 로 남긴다. 값을 바꾸지 않고 찍기만 한다.
+        //
+        // 🔴 **왜 로그 본문에 넣나**: 줄 앞머리 시각이 **1초 해상도**라(§433 `%H:%M:%S`)
+        // 조용한 창(약 1.0초)과 장치 활성 구간(약 113ms)을 **구별할 수 없다.**
+        // `ard_last_ms` 는 ms 단위로 이미 있으므로, 그 차이를 본문에 적으면 그 순간 잴 수 있다.
+        // → 이것 없이 `W`(송신 허용 창)를 정하면 **추측이다.**
+        //
+        // ⚠ **`S` 를 한 번도 못 받은 상태를 따로 표시한다.** `ard_seen` 이 false 면
+        // `ard_last_ms` 는 **의미 없는 0** 이고, 그때 차이를 찍으면 **거대한 가짜 값**이 된다.
+        // 승격 직후 `resync_reservations()` 가 쏘는 자리가 정확히 그 경우라
+        // **그 구분이 `resync` 게이트 면제 판단의 입력**이 된다(설계 §3.4).
+        //
+        // 🔑 `wire_rid` 를 같이 찍는 이유: 장치 쪽에서 **`+IPD` 도착 위상**을 따로 재는데,
+        // **짝지을 식별자가 없으면 양쪽이 각각 반쪽**이다("언제 쐈나" 대 "언제 받았나").
+        {
+            char ph[64];
+            if (!ard_seen)
+                snprintf(ph, sizeof(ph), " (S미수신)");
+            else
+                snprintf(ph, sizeof(ph), " (S+%lldms)", (long long)(now_ms() - ard_last_ms));
+            logf("→ARD", line.substr(0, line.size() - 1) + ph);
+            return;
+        }
     }
 
     // ---------- WebSocket 프레임 (§5.2)
