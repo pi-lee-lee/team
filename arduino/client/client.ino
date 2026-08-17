@@ -211,7 +211,7 @@ static bool sendStatus(void) {
   }
   if (n <= 0 || (unsigned)n + 3 > sizeof(buf)) return false;   // 잘린 줄은 내보내지 않는다
   uint8_t total = appendChecksum(buf, (uint8_t)n);
-  return link.send((const uint8_t*)buf, total);                // ★ 전송은 이 한 줄이 전부다
+  return link.,send((const uint8_t*)buf, total);                // ★ 전송은 이 한 줄이 전부다
 }
 
 static bool sendAck(uint16_t rid, char s0, char s1, uint8_t result) {

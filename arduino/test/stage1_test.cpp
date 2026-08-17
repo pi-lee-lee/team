@@ -50,6 +50,16 @@ static void ok(bool cond, const char* what) {
 
 // 각 시험을 같은 출발점에서 시작시킨다.
 // `netOnline=true` 로 두는 이유: `sendLine()` 은 오프라인이면 즉시 false 로 빠진다.
+// ★ 하행 프레임을 **실제 체크섬 함수로** 만들어 먹인다.
+//   손으로 `00` 을 적으면 `verify_line` 단계에서 걸려 `handleLine` 이 조용히 버린다 —
+//   그러면 시험이 "ACK 가 안 나갔다"를 코드 결함으로 오독한다. (2026-08-17 실제로 밟았다)
+static void feedDown(const char* bodyEndingWithComma) {
+  char buf[40];
+  int n = snprintf(buf, sizeof(buf), "%s", bodyEndingWithComma);
+  appendChecksum(buf, (uint8_t)n);
+  handleLine(buf);
+}
+
 static void arm(const char* refuse /* nullptr 이면 정상 프롬프트 */) {
   // ⚠ `reset()` 이 필수다. 앞 시험의 더미 `#` 들이 `\r\n` 없이 남아 다음 명령을 삼킨다
   //   — 스텁의 결함이 아니라 실기 스트림 엉킴의 정확한 재현이라 명시적으로 지운다.
@@ -72,6 +82,12 @@ static void arm(const char* refuse /* nullptr 이면 정상 프롬프트 */) {
   sendOkWaitFrom = 0;
   sendSkips = sendOkTimeouts = sendFails = 0;
   espResets = 0;
+  // ★ 2026-08-17 신설 상태 — 위 주석이 시키는 대로 여기 같이 넣는다.
+  sendOkT1Passed = false;    // 안 걸면 앞 시험의 걸쇠가 새어 `okto` 가 안 세진다
+  sendOkGiveups  = 0;
+  cifsrRefused   = false;
+  ackqDrops      = 0;
+  ackqClear();
 }
 
 static const char* FRAME = "S,1,0000000000,0000000000,1,P1,";
@@ -229,16 +245,89 @@ int main() {
   bool r11 = sendLine(FRAME);
   ok(r11,                       "★ 대기가 풀리면 다음 프레임이 정상적으로 나간다");
 
-  // ── [12] 안전망 — SEND OK 가 영영 안 와도 상한이 풀어 준다 ─────────────────
-  // 이것이 없으면 2단계는 1단계보다 **더 나쁜 정지**를 만든다(설계 §4).
-  printf("\n[12] 안전망 — SEND OK 가 안 와도 상한(3초)이 풀어 준다\n");
+  // ── [12] 3단 게이트 — T1 을 넘겨도 **두들기지 않는다** ──────────────────────
+  // ✏️ 2026-08-17 개정. 옛 시험은 *"상한을 넘기면 대기를 풀고 실제로 보낸다"* 를 검증했다.
+  //   그 동작이 **`busy` 폭풍의 시작이었다**(창4 09:02·09:13, 설계서 §5-T):
+  //   막힌 ESP 에 다시 쏘기 시작해 8초를 두들기고 10초에 불변식이 겨우 끊었다.
+  //   → **T1~T2 는 계속 조용히 기다리고, T2 에서 복구로 간다.**
+  //   ⚠ "영구 정지 방지"라는 원래 목적은 **[12b] 가 그대로 지킨다** — 없앤 것이 아니라 옮겼다.
+  printf("\n[12] 3단 게이트 — T1 을 넘겨도 두들기지 않는다\n");
   arm(nullptr);
+  sendOkTimeouts = 0;                       // ★ 앞 시험들의 누적을 지워 계수를 결정적으로 만든다
   sendLine(FRAME);                          // 대기 시작
   ok(awaitingSendOk,            "대기 중이다");
-  sendOkWaitFrom = millis() - (SEND_OK_TIMEOUT_MS + 1);   // 상한을 넘긴 것으로 둔다
+  sendOkWaitFrom = millis() - (SEND_OK_TIMEOUT_MS + 1);   // T1 을 넘긴 것으로 둔다
   bool r12 = sendLine(FRAME);
-  ok(r12,                       "★★ 상한을 넘기면 대기를 풀고 실제로 보낸다 (영구 정지 방지)");
-  ok(sendOkTimeouts == 1,       "상한 초과가 진단에 기록된다 — 잦으면 그 자체가 발견이다");
+  ok(!r12,                      "★★ T1 을 넘겨도 보내지 않는다 (busy 폭풍의 원인을 제거)");
+  ok(awaitingSendOk,            "★ 대기를 풀지 않는다 — 2단은 계속 기다리는 구간이다");
+  ok(netOnline,                 "★ 그리고 아직 링크를 끊지도 않는다");
+  // ⚠ 이 단언은 **[12] 안에 있어야 한다.** 예전엔 [12b] 뒤에 있었는데 `arm()` 이
+  //   `sendOkTimeouts` 를 지우므로 거기서는 항상 0 이다 — 측정 지점이 틀렸던 것이다.
+  ok(sendOkTimeouts == 1,       "★ T1 초과가 okto 에 **한 번만** 계상된다 (증상 수가 아니라 사건 수)");
+  bool r12dup = sendLine(FRAME);                      // 같은 라운드에서 한 번 더 막힌다
+  ok(!r12dup,                   "여전히 안 보낸다");
+  ok(sendOkTimeouts == 1,       "★★ 2단을 여러 주기 지나도 okto 는 안 늘어난다 (걸쇠가 산다)");
+
+  // ── [12b] 3단 — T2 를 넘기면 **두들기지 말고 링크를 다시 세운다** ───────────
+  // 옛 시험의 "영구 정지 방지"가 여기로 옮겨 왔다. **빠져나오는 길은 그대로 있다.**
+  printf("\n[12b] 3단 — T2 를 넘기면 복구로 간다 (영구 정지 방지 · 옛 [12] 의 목적)\n");
+  arm(nullptr);
+  sendLine(FRAME);
+  sendOkWaitFrom = millis() - (SEND_OK_GIVEUP_MS + 1);    // T2 를 넘긴 것으로 둔다
+  bool r12b = sendLine(FRAME);
+  ok(!r12b,                     "T2 초과에서도 그 주기에 보내지는 않는다");
+  ok(!netOnline,                "★★ T2 를 넘기면 링크를 다시 세운다 (영구 정지 방지)");
+  ok(!awaitingSendOk,           "★ 대기가 풀린다 — 복구 뒤 첫 송신이 안 막힌다");
+  ok(sendOkGiveups == 1,        "★ 3단 발동이 stuck 에 계상된다 (T2 의 자기교정 계기)");
+  // ⚠ 옛 `sendOkTimeouts == 1` 단언은 여기 있었는데 **`arm()` 이 그 값을 지우므로
+  //   여기서는 항상 0 이었다.** 측정 지점을 [12] 안으로 옮겼다 — 값이 아니라 자리가 틀렸다.
+
+  // ══ ACK 보류 큐 (2026-08-17 · 설계서 §5-U) ════════════════════════════════
+  // 결함: 게이트가 닫혀 있으면 `sendAck` 이 실패하는데 **호출자가 반환값을 버렸다.**
+  //       → 장치는 하행을 받고 적용까지 하는데 **ACK 만 조용히 사라진다.**
+  //       실측(사용자 재현 13:20:22): 서버 재전송 3건이 **전부 같은 닫힌 게이트**를 만났다.
+  // ⚠ 이 시험들은 **수정 전 판본에서 반드시 실패해야 한다.**
+
+  // ── [12c] 게이트가 닫혀 있으면 ACK 가 큐에 남는다 ──────────────────────────
+  printf("\n[12c] ACK 보류 큐 — 게이트가 닫혀 있어도 잃지 않는다\n");
+  arm(nullptr);
+  ackqClear();
+  sendLine(FRAME);                          // 성공 송신 → 게이트가 닫힌다
+  ok(awaitingSendOk,            "게이트가 닫힌 상태");
+  feedDown("R,77,A1,u1,");                  // 하행 도착 (체크섬은 실제 함수로 붙인다)
+  ok(ackqCount == 1,            "★★ 못 보낸 ACK 가 큐에 남는다 (예전엔 사라졌다)");
+
+  // ── [12d] 게이트가 열리면 보류된 ACK 가 나간다 ─────────────────────────────
+  printf("\n[12d] 게이트가 열리면 보류된 ACK 가 나간다\n");
+  {
+    char sendok[] = "SEND OK";
+    handleLine(sendok);                     // 게이트가 열린다
+  }
+  ok(!awaitingSendOk,           "게이트가 열렸다");
+  ackqDrain();
+  ok(ackqCount == 0,            "★★ 보류된 ACK 가 실제로 나간다");
+
+  // ── [12e] 큐가 넘치면 버리되 **세어서 드러낸다** ───────────────────────────
+  // ⚠ 조용히 버리면 지금과 같아진다 — 폐기 경로가 안 보이면 그게 다음 사고가 된다.
+  printf("\n[12e] 큐 넘침 — 버리되 ackdrop 으로 드러낸다\n");
+  arm(nullptr);
+  ackqClear();
+  ackqDrops = 0;
+  sendLine(FRAME);                          // 게이트를 닫아 둔다
+  for (int i = 0; i < 6; i++) {             // 깊이 4 에 6건을 넣는다
+    char body[24];
+    snprintf(body, sizeof(body), "R,%d,A1,u1,", 100 + i);
+    feedDown(body);
+  }
+  ok(ackqCount == 4,            "★ 깊이 상한(4)을 지킨다");
+  ok(ackqDrops == 2,            "★★ 넘친 2건이 ackdrop 에 남는다 (조용히 안 버린다)");
+
+  // ── [12f] 소켓이 끊기면 큐를 비운다 ────────────────────────────────────────
+  // ⚠ 이 설계가 새로 만드는 **유일한 위험**이다 — 새 소켓에서 옛 rid 에 답하면 안 된다.
+  printf("\n[12f] 소켓이 끊기면 보류 ACK 를 버린다 (새 소켓에 옛 rid 로 답하지 않는다)\n");
+  ok(ackqCount > 0,             "끊기 전에는 보류가 남아 있다");
+  startSocketRecovery();
+  ok(ackqCount == 0,            "★★ 소켓 재수립 시 큐가 비워진다");
 
   // ── [13] SEND FAIL 은 실패로 센다 — **원래 있던 구멍** ─────────────────────
   // 프롬프트까지 받고 페이로드도 썼는데 전송이 실패한 것이라 `busy` 와 전혀 다르다.

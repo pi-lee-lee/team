@@ -450,6 +450,53 @@ static void cachePut(uint16_t rid, char s0, char s1, uint8_t result) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// 🔴 ACK 보류 큐 — **게이트가 닫혀 있을 때 ACK 가 조용히 사라지던 것을 막는다**
+//    (2026-08-17 · 사용자 재현 13:20:22 · 설계서 §5-U)
+//
+// 무엇이 문제였나:
+//   `handleLine()` 이 `cachePut()` 으로 **상태를 커밋한 뒤** `sendAck()` 를 부르는데
+//   **반환값을 안 썼다.** 그리고 `sendLine()` 은 게이트가 닫혀 있으면 `false` 를 돌려준다.
+//   → **장치는 하행을 받고 적용까지 했는데 ACK 만 사라진다. 아무도 재시도하지 않는다.**
+//   실측: 서버가 같은 `rid` 를 3번 재전송했고 **3번 다 같은 닫힌 게이트를 만났다.**
+//
+// ⚠ 그래서 **서버측 재전송 강화는 이 결함의 해법이 아니다.**
+// ⚠ 그리고 **게이트에서 ACK 를 면제하는 것도 해법이 아니다** — 게이트가 닫힌 이유가
+//   "ESP 가 아직 전송 중"이라서다. 면제해도 `busy` 로 거부된다. **미루는 것 말고 답이 없다.**
+//
+// 왜 이렇게 작은가 — **내용은 이미 멱등 캐시가 갖고 있다.**
+//   잃는 것은 "무엇을 보낼지"가 아니라 **"보내야 한다는 사실"** 하나뿐이다.
+//   그래서 큐는 `rid` 목록이면 되고, 보낼 때 캐시에서 다시 만든다.
+//   ⚠ RAM 이 빠듯하다(실측 최저 여유 782B). 프레임을 통째로 담으면 한 칸 64바이트라 32배다.
+//
+// 멱등 캐시와 겹치지 않는다 — **직교한다:**
+//   · 캐시 = 같은 `rid` 가 **또 오면** 상태를 다시 안 바꾼다 (중복 **수신**)
+//   · 큐   = 만든 답을 **못 보냈으면** 나중에 보낸다      (송신 **지연**)
+static const uint8_t ACKQ_N = 4;      // 60초 간격이면 1이면 충분. 사람이 연달아 누르는 경우를 위해 4
+static uint16_t      ackq[ACKQ_N];
+static uint8_t       ackqCount = 0;
+static uint8_t       ackqHead  = 0;   // 다음에 내보낼 자리
+static uint16_t      ackqDrops = 0;   // ★ 가득 차서 버린 수 — **조용히 버리면 지금과 같아진다**
+
+static void ackqPush(uint16_t rid) {
+  for (uint8_t i = 0; i < ackqCount; i++)                    // 같은 rid 가 이미 있으면 안 넣는다
+    if (ackq[(uint8_t)((ackqHead + i) % ACKQ_N)] == rid) return;
+  if (ackqCount == ACKQ_N) {
+    ackqHead = (uint8_t)((ackqHead + 1) % ACKQ_N);           // 가장 오래된 것을 버린다
+    ackqCount--;
+    if (ackqDrops < 65535) ackqDrops++;
+#if DEBUG
+    Serial.println(F("[ACKQ] 가득 참 — 가장 오래된 보류 ACK 를 버린다"));
+#endif
+  }
+  ackq[(uint8_t)((ackqHead + ackqCount) % ACKQ_N)] = rid;
+  ackqCount++;
+}
+
+// ★ 소켓이 끊기면 비운다 — **새 소켓에서 옛 `rid` 에 답하면 안 된다.**
+//   이 설계가 새로 만드는 유일한 위험이 그것이라 `awaitingSendOk=false` 와 같은 자리에 둔다.
+static void ackqClear(void) { ackqCount = 0; ackqHead = 0; }
+
+// ─────────────────────────────────────────────────────────────────────────
 // 송신 상태
 // ─────────────────────────────────────────────────────────────────────────
 static uint16_t      seqNo = 0;                 // §2.4 uint16 순환. 재부팅하면 0
@@ -1129,6 +1176,9 @@ static uint16_t      promptResyncs = 0;
 //   처리가 통째로 밀린다. 그래서 "기다린다"가 아니라 **"아직이면 이번 주기를 건너뛴다"** 다.
 static bool          awaitingSendOk  = false;  // 앞 전송의 SEND OK 를 아직 못 봤다
 static uint32_t      sendOkWaitFrom  = 0;      // 그 기다림이 시작된 시각
+static bool          sendOkT1Passed  = false;  // 이 라운드에서 T1 을 이미 넘어 `okto` 를 셌다
+//   ⚠ 없으면 T1~T2 구간의 **매 주기마다** `okto` 가 오른다 — 사건 수가 아니라 증상 수가 되어
+//     monitor 계수와 정의가 어긋난다(원장 §8.2-1 이 `espResets` 에서 겪은 그것).
 // 안전망: `SEND OK` 가 **영영 안 올 수도 있다.** AT 펌웨어 판본에 따라 안 주거나,
 // SoftwareSerial 이 반이중 + RX 64B 라 우리가 쓰는 동안 도착한 응답이 통째로 사라질 수 있다
 // (원장 §2.5). 상한을 두지 않으면 2단계가 1단계보다 **더 나쁜 정지**를 만든다.
@@ -1177,6 +1227,38 @@ static uint32_t      sendOkWaitFrom  = 0;      // 그 기다림이 시작된 시
 //   그때 근거를 갖고 올린다. **추측으로 미리 넉넉히 잡는 것보다 낫다 — 재고 고치는 길이 있다.**
 static const uint16_t SEND_OK_TIMEOUT_MS = 2000;
 static uint16_t      sendOkTimeouts = 0;       // 진단: 상한 초과 횟수 — 잦으면 그 자체가 발견이다
+
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴 3단 게이트 — **상한이 만료됐을 때 무엇을 하는가가 진짜 결함이었다** (2026-08-17 · 설계서 §5-T)
+//
+// 옛 동작: 상한(2초) 만료 → **"옛 동작으로 복귀"** = 막힌 ESP 에 다시 쏘기 시작
+//          → 매 초 `busy` 8회 → 10초에 살아있음 불변식이 겨우 끊는다
+//   실측 2건(창4 09:02·09:13)이 줄 단위로 같은 사슬이었고, **포기한 그 순간에 앞 전송의
+//   페이로드 에코가 도착했다.** → **ESP 는 죽지 않았다. 느렸을 뿐이고 우리가 먼저 포기했다.**
+//
+// 새 동작:
+//   1단 (0 ~ T1)  조용히 기다린다                      (지금 그대로)
+//   2단 (T1 ~ T2) **계속 조용히 기다린다**             ← 신설. 여기서 두들기던 것을 멈춘다
+//   3단 (> T2)    **복구로 간다**                      끝내 안 오는 건은 기다려도 소용없다
+//
+// ★ 이유를 묻지 않는다 — `busy` 든 침묵이든 **"`SEND OK` 가 왔는가" 하나만** 본다(§6.1).
+//   `busy` 전용 카운터를 만들지 않는다.
+//
+// ★ `T2 = 8000` 의 근거는 **세 경계**다(관측 최대의 배수가 아니다):
+//   ① 하한 6000ms — 서버 무프레임 판정(3.5초)보다 길어야 정상 회복을 안 자른다(루트 결정)
+//   ② `TX_STALL_MS`(10000) **미만** — 아니면 살아있음 불변식이 먼저 걸려 **3단이 영영 안 돈다**
+//   ③ 관측된 회복을 안 자른다 — 창4 `okto` 25건 중 23건이 총 (2000+Δ) 안에 회복했고
+//      그 최대가 총 (6000, 8000)ms 다. `6000` 으로 잡으면 **그중 4건을 새로 죽인다.**
+//   ⚠ ③의 Δ 분포는 **재시도가 낀 자료**라 "기다렸으면 왔을까"를 직접 답하지 못한다.
+//     그래서 값을 분포에서 뽑지 않고 **경계에서** 정했다. 자기교정은 `stuck` 이 맡는다.
+//
+// ⚠ 대가: **ESP 가 진짜 죽었을 때 탐지가 `T2` 만큼 늦어진다.** 다만 불변식(10초)이 뒤를 받치므로
+//   탐지가 사라지지는 않고 늦어질 뿐이며, 그 늦어짐이 `T2 < TX_STALL_MS` 로 제한된다.
+static const uint16_t SEND_OK_GIVEUP_MS = 8000;
+static uint16_t      sendOkGiveups = 0;        // ★ 3단 복구 발동 수(`stuck`) — T2 의 자기교정 계기
+//   `okto` 많고 `stuck` 적다   → 느린 전송 대부분이 2단에서 회복 → T2 적절
+//   `stuck` 이 `okto` 에 가깝다 → 기다려도 안 온다 → **T2 를 낮춰야** 한다(헛기다림)
+//   ⚠ 기대치를 미리 박지 않는다 — §6.5-1 에서 옛 기대치와 견주다 데인 자리다.
 static uint16_t      sendSkips      = 0;       // 진단: SEND OK 대기로 건너뛴 주기 수
 static uint16_t      sendFails      = 0;       // 진단: SEND FAIL 수신 횟수
 
@@ -1224,6 +1306,16 @@ static uint16_t      sendFails      = 0;       // 진단: SEND FAIL 수신 횟�
 //   그래서 **IP 를 잃은 순간 한 번만** 세고, 실제로 IP 를 되찾을 때 걸쇠를 푼다.
 static uint16_t      espResets = 0;      // ESP 가 IP 를 잃은 **사건 수** (증상 수가 아니다)
 static bool          ipLossLatched = false;
+
+// ★ 2026-08-17 — `CIFSR 3회 소진` 판별자의 **오탐**을 막는다 (원장 §8.2-12)
+//   그 가지는 "세 번 물어도 쓸 IP 가 없었다"를 IP 소실로 센다. 그런데 ESP 가 바쁘면
+//   `AT+CIFSR` 에도 `busy s...` 로 답한다 — **IP 를 잃어서가 아니라 물어보지 못해서** 소진된다.
+//   실측(창4): `esprst` 4건 중 2건이 이 오탐이었다. `09:13:59` 은 4초 뒤 **같은 IP** 를 되찾았고
+//   부트 배너도 `0.0.0.0` 도 없었다. A 창에서도 6건 중 2건이 같은 오탐이다(§8.2-13).
+//   ⚠ 오탐 방향이 한쪽이다 — **자해를 모듈 리셋으로** 옮긴다. 두 기전을 가르려는 계수기가
+//     바로 그 자리에서 둘을 섞는다.
+//   → **"물어봤는데 답에 IP 가 없었다"와 "물어볼 수조차 없었다"를 가른다.**
+static bool          cifsrRefused = false;   // 이번 CIFSR 라운드에서 `busy` 로 거부된 적이 있다
 // ⚠ **이름이 주장보다 세다. 값은 그대로 두고 정의만 정확히 적는다**(2026-08-17 루트 지적).
 //   ~~"링크가 실제로 끊겨"~~ 는 **과한 주장**이었다. 이 카운터는 `startSocketRecovery()` 진입을
 //   세는 것이고, 그 함수 자신이 판정을 **추정**이라고 밝힌다 — 재시도에 `ALREADY CONNECTED` 가
@@ -1280,6 +1372,12 @@ static void cntTick(uint32_t now) {
   Serial.print(F(" resync="));       Serial.print(promptResyncs);
   Serial.print(F(" sendfail="));     Serial.print(sendFails);
   Serial.print(F(" okto="));         Serial.print(sendOkTimeouts);
+  // ★ 2026-08-17 신설 — ⚠ **칸을 뒤에 붙인다. 기존 이름·순서는 그대로 둔다**(monitor 파서).
+  //   ⚠ 옛 로그에는 이 칸들이 없다. **굽기 전후를 같은 표에 넣지 마라** —
+  //     그 칸의 0 은 "안 났다"가 아니라 "그 칩엔 없었다"다.
+  Serial.print(F(" stuck="));        Serial.print(sendOkGiveups);   // T2 초과 → 링크 재수립
+  Serial.print(F(" ackq="));         Serial.print(ackqCount);       // 지금 보류 중인 ACK
+  Serial.print(F(" ackdrop="));      Serial.print(ackqDrops);       // 큐가 넘쳐 버린 ACK
   Serial.print(F(" skip="));         Serial.print(sendSkips);
   Serial.print(F(" online="));       Serial.println(netOnline ? 1 : 0);
 }
@@ -1304,7 +1402,12 @@ static void startSocketRecovery(void) {
   // ★ 2단계: 대기를 **반드시 푼다.** 소켓이 사라지는 마당에 앞 전송의 `SEND OK` 는 영영 오지
   //   않는다. 안 풀면 다시 온라인이 된 뒤 첫 송신이 통째로 건너뛰어지고, 최악에는 상한(3초)을
   //   태우고 나서야 첫 프레임이 나간다. **복구 직후가 가장 급한 순간인데 거기서 늦어진다.**
-  awaitingSendOk = false;
+  awaitingSendOk = false; sendOkT1Passed = false;
+  // ★ 2026-08-17 — **보류된 ACK 도 여기서 버린다.** 소켓이 사라지면 그 `rid` 에 대한 답은
+  //   새 소켓에서 의미가 없다. **이것이 ACK 큐가 새로 만드는 유일한 위험이고**, 그래서
+  //   `awaitingSendOk` 를 푸는 바로 이 자리에 둔다 — 한 곳에서만 처리하면 빠뜨릴 수 없다.
+  //   ⚠ 멱등 캐시는 **비우지 않는다**(아래 이유 참조). 큐만 비운다 — 둘은 다른 물건이다.
+  ackqClear();
   // ★ 운영 계수 — **전송이 안 되어 링크를 다시 세우는 모든 경로가 여기를 지난다.**
   //   그래서 여기 한 곳에서만 세면 중복도 누락도 없다(이 함수의 존재 이유 그대로다).
   if (linkDrops < 65535) linkDrops++;
@@ -1413,19 +1516,34 @@ static bool sendLine(const char* line) {
   // ⚠ 그럼에도 **막히면 반드시 빠져나온다**: 여기서 계속 건너뛰면 `lastTxOkAt` 이 갱신되지
   //   않아 살아있음 불변식(10초)이 발동한다. 아래 상한(3초)은 그보다 먼저 푸는 1차 방어다.
   if (awaitingSendOk) {
-    if ((uint32_t)(millis() - sendOkWaitFrom) < SEND_OK_TIMEOUT_MS) {
+    const uint32_t waited = (uint32_t)(millis() - sendOkWaitFrom);
+
+    // ── 1단 (0 ~ T1) · 2단 (T1 ~ T2) — 둘 다 **조용히 기다린다** ─────────────
+    //   차이는 `okto` 를 한 번 세느냐뿐이다. **2단에서 두들기던 것이 이번 수정의 전부다.**
+    if (waited < SEND_OK_GIVEUP_MS) {
+      if (waited >= SEND_OK_TIMEOUT_MS && !sendOkT1Passed) {
+        sendOkT1Passed = true;                       // 라운드당 한 번만 센다
+        if (sendOkTimeouts < 65535) sendOkTimeouts++;
+#if DEBUG
+        Serial.println(F("[TX-WAIT] ★ T1 초과 — 그래도 계속 기다린다(두들기지 않는다)"));
+#endif
+      }
       if (sendSkips < 65535) sendSkips++;
 #if DEBUG
       Serial.println(F("[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다"));
 #endif
       return false;
     }
-    // 상한 초과 — `SEND OK` 를 못 받고 있다. 풀어 주고 **예전 동작(SEND_GAP_MS)으로 되돌아간다.**
-    awaitingSendOk = false;
-    if (sendOkTimeouts < 65535) sendOkTimeouts++;
+
+    // ── 3단 (> T2) — 끝내 안 온다. **두들기지 말고 링크를 다시 세운다** ───────
+    //   ⚠ 옛 동작은 여기서 "예전 동작으로 복귀"였고, 그것이 `busy` 폭풍의 시작이었다.
+    awaitingSendOk = false; sendOkT1Passed = false;
+    if (sendOkGiveups < 65535) sendOkGiveups++;
 #if DEBUG
-    Serial.println(F("[TX-WAIT] ★ SEND OK 상한 초과 → 대기를 푼다(SEND_GAP_MS 시절 동작으로 복귀)"));
+    Serial.println(F("[TX-WAIT] ★★ T2 초과 — SEND OK 가 끝내 안 온다 → 링크를 다시 세운다"));
 #endif
+    startSocketRecovery();
+    return false;
   }
 
   inSend = true;
@@ -1447,6 +1565,11 @@ static bool sendLine(const char* line) {
     // ★ 2단계: 여기서부터 ESP 가 **실제로 WiFi 로 보내는 중**이다. 그 끝을 알려주는 것이
     //   `SEND OK` 다. 추측(80ms) 대신 그 신호를 기다린다 — 단, 비블로킹으로.
     awaitingSendOk = true;
+    // ★ 새 라운드가 시작됐다 — T1 걸쇠를 반드시 푼다.
+    //   ⚠ 안 풀면 `okto` 가 **부팅 후 딱 한 번만** 오르고 그 뒤로 영영 0 이다.
+    //     자기교정 계기가 조용히 죽는 것이라 §6.5 의 취지가 통째로 사라진다.
+    //     (2026-08-17 회귀 시험이 이 결함을 잡았다 — 코드보다 시험이 먼저 맞았다)
+    sendOkT1Passed = false;
     sendOkWaitFrom = millis();
   } else if (pr != PROMPT_TIMEOUT) {
     // ─────────────────────────────────────────────────────────────────────
@@ -1596,7 +1719,33 @@ static bool sendAck(uint16_t rid, char s0, char s1, uint8_t result) {
                    (unsigned int)rid, s0, s1, (unsigned int)result);
   if (n <= 0 || (unsigned)n + 3 > sizeof(buf)) return false;
   appendChecksum(buf, (uint8_t)n);
-  return sendLine(buf);
+  // ★ 2026-08-17 — **반환값을 여기서 쓴다.** 예전에는 호출자가 전부 버려서
+  //   게이트가 닫혀 있으면 ACK 가 조용히 사라졌다. 못 보냈으면 담아 둔다.
+  //   호출자 5곳을 전부 고치는 대신 여기 한 곳에 두어 **빠뜨릴 수 없게** 한다.
+  const bool ok = sendLine(buf);
+  if (!ok) ackqPush(rid);
+  return ok;
+}
+
+// ★ 보류된 ACK 를 한 번에 하나씩 내보낸다. **게이트가 열려 있을 때만 나간다.**
+//   `loop()` 에서 `drainPending()`(하행) 뒤 `statusTick()`(상행) **앞**에 부른다 —
+//   기존의 "하행이 상행보다 앞" 순서를 그대로 따른다.
+static void ackqDrain(void) {
+  if (ackqCount == 0 || !netOnline) return;
+  const uint16_t rid = ackq[ackqHead];
+  const int8_t   hit = cacheFind(rid);
+  // ⚠ **먼저 뺀다.** 빼지 않고 보내면, 실패했을 때 `sendAck` 이 다시 넣으려다
+  //   중복 제거에 걸려 **영원히 안 나가는 상태**가 된다. 빼고 보내면 실패 시 꼬리로 다시 들어온다.
+  ackqHead = (uint8_t)((ackqHead + 1) % ACKQ_N);
+  ackqCount--;
+  if (hit < 0) {                       // 캐시에서 밀려났다 — 내용을 만들 수 없다
+    if (ackqDrops < 65535) ackqDrops++;
+#if DEBUG
+    Serial.println(F("[ACKQ] 캐시에서 밀려나 보낼 수 없다 — 버린다"));
+#endif
+    return;
+  }
+  sendAck(cache[hit].rid, cache[hit].slot[0], cache[hit].slot[1], cache[hit].result);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1965,6 +2114,9 @@ static void handleLine(char* s) {
       //   실측(REQ-0064): 부팅 직후 ESP 가 앞선 CWJAP 를 처리하는 12초 동안
       //   **`AT+RST` 를 1.5초마다 8회** 되쏘고 있었다 — **진행 중인 결합을 매번 죽인 것**이다.
       //   RST 는 되쏘지 않는다. 응답이 없으면 NET_WAIT[NET_RST](2500ms)가 알아서 재시도한다.
+      // ★ 2026-08-17 — 이 `busy` 가 CIFSR 에 대한 것이면 **소진 사유가 "IP 없음"이 아니다.**
+      //   여기서 표시해 두고, 3회 소진 지점에서 `noteIpLoss()` 를 건너뛴다(§8.2-12).
+      if (netLastSent == NET_CIFSR) cifsrRefused = true;
       switch (netLastSent) {
         case NET_CIFSR: case NET_CIPMUX: case NET_CIPSTART:
           netAdvance(netLastSent, 1500);   // 이 셋은 되쏴도 상태를 망가뜨리지 않는 질의/설정이다
@@ -2036,6 +2188,7 @@ static void handleLine(char* s) {
         netHasIp = true;
         cifsrTries = 0;
         ipLossLatched = false;              // ★ IP 를 실제로 되찾았다 — 다음 소실은 새 사건이다
+        cifsrRefused  = false;              // ★ 라운드가 끝났다 — 묵은 `busy` 표시가 다음 판정을 가리면 안 된다
         if (!assocAt) assocAt = millis();   // 결합 유지시간 계측 시작 (REQ-0071 0단)
 #if DEBUG
         Serial.print(F("[NET] ★ IP 확보: "));
@@ -2156,7 +2309,7 @@ static void handleLine(char* s) {
     onlineSince = millis();            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
     lastTxOkAt  = millis();            // ★ 살아있음 불변식의 출발점 — 붙자마자 발동하지 않게 한다
     sendFailStreak = 0;
-    awaitingSendOk = false;            // ★ 2단계: 새 소켓이다 — 앞 소켓의 SEND OK 를 기다리지 않는다
+    awaitingSendOk = false; sendOkT1Passed = false;            // ★ 2단계: 새 소켓이다 — 앞 소켓의 SEND OK 를 기다리지 않는다
     closeAttempts = 0;
 #if DEBUG
     Serial.println(F("[NET] online (ALREADY CONNECTED · 초기 경합)"));
@@ -2168,7 +2321,7 @@ static void handleLine(char* s) {
     onlineSince = millis();            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
     lastTxOkAt  = millis();            // ★ 살아있음 불변식의 출발점 — 붙자마자 발동하지 않게 한다
     sendFailStreak = 0;
-    awaitingSendOk = false;            // ★ 2단계: 새 소켓이다 — 앞 소켓의 SEND OK 를 기다리지 않는다
+    awaitingSendOk = false; sendOkT1Passed = false;            // ★ 2단계: 새 소켓이다 — 앞 소켓의 SEND OK 를 기다리지 않는다
     staleSocket = false;               // 진짜로 새로 붙었다 — 낡은 소켓이 아니다
     closeAttempts = 0;
     // TCP 까지 올라왔다는 것은 그 아래(결합·IP)가 전부 성립했다는 뜻이다 — 진단 카운터를 되돌린다.
@@ -2185,7 +2338,7 @@ static void handleLine(char* s) {
   if (isClosedLine(s)) {
     netOnline = false;
     sendFailStreak = 0;
-    awaitingSendOk = false;            // ★ 2단계: 소켓이 닫혔다 — 그 SEND OK 는 영영 오지 않는다
+    awaitingSendOk = false; sendOkT1Passed = false;            // ★ 2단계: 소켓이 닫혔다 — 그 SEND OK 는 영영 오지 않는다
     // 닫혔다는 통보다 — 낡은 소켓 의심이 해소됐다. 사다리도 내려온다.
     staleSocket = false;
     closeAttempts = 0;
@@ -2227,7 +2380,7 @@ static void handleLine(char* s) {
     // ⚠ `strstr` 이 아니라 접두 비교인 이유: 서버 프레임에 우연히 "SEND OK" 가 섞여도
     //   여기까지 오지 않지만(데이터 줄은 맨 앞에서 갈린다), 판정은 좁을수록 좋다.
     if (strncmp(s, "SEND OK", 7) == 0) {
-      awaitingSendOk = false;
+      awaitingSendOk = false; sendOkT1Passed = false;
       return;
     }
     // ── 2단계: `SEND FAIL` — **원래 있던 구멍이다** ──────────────────────────────
@@ -2237,7 +2390,7 @@ static void handleLine(char* s) {
     // **연속 카운터를 0 으로 되돌린 뒤**였다. 즉 프레임이 안 나갔는데 성공으로 세고 있었다.
     // ⚠ 이중 계수가 아니다 — 그 성공 계상을 **여기서 되돌리는** 것이다.
     if (strncmp(s, "SEND FAIL", 9) == 0) {
-      awaitingSendOk = false;
+      awaitingSendOk = false; sendOkT1Passed = false;
       if (sendFails < 65535) sendFails++;
 #if DEBUG
       Serial.println(F("[NET] ★ SEND FAIL — 페이로드까지 썼는데 전송이 실패했다. 실패로 센다"));
@@ -2336,12 +2489,18 @@ static void netTick(unsigned long now) {
     case NET_CIFSR:
       // CIFSR 은 로컬 질의라 답이 빠르다. 세 번 물어도 쓸 IP 가 없으면 결합부터 다시.
       if (++cifsrTries >= 3) {
+        // ★ 2026-08-17 — 소진 **사유**를 먼저 읽는다. 아래 리셋보다 앞이어야 한다(§8.2-12)
+        const bool refused = cifsrRefused;
         cifsrTries = 0;
+        cifsrRefused = false;
         // ★ 판별자 ② — **응답이 가비지여도 성립한다.** 18:48:12 리셋에서 CIFSR 응답이
         //   통째로 깨져 `0.0.0.0` 문자열이 안 나왔고, 판별자 ① 만으로는 놓쳤다(monitor 실측).
         //   "세 번 물어도 쓸 IP 가 없었다"는 **문자열이 아니라 우리 쪽 상태**라 안 깨진다.
-        noteIpLoss();
+        // ⚠ `busy` 로 거부돼 소진된 것이면 **IP 소실이 아니다.** 세지 않는다(원장 §8.2-12).
+        if (!refused) noteIpLoss();
 #if DEBUG
+        if (refused)
+          Serial.println(F("[NET] CIFSR 3회 소진 — 그러나 busy 거부였다. IP 소실로 세지 않는다"));
         Serial.println(F("[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시"));
 #endif
         netStep = NET_CWJAP;
@@ -2615,6 +2774,7 @@ void loop() {
   netTick(now);
   pumpSerialRaw();
   drainPending();
+  ackqDrain();                      // ★ 보류된 ACK 를 상행보다 **먼저** 내보낸다 (2026-08-17)
   sensorTick();
   statusTick(now);
   cntTick(now);                     // ★ DEBUG 밖 — 운영 빌드에서도 관측이 남는다
