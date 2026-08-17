@@ -3318,6 +3318,53 @@ static int selftest() {
                       << s.q_dropped_link << " (기대: 큐 0 · 버린 수가 세어짐)\n";
             if (!ok7) bad++;
 
+            // ⑧ 🔴 **창 포기가 슬롯당 1회로 묶인다** — `tick()` 은 200ms 마다 도는데
+            //    조건이 "조용하다" 하나면 침묵 구간 내내 200ms 버스트가 된다.
+            //    **장치가 가장 힘들어하는 구간에서 슬롯 규율이 통째로 꺼지는 것**이라
+            //    이 검사가 없으면 다음 사람이 조건을 단순화하면서 되돌린다.
+            s.ard = sv[0];
+            s.ard_last_ms = now_ms() - (DOWN_DMAX_MS + 100);   // 오래 조용했다
+            s.last_dmax_ms = 0;
+            s.dispatch('R', BAD_SOCK, "", "B2", "00000000");
+            s.dispatch('R', BAD_SOCK, "", "B4", "00000000");
+            long long dm0 = s.dmax_flushes;
+            s.tick();                                          // 첫 포기 — 나가야 한다
+            s.tick();                                          // 곧바로 또 — **나가면 안 된다**
+            s.tick();
+            bool ok8 = (s.dmax_flushes == dm0 + 1);
+            std::cout << (ok8 ? "  ✓ " : "  ✗ ") << "창 포기 3틱 연속 → 창포기 "
+                      << (s.dmax_flushes - dm0) << "회 (기대 1 — 슬롯당 1회로 묶임)\n";
+            if (!ok8) bad++;
+            while (recv(sv[1], b, sizeof(b), MSG_DONTWAIT) > 0) {}
+
+            // ⑨ 🔴 **링크가 끊긴 뒤 거짓 `ack_timeout` 이 안 나간다**
+            //    `end_ard_session` 은 큐만 비우고 **전선에 나가 있던 pend 는 남는다.**
+            //    그 건이 재전송으로 와서 거절되면 이미 `device_offline` 로 답이 갔는데,
+            //    `tick()` 이 반환값을 무시하면 몇 틱 뒤 **`ack_timeout` 으로 한 번 더** 답한다.
+            //    ⚠ 그 이름은 "전선에 나갔다. 3회 재전송까지 했다"를 뜻한다(§8.16) —
+            //    서버가 스스로 거절한 건에 붙으면 **로그에 거짓 문장이 남는다.**
+            {
+                s.ard_last_ms = now_ms();
+                s.dispatch('R', BAD_SOCK, "", "B5", "00000000");
+                s.flush_downq("selftest ⑨ 전선에 올린다", false);
+                uint16_t rid9 = 0;
+                for (std::map<uint16_t, Pending>::iterator it = s.pend.begin();
+                     it != s.pend.end(); ++it)
+                    if (!it->second.queued) rid9 = it->first;
+                long long fail0 = s.ack_fail_count;
+                s.ard = BAD_SOCK;                       // 링크가 끊긴 상태
+                if (rid9) s.pend[rid9].sent_ms = now_ms() - (ACK_TIMEOUT_MS + 50);
+                s.tick(); s.tick(); s.tick(); s.tick();  // 3회 소진보다 많이 돌린다
+                bool ok9 = (rid9 && s.pend.count(rid9) == 0
+                            && s.ack_fail_count == fail0 && s.q_nodev > 0);
+                std::cout << (ok9 ? "  ✓ " : "  ✗ ") << "링크 끊긴 뒤 재전송: pend "
+                          << (s.pend.count(rid9) ? "남음" : "정리됨")
+                          << " · ACK실패 " << (s.ack_fail_count - fail0)
+                          << " · 장치없음 " << s.q_nodev
+                          << " (기대: 정리됨 · ACK실패 0 · 장치없음 >0)\n";
+                if (!ok9) bad++;
+            }
+
             s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
             closesock(sv[0]); closesock(sv[1]);
         }
