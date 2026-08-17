@@ -137,8 +137,23 @@ def main():
                     help="시험 인스턴스의 HTTP/WS 포트. **기본값 없음** — "
                          "운영 포트를 실수로 집지 않게 하려는 것이다")
     ap.add_argument("--allow-production", action="store_true",
-                    help="운영 포트(9900/9991/5500)에 붙는 것을 허용한다. "
-                         "**관측 전용** — 상태를 바꾸는 요청은 이 플래그로도 안 열린다")
+                    help="운영 포트(9900/9991/5500)에 붙는 것을 허용한다. **관측 전용** — "
+                         "상태를 바꾸는 요청은 이것만으로 안 열린다(--allow-state-change 가 더 필요하다)")
+    # 🔴 운영 상태 변경 — **둘째 열쇠**. 하나로 안 열리게 한 것이 요점이다.
+    #
+    # 처음에 나는 "상태 변경은 어떤 플래그로도 안 열린다"로 만들었다. 근거는
+    # **예약 한 번이 관측 창을 깼기 때문**이다(web REQ-0129). 그 판단은 여전히 옳다.
+    # 그런데 2026-08-17 에 **운영에서 예약이 실제로 되는지 재야 하는 일**이 생겼다 —
+    # `5b9d967`(5/5 성공)이 `R`/`C` 로 잰 것이라 같은 자로 재야 비교가 성립한다.
+    #
+    # 전면 금지를 유지하면 그때 **사람이 압박 속에서 이 파일을 고친다.** 그게 더 나쁘다.
+    # 그래서 **막는 것을 없애지 않고 열쇠를 하나 더 요구**한다:
+    #   · 사고로는 절대 안 열린다(플래그 둘을 동시에 우연히 칠 수 없다)
+    #   · 열 때는 **무엇을 하는지 알고 치게 된다**(이름이 그렇게 되어 있다)
+    ap.add_argument("--allow-state-change", action="store_true",
+                    help="운영에서 **상태를 바꾸는** 요청(--reserve/--cancel/--sim/--test-*)을 허용한다. "
+                         "⚠ --allow-production 과 **함께** 줘야 한다. "
+                         "관측 창이 도는 중이면 반드시 monitor 에 시각을 통보해라")
     ap.add_argument("--listen", type=float, default=3.0, help="이 시간(초)만큼 수신하고 끝낸다")
     ap.add_argument("--reserve", metavar="SLOT")
     ap.add_argument("--cancel", metavar="SLOT")
@@ -186,13 +201,20 @@ def main():
     # 그때 도구가 무조건 거부하면 **사람이 압박 속에서 이 파일을 고치게 된다.** 그게 더 나쁘다.
     PRODUCTION_PORTS = (9900, 9991, 5500)
     if a.port in PRODUCTION_PORTS:
-        if request() is not None:
-            print("🔴 %d 는 운영 포트다. 상태를 바꾸는 요청(--reserve/--cancel/--sim/--test-*)은\n"
-                  "   운영에 보낼 수 없다. --allow-production 으로도 열리지 않는다.\n"
-                  "   관측 창이 도는 동안 예약 한 번이 기준선을 깬다 — 실제로 그럴 뻔했다.\n"
-                  "   시험 인스턴스를 띄우고 그 포트로 붙어라(--port-offset)." % a.port,
+        if request() is not None and not (a.allow_production and a.allow_state_change):
+            print("🔴 %d 는 운영 포트이고 이 요청은 **상태를 바꾼다**\n"
+                  "   (--reserve/--cancel/--sim/--test-*).\n"
+                  "   열려면 **둘 다** 필요하다: --allow-production --allow-state-change\n"
+                  "   하나로 안 열리게 한 이유: 관측 창이 도는 동안 **예약 한 번이 기준선을 깬다**\n"
+                  "   — 실제로 그럴 뻔했다(web REQ-0129).\n"
+                  "   그냥 시험이면 시험 인스턴스를 띄워라(--port-offset)." % a.port,
                   file=sys.stderr)
             return 2
+        if request() is not None:
+            print("⚠⚠⚠ 운영 포트 %d 에 **상태를 바꾸는 요청**을 보낸다: %s\n"
+                  "    관측 창이 돌고 있으면 **지금 시각을 monitor 에 통보해라.**\n"
+                  "    이 개입은 기록되지 않으면 남이 원인 불명의 사건으로 쫓게 된다."
+                  % (a.port, json.dumps(request(), ensure_ascii=False)), file=sys.stderr)
         if not a.allow_production:
             print("🔴 %d 는 운영 포트다. 관측만 할 것이라면 --allow-production 을 명시해라.\n"
                   "   (기본값을 없앤 이유: 전에는 이 포트가 기본값이라 --port 를 빼먹으면\n"
