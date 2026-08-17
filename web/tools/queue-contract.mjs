@@ -63,7 +63,10 @@ const readPending = (rid) => `(() => {
   const p = state.pending.get(${JSON.stringify(rid)});
   if (!p) return null;
   return { status: p.status, ahead: p.ahead, timer: p.timer,
-           expiresAt: p.expiresAt, hasExpiry: p.expiresAt !== null };
+           expiresAt: p.expiresAt, hasExpiry: p.expiresAt !== null,
+           /* deadlineAt = 결말까지의 절대 마감(expires_ms + ack_budget_ms). expiresAt 과 다르다 —
+              하나는 "큐에서 나갈 때까지", 하나는 "결말까지"다(REQ-0166). */
+           deadlineAt: p.deadlineAt, hasDeadline: p.deadlineAt !== null };
 })()`;
 
 const mkPending = (rid, slot) => `(() => {
@@ -135,14 +138,18 @@ try {
      JSON.stringify([seen.queue_full, seen.already_pending]));
 
   /* ══ B. queued 수신 ═══════════════════════════════════════════════ */
-  console.log('\n[B] queued 수신 — ahead 표시 · expires_ms 타이머 재설정');
+  console.log('\n[B] queued 수신 — ahead 표시 · expires_ms + ack_budget_ms 타이머');
 
-  // B1 — ahead 가 있고 상한도 있는 정상 경우
+  /* 🔴 서버가 실제로 보내는 값(socket REQ-0166 처리 결과). 리터럴로 쓰지만 **화면은 이 숫자를
+     코드에 갖고 있지 않다** — 받아서 쓴다. 서버가 상수에서 계산하므로 값이 바뀌면 따라온다. */
+  const SRV_BUDGET = 9900;
+
+  // B1 — ahead 가 있고 두 상한이 다 있는 정상 경우
   {
     const rid = 'q-normal';
     await evaluate(client, mkPending(rid, 'B1'));
     const before = await evaluate(client, readPending(rid));
-    await evaluate(client, inject({ type: 'queued', rid: rid, slot: 'B1', ahead: 2, expires_ms: 4800 }));
+    await evaluate(client, inject({ type: 'queued', rid: rid, slot: 'B1', ahead: 2, expires_ms: 4800, ack_budget_ms: SRV_BUDGET }));
     await sleep(150);
     const after = await evaluate(client, readPending(rid));
     const tile = await evaluate(client, readTile('B1'));
@@ -152,7 +159,13 @@ try {
     ok('ahead=2 가 문구에 그대로 나온다', !!(tile && /앞에 2건/.test(tile.meta)), JSON.stringify(tile && tile.meta));
     ok('타일이 "접수됨"으로 그려진다', !!(tile && /접수됨/.test(tile.state)), JSON.stringify(tile && tile.state));
     ok('아직 누를 수 없다', tile && tile.ariaDisabled === 'true');
-    ok('expiresAt 이 생겼다', !!(after && after.hasExpiry));
+    ok('expiresAt 이 생겼다(큐 이탈 예상)', !!(after && after.hasExpiry));
+    /* 🔑 REQ-0166 의 핵심 — 결말 마감은 두 구간의 합이다. 이탈분만 알고 끝내면 이탈 후가 비어
+       화면이 서버보다 먼저 롤백한다(그게 3900ms 구멍이었다). */
+    ok('deadlineAt 이 생겼다(결말 마감)', !!(after && after.hasDeadline));
+    ok('deadlineAt − expiresAt ≈ ack_budget_ms (' + SRV_BUDGET + ')',
+       !!(after && Math.abs((after.deadlineAt - after.expiresAt) - SRV_BUDGET) <= 50),
+       JSON.stringify(after && [after.expiresAt, after.deadlineAt]));
     /* 🔑 타이머 id 가 갈렸다 = 자체 타임아웃을 **버리고** 새로 걸었다.
        같은 id 면 clearTimeout 이 안 된 것이고, 그러면 6초에 그대로 터진다. */
     ok('타이머가 새로 걸렸다(id 가 갈렸다)', !!(before && after && before.timer !== after.timer),
@@ -163,18 +176,18 @@ try {
   {
     const rid = 'q-next';
     await evaluate(client, mkPending(rid, 'B2'));
-    await evaluate(client, inject({ type: 'queued', rid: rid, slot: 'B2', ahead: 0, expires_ms: 1200 }));
+    await evaluate(client, inject({ type: 'queued', rid: rid, slot: 'B2', ahead: 0, expires_ms: 1200, ack_budget_ms: SRV_BUDGET }));
     await sleep(150);
     const tile = await evaluate(client, readTile('B2'));
     console.log('  · B2 타일 → ' + JSON.stringify(tile && tile.meta));
     ok('ahead=0 → "다음 차례입니다"', !!(tile && /다음 차례/.test(tile.meta)), JSON.stringify(tile && tile.meta));
   }
 
-  // B3 — 🔴 서버가 상한을 안 줬을 때 숫자를 지어내지 않는다
+  // B3 — 🔴 expires_ms 가 없을 때 숫자를 지어내지 않는다 (ack_budget_ms 는 줬다)
   {
     const rid = 'q-noexp';
     await evaluate(client, mkPending(rid, 'B3'));
-    await evaluate(client, inject({ type: 'queued', rid: rid, slot: 'B3', ahead: 1 }));
+    await evaluate(client, inject({ type: 'queued', rid: rid, slot: 'B3', ahead: 1, ack_budget_ms: SRV_BUDGET }));
     await sleep(150);
     const p = await evaluate(client, readPending(rid));
     const tile = await evaluate(client, readTile('B3'));
@@ -185,6 +198,26 @@ try {
        JSON.stringify(tile && tile.reason));
   }
 
+  /* B7 — 🔴 **한쪽만 온 경우.** expires_ms 는 있고 ack_budget_ms 가 없다.
+     이탈 예상은 알지만 **결말 상한을 모른다** → 타이머를 안 걸고 "모른다"를 적어야 한다.
+     ⚠ 여기서 ACK_TIMEOUT(6000)으로 메우면 REQ-0166 으로 막은 그 구멍이 되살아난다.
+     그리고 이 경우 화면이 `expiresAt` 만 보고 "안다"고 말하면 안 된다 —
+     판단 기준이 `deadlineAt` 이어야 하는 이유가 이 케이스다. */
+  {
+    const rid = 'q-nobudget';
+    await evaluate(client, mkPending(rid, 'A5'));
+    await evaluate(client, inject({ type: 'queued', rid: rid, slot: 'A5', ahead: 1, expires_ms: 1200 }));
+    await sleep(150);
+    const p = await evaluate(client, readPending(rid));
+    const tile = await evaluate(client, readTile('A5'));
+    console.log('  · B7 → ' + JSON.stringify(p && { hasExpiry: p.hasExpiry, hasDeadline: p.hasDeadline, timer: p.timer }));
+    ok('ack_budget_ms 가 없으면 deadlineAt 을 안 만든다', !!(p && p.hasDeadline === false), JSON.stringify(p));
+    ok('ack_budget_ms 가 없으면 타이머를 안 건다(6000 으로 메우지 않는다)',
+       !!(p && p.timer === 0), JSON.stringify(p && p.timer));
+    ok('이탈 예상만 알아도 "모른다"를 적는다', !!(tile && /알려 주지 않았습니다/.test(String(tile.reason))),
+       JSON.stringify(tile && tile.reason));
+  }
+
   /* B4 — 🔴 이 계약의 존재 이유. 큐에서 정상 대기 중인 요청을 자체 6초에 걸어 되돌리면
      사용자가 다시 누르고 큐가 한 건 더 쌓인다(증폭 고리). 그것이 **실제로 안 일어나는지**
      시간을 흘려 본다. expires_ms=4800 이면 타이머는 4800+6000=10800ms 이므로
@@ -192,7 +225,7 @@ try {
   {
     const rid = 'q-survive';
     await evaluate(client, mkPending(rid, 'B4'));
-    await evaluate(client, inject({ type: 'queued', rid: rid, slot: 'B4', ahead: 3, expires_ms: 4800 }));
+    await evaluate(client, inject({ type: 'queued', rid: rid, slot: 'B4', ahead: 3, expires_ms: 4800, ack_budget_ms: SRV_BUDGET }));
     const waitMs = ACK_TIMEOUT + 500;
     console.log('  · B4 자체 타임아웃(' + ACK_TIMEOUT + 'ms)을 넘겨 ' + waitMs + 'ms 기다린다…');
     await sleep(waitMs);
@@ -203,17 +236,17 @@ try {
     ok('그동안 타일은 "접수됨"을 유지한다', !!(tile && /접수됨/.test(tile.state)), JSON.stringify(tile && tile.state));
   }
 
-  /* B6 — 🔴 **산식 자체를 시계로 잰다.** B4 는 "6000ms 에 안 터진다"를 보였을 뿐이고
-     발화 시각이 `expires_ms + ACK_TIMEOUT` 이라는 것은 **판독이었다.**
-     작은 상한(300ms)을 주면 6300ms 에 터져야 한다 — 그러면 산식이 실측이 된다.
-     이 값이 socket 과의 타이밍 대조(원장 §5.24)에서 **web 쪽 숫자의 근거**다. */
+  /* B6 — 🔴 **산식 자체를 시계로 잰다.** B4 는 "안 터진다"를 보였을 뿐이고 발화 시각이
+     `expires_ms + ack_budget_ms` 라는 것은 **판독이다.** 작은 값 둘을 주고 합에 터지는지 본다.
+     🔑 **`ACK_TIMEOUT`(6000)이 산식에서 빠진 것을 이 케이스가 증명한다** — 6000 이 아직 섞여
+     있으면 발화가 6800ms 쯤이 되어 기대(800ms)와 크게 어긋난다. 그게 REQ-0166 의 구멍이었다. */
   {
     const rid = 'q-formula';
-    const EXP = 300;
+    const EXP = 300, BUD = 500;
     await evaluate(client, mkPending(rid, 'A4'));
-    await evaluate(client, inject({ type: 'queued', rid: rid, slot: 'A4', ahead: 0, expires_ms: EXP }));
+    await evaluate(client, inject({ type: 'queued', rid: rid, slot: 'A4', ahead: 0, expires_ms: EXP, ack_budget_ms: BUD }));
     const t0 = Date.now();
-    console.log('  · B6 expires_ms=' + EXP + ' → ' + (EXP + ACK_TIMEOUT) + 'ms 에 터져야 한다. 재는 중…');
+    console.log('  · B6 expires_ms=' + EXP + ' + ack_budget_ms=' + BUD + ' → ' + (EXP + BUD) + 'ms 에 터져야 한다. 재는 중…');
 
     let firedAt = null;
     while (Date.now() - t0 < 9000) {
@@ -224,15 +257,18 @@ try {
     const msg = await evaluate(client, readMsg('A4'));
     console.log('  · B6 실제 발화 → ' + firedAt + 'ms · 문구 ' + JSON.stringify(msg && msg.mine));
 
-    const want = EXP + ACK_TIMEOUT;
-    ok('발화 시각이 expires_ms + ACK_TIMEOUT 이다 (' + firedAt + 'ms, 기대 ' + want + 'ms ±400)',
+    const want = EXP + BUD;
+    ok('발화 시각이 expires_ms + ack_budget_ms 다 (' + firedAt + 'ms, 기대 ' + want + 'ms ±400)',
        firedAt !== null && Math.abs(firedAt - want) <= 400,
-       '산식이 다르면 socket 과의 타이밍 대조 근거가 무너진다');
-    /* ⚠ 자체 타임아웃(6000)이 아니라 **큐 상한 초과** 문구여야 한다 — 원인이 다르다.
-       ⚠ 그리고 이 문구는 **겹침이 일어나는 경우에 거짓이 된다**(장치로 보냈고 ack 를 안 받은
-       것이므로). 고치는 것은 원장 §5.24 의 결정 뒤다 — 지금 고치면 검증 없는 변경이 된다. */
-    ok('자체 타임아웃과 다른 문구다(큐 상한 초과)',
-       !!(msg && msg.mine && /상한 시간/.test(msg.mine) && !/자체 타임아웃/.test(msg.mine)),
+       'ACK_TIMEOUT(6000)이 아직 산식에 섞여 있으면 여기서 크게 어긋난다');
+    /* ⚠ 자체 타임아웃과 다른 문구여야 한다 — 원인이 다르다(서버가 아무 말도 안 함 대 상한 초과).
+       ⚠ **"보내지 못해"를 뺐다**(REQ-0166): 서버는 큐 마감을 넘겼다고 항목을 버리지 않으므로
+       "큐에서 못 나가서 취소"라는 결말이 **서버에 없다.** 이 타이머가 터지면 진짜로 답이 안 온
+       것이다 — 화면은 어느 구간에서 막혔는지 모르니 단정하지 않는다. */
+    ok('"보내지 못해"라고 단정하지 않는다',
+       !!(msg && msg.mine && !/보내지 못해/.test(msg.mine) && /결과가 오지 않아/.test(msg.mine)),
+       JSON.stringify(msg && msg.mine));
+    ok('자체 타임아웃과 다른 문구다', !!(msg && msg.mine && !/자체 타임아웃/.test(msg.mine)),
        JSON.stringify(msg && msg.mine));
   }
 
@@ -240,7 +276,7 @@ try {
   {
     const rid = 'q-ack';
     await evaluate(client, mkPending(rid, 'B5'));
-    await evaluate(client, inject({ type: 'queued', rid: rid, slot: 'B5', ahead: 1, expires_ms: 2000 }));
+    await evaluate(client, inject({ type: 'queued', rid: rid, slot: 'B5', ahead: 1, expires_ms: 2000, ack_budget_ms: SRV_BUDGET }));
     await sleep(120);
     await evaluate(client, inject({ type: 'ack', rid: rid, slot: 'B5', result: 0 }));
     await sleep(150);
