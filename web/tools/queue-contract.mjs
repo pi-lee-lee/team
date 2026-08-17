@@ -203,6 +203,39 @@ try {
     ok('그동안 타일은 "접수됨"을 유지한다', !!(tile && /접수됨/.test(tile.state)), JSON.stringify(tile && tile.state));
   }
 
+  /* B6 — 🔴 **산식 자체를 시계로 잰다.** B4 는 "6000ms 에 안 터진다"를 보였을 뿐이고
+     발화 시각이 `expires_ms + ACK_TIMEOUT` 이라는 것은 **판독이었다.**
+     작은 상한(300ms)을 주면 6300ms 에 터져야 한다 — 그러면 산식이 실측이 된다.
+     이 값이 socket 과의 타이밍 대조(원장 §5.24)에서 **web 쪽 숫자의 근거**다. */
+  {
+    const rid = 'q-formula';
+    const EXP = 300;
+    await evaluate(client, mkPending(rid, 'A4'));
+    await evaluate(client, inject({ type: 'queued', rid: rid, slot: 'A4', ahead: 0, expires_ms: EXP }));
+    const t0 = Date.now();
+    console.log('  · B6 expires_ms=' + EXP + ' → ' + (EXP + ACK_TIMEOUT) + 'ms 에 터져야 한다. 재는 중…');
+
+    let firedAt = null;
+    while (Date.now() - t0 < 9000) {
+      const alive = await evaluate(client, `state.pending.has(${JSON.stringify(rid)})`).catch(() => null);
+      if (alive === false) { firedAt = Date.now() - t0; break; }
+      await sleep(100);
+    }
+    const msg = await evaluate(client, readMsg('A4'));
+    console.log('  · B6 실제 발화 → ' + firedAt + 'ms · 문구 ' + JSON.stringify(msg && msg.mine));
+
+    const want = EXP + ACK_TIMEOUT;
+    ok('발화 시각이 expires_ms + ACK_TIMEOUT 이다 (' + firedAt + 'ms, 기대 ' + want + 'ms ±400)',
+       firedAt !== null && Math.abs(firedAt - want) <= 400,
+       '산식이 다르면 socket 과의 타이밍 대조 근거가 무너진다');
+    /* ⚠ 자체 타임아웃(6000)이 아니라 **큐 상한 초과** 문구여야 한다 — 원인이 다르다.
+       ⚠ 그리고 이 문구는 **겹침이 일어나는 경우에 거짓이 된다**(장치로 보냈고 ack 를 안 받은
+       것이므로). 고치는 것은 원장 §5.24 의 결정 뒤다 — 지금 고치면 검증 없는 변경이 된다. */
+    ok('자체 타임아웃과 다른 문구다(큐 상한 초과)',
+       !!(msg && msg.mine && /상한 시간/.test(msg.mine) && !/자체 타임아웃/.test(msg.mine)),
+       JSON.stringify(msg && msg.mine));
+  }
+
   // B5 — queued 를 거친 rid 도 ack 로 정상 확정된다(중간 상태가 영구가 되지 않는다)
   {
     const rid = 'q-ack';
