@@ -2190,6 +2190,18 @@ function applyMap(msg) {
 function applyZoneState(msg) {
   if (!Array.isArray(msg.zones) || !Number.isFinite(Number(msg.epoch))) return;
   const ep = Number(msg.epoch);
+
+  /* 🔑 **`epoch` 은 단조 증가다**(socket 명세 §6.8). 그 성질을 쓰면 불일치를 **두 경우로** 가른다 —
+     ~~예전에는 `!==` 하나로 묶었다~~ 가 그건 필요 이상으로 엄격했다.
+
+     ① `ep > 내 판` : **내 지형이 낡았다** → 그리지 않고 재청한다
+     ② `ep < 내 판` : **늦게 도착한 옛 프레임**이다 → 🔴 **내 지형은 멀쩡하다.**
+        묶어서 다루면 **그 한 장 때문에 화면이 깜빡 비고**(담아 둔 상태를 버린다) **이미 가진
+        맵을 다시 청한다.** 둘 다 불필요하다 → **그냥 무시한다.**
+
+     ⚠ **①에서 그리지 않는 것은 그대로다**: 판이 다른 상태를 그리면 **두 세대를 섞는다.** */
+  if (state.map && ep < state.map.epoch) return;   // ② 늦게 온 옛 프레임 — 조용히 버린다
+
   if (!state.map || ep !== state.map.epoch) {
     /* 🔴 옛 사본으로 계속 그리지 않는다. **낡았다는 것을 알면서 그리는 것은 모르고 그리는 것보다
        나쁘다 — 알고도 숨긴 것이다**(내 §5.34 의 형태 · socket 이 이 규율을 채택했다). */
@@ -2380,7 +2392,14 @@ function renderZone(li, z, zs) {
   for (const mm of mods) kindCount.set(mm.kind, (kindCount.get(mm.kind) || 0) + 1);
   for (const mod of mods) {
     /* 🔴 모듈 조회는 **`(devid, name)` 복합 키**로 한다. `name` 단독 조회 금지 —
-       같은 `name` 이 다른 노드에 또 있을 수 있고 그게 정상이다(§5.42). */
+       같은 `name` 이 다른 노드에 또 있을 수 있고 그게 정상이다(§5.42).
+
+       ⚠ **부트스트랩 임시 규칙을 알고 있어야 한다**(socket 4a): 지금 서버는 **모듈 `name` 이
+       자리 `id` 와 같으면** 그 자리에 붙인다(펌웨어가 `D,A1,IP` 처럼 자리 이름을 쓰기 때문이다).
+       🔴 **그래서 모듈 이름을 바꾸면 결속이 끊긴다.** 설정이 생기면 설정이 대체한다.
+       → **화면은 `name` 을 표시에도 가공하지 않고 편집하지도 않는다**(라벨은 `kind` 에서 온다).
+       ⚠ **결속이 끊긴 것을 화면은 볼 수 없다** — 그 자리는 `modules` 가 빈 것으로 올 뿐이고
+       "이름이 안 맞아서"인지 "모듈이 없어서"인지 구분할 근거가 없다(§5.34 의 형태). */
     const smod = zs && Array.isArray(zs.modules)
       ? zs.modules.find(function (x) { return x && x.devid === mod.devid && x.name === mod.name; })
       : null;

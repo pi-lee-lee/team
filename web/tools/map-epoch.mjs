@@ -292,6 +292,24 @@ try {
   const sent2 = await evaluate(client, `(window.__sent || []).map(p => p.type)`);
   ok('취소로 닫으면 아무것도 안 보낸다', !sent2.includes('reserve'), JSON.stringify(sent2));
 
+  /* ══ [10] 🔴 `epoch` 단조성 — 늦게 온 옛 프레임은 화면을 흔들지 않는다 ═════════ */
+  console.log('\n[10] 늦게 도착한 옛 판의 state (socket: epoch 은 단조 증가)');
+  /* 지금 판은 20 이고 정상 상태가 담겨 있다. 옛 판(19) 한 장이 늦게 도착하는 상황을 만든다. */
+  const before10 = await evaluate(client, peek);
+  const askBefore = before10.sent.filter(t => t === 'get_map').length;
+  await evaluate(client, inject({ type: 'state', epoch: 19, ts_ms: 9, zones: [] }));
+  await sleep(200);
+  const after10 = await evaluate(client, peek);
+  console.log('  · ' + JSON.stringify({ before: before10.hasZoneState, after: after10.hasZoneState,
+                                        stale: after10.stale, ask: after10.sent.filter(t => t === 'get_map').length }));
+  ok('🔴 담아 둔 상태를 안 버린다(화면이 깜빡 비지 않는다)', after10.hasZoneState === before10.hasZoneState,
+     '버리면 옛 프레임 한 장 때문에 격자가 빈다');
+  ok('🔴 낡음으로 표시하지 않는다(내 지형은 멀쩡하다)', after10.stale === false);
+  ok('🔴 맵을 다시 청하지 않는다(이미 새것을 갖고 있다)',
+     after10.sent.filter(t => t === 'get_map').length === askBefore,
+     '청하면 늦은 프레임마다 서버를 때린다');
+  ok('여전히 그릴 수 있다', after10.usable === true);
+
 } catch (e) {
   fail++;
   console.log('  💥 예외로 중단: ' + (e && e.message ? e.message : e));
