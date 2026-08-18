@@ -201,7 +201,7 @@ int main() {
 
   // ── [8c] 🔴 C-2 경로 — **하행 없이 `CONNECT` 만으로도** 같은 언더플로가 가능하다 ────
   // 위 [8b] 는 `lastTxOkAt` 을 직접 미래로 놓았지만, 실제 갱신 경로는 셋이다(원장 §8.7-5).
-  //   :1534 sendLine ← drainPending(하행 ACK)  ·  :2148/:2160 pumpSerialRaw(CONNECT 처리)
+  //   :1534 sendLine ← drainPending(하행 ACK)  ·  :2148/:2160 espRead(CONNECT 처리)
   // 뒤 둘은 `statusTick` 보다 **앞에서** 돌므로 **하행이 전혀 없어도** 발동할 수 있다.
   // 여기서는 합성 대입이 아니라 **진짜 `CONNECT` 줄을 먹여** 그 경로를 태운다.
   printf("\n[8c] CONNECT 직후 — 하행 없이도 스스로 끊지 않는다 (C-2 경로)\n");
@@ -563,16 +563,16 @@ int main() {
   printf("\n[21] SoftwareSerial 링버퍼 넘침 — ssovf 가 오르고, 그 값은 하한이다\n");
   arm(nullptr);
   ssOverflows = 0;
-  pumpSerialRaw();
+  espRead();
   ok(ssOverflows == 0,          "넘침이 없으면 오르지 않는다");
   wifi.injectOverflow();
-  pumpSerialRaw();
+  espRead();
   ok(ssOverflows == 1,          "★★ 넘치면 계수가 오른다 (계측기가 실제로 동작한다)");
-  pumpSerialRaw();
+  espRead();
   ok(ssOverflows == 1,          "★★ 플래그는 읽으면 지워진다 → 이 수는 **하한**이다");
   wifi.injectOverflow();
   wifi.injectOverflow();                        // 확인 사이에 두 번 넘쳤다
-  pumpSerialRaw();
+  espRead();
   ok(ssOverflows == 2,          "★★ 두 번 넘쳐도 1 만 오른다 — 뭉친다(하한의 근거)");
 
   // ── [22] 🔴 `[SLOT-OOW]` 는 **도착** 시각을 재야 한다 — 처리 시각이 아니라 (REQ-0174)
@@ -624,7 +624,7 @@ int main() {
 
   // ── [24] 🔴 `[CNT]` 도 슬롯 규율을 지킨다 (REQ-0187 ②) ─────────────────────
   //   이 줄이 **손실원이었다**: 142B 가 TX 링버퍼(64B)를 넘겨 블로킹하고,
-  //   그동안 `pumpSerialRaw()` 가 안 돌아 도착 중인 하행이 사라졌다.
+  //   그동안 `espRead()` 가 안 돌아 도착 중인 하행이 사라졌다.
   //   창 B·C·D 에서 `[CKSUM NG]` 시각이 `[CNT]` 시각과 정합했다(monitor 전수 대조).
   //   ⚠ **이 시험은 수정 전 판본에서 반드시 실패한다** — 그때는 창과 무관하게 찍었다.
   printf("\n[24] [CNT] 가 수신 창에서는 안 나간다 (슬롯 규율을 진단 출력에도)\n");
@@ -812,7 +812,7 @@ int main() {
   netStep = NET_CIFSR;
   netLastSent = NET_CIFSR;
   netStepAt = millis() - 5000;              // 대기시간이 지난 것으로 둔다
-  netTick(millis());
+  espReset(millis());
   ok(espResets == 1,            "★★ 0.0.0.0 문자열이 하나도 없어도 IP 소실을 잡는다");
 
   // ── [16] 🔴 루트 지시(REQ-0125 3번) — **침묵 탐지를 잃지 않았다**를 증명한다 ──
@@ -930,7 +930,7 @@ int main() {
     ok(f2.find("bigokst=")  != std::string::npos, "★ bigokst 칸이 나간다");
 
     // ⚠ 줄 길이를 **눈으로 본다.** 이 줄은 하드웨어 Serial 로 나가고, 64B TX 링버퍼를
-    //   넘는 만큼 블로킹한다. 그동안 pumpSerialRaw 가 안 돌면 하행이 사라진다(§11.2 의 그 고장).
+    //   넘는 만큼 블로킹한다. 그동안 espRead 가 안 돌면 하행이 사라진다(§11.2 의 그 고장).
     size_t p1 = f2.find("[CNT]");
     size_t p2 = f2.find('\n', p1);
     size_t linelen = (p1 != std::string::npos && p2 != std::string::npos) ? (p2 - p1) : 0;
@@ -941,7 +941,7 @@ int main() {
 
   // ── [29] 🔴 출력 **도중** 계수기가 늘어도 불가능한 값이 안 나온다 ──────────
   //
-  // `cntTick` 이 줄을 찍는 중간에 `pumpSerialRaw()` 가 돈다. 그때 `awaitingSendOk` 가
+  // `cntTick` 이 줄을 찍는 중간에 `espRead()` 가 돈다. 그때 `awaitingSendOk` 가
   // true 면(=CIPSEND 직후의 **정상** 상태) 바이트 매처가 `SEND OK` 를 잡아 계수기가 는다.
   // **먼저 찍힌 `okstream` 은 옛 값, 나중 찍힌 `bigokst` 는 새 값** → `bigokst > okstream`.
   // ⚠ **시험 [28] 은 이걸 못 잡는다** — 출력 중에 바이트를 안 먹이기 때문이다.

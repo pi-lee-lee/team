@@ -1080,7 +1080,7 @@ static void feedRxChar(char c) {
   rxLine[rxLen++] = c;
 }
 
-static void pumpSerialRaw(void) {
+static void espRead(void) {
   while (wifi.available()) feedRxChar((char)wifi.read());
   // ─────────────────────────────────────────────────────────────────────────
   // 🔴 2026-08-17 (REQ-0167) — **SoftwareSerial 링버퍼가 넘쳤는가.** 계측기가 이미 있었다.
@@ -1092,7 +1092,7 @@ static void pumpSerialRaw(void) {
   //   → **하한이다.** `0 이 아니다`는 강한 신호지만 `0` 은 "그 지점들 사이엔 안 넘쳤다"까지만 말한다.
   //
   // ★ 위치를 여기로 고른 이유: **읽기 루프 직후**라 "우리가 다 빼낸 뒤에도 넘쳐 있었나"를 본다.
-  //   그리고 `pumpSerialRaw` 는 `loop()`·`waitForPrompt()` 양쪽에서 자주 불려 확인 간격이 짧다 —
+  //   그리고 `espRead` 는 `loop()`·`waitForPrompt()` 양쪽에서 자주 불려 확인 간격이 짧다 —
   //   플래그가 지워지는 계측기라 **자주 볼수록 뭉침이 줄어든다.**
   //
   // ⚠⚠ **이름을 `rxOverflow` 와 헷갈리지 마라 — 다른 계층이다.**
@@ -1250,7 +1250,7 @@ static void applyRung(void) {
 // ── 실패 사건이 들어오는 유일한 문 ──
 // why: 무엇이 실패했는가. 계측 한 줄을 정확히 쓰기 위해서만 쓰인다(단 선택에는 3번만 관여).
 //
-// ⚠ **netTick() 의 switch 안에서 이 함수를 부를 때 주의할 것** — 새 호출 지점을 추가할 사람에게.
+// ⚠ **espReset() 의 switch 안에서 이 함수를 부를 때 주의할 것** — 새 호출 지점을 추가할 사람에게.
 //   그 시점에는 이미 `netSendStep(sent)` 로 명령이 나간 뒤다. 그런데 1단 조치는 `drainSerial()`
 //   이라 **방금 보낸 명령의 응답을 그 자리에서 버린다.** 지금 있는 두 호출 지점은 둘 다 안전하다:
 //     · NET_CIFSR  — 버려도 되는 응답이다(cifsrTries 를 이미 소진해 쓸모없음이 확정됐다)
@@ -1336,7 +1336,7 @@ static void ladderFail(uint8_t why) {
 // 그 값을 버리고 있었을 뿐이다.**
 //
 // 구조적 원인: `netOnline = false` 가 되는 곳이 파일 전체에 `CLOSED` 하나뿐이었다.
-// 그 통보가 안 오면 netTick() 이 첫 줄에서 빠져 **재접속을 아예 시도하지 않는다.**
+// 그 통보가 안 오면 espReset() 이 첫 줄에서 빠져 **재접속을 아예 시도하지 않는다.**
 //
 // ── N(연속 실패 한계)을 3 으로 정한 근거 ──
 // 명세 §3.4: **서버는 3.5초 무프레임이면 device.online=false 로 본다.**
@@ -1597,7 +1597,7 @@ static void cntTick(uint32_t now) {
   //     창 B 5건 · 창 C 4건(위상 `:56` 고정) · 창 D 2건 — **셋 다 정합.**
   //
   // 기전: `[CNT]` 는 약 142B 인데 하드웨어 UART TX 링버퍼는 **64B**(`SERIAL_TX_BUFFER_SIZE`)다.
-  //   → 넘치는 78B 만큼 **블로킹**하고, 그동안 `pumpSerialRaw()` 가 안 돌아
+  //   → 넘치는 78B 만큼 **블로킹**하고, 그동안 `espRead()` 가 안 돌아
   //     **도착 중인 하행 바이트가 SoftwareSerial 64B 링버퍼에서 사라진다.**
   //
   // ★ **UART 를 쓰는 모든 것이 슬롯 규율의 대상이다** — 프레임 송신만이 아니라 진단 출력도.
@@ -1644,14 +1644,14 @@ static void cntTick(uint32_t now) {
   Serial.print(F(" cksumng="));      Serial.print(cksumNg);
   // ★ REQ-0218 — 바이트 흐름으로 잡은 `SEND OK` 수. **줄 경로가 놓치던 양**이다.
   // 🔴 2026-08-18 — **okstream 계열은 스냅샷으로 찍는다.**
-  //   이 줄을 찍는 도중 `pumpSerialRaw()` 가 돈다. `cntTick` 중에 `inSend` 는 false 지만
+  //   이 줄을 찍는 도중 `espRead()` 가 돈다. `cntTick` 중에 `inSend` 는 false 지만
   //   **`awaitingSendOk` 는 흔히 true 다**(CIPSEND 직후의 정상 상태).
   //   그 pump 가 `SEND OK` 를 매칭하면 `okstream`/`bigokst` 가 **출력 도중에 늘어나서**
   //   먼저 찍힌 `okstream` 은 옛 값, 나중 찍힌 `bigokst` 는 새 값이 된다.
   //   → **`bigokst > okstream` 이라는 불가능한 출력**이 나오고, 읽는 쪽은 펌웨어 결함으로 읽는다.
   //   ⚠ `pendfill`/`bigfill`/`bigdrop` 은 `inSend` 가 필요해서 이 문제가 없다.
   //     **이 계열만 해당한다** — 그래서 여기만 스냅샷한다.
-  // 🔴 **출력 도중에는 `pumpSerialRaw()` 를 부르지 않는다.** 한 번 넣었다가 뺐다.
+  // 🔴 **출력 도중에는 `espRead()` 를 부르지 않는다.** 한 번 넣었다가 뺐다.
   //   이유: pump 가 `[AT] "..."` 를 찍어 **`[CNT]` 줄 한가운데로 끼어든다.**
   //   시험에서 실제로 그렇게 나왔다: `… pendfill=0[AT] "SEND OK" (7)\n bigfill=0 …`
   //   **monitor 의 파서가 그 줄을 못 읽는다.** 계측기를 고치려다 계측기를 깬 꼴이다.
@@ -1803,7 +1803,7 @@ static uint8_t waitForPrompt(void) {
 
 // line 은 LF 없는 문자열. LF 는 여기서 붙인다(전선 종단은 LF 하나 — §2.1)
 // ─────────────────────────────────────────────────────────────────────────
-// 🔴 2026-08-17 — 몸통을 `sendPayload()` 로 뺐다. **한 거래에 여러 줄**을 담기 위해서다.
+// 🔴 2026-08-17 — 몸통을 `espWrite()` 로 뺐다. **한 거래에 여러 줄**을 담기 위해서다.
 //
 // 왜 나눴나: 슬롯 구조는 **슬롯당 정확히 1거래**다. 3건을 보내려면 묶는 것 말고 방법이 없다
 //   (안 묶으면 3건에 3.6초가 걸린다). **배치는 최적화가 아니라 구조적 필수다.**
@@ -1814,8 +1814,8 @@ static uint8_t waitForPrompt(void) {
 // ⚠⚠ **길이를 먼저 확정하고 그 길이만큼 정확히 쓴다.** `AT+CIPSEND=N` 을 선언한 뒤 N 과 다르게
 //   쓰면 스트림이 어긋나고, 그것이 원장 §1.4 가 설명하는 (a)/(b) 갈래를 우리 손으로 만드는 것이다.
 //   → 그래서 배치는 **호출 전에 버퍼에 완성**되어 있어야 한다. `waitForPrompt()` 안에서
-//     `pumpSerialRaw()` 가 돌아 **캐시가 바뀔 수 있으므로** 길이를 나중에 다시 계산하면 안 된다.
-static bool sendPayload(const char* line, uint16_t len) {
+//     `espRead()` 가 돌아 **캐시가 바뀔 수 있으므로** 길이를 나중에 다시 계산하면 안 된다.
+static bool espWrite(const char* line, uint16_t len) {
   // ★ `ramProbe()` 는 **조기 반환보다 앞**에 있어야 한다. 뒤에 두면 오프라인 동안 한 번도 안 불려
   //   `[RAM]` 이 초기값 65535 를 찍고, 소크 로그를 나중에 읽는 사람이 계측 고장으로 오해한다.
   //   (실제로 그렇게 찍혔다 — REQ-0064 관측 중 발견.)
@@ -1869,7 +1869,7 @@ static bool sendPayload(const char* line, uint16_t len) {
   //   `SEND OK` 가 즉시 와도 연속 CIPSEND 를 너무 촘촘히 쏘면 `busy p...`(앞 **명령** 처리 중)가
   //   난다 — 이 값은 원래 그걸 막으려고 있던 것이고 2단계가 겨냥하는 `busy s...`(앞 **전송**
   //   처리 중)와 **다른 사건**이다. 둘을 같은 것으로 보고 지우면 옛 결함이 되살아난다.
-  while (millis() - lastSendEndAt < SEND_GAP_MS) pumpSerialRaw();   // 연속 CIPSEND 간격
+  while (millis() - lastSendEndAt < SEND_GAP_MS) espRead();   // 연속 CIPSEND 간격
 
   wifi.print(F("AT+CIPSEND="));
   wifi.print((unsigned int)(len + 1));                     // +1 = LF 도 전선에 나간다
@@ -1893,10 +1893,10 @@ static bool sendPayload(const char* line, uint16_t len) {
     //   더 촘촘히 하면 오버헤드만 늘고, 더 성기면 여유가 준다.
     for (uint16_t i = 0; i < len; i++) {
       wifi.write((uint8_t)line[i]);
-      if ((i & 0x0F) == 0x0F) pumpSerialRaw();     // 16B 마다 꺼낸다
+      if ((i & 0x0F) == 0x0F) espRead();     // 16B 마다 꺼낸다
     }
     wifi.write('\n');
-    pumpSerialRaw();                                // 마지막 조각도 비운다
+    espRead();                                // 마지막 조각도 비운다
     // ★ 2단계: 여기서부터 ESP 가 **실제로 WiFi 로 보내는 중**이다. 그 끝을 알려주는 것이
     //   `SEND OK` 다. 추측(80ms) 대신 그 신호를 기다린다 — 단, 비블로킹으로.
     awaitingSendOk = true;
@@ -1967,7 +1967,7 @@ static bool sendPayload(const char* line, uint16_t len) {
     //   여기 남은 것은 **정말로 아무 답이 없었던 경우**뿐이고, 그때는 ESP 가 데이터 모드일
     //   수 있으므로 채우는 쪽이 여전히 안전하다.
     // ─────────────────────────────────────────────────────────────────────
-    // 🔴 2026-08-18 — **여기에도 pumpSerialRaw 가 필요하다.** 정상 경로(위)에만 넣고
+    // 🔴 2026-08-18 — **여기에도 espRead 가 필요하다.** 정상 경로(위)에만 넣고
     //   이 갈래를 빠뜨렸었다. 더미도 페이로드와 똑같이 UART 로 나가고, 쓰는 동안
     //   SoftwareSerial 은 cli() 로 수신 인터럽트를 끈다 — **하행 바이트가 64B 링버퍼에서 사라진다.**
     //   `len` 이 90B 면 더미도 90B 다. 크기 조건이 정상 경로와 같다.
@@ -1978,10 +1978,10 @@ static bool sendPayload(const char* line, uint16_t len) {
     //     창 G 에서 `resync=3 / up=540` 이었다 — 창 H 에서 비슷하면 이 경로는 판정을 못 움직인다.
     for (uint16_t i = 0; i < len; i++) {
       wifi.write('#');
-      if ((i & 0x0F) == 0x0F) pumpSerialRaw();            // 16B 마다 꺼낸다 (정상 경로와 같은 주기)
+      if ((i & 0x0F) == 0x0F) espRead();            // 16B 마다 꺼낸다 (정상 경로와 같은 주기)
     }
     wifi.write('\n');                                      // 합계 len+1 = 약속한 길이와 정확히 같다
-    pumpSerialRaw();
+    espRead();
     if (promptResyncs < 65535) promptResyncs++;
 #if DEBUG
     Serial.print(F("[TX-RESYNC] 프롬프트 놓침 → 더미 "));
@@ -2020,11 +2020,11 @@ static bool sendPayload(const char* line, uint16_t len) {
 }
 
 // ★ 한 줄 래퍼 — **기존 규약을 그대로 유지한다**(§2.1 한 줄 최대 64바이트, LF 포함).
-//   호출부(`sendAck` 등)는 이 함수를 그대로 쓴다. 배치는 `sendPayload` 를 직접 쓴다.
+//   호출부(`sendAck` 등)는 이 함수를 그대로 쓴다. 배치는 `espWrite` 를 직접 쓴다.
 static bool sendLine(const char* line) {
   const size_t n = strlen(line);
   if (n == 0 || n > 63) return false;
-  return sendPayload(line, (uint16_t)n);
+  return espWrite(line, (uint16_t)n);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -2326,7 +2326,7 @@ static bool sendStatus(void) {
   char buf[64];
   const uint8_t n = buildStatus(buf, sizeof(buf));
   if (n == 0) return false;
-  return sendPayload(buf, n);
+  return espWrite(buf, n);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -2372,7 +2372,7 @@ static bool sendAck(uint16_t rid, char s0, char s1, uint8_t result) {
 // ⚠ **ACK 는 캐시에서 재생성한다 — 재생(replay)이 아니다.** 큐에는 `rid` 만 있고
 //   내용은 멱등 캐시가 갖고 있다. 옛 바이트를 그대로 다시 보내는 것이 아니라 지금 다시 만든다.
 //
-// 🔑 **성공했을 때만 큐에서 소비한다.** 만들 때는 `peek` 만 하고, `sendPayload` 가 참을
+// 🔑 **성공했을 때만 큐에서 소비한다.** 만들 때는 `peek` 만 하고, `espWrite` 가 참을
 //   돌려준 뒤에 그만큼 뺀다. **실패하면 ACK 가 큐에 그대로 남아 다음 슬롯에 다시 나간다.**
 //   (옛 `ackqDrain` 은 먼저 빼고 실패 시 되넣는 방식이었다 — 배치에서는 순서가 뒤집힐 수 있어
 //    쓸 수 없다. 이쪽이 손실 경로가 아예 없다.)
@@ -2401,7 +2401,7 @@ static bool sendSlotBatch(uint8_t* ackOut, uint16_t* bytesOut) {
 #endif
       return false;                       // ⚠ 다음 슬롯에 다시 시도한다(regPending 유지)
     }
-    const bool okReg = sendPayload(buf, rn);
+    const bool okReg = espWrite(buf, rn);
     if (okReg) {
       regPending = false;                 // ★ 성공했을 때만 내린다 — ACK 큐와 같은 규율이다
       if (regSends < 65535) regSends++;
@@ -2456,7 +2456,7 @@ static bool sendSlotBatch(uint8_t* ackOut, uint16_t* bytesOut) {
     take++;
   }
 
-  const bool ok = sendPayload(buf, used);
+  const bool ok = espWrite(buf, used);
 
   // ── 4) **성공했을 때만** 소비한다 ────────────────────────────────────────
   if (ok && take) {
@@ -3046,7 +3046,7 @@ static void handleLine(char* s) {
   // **성공으로 보인다** — 오류도 타임아웃도 안 난다(REQ-0032).
   //
   // 왜 CLOSED 가 주 방어선인가:
-  //   재접속은 netOnline==false 를 요구하고(netTick 첫 줄), netOnline 이 런타임에 false 가 되는
+  //   재접속은 netOnline==false 를 요구하고(espReset 첫 줄), netOnline 이 런타임에 false 가 되는
   //   곳은 아래 CLOSED 분기 하나뿐이다. 즉 **재접속이 실제로 일어났다면 CLOSED 는 반드시
   //   탐지된 것이다.** CLOSED 문구가 틀리면 재접속 자체가 안 되므로(= 눈에 보이는 고장)
   //   스테일 캐시가 생길 조건이 애초에 만들어지지 않는다.
@@ -3057,7 +3057,7 @@ static void handleLine(char* s) {
   //   비우는 비용은 정수 두 개를 0 으로 되돌리는 것뿐이라 중복이 손해가 아니다.
   //
   // 왜 ALREADY CONNECTED 에서는 비우면 안 되는가:
-  //   그건 **기존 연결이 그대로 살아 있다**는 응답이다(서버도 그대로다). netTick() 이 CIPSTART 를
+  //   그건 **기존 연결이 그대로 살아 있다**는 응답이다(서버도 그대로다). espReset() 이 CIPSTART 를
   //   5초마다 재시도하므로, 여기서 비우면 살아 있는 연결의 멱등성이 재시도마다 깨진다.
   // ─────────────────────────────────────────────────────────────────────────
   // 여기부터는 **데이터가 아닌 줄**만 도달한다(위 +IPD 조기 처리가 걸러 냈다).
@@ -3139,7 +3139,7 @@ static void handleLine(char* s) {
 
   // ── REQ-0049 ② 송신 오류 응답 (보조 경로) ────────────────────────────────
   // 온라인 중에 우리가 보내는 AT 명령은 **`AT+CIPSEND=` 하나뿐**이다
-  // (netTick() 이 `if (netOnline) return;` 으로 시작하므로 온라인 중엔 다른 명령이 안 나간다).
+  // (espReset() 이 `if (netOnline) return;` 으로 시작하므로 온라인 중엔 다른 명령이 안 나간다).
   // 따라서 **온라인 중에 오는 오류 응답은 반드시 CIPSEND 에 대한 것**이다 — 그래서 여기서
   // 판정해도 "관계없는 AT 실패를 연결 문제로 오인"하는 사고가 구조적으로 생기지 않는다.
   //
@@ -3215,7 +3215,7 @@ static void drainPending(void) {
 //              → 그래도 ALREADY CONNECTED 만 오면 다시 CIPCLOSE
 //              → CIPCLOSE 3회가 안 먹으면 **AT+RST 로 올라가 전체 초기화**
 // 마지막 층이 없으면 또 무한 루프가 된다.
-static void netTick(unsigned long now) {
+static void espReset(unsigned long now) {
   if (netOnline) {
     // ★ REQ-0071 — 사다리는 **연속 30초 온라인**이라야 0단으로 내려온다.
     //   붙는 즉시 내리면 "붙었다가 12초 뒤 끊김"이 반복될 때 영원히 0~1단만 오간다.
@@ -3422,7 +3422,7 @@ static void statusTick(unsigned long now) {
   //   ⚠ 아래 조기 반환(`return`)보다 **앞**에 있어야 한다. 뒤에 두면 하트비트가 뜨지 않는
   //     순간에는 검사가 건너뛰어져, 정작 아무것도 못 보내는 상황에서 발동하지 못한다.
   // ⚠ `changeAt`(위)과 **같은 함정이고 같은 관용구로 막는다.** 2026-08-17 실기에서 터졌다:
-  //   `now` 는 loop() 맨 위에서 한 번만 뜨는데, 그 뒤 `pumpSerialRaw()`/`drainPending()` 이
+  //   `now` 는 loop() 맨 위에서 한 번만 뜨는데, 그 뒤 `espRead()`/`drainPending()` 이
   //   `lastTxOkAt` 을 **더 나중 시각**으로 갱신한다(하행 ACK 송신 약 64ms · CONNECT 처리).
   //   그러면 `now - lastTxOkAt` 이 음수가 되고 unsigned 로 읽으면 `2^32-64`(=49.7일)이 되어
   //   **어떤 임계값도 즉시 넘어 멀쩡한 링크를 끊는다.** 실제 로그: `정지 감지: 4294967232ms`.
@@ -3614,8 +3614,8 @@ void loop() {
   wdt_reset();                      // 6단 — 여기 못 오면(=행) 8초 뒤 AVR 이 리셋된다
 #endif
   unsigned long now = millis();
-  netTick(now);
-  pumpSerialRaw();
+  espReset(now);
+  espRead();
   drainPending();
   // ⚠ 2026-08-17 — `ackqDrain()` 을 뺐다. **보류 ACK 는 이제 슬롯 배치에 실려 나간다**
   //   (`sendSlotBatch`). 여기서 따로 내보내면 슬롯당 1거래 규칙이 깨지고 수신 창을 침범한다.
