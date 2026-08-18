@@ -189,6 +189,46 @@ try {
   ok('ok:false 는 aria-disabled 로 막는다', !!(a1 && a1.acts.includes('cancel:true')), JSON.stringify(a1.acts));
   ok('🔴 actions 에 없는 조작은 버튼이 없다(E1 은 상태가 없다)', !!(e1 && e1.acts.length === 0), JSON.stringify(e1.acts));
 
+  /* ══ [8] 미상 집계 배너 — **정상에서 침묵하는가**가 이 항목의 본체다 ═════════ */
+  console.log('\n[8] 미상 집계 배너');
+  const bnr = `(() => { const b = document.getElementById('slots-banner');
+                        return { hidden: b.hidden, text: b.textContent }; })()`;
+  let b = await evaluate(client, bnr);
+  console.log('  · 지금 → ' + JSON.stringify(b));
+  /* 위 [7] 상태에서 E1 은 상태가 안 왔고 A1 은 cancel 이 node_offline(미상 계열)로 막혔다 → 둘 다 센다. */
+  ok('둘을 센다(상태 없음 + 미상으로 막힘)', b.hidden === false && /2자리/.test(b.text), JSON.stringify(b));
+  ok('원인을 갈라 말한다', /상태가 아직 오지 않았습니다/.test(b.text) && /장치의 상태를 모릅니다/.test(b.text), b.text);
+  ok('🔴 빈 칸(7개)은 세지 않는다', !/9자리|7자리/.test(b.text), b.text);
+
+  /* 🔴 정상에서 침묵하는가 — 이게 §3.1 이 배너를 만든 이유이자 이 규칙의 시험이다. */
+  console.log('  · 모두 정상인 상태를 넣는다');
+  await evaluate(client, inject({ type: 'state', epoch: 20, ts_ms: 2, zones: [
+    { id: 'A1', occupied: false, reserved: false, completion: 'complete',
+      actions: { reserve: { ok: true, reason: null } },
+      modules: [{ devid: 'P1', name: 'sensor', value: 0, known: true },
+                { devid: 'P2', name: 'sign', value: 1, known: true }] },
+    { id: 'E1', kind: 'entrance', completion: 'complete',
+      actions: { open_gate: { ok: true, reason: null } },
+      modules: [{ devid: 'P3', name: 'gate', value: 0, known: true }] } ] }));
+  await sleep(200);
+  b = await evaluate(client, bnr);
+  console.log('  · 정상 → ' + JSON.stringify(b));
+  ok('🔴 정상에서 침묵한다', b.hidden === true, JSON.stringify(b) + ' — 상시 켜진 경고는 아무도 안 읽는다');
+
+  /* `busy` 는 세지 않는다 — 곧 풀리는 정상 상태다. */
+  console.log('  · busy 계열(pending)로 막힌 상태를 넣는다');
+  await evaluate(client, inject({ type: 'state', epoch: 20, ts_ms: 3, zones: [
+    { id: 'A1', occupied: false, reserved: false, completion: 'complete',
+      actions: { reserve: { ok: false, reason: 'pending' } },
+      modules: [{ devid: 'P1', name: 'sensor', value: 0, known: true },
+                { devid: 'P2', name: 'sign', value: 1, known: true }] },
+    { id: 'E1', kind: 'entrance', completion: 'complete',
+      actions: { open_gate: { ok: true, reason: null } },
+      modules: [{ devid: 'P3', name: 'gate', value: 0, known: true }] } ] }));
+  await sleep(200);
+  b = await evaluate(client, bnr);
+  ok('🔴 busy 는 세지 않는다(곧 풀린다)', b.hidden === true, JSON.stringify(b));
+
 } catch (e) {
   fail++;
   console.log('  💥 예외로 중단: ' + (e && e.message ? e.message : e));

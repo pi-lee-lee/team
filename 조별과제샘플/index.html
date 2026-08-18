@@ -1340,6 +1340,10 @@ function tileView(slot) {
 let lastSlotGapText = null;
 function renderSlotGap() {
   const box = el.slotsBanner;
+  /* 🔴 새 격자가 켜졌으면 **이 배너는 비켜 준다.** 배너는 하나이고, 두 렌더러가 같은 칸에
+     서로 다른 집계를 쓰면 **무엇을 센 수인지 알 수 없게 된다**(루트 지적: 이중 경로가
+     "무엇이 참인가"를 흐린다). 집계는 `renderZoneBanner()` 가 맡는다. */
+  if (mapUsable()) { lastSlotGapText = null; return; }
   if (!state.snapshot) { box.hidden = true; lastSlotGapText = null; return; }
 
   const missing = state.snapshot.slots.filter(function (s) { return !s.known; })
@@ -2255,6 +2259,38 @@ function renderZoneGrid() {
       el.zoneGrid.appendChild(renderZone(li, z, st.get(z.id) || null));
     }
   }
+  renderZoneBanner(m, st);
+}
+
+/**
+ * 미상 집계 한 줄 — 🔴 **정상에서 침묵한다.**
+ *
+ * 세는 규칙(설계서 §6): **조작을 막는 미상만** 센다. 조작과 무관한 미상(안내등 등)은
+ * **칸 안에 조용히 남고 집계에는 안 들어간다** — 넣으면 **상시 켜진 경고**가 되고 아무도 안 읽는다
+ * (원장 §3.1 이 배너를 정상에서 침묵시킨 이유). `busy` 계열도 안 센다 — **곧 풀린다.**
+ *
+ * 🔴 **구현하면서 내 §6 규칙의 빈 칸을 찾았다**: `state` 에 **아예 없는 자리**는
+ * `blocked_reason` 도 없어서 `unknown` 계열 계수에 안 걸린다. **그런데 그게 가장 모르는 자리다** —
+ * 조작 가능성조차 모른다. → **둘을 같이 센다.** 규칙을 "코드가 미상 계열" 에서
+ * **"조작 판정을 할 수 없는 자리"** 로 넓혔다.
+ * ⚠ **빈 칸(zone 이 없는 좌표)은 세지 않는다** — 존재하지 않는 것은 미상이 아니다(설계서 §5.1).
+ */
+function renderZoneBanner(m, st) {
+  const box = el.slotsBanner;
+  const noState = [], blocked = [];
+  for (const z of m.zones) {
+    const zs = st.get(z.id);
+    if (!zs) { noState.push(z.id); continue; }
+    if (zoneBlockedByUnknown(zs)) blocked.push(z.id);
+  }
+  const all = noState.concat(blocked);
+  if (all.length === 0) { box.hidden = true; return; }   // 🔑 정상에서 침묵
+  /* 기호는 원인(`⏱` 모른다)이고, 배너에 있다는 것 자체가 영향(조작을 막는다)이다 — 두 축(§5.33). */
+  box.textContent = '⏱ ' + all.length + '자리는 지금 조작 판정을 할 수 없습니다 ('
+    + all.join(' · ') + ')'
+    + (noState.length ? ' — ' + noState.length + '자리는 상태가 아직 오지 않았습니다' : '')
+    + (blocked.length ? ' — ' + blocked.length + '자리는 필요한 장치의 상태를 모릅니다' : '');
+  box.hidden = false;
 }
 
 function renderZone(li, z, zs) {
