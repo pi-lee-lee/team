@@ -678,6 +678,26 @@ static std::string peer_host(const std::string& hp) {
     return (c == std::string::npos) ? hp : hp.substr(0, c);
 }
 
+// 🔴🔴 **`Node` — 통신 단위 하나**(REQ-0203 1단계 · 설계 `docs/net/DESIGN-bridge-node-module-zone.md` §1)
+// 지금은 **주차 노드 하나뿐**이라 `Server` 안에 `park` 로 한 벌만 산다. 나중에 `map<devid,Node>` 가 된다.
+//
+// 🔑 **이 단계의 목적은 "그릇"만 바꾸는 것이다. 거동이 바뀔 자리가 없어야 한다.**
+//   기존 이름(`ard_last_ms` 등)을 **참조 별칭**으로 남겨 **호출부 약 150곳을 한 곳도 안 고친다.**
+//   ⚠ 참조 멤버는 `operator=` 를 지운다 — **`Server` 가 어디서도 대입되지 않는 것을 먼저 확인했다**
+//     (선언 13곳 전부 생성이고 대입 0곳).
+// ⚠ **낱말**: 여기의 `Node` 는 통신 단위(ESP 하나 = 소켓 하나 = 자기 1.2초 주기)다.
+//   **주차 자리가 아니다.** 자리는 `Zone`(§0 낱말표).
+struct Node {
+    std::string devid;          // 전선의 장치 id. "" = 아직 미정(first-S-wins)
+    sock_t      sock;           // 이 노드의 연결
+    std::string peer;           // "IP:포트" — `devid` 가 고유하지 않을 때 유일한 구분자(REQ-0215)
+    std::string rxbuf;          // 수신 조립 버퍼
+    bool        seen;           // 유효 프레임을 한 번이라도 받았나
+    long long   last_ms;        // 마지막 프레임 수신 시각(단조 시계)
+    long long   last_epoch_ms;  // 같은 사건의 벽시계 — **로그 대조용이지 계산용이 아니다**
+    Node() : sock(BAD_SOCK), seen(false), last_ms(0), last_epoch_ms(0) {}
+};
+
 struct UnknownSock {
     sock_t fd;
     std::string buf;
@@ -731,9 +751,13 @@ struct Server {
     // **하위호환을 코드로 증명할 수 없다.** 지금 도는 단일 노드(P1)가 그대로 동작해야 하고
     // 그게 조원 배포 전까지 유일한 실물이다. 그래서 주차 노드 경로는 **한 줄도 안 바꾸고**,
     // 보조 노드를 옆에 붙이는 쪽을 택했다. 단일 노드 동작이 구조적으로 보존된다.
-    sock_t ard;                        // **주차 노드**의 연결 (여전히 하나)
-    std::string park_dev;              // 주차 노드의 device_id. "" = 아직 미정(first-S-wins)
-    std::string ard_peer;              // 현재 주차 노드 소켓의 "IP:포트" (REQ-0215)
+    // 🔴 **진실은 여기 있다**(REQ-0203 1단계). 아래 별칭들은 전부 이 안을 가리킨다.
+    Node park;
+    // ⚠ **별칭은 옛 이름을 유지하기 위한 것이다.** 새 코드는 `park.<필드>` 를 직접 쓴다 —
+    //   별칭을 늘리지 마라. 2단계에서 `map<devid,Node>` 로 올릴 때 **별칭이 많을수록 못 올린다.**
+    sock_t&      ard      = park.sock;   // **주차 노드**의 연결 (여전히 하나)
+    std::string& park_dev = park.devid;  // 주차 노드의 device_id. "" = 미정(first-S-wins)
+    std::string& ard_peer = park.peer;   // 현재 주차 노드 소켓의 "IP:포트" (REQ-0215)
     // 🔴 **같은 devid 로 동시에 붙은 것을 센다.** 0 이 아니면 관측 자료가 오염된 것이다 —
     // **어느 보드가 응답했는지 모르는 채로 지표를 읽게 된다.**
     long long dup_devid_reject;   // ①에서 거절한 횟수 = **다른 IP 가 산 자리를 노렸다**
@@ -742,9 +766,9 @@ struct Server {
     std::vector<UnknownSock> unknown;     // id 미상 소켓 — 첫 유효 프레임에서 승격
     int  aux_conflicts;                // `S` 를 보냈지만 주차 노드가 아닌 장치 수(가정 붕괴 신호)
     int  admit_rejects;                // 상한 초과로 거절한 연결 수
-    std::string ard_buf;
-    bool  ard_seen;
-    long long ard_last_ms;
+    std::string& ard_buf   = park.rxbuf;
+    bool&        ard_seen  = park.seen;
+    long long&   ard_last_ms = park.last_ms;
 
     // ── 하행 슬롯 큐 (docs/net/DESIGN-server-slot-queue.md · 반송파 슬롯 구조)
     //
@@ -812,7 +836,7 @@ struct Server {
     bool      dmax_armed;
     // §9.1 `device.last_frame_ts` 전용 — **epoch 시각**이다. ard_last_ms 를 쓰면 안 된다:
     // 그건 now_ms() 기반(윈도우에서는 부팅 후 경과)이라 바깥으로 나가면 수십 년짜리 값이 된다(28행 경고).
-    long long ard_last_epoch_ms;
+    long long&   ard_last_epoch_ms = park.last_epoch_ms;
     long long ard_uptime;
     long  ard_seq;
     std::string ard_dev;
@@ -928,10 +952,11 @@ struct Server {
     int  zombie_reaps;            // 유휴 마감으로 회수한 소켓 수 — **앱 경로**
     int  keepalive_reaps;         // ETIMEDOUT 으로 죽은 소켓 수 — **OS 경로**
 
-    Server() : lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK), ard(BAD_SOCK),
+    // 🔑 `park` 의 필드들은 **`Node` 의 생성자가 초기화한다.** 여기 목록에 다시 적지 않는다 —
+    //   적으면 참조에 임시값을 묶으려는 것이 되어 컴파일이 안 된다(그게 이 설계의 안전장치다).
+    Server() : lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK),
                dup_devid_reject(0), takeover_grace(0),  // 선언 순서와 일치시킨다(-Wreorder)
                aux_conflicts(0), admit_rejects(0),
-               ard_seen(false), ard_last_ms(0),
                // 🔴 이 여섯(+다섯)은 **선언만 돼 있고 초기화 목록에 없었다.** 쓰기 시작하는 순간
                // 쓰레기값이 지표로 나간다 — 원장이 통째로 경고하는 그 형태다. 여기서 닫는다.
                downq_bytes(0), batch_count(0), batch_lines(0),
@@ -940,7 +965,7 @@ struct Server {
                q_deferred(0), q_dropped_link(0),
                rtt_max_ms(0), rtt_last_ms(0), rtt_n(0), win_skips(0), dmax_flushes(0),
                last_dmax_ms(0), dmax_armed(true),
-               ard_last_epoch_ms(0), ard_uptime(-1), ard_seq(-1),
+               ard_uptime(-1), ard_seq(-1),
                ard_dev("?"),
                xs_uptime(-1), xs_last_ms(0), xs_dev(""),
                xs_reconnect_reboot(0), xs_reconnect_link(0),
