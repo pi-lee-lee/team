@@ -653,6 +653,67 @@ try {
       } else {
         skip('⑦ 에코 전이 판정', 'ACK result 가 0 도 3 도 아니다 → ' + JSON.stringify(rG) + ' · 갈래를 모르면 단언하지 않는다');
       }
+
+      /* ── 미결 갈래: 앞선 요청이 살아 있는 동안 또 누르면 어떻게 되나 ──────────────
+         socket 실측: `{"type":"error","code":"pending","message":"지금은 조작할 수 없습니다"}`
+         🔴 **내 아이들 1초가 이 갈래를 사용자에게서 구조적으로 막을 수 있다** — 아이들이 풀릴 때쯤
+         서버 쪽 미결도 풀려 있으면 **사용자는 이 거절을 만날 수 없다.**
+         🔑 그러면 그 사실 자체가 결과다(문구가 도달 불가라는 뜻). **못 밟으면 미측정으로 적는다.** */
+      const txAt2 = tx.length, rxAt2 = rx.length;
+      for (let i = 0; i < 30; i++) {
+        const left = await evaluate(client, `(() => { try { return cooldownLeftMs(); } catch (e) { return 0; } })()`).catch(() => 0);
+        if (!left || left <= 0) break;
+        await sleep(50);
+      }
+      /* 🔴 **다른 자리에서 한다.** 앞선 자리(E1)는 이미 `settled` 를 기다리느라 2.8초가 흘렀고
+         **그 사이 서버 미결이 풀렸다**(실측: 재요청이 `queued` 로 접수됐다).
+         🔑 겹치게 하려면 **정착을 기다리지 않아야** 하므로, 손대지 않은 자리(X1)에서
+         **보내고 → 아이들만 풀리면 → 곧바로 다시** 를 한다. 그러면 E1 자료도 안 흔든다. */
+      const other = await evaluate(client, `(() => {
+        const b = [...document.querySelectorAll('#zone-grid .zbtn')].find(x => x.dataset.zone !== ${JSON.stringify(gate.zone)}
+          && (x.dataset.act === 'open_gate' || x.dataset.act === 'close_gate') && x.getAttribute('aria-disabled') === 'false');
+        if (!b) return null; b.click(); return { zone: b.dataset.zone, act: b.dataset.act };
+      })()`);
+      if (other) {
+        actLog('미결 시험 1차 — ' + other.zone + ' / ' + other.act);
+        for (let i = 0; i < 40; i++) { const d3 = await evaluate(client, `document.getElementById('confirm-dialog').open === true`).catch(() => false); if (d3) break; await sleep(50); }
+        await evaluate(client, `document.querySelector('#confirm-dialog button[value="ok"]').click()`);
+      }
+      const again = !other ? null : await (async () => {
+        /* 아이들만 기다린다 — **정착은 기다리지 않는다.** 그게 이 시험의 요점이다. */
+        for (let i = 0; i < 40; i++) {
+          const left = await evaluate(client, `(() => { try { return cooldownLeftMs(); } catch (e) { return 0; } })()`).catch(() => 0);
+          if (!left || left <= 0) break;
+          await sleep(40);
+        }
+        return await evaluate(client, `(() => {
+          const b = [...document.querySelectorAll('#zone-grid .zbtn')].find(x => x.dataset.zone === ${JSON.stringify(other.zone)}
+            && (x.dataset.act === 'open_gate' || x.dataset.act === 'close_gate') && x.getAttribute('aria-disabled') === 'false');
+          if (!b) return null; b.click(); return b.dataset.act;
+        })()`);
+      })();
+      if (!again) skip('⑦ 미결 중 재요청', '아이들이 풀린 뒤에도 누를 수 있는 차단봉 버튼이 없었다');
+      else {
+        actLog('미결 시험 2차 — ' + (other ? other.zone : '?') + ' / ' + again + ' (정착 기다리지 않고 곧바로)');
+        for (let i = 0; i < 40; i++) { const d2 = await evaluate(client, `document.getElementById('confirm-dialog').open === true`).catch(() => false); if (d2) break; await sleep(50); }
+        await evaluate(client, `document.querySelector('#confirm-dialog button[value="ok"]').click()`);
+        await sleep(1500);
+        const resp2 = rx.slice(rxAt2).filter(m => m && (m.type === 'error' || m.type === 'ack' || m.type === 'queued'));
+        const errs = resp2.filter(m => m.type === 'error');
+        const m2 = await evaluate(client, `(() => { const a = [...document.querySelectorAll('#messages .msg')]; return a.length ? a[0].textContent.slice(0, 140) : null; })()`);
+        console.log('  🔑 연속 조작 응답 → ' + JSON.stringify(resp2.map(m => m.type + (m.code ? '/' + m.code : '') + (m.result !== undefined ? '/result=' + m.result : ''))));
+        console.log('  🔑 그때 화면 문구 → ' + JSON.stringify(m2));
+        if (!errs.length) {
+          skip('⑦ 미결 중 재요청이 거절된다', '거절이 안 왔다 — 앞선 요청이 이미 풀렸다는 뜻이다(아이들 1초가 이 갈래를 막는다). 응답: ' + JSON.stringify(resp2.map(m => m.type)));
+        } else {
+          /* 🔴 문구가 **"기다려라"** 여야 한다. `'오류가 발생했습니다'` 나 막연한 문구면
+             사용자가 **다시 누른다** — 그게 증폭 고리다(§5.14). 코드도 같이 찍어 둔다. */
+          console.log('  🔑 거절 코드 → ' + JSON.stringify(errs.map(m => m.code)));
+          ok('⑦ 🔴 미결 중 재요청 문구가 "기다려라"로 말한다',
+             !!(m2 && /처리 중|결과가 나온 뒤/.test(m2) && !/오류가 발생했습니다/.test(m2)),
+             JSON.stringify({ codes: errs.map(m => m.code), msg: m2 }));
+        }
+      }
     }
   }
 
