@@ -631,10 +631,28 @@ try {
         return m ? m.value : null;
       })();
       console.log('  🔑 에코 전이 → ' + JSON.stringify({ before: gate.valueBefore, want: gate.wantAfter, after: after }));
-      ok('⑦ 🔴🔴 명령이 장치 상태를 실제로 바꿨다 (에코 비트가 뒤집혔다)',
-         after === gate.wantAfter && after !== gate.valueBefore,
-         JSON.stringify({ before: gate.valueBefore, want: gate.wantAfter, after: after })
-           + ' — 같으면 이미 그 상태였다는 뜻이고 그때 settled 는 아무것도 증명하지 않는다');
+      /* 🔴 **갈래를 갈라 단언한다.** 거절(`result=3`)에서는 **안 바뀌는 것이 옳다** —
+         한 단언으로 두 갈래를 덮으면 거절 시험이 "제품 결함"으로 빨강이 된다(§5.47 의 형태).
+         🔑 갈래를 결정하는 것은 **ACK 의 `result`** 이고 내가 짐작하지 않는다. */
+      const ackG = rx.slice(rxAt).filter(m => m && m.type === 'ack' && sentG && m.rid === sentG.rid).slice(-1)[0] || null;
+      const rG = ackG ? Number(ackG.result) : null;
+      if (rG === 0) {
+        ok('⑦ 🔴🔴 명령이 장치 상태를 실제로 바꿨다 (에코 비트가 뒤집혔다)',
+           after === gate.wantAfter && after !== gate.valueBefore,
+           JSON.stringify({ before: gate.valueBefore, want: gate.wantAfter, after: after })
+             + ' — 같으면 이미 그 상태였다는 뜻이고 그때 settled 는 아무것도 증명하지 않는다');
+      } else if (rG === 3) {
+        /* 🔑 거절 갈래 — **상태가 안 바뀌어야** 하고 **문구가 장치 탓이어야** 한다.
+           내 표(`TEST_RESULT_TEXT[3]`)가 서버 문구를 덮으면 *"잘못된 자리 또는 값입니다"* 가 뜬다 —
+           **장치 실패를 사용자 잘못으로 돌리는 것**이고 그게 §5.71 의 결함이다. */
+        ok('⑦ 거절(result=3)이면 상태가 안 바뀐다', after === gate.valueBefore,
+           JSON.stringify({ before: gate.valueBefore, after: after }));
+        ok('⑦ 🔴 거절 문구가 장치 탓으로 말한다 (사용자 잘못이 아니다)',
+           !!(msg && /수행할 수 없습니다/.test(msg) && !/잘못된 자리 또는 값/.test(msg)),
+           JSON.stringify(msg) + ' — "잘못된 자리 또는 값입니다" 면 내 표가 서버 문구를 덮은 것이다(§5.71)');
+      } else {
+        skip('⑦ 에코 전이 판정', 'ACK result 가 0 도 3 도 아니다 → ' + JSON.stringify(rG) + ' · 갈래를 모르면 단언하지 않는다');
+      }
     }
   }
 
