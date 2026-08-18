@@ -546,3 +546,13 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-18T11:44:03+0900 | 착수 | REQ-0197 | socket-engineer → socket-engineer | 설계 재개 — 브릿지 명세 미결 넷을 마저 써라 · 완료 판정은 지금 답할 수 있다 |
 | 2026-08-18T11:46:00+0900 | 완료 | REQ-0197 | socket-engineer → socket-engineer | 설계 재개 — 브릿지 명세 미결 넷을 마저 써라 · 완료 판정은 지금 답할 수 있다 |
 | 2026-08-18T11:53:37+0900 | 완료 | REQ-0198 | web-engineer → web-engineer | 설계 재개 — 표시량 A 확정(칸 안에 다) · §5 시각 형태를 채워라 |
+| 2026-08-18T12:21:04+0900 | 발행 | REQ-0199 | root → socket-engineer | 구현 1 — ACK_TIMEOUT 유도식 (web 과 같은 배포) · 재전송이 파괴만 세게 만든다 |
+| 2026-08-18T12:21:31+0900 | 발행 | REQ-0200 | root → web-engineer | 구현 1 — ack_budget_ms 경로 확인 · socket 과 같은 배포 (화면 개정은 4번이다) |
+| 2026-08-18T12:22:35+0900 | 착수 | REQ-0200 | web-engineer → web-engineer | 구현 1 — ack_budget_ms 경로 확인 · socket 과 같은 배포 (화면 개정은 4번이다) |
+| 2026-08-18T12:22:35+0900 | 착수 | REQ-0199 | socket-engineer → socket-engineer | 구현 1 — ACK_TIMEOUT 유도식 (web 과 같은 배포) · 재전송이 파괴만 세게 만든다 |
+| 2026-08-18T12:22:35+0900 | 진행 | REQ-0199 | socket-engineer → socket-engineer | 구현 1 — ACK_TIMEOUT 유도식 (web 과 같은 배포) · 재전송이 파괴만 세게 만든다 — 착수. ACK_TIMEOUT 을 유도식으로 바꾼다 — rtt_max 금지(창 D 최대 1599), 상수에서 유도. ack_budget_ms 가 따라 움직이므로 새 값을 web 에 넘기고 배포 시점을 직접 맞춘다. |
+| 2026-08-18T12:26:53+0900 | 완료 | REQ-0200 | web-engineer → web-engineer | 구현 1 — ack_budget_ms 경로 확인 · socket 과 같은 배포 (화면 개정은 4번이다) |
+| 2026-08-18T12:28:05+0900 | 진행 | REQ-0199 | socket-engineer → socket-engineer | 구현 1 — ACK_TIMEOUT 유도식 (web 과 같은 배포) · 재전송이 파괴만 세게 만든다 — 1단계 구현 완료·커밋 c719d87. ACK_TIMEOUT 1500→2400(=2×DOWN_SLOT_MS 유도식, rtt_max 미사용). 파생 ack_budget_ms 9900→12600. selftest 44건 통과. web 확인 결과 화면 코드 변경 0 이고 예산을 캐시하지 않아 '옛 예산 구간'이 없다 — 내 배포 제약을 그렇게 정정해 원장에 반영. 추가: 기동 시 '계약값' 한 줄 로그(거동 변경 0) — web 이 짚은 '서버 값 변화를 잡을 검사가 없다'를 검사 대신 관측으로 닫은 것. 배포 명령은 루트에 넘겼고 monitor 에 재전송 대조 불가 통보 완료. 남은 것: 루트의 배포 실행 → 배포 시각·build 확인 → 그 뒤 2단계(노드별 리팩터링). |
+| 2026-08-18T12:34:35+0900 | 발행 | REQ-0201 | root → monitor-engineer | 🔴 재현 관측 — 사용자가 20개 이상 누르면 ESP 리셋 · 몇 개째부터인가가 핵심 |
+| 2026-08-18T12:35:01+0900 | 착수 | REQ-0201 | monitor-engineer → monitor-engineer | 🔴 재현 관측 — 사용자가 20개 이상 누르면 ESP 리셋 · 몇 개째부터인가가 핵심 |
+| 2026-08-18T13:57:37+0900 | 발행 | REQ-0202 | root → web-engineer | 🔴 구현 1.5 — cmdPending 구멍 즉시 수정 (사용자가 실물 재현) · ack_budget_ms 를 써라 |
