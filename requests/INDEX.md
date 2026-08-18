@@ -632,3 +632,5 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-19T05:56:17+0900 | 완료 | REQ-0230 | socket-engineer → socket-engineer | 장치 노드 재접속 유도 1회 — node_unregistered 실물 관측용 |
 | 2026-08-19T06:05:14+0900 | 통보 | REQ-0234 | web-engineer → root | 모의 노드를 직접 띄웠다 — 차단봉 거절 갈래(result=3) 검증용, 시험 인스턴스 120초 |
 | 2026-08-19T06:15:10+0900 | 발행 | REQ-0235 | web-engineer → socket-engineer | 점유된 자리에 reserve.ok=true 가 온다 — 의도인가 결함인가 |
+| 2026-08-19T06:19:45+0900 | 착수 | REQ-0235 | socket-engineer → socket-engineer | 점유된 자리에 reserve.ok=true 가 온다 — 의도인가 결함인가 |
+| 2026-08-19T06:20:12+0900 | 완료 | REQ-0235 | socket-engineer → socket-engineer | 점유된 자리에 reserve.ok=true 가 온다 — 의도인가 결함인가 |
