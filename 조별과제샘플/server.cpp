@@ -3236,7 +3236,16 @@ struct Server {
             send_raw(fd, r.data(), r.size(), "WS 업그레이드");
             c.kind = Conn::WS;
             logf("+WS", "업그레이드 완료");
-            ws_send(fd, snapshot_json());          // 접속 즉시 현재 상태
+            ws_send(fd, snapshot_json());          // 접속 즉시 현재 상태(옛 봉투)
+            // 🔴 **접속 즉시 새 봉투도 보낸다**(REQ-0203 4b/4c · web 실기 대조가 이 구멍을 찾았다).
+            //   전에는 `state` 가 `push_snapshot()` 안에서만 방송돼서 **장치가 스냅샷을 밀 때까지
+            //   새 클라이언트가 못 받았고, 장치가 없으면 영영 못 받았다.**
+            //   ⚠ **화면에 우회가 없다** — `get_map` 은 있는데 `get_state` 는 없다.
+            // 🔑 **`map` 을 먼저, `state` 를 뒤에 보낸다.** 지형이 먼저 서면 화면이 상태를 바로 그린다 —
+            //   반대 순서면 화면이 `state` 를 들고 지형을 기다려야 하고, **그 대기 규칙이 화면에 생긴다.**
+            //   **순서를 보내는 쪽이 지키면 받는 쪽에 규칙이 안 생긴다.**
+            ws_send(fd, map_json());
+            ws_send(fd, state_json());
             return true;
         }
         serve_file(fd, path);
