@@ -237,6 +237,21 @@ static const int  DEV_S_WORST_ASSUMED_B = 60;   // n=10 기준 · arduino REQ-02
 //   요구했으므로 분명히 해 둔다 — *최소 표본 = 1* 은 계산 결과가 아니라 탐침의 뜻 자체다.
 static const int  DOWN_PROBE_N = 1;
 
+// 🔴🔴 **자리 인수 유예 — 다른 IP 가 조용한 자리를 가져가도 되는 시간** (REQ-0217)
+// ⚠ **루트가 제안한 판별식("최근 프레임이 있으면 침입자")은 실측으로 반증된다.**
+//   서버 로그의 정상 재접속 85건에서 **공백 최소가 `0초`**다(0·1·2·2·3·4…).
+//   장치가 TCP 를 다시 세울 때 **옛 소켓의 마지막 프레임 직후에 새 연결이 올 수 있다.**
+//   → **공백만으로 갈랐다면 우리 보드의 정상 재접속을 7건 이상 막았다.**
+//
+// 🔑 **그래서 1차 판별자는 시간이 아니라 IP 다.** `devid` 가 고유하지 않은 것이 문제의 뿌리이고,
+//   그때 남는 유일한 구분자가 커널이 주는 주소다.
+//     같은 IP → 같은 장치의 TCP 재접속 → **공백과 무관하게 교체 허용**
+//     다른 IP → 두 대다 → 아래 유예로 판정
+// 이 값은 **다른 IP 일 때만** 쓰이므로 우리 재접속을 막지 않는다. 그래서 크게 잡는 쪽이 안전하다.
+//   하한: 정상 주기(1슬롯)보다 충분히 커야 한다
+//   상한: 장치의 자체 재접속(T2 약 8초)보다 작아야 한다 — 안 그러면 자리를 못 비켜 준다
+static const int  TAKEOVER_GRACE_MS = 5 * DOWN_SLOT_MS;   // = 6000ms · 연속 5슬롯 무프레임
+
 
 // ── ACK 마감 — 🔴 **값이 아니라 유도식이다** (창 C~E 실측이 입력을 확정했다)
 //
@@ -408,6 +423,12 @@ static void on_stop_signal(int) { g_stop = 1; }
 // (--selftest 의 no_disk 와 같은 성격의 이음매다).
 // 0 이 아니면 기동 배너에 크게 찍어 시험 인스턴스를 운영으로 착각할 수 없게 한다.
 static int g_port_offset = 0;
+// 🔴 **주차 노드 잠금**(REQ-0217 ④). 빈 문자열 = 잠금 없음 = 종전 `first-S-wins` 그대로.
+// ⚠ **`first-S-wins` 를 없애지 않는다.** 이건 관측 환경용 잠금장치이지 프로토콜 변경이 아니다.
+// 왜 필요한가: 우리가 devid 를 바꿔도 **조원 보드는 여전히 `P1` 로 붙고 서버는 그것을 받는다.**
+// 더 나쁜 경우 — 조원 `P1` 이 **먼저** `S` 를 보내면 `first-S-wins` 가 **그 보드를 주차 노드로
+// 지정**하고 우리는 보조 노드(상행 전용)로 밀려 **하행을 못 받는다.** 지금보다 나쁘다.
+static std::string g_park_dev_pin;
 
 // ---------------------------------------------------------------- 로그 계약 v0.1 (REQ-0111)
 // 명세: docs/net/server-log-contract.md
@@ -624,10 +645,40 @@ struct AuxNode {
 };
 
 // 아직 `device_id` 를 모르는 소켓. 첫 유효 프레임에서 승격된다.
+// 🔴🔴 **접속 IP·포트를 남긴다** (REQ-0215)
+// 종전에는 `accept(fd, NULL, NULL)` 로 **상대 주소를 그냥 버렸다.** 그래서 2026-08-18 에
+// *"같은 망의 조원들이 동일 카피 보드(`device=P1`)를 돌리고 있었다"* 가 확인됐을 때
+// **서버 자료만으로는 어느 세션이 누구 것인지 가릴 방법이 없었다.**
+// 🔑 **`device_id` 가 고유하다는 전제가 깨지면 전선 위 식별자는 전부 무력해진다.**
+//    그때 남는 유일한 구분자가 **IP·포트**다 — 그것은 전선이 아니라 커널이 준다.
+// ⚠ 완전하지 않다: NAT 뒤나 DHCP 재할당이면 같은 IP 가 다른 장치일 수 있다.
+//   **그래도 "구분자가 하나도 없다"와는 질이 다르다.**
+static std::string peer_str(sock_t fd) {
+    struct sockaddr_storage ss;
+    socklen_t sl = sizeof(ss);
+    if (getpeername(fd, (struct sockaddr*)&ss, &sl) != 0) return "?";
+    char host[64] = {0};
+    if (ss.ss_family == AF_INET) {
+        struct sockaddr_in* a4 = (struct sockaddr_in*)&ss;
+        const unsigned char* q = (const unsigned char*)&a4->sin_addr;
+        snprintf(host, sizeof(host), "%u.%u.%u.%u:%u",
+                 q[0], q[1], q[2], q[3], (unsigned)ntohs(a4->sin_port));
+        return std::string(host);
+    }
+    return "?";
+}
+
+// IP 만(포트 제외). **동일 장치 판별은 IP 로 한다** — 포트는 재접속마다 바뀐다.
+static std::string peer_host(const std::string& hp) {
+    size_t c = hp.rfind(':');
+    return (c == std::string::npos) ? hp : hp.substr(0, c);
+}
+
 struct UnknownSock {
     sock_t fd;
     std::string buf;
     long long since_ms;
+    std::string peer;          // "IP:포트" — 승격 시 세션으로 넘어간다
     UnknownSock() : fd(BAD_SOCK), since_ms(0) {}
 };
 
@@ -678,6 +729,11 @@ struct Server {
     // 보조 노드를 옆에 붙이는 쪽을 택했다. 단일 노드 동작이 구조적으로 보존된다.
     sock_t ard;                        // **주차 노드**의 연결 (여전히 하나)
     std::string park_dev;              // 주차 노드의 device_id. "" = 아직 미정(first-S-wins)
+    std::string ard_peer;              // 현재 주차 노드 소켓의 "IP:포트" (REQ-0215)
+    // 🔴 **같은 devid 로 동시에 붙은 것을 센다.** 0 이 아니면 관측 자료가 오염된 것이다 —
+    // **어느 보드가 응답했는지 모르는 채로 지표를 읽게 된다.**
+    long long dup_devid_reject;   // ①에서 거절한 횟수 = **다른 IP 가 산 자리를 노렸다**
+    long long takeover_grace;     // 유예를 넘겨 교체한 횟수 = 진짜 죽은 것으로 판단
     std::map<std::string, AuxNode> aux;   // device_id → 보조 노드 (상행 전용)
     std::vector<UnknownSock> unknown;     // id 미상 소켓 — 첫 유효 프레임에서 승격
     int  aux_conflicts;                // `S` 를 보냈지만 주차 노드가 아닌 장치 수(가정 붕괴 신호)
@@ -869,7 +925,8 @@ struct Server {
     int  keepalive_reaps;         // ETIMEDOUT 으로 죽은 소켓 수 — **OS 경로**
 
     Server() : lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK), ard(BAD_SOCK),
-               aux_conflicts(0), admit_rejects(0),      // 선언 순서와 일치시킨다(-Wreorder)
+               dup_devid_reject(0), takeover_grace(0),  // 선언 순서와 일치시킨다(-Wreorder)
+               aux_conflicts(0), admit_rejects(0),
                ard_seen(false), ard_last_ms(0),
                // 🔴 이 여섯(+다섯)은 **선언만 돼 있고 초기화 목록에 없었다.** 쓰기 시작하는 순간
                // 쓰레기값이 지표로 나간다 — 원장이 통째로 경고하는 그 형태다. 여기서 닫는다.
@@ -1086,6 +1143,11 @@ struct Server {
            + "/링크버림 " + std::to_string(q_dropped_link) + ")"
            // 🔑 **한 번 뜨는 경고는 놓친다.** 주기 요약에 계속 보이게 둔다 —
            // 이 칸이 가정을 넘으면 하행 건수 상한의 근거가 이미 깨진 것이다.
+           // 🔴 **0 이 아니면 그 창의 장치 지표는 읽지 마라** — 두 보드가 섞였다는 뜻이다.
+           // 계측 신뢰도 지표라서 다른 칸보다 앞에 둔다.
+           + " · devid거절 " + std::to_string(dup_devid_reject)
+           + (dup_devid_reject ? "🔴" : "")
+           + "/유예교체 " + std::to_string(takeover_grace)
            + " · S최대 " + std::to_string(s_max_b) + "B/가정 "
            + std::to_string(DEV_S_WORST_ASSUMED_B) + "B"
            + (s_worst_warned ? "🔴" : "")
@@ -1141,7 +1203,8 @@ struct Server {
             logf("-ARD", "세션#" + std::to_string(ard_sessions) + " 종료(" + why + ") — 지속 "
                          + hms(now_ms() - sess_start_ms)
                          + " · 프레임 " + std::to_string(sess_frames)
-                         + " · 최대공백 " + secs(sess_max_gap_ms));
+                         + " · 최대공백 " + secs(sess_max_gap_ms)
+                         + " · 상대 " + (ard_peer.empty() ? std::string("?") : ard_peer));
             sess_start_ms = 0;
         }
         if (!link_down_since) link_down_since = now_ms();
@@ -1196,8 +1259,9 @@ struct Server {
         rtt_max_ms = 0; rtt_last_ms = 0; rtt_n = 0;
         if (link_down_since) { link_down_ms += now_ms() - link_down_since; link_down_since = 0; }
         reboot_by_conn++;
+        ard_peer = peer_str(c);
         logf("+ARD", "주차 노드 접속 — 세션#" + std::to_string(ard_sessions)
-                     + " · device=" + dev);
+                     + " · device=" + dev + " · 상대 " + ard_peer);
         ard_seq = -1; ard_uptime = -1;
         base_valid = false;                 // §7.5-1
         // 🔴 **재하달을 담기 전에 큐를 비운다.** `ard` 가 이미 BAD_SOCK 이었던 경로에서는
@@ -1292,12 +1356,65 @@ struct Server {
 
     // id 미상 소켓 하나를 승격한다. 반환 false = 자리가 없어 거절했다(소켓은 닫힌다).
     bool promote_unknown(sock_t c, const std::string& dev) {
+        // (0) 🔴 **잠금이 걸려 있으면 지정된 devid 만 주차 노드가 된다**(REQ-0217 ④).
+        //     다른 devid 는 **거절이 아니라 보조 노드**로 들어간다 — 상행은 받되 하행은 안 준다.
+        //     🔑 **그래야 그들이 로그에 보인다.** 끊어 버리면 다시 "안 보이게" 된다.
+        if (!g_park_dev_pin.empty() && dev != g_park_dev_pin && park_dev.empty()) {
+            logf("!", "주차 노드 잠금(" + g_park_dev_pin + ") — device=" + dev
+                      + " (" + peer_str(c) + ") 는 보조 노드로 받는다. **하행 없음**");
+        }
         // (1) 주차 노드가 아직 없다 → first-S-wins 로 이 장치가 주차 노드다
         // (2) 같은 device_id 의 재접속 → 자리를 물려받는다(옛 동작을 이 경우로 한정한 것)
-        if (park_dev.empty() || park_dev == dev) {
+        const bool pin_ok = g_park_dev_pin.empty() || dev == g_park_dev_pin;
+        if ((park_dev.empty() && pin_ok) || park_dev == dev) {
             if (park_dev.empty())
                 logf("=", "주차 노드 지정 — device=" + dev
                           + " (first-S-wins: 첫 S 프레임을 보낸 장치가 주차 노드다)");
+            // 🔴🔴 **동시 접속 감지 — 1차 판별자는 시간이 아니라 IP 다** (REQ-0217)
+            // 종전 규칙은 *"같은 devid = 같은 장치"* 를 전제했다. **조원들의 동일 카피 보드가
+            // 전부 `P1` 이라 그 전제가 깨졌고, 그래서 이 경로가 조용히 통과했다.**
+            // ⚠ **"최근 프레임이 있으면 침입자"로 갈라선 안 된다** — 실측 반증이 상수 주석에 있다
+            //   (정상 재접속 85건 중 공백 0·1·2초가 실재한다).
+            if (ard != BAD_SOCK) {
+                const std::string np = peer_str(c);
+                const std::string oh = peer_host(ard_peer), nh = peer_host(np);
+                const bool known = (!oh.empty() && oh != "?" && !nh.empty() && nh != "?");
+                // 🔴 **판별자가 없으면 막지 않는다 — 실패 방향을 고른 것이다.**
+                // 주소를 못 얻는 경우(비 IPv4 소켓·`getpeername` 실패)에 거절 쪽으로 넘어지면
+                // **우리 보드의 정상 재접속이 영영 막힌다.** 반대 방향의 손해는 "종전과 같다"뿐이다.
+                // ⚠ 이 갈래는 자가검증 ⑬-(가)가 잡아 준 것이다 — 처음엔 거절 쪽으로 넘어졌다.
+                if (!known) {
+                    logf("!", "⚠ 같은 device_id(" + dev + ") 재접속인데 **주소를 못 얻어 판별 불가**"
+                              " (기존 '" + ard_peer + "' → 새 '" + np + "') — 종전대로 교체한다");
+                    adopt_as_parking(c, dev);
+                    return true;
+                }
+                if (oh == nh) {
+                    // 같은 IP = 같은 장치의 TCP 재접속. **공백을 묻지 않는다.**
+                    adopt_as_parking(c, dev);
+                    return true;
+                }
+                const long long quiet = ard_seen ? (now_ms() - ard_last_ms) : TAKEOVER_GRACE_MS;
+                if (quiet < TAKEOVER_GRACE_MS) {
+                    dup_devid_reject++;
+                    logf("!!", "🔴 같은 device_id(" + dev + ") · **다른 IP** — 기존 " + ard_peer
+                               + " 이 " + std::to_string(quiet)
+                               + "ms 전까지 프레임을 보내는 중인데 " + np
+                               + " 이 자리를 요구했다. **두 대다. 거절한다.** 누적 "
+                               + std::to_string(dup_devid_reject) + "회");
+                    // **확실한 것을 버리고 불확실한 것을 얻지 않는다**(MAX_ARD_NODES 와 같은 원칙).
+                    // 🔑 관측에서 중요한 것은 이기는 것이 아니라 **누가 잡았는지 아는 것**이다.
+                    logf("!!", "⚠ 같은 망에 동일 devid 보드가 있다 — 이 시각 전후의 장치 지표를 "
+                               "우리 보드의 것으로 읽지 마라");
+                    closesock(c);
+                    return false;
+                }
+                takeover_grace++;
+                logf("!", "⚠ 같은 device_id(" + dev + ") · 다른 IP(" + ard_peer + " → " + np
+                          + ") 인데 기존이 " + std::to_string(quiet) + "ms 조용하다 — 교체 허용. "
+                          "**우리 보드의 IP 가 바뀐 것일 수도, 남의 보드가 죽은 자리를 가져간 것일 수도 있다.** "
+                          "누적 " + std::to_string(takeover_grace) + "회");
+            }
             adopt_as_parking(c, dev);
             return true;
         }
@@ -2903,14 +3020,17 @@ struct Server {
         // → **검사로 막지 말고 관측 가능하게 만든다.** 그러면 "지금 서버가 보내는 값"이
         //   남의 원장 사본이 아니라 **로그에 남는 사실**이 된다.
         {
-            char cb[192];
+            char cb[288];
             snprintf(cb, sizeof(cb),
                      "계약값 — ACK_TIMEOUT %dms(=2x슬롯) · ACK_MAX_TRIES %d · "
                      "ack_budget_ms %lld · 큐대기마감 %dms · cap %dB/%d건 · "
-                     "사용자큐상한 %d건 · W_srv %lldms",
+                     "사용자큐상한 %d건 · 인수유예 %dms(=5x슬롯) · 노드잠금 %s · W_srv %lldms",
                      ACK_TIMEOUT_MS, ACK_MAX_TRIES, ack_budget_ms(),
                      DOWNQ_WAIT_CAP_MS, DOWN_BATCH_CAP_B, DOWN_BATCH_MAX_N,
-                     DOWN_BATCH_MAX_N * (DOWNQ_WAIT_CAP_MS / DOWN_SLOT_MS), w_srv());
+                     DOWN_BATCH_MAX_N * (DOWNQ_WAIT_CAP_MS / DOWN_SLOT_MS),
+                     TAKEOVER_GRACE_MS,
+                     g_park_dev_pin.empty() ? "(none, first-S-wins)" : g_park_dev_pin.c_str(),
+                     w_srv());
             logf("=", cb);
         }
         logf("⏱", "소크 관측 시작 — " + std::to_string(SOAK_REPORT_MS / 1000) + "초마다 요약, 종료(Ctrl-C) 시 한 줄 총평");
@@ -2967,8 +3087,10 @@ struct Server {
                             closesock(c);
                         } else {
                             UnknownSock u; u.fd = c; u.since_ms = now_ms();
+                            u.peer = peer_str(c);
                             unknown.push_back(u);
-                            logf("+?", "연결 수락 — device_id 대기 중(" + std::to_string(UNKNOWN_TIMEOUT_MS / 1000)
+                            logf("+?", "연결 수락 — 상대 " + u.peer
+                                       + " · device_id 대기 중(" + std::to_string(UNKNOWN_TIMEOUT_MS / 1000)
                                        + "초 안에 유효 프레임 없으면 끊는다) · " + ka);
                         }
                     }
@@ -3676,6 +3798,115 @@ static int selftest() {
                 if (!ok13b) bad++;
             }
 
+            // 🔑 **루프백 TCP 쌍** — `socketpair` 는 주소가 없어 IP 판별을 못 밟는다.
+            //    거절 경로가 이 REQ 의 본체이므로 **진짜 주소가 붙은 소켓**으로 시험한다.
+            struct LoopPair {
+                sock_t a, b, lsn;
+                LoopPair() : a(BAD_SOCK), b(BAD_SOCK), lsn(BAD_SOCK) {
+                    lsn = socket(AF_INET, SOCK_STREAM, 0);
+                    if (lsn == BAD_SOCK) return;
+                    struct sockaddr_in sa; memset(&sa, 0, sizeof(sa));
+                    sa.sin_family = AF_INET; sa.sin_port = 0;
+                    sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+                    if (bind(lsn, (struct sockaddr*)&sa, sizeof(sa)) != 0) return;
+                    socklen_t sl = sizeof(sa);
+                    if (getsockname(lsn, (struct sockaddr*)&sa, &sl) != 0) return;
+                    if (listen(lsn, 1) != 0) return;
+                    a = socket(AF_INET, SOCK_STREAM, 0);
+                    if (a == BAD_SOCK) return;
+                    if (connect(a, (struct sockaddr*)&sa, sizeof(sa)) != 0) { a = BAD_SOCK; return; }
+                    b = accept(lsn, NULL, NULL);
+                }
+                ~LoopPair() {
+                    if (a != BAD_SOCK) closesock(a);
+                    if (b != BAD_SOCK) closesock(b);
+                    if (lsn != BAD_SOCK) closesock(lsn);
+                }
+            };
+
+            // ⑬ 🔴 **자리 인수 판정** (REQ-0217 ①) — 세 갈래를 전부 밟는다.
+            //    ⚠ `socketpair` 는 `getpeername` 이 이름 없는 주소를 주므로 `peer_str` 이 "?" 다.
+            //      그래서 **같은 IP 경로**가 자연히 성립한다 — 그 경로부터 확인하고,
+            //      다른 IP 는 `ard_peer` 를 손으로 바꿔 만든다(실제 판정 코드는 같은 것을 탄다).
+            {
+                Server t;
+                t.ard = sv[0]; t.park_dev = "P1"; t.ard_seen = true;
+
+                // (가) 🔴 **주소를 못 얻는다 → 막지 않는다**(socketpair 가 그 상황을 그대로 만든다)
+                t.ard_last_ms = now_ms();                    // 방금 프레임을 받았다
+                long long r0 = t.dup_devid_reject;
+                bool okA = t.promote_unknown(sv[1], "P1") && t.dup_devid_reject == r0;
+                std::cout << (okA ? "  ✓ " : "  ✗ ") << "주소 판별 불가 · 공백 0ms → 교체 허용 "
+                          << "(거절 쪽으로 넘어지면 우리 보드가 영영 막힌다)\n";
+                if (!okA) bad++;
+            }
+            {
+                Server t;
+                t.ard = sv[0]; t.park_dev = "P1"; t.ard_seen = true;
+                t.ard_peer = "?:1";                          // 새 소켓과 같은 host("?")
+                t.ard_last_ms = now_ms();
+                bool okA2 = (t.promote_unknown(sv[1], "P1") && t.dup_devid_reject == 0);
+                std::cout << (okA2 ? "  ✓ " : "  ✗ ") << "같은 IP · 공백 0ms → 교체 허용 "
+                          << "(정상 재접속 85건 중 공백 0·1·2초가 실재한다)\n";
+                if (!okA2) bad++;
+                t.ard = BAD_SOCK;
+            }
+            {
+                Server t;
+                t.ard = sv[0]; t.park_dev = "P1"; t.ard_seen = true;
+                t.ard_peer = "10.0.0.99:1234";               // 🔴 다른 IP 로 만든다
+                LoopPair lp;                                  // 새 소켓엔 진짜 주소가 붙는다
+
+                // (나) 다른 IP + 기존이 최근에 말했다 → 거절
+                t.ard_last_ms = now_ms();
+                bool okB = (lp.b != BAD_SOCK && t.promote_unknown(lp.b, "P1") == false
+                            && t.dup_devid_reject == 1 && t.takeover_grace == 0);
+                lp.b = BAD_SOCK;                              // promote 가 닫았다
+                std::cout << (okB ? "  ✓ " : "  ✗ ") << "다른 IP · 기존이 말하는 중 → 거절 "
+                          << "(거절 " << t.dup_devid_reject << " · 유예교체 "
+                          << t.takeover_grace << " · 기대 1/0)\n";
+                if (!okB) bad++;
+            }
+            {
+                Server t;
+                t.ard = sv[0]; t.park_dev = "P1"; t.ard_seen = true;
+                t.ard_peer = "10.0.0.99:1234";
+                LoopPair lp;
+
+                // (다) 다른 IP + 기존이 유예를 넘겨 조용하다 → 교체 허용(경고 남김)
+                t.ard_last_ms = now_ms() - (TAKEOVER_GRACE_MS + 100);
+                bool okC = (lp.b != BAD_SOCK && t.promote_unknown(lp.b, "P1") == true
+                            && t.dup_devid_reject == 0 && t.takeover_grace == 1);
+                lp.b = BAD_SOCK;
+                std::cout << (okC ? "  ✓ " : "  ✗ ") << "다른 IP · 기존이 "
+                          << TAKEOVER_GRACE_MS << "ms 조용 → 교체 허용 (거절 "
+                          << t.dup_devid_reject << " · 유예교체 " << t.takeover_grace
+                          << " · 기대 0/1)\n";
+                if (!okC) bad++;
+                t.ard = BAD_SOCK;
+            }
+
+            // ⑭ 🔴 **주차 노드 잠금** (REQ-0217 ④) — 잠금 미지정 시 거동이 안 바뀌는 것까지 본다
+            {
+                Server t; t.ard = BAD_SOCK;
+                g_park_dev_pin = "P1A";
+                bool tookAux = t.promote_unknown(sv[1], "P1");   // 잠금과 다른 devid
+                bool okD = (tookAux && t.park_dev != "P1");      // 주차 노드가 되면 안 된다
+                std::cout << (okD ? "  ✓ " : "  ✗ ") << "잠금 P1A · device=P1 의 S → 주차 노드 '"
+                          << t.park_dev << "' (기대: P1 이 아님 — 보조로 받는다)\n";
+                if (!okD) bad++;
+                t.ard = BAD_SOCK;
+            }
+            {
+                Server t; t.ard = BAD_SOCK;
+                g_park_dev_pin = "";                             // 잠금 없음 = 종전 동작
+                bool okE = (t.promote_unknown(sv[1], "P1") && t.park_dev == "P1");
+                std::cout << (okE ? "  ✓ " : "  ✗ ") << "잠금 없음 → first-S-wins 그대로 (주차 노드 '"
+                          << t.park_dev << "' · 기대 P1)\n";
+                if (!okE) bad++;
+                t.ard = BAD_SOCK;
+            }
+
             s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
             closesock(sv[0]); closesock(sv[1]);
         }
@@ -3753,6 +3984,15 @@ int main(int argc, char** argv) {
             return 1;
         }
         g_port_offset = off;
+    }
+    for (int i = 1; i < argc; i++) {
+        std::string a(argv[i]);
+        if (a.compare(0, 11, "--park-dev=") != 0) continue;
+        g_park_dev_pin = a.substr(11);
+        if (g_park_dev_pin.empty()) {
+            std::cerr << "--park-dev= 에 devid 를 줘라 (예: --park-dev=P1A)\n";
+            return 1;
+        }
     }
     // --selftest 는 로그 파일을 열지 않는다. 자가검증 출력이 운영 로그에 섞이면
     // 인스턴스 경계 없이 사람이 만든 줄이 끼어드는 셈이라, 계약이 지키려는 것을 스스로 깬다.
