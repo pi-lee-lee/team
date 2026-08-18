@@ -81,6 +81,18 @@ CASES = [
     ("arduino · 진행 표시의 변수 경로",
      ARD, 'echo "round $r/$ROUNDS"', True),
 
+
+    # ── 🔴 2026-08-18 추가 — **복합 명령: 탐지는 한 구획, 대상은 다른 구획** (arduino 실제 피해)
+    #    옛 코드는 명령 전체에서 패턴을 찾고 전체에서 경로를 뽑아, `rm` 이 있으면
+    #    무관한 `git add requests/` 의 인자까지 대상이 됐다. 메시지는 `대상: requests`.
+    #    ⚠ 아래 셋은 한 벌이다. **집행 사례(둘째)가 통과로 바뀌면 고친 게 아니라 뚫은 것이다.**
+    ("arduino · rm(공용) 뒤에 무관한 git add 디렉토리",
+     ARD, "rm -f requests/.body-arduino.md ; git add requests/ && git commit -q -m x", True),
+    ("arduino · rm(공용) 뒤에 남의 파일 rm — 여전히 막혀야 한다",
+     ARD, "rm -f requests/.body-arduino.md ; rm cpp/y.cpp", False),
+    ("arduino · 공용 디렉토리 인자 자체(슬래시로 끝남)",
+     ARD, "rm -rf requests/", True),
+
     # ── 원래 통과해야 하는 것 (회귀)
     ("arduino · 루트 소유 스크립트 호출",        ARD, "team/bin/req.sh list",           True),
     ("arduino · cd 뒤 읽기 전용 명령",           ARD, CD + "cat cpp/y.cpp",             True),

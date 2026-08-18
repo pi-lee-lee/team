@@ -259,9 +259,17 @@ def bash_candidates(cmd, own):
     `team/bin/req.sh` 를 호출하는 것만으로 차단된다 — 실제로 겪은 사고다.
     (`req.sh done ... --note "cp 로 복사함"` 처럼 인자에 변조 낱말이 섞이면 발동했다.)
     """
-    exts = set((own.get("ext_rules") or {}).keys())
     out = []
     for toks in _segment_tokens(cmd):
+        out.extend(_candidates_from_toks(toks, own))
+    return out
+
+
+def _candidates_from_toks(toks, own):
+    """한 구획의 토큰에서 경로 후보를 뽑는다."""
+    exts = set((own.get("ext_rules") or {}).keys())
+    out = []
+    for _ in (0,):
         # 디렉터리 이동 구획은 통째로 건너뛴다. `cd` 의 인자는 **가려는 곳**이지
         # 고치려는 대상이 아니다.
         #
@@ -370,7 +378,12 @@ def check_bash(cmd, cwd, role, own):
         rel = rel_path(tok, cwd)
         if rel is None:
             return
-        owner, reason = owner_of(rel, own)
+        # ⚠ `requests/` 처럼 **슬래시로 끝나는 디렉토리 인자**는 정규화되면 `requests` 가
+        #   되는데, 소유 규칙은 `requests/**` 라 **디렉토리 자신은 어느 규칙에도 안 걸린다.**
+        #   그래서 공용 디렉토리인데 기본 소유자(root)로 떨어졌다.
+        #   **디렉토리에 쓰는 것은 그 안의 파일에 쓰는 것**이므로 자식으로 판정한다.
+        probe = rel + "/x" if tok.rstrip("'\"").endswith("/") else rel
+        owner, reason = owner_of(probe, own)
         if owner is None or owner == role:
             return
         deny(role, rel, owner, reason, extra="\n  탐지: %s" % why)
@@ -386,12 +399,28 @@ def check_bash(cmd, cwd, role, own):
 
     # 2) 낱말형 변조 명령(rm/mv/cp/sed -i …)은 대상을 특정하기 어렵다 →
     #    그런 명령이 실제로 있을 때만 경로 토큰을 전수 검사한다.
+    #
+    # 🔴 2026-08-18 — **탐지와 대상 추출을 같은 구획 안에 묶는다.**
+    #   예전에는 명령 **전체**에서 패턴을 찾고 **전체**에서 경로를 뽑았다. 그래서
+    #   변조 명령 하나가 있으면 **무관한 다른 하위 명령의 인자까지 대상**이 됐다:
+    #
+    #     rm -f requests/.body-x.md ; git add requests/ && git commit …
+    #        └ 패턴 rm 은 여기            └ 🔴 대상으로 잡힌 것은 여기(`requests/`)
+    #
+    #   차단 메시지가 `대상: requests` 로 떠서 **무엇이 막혔는지 알 수 없었다**(arduino 보고).
+    #   `rm` 이 있는 줄에 다른 명령의 경로가 있으면 **언제나** 오탐이므로 범위가 넓다.
+    #
+    #   ⚠ 집행은 안 약해진다 — 변조 명령 **자신의 인자**는 같은 구획에 있다.
+    #     `cd cpp; rm y.cpp` 도 `rm` 구획에 `y.cpp` 가 있어 그대로 걸린다(시험 있음).
     word_pats = [p for p in pats if p.strip() and p.strip()[0].isalpha()]
-    hit = _mutation_hit(cmd, word_pats)
-    if not hit:
-        return
-    for tok in bash_candidates(cmd, own):
-        verdict(tok, "Bash 명령에 파일 변조 패턴 '%s' 이 있고 대상이 남의 영역이다." % hit)
+    for toks in _segment_tokens(cmd):
+        if not toks:
+            continue
+        hit = _mutation_hit(" ".join(toks), word_pats)
+        if not hit:
+            continue
+        for tok in _candidates_from_toks(toks, own):
+            verdict(tok, "Bash 명령에 파일 변조 패턴 '%s' 이 있고 대상이 남의 영역이다." % hit)
 
 
 def main():
