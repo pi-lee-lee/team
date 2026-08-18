@@ -8,14 +8,17 @@
 #
 # ⚠ 라운드 수는 **유한하다.** 감시 없는 무한 루프를 만들지 않는다.
 ROUNDS=${1:-8}
-LOG=net/inject-winG-2026-08-18.log
+# 🔑 **회차 표는 부하 인자가 아니다.** 라운드·인스턴스·건수·간격은 절대 바꾸지 않되,
+#    rid 접두와 기록 파일은 창마다 갈라야 한다 — 안 그러면 append-only 로그에서 짝이 섞인다.
+TAG=${2:-G}
+LOG=net/inject-win${TAG}-2026-08-18.log
 r=1
 while [ "$r" -le "$ROUNDS" ]; do
   echo "$(date '+%Y-%m-%d %H:%M:%S')  라운드 $r/$ROUNDS 시작" >> "$LOG"
   i=1
   for S in A1 A2 A3 A4 A5 B1 B2 B3; do
     python3 net/downlink_inject.py --port 9900 --allow-production --slot "$S" \
-      --interval 0.3 --start-delay 0 --count 60 --rid-prefix "injG${r}-$i" \
+      --interval 0.3 --start-delay 0 --count 60 --rid-prefix "inj${TAG}${r}-$i" \
       --stop-queue-full 20 --log "$LOG" > /dev/null 2>&1 &
     i=$((i + 1))
   done
@@ -24,4 +27,4 @@ while [ "$r" -le "$ROUNDS" ]; do
   sleep 5
   r=$((r + 1))
 done
-echo "$(date '+%Y-%m-%d %H:%M:%S')  창 G 주입 전체 종료" >> "$LOG"
+echo "$(date '+%Y-%m-%d %H:%M:%S')  창 ${TAG} 주입 전체 종료" >> "$LOG"
