@@ -36,9 +36,10 @@ for ln in open(LOG, encoding="utf-8", errors="replace"):
     if RE_T2.search(ln): ev.append((t, "t2", 0)); continue
 
 # 거래 단위로 자른다: cmd 또는 echo 가 나오면 새 거래 시작 후보
-norm = inv = 0
-inv_t2 = norm_t2 = 0
+norm = inv = noecho = 0
+inv_t2 = norm_t2 = noecho_t2 = 0
 inv_times, invsizes, normsizes = [], Counter(), Counter()
+noecho_times, noechosizes = [], Counter()
 i = 0
 while i < len(ev):
     k = ev[i][1]
@@ -60,12 +61,25 @@ while i < len(ev):
             j += 1
         if seen_t2: norm_t2 += 1
         i = j
+    elif k == "cmd":
+        # 🔴 `cmd` 뒤에 에코가 안 붙는다 = **에코 실종/지연**. 종전 판은 이것을 분모에서
+        #    조용히 뺐다(창 G 16:40:15 원문에서 발각). 세 번째 갈래로 센다.
+        j = i + 1
+        seen_t2 = False
+        while j < len(ev) and ev[j][1] != "cmd":
+            if ev[j][1] == "t2": seen_t2 = True
+            if ev[j][1] == "echo": break
+            j += 1
+        noecho += 1; noecho_times.append(ev[i][0]); noechosizes[ev[i][2]] += 1
+        if seen_t2: noecho_t2 += 1
+        i = j if j > i else i + 1
     else:
         i += 1
 
-tot = norm + inv
+tot = norm + inv + noecho
 print("# %s — 찾은 문자열 '[AT] \"AT+CIPSEND='  '[AT] \" S,'  '[AT] \"SEND OK'  '★★ T2 초과'" % LOG)
-print("# 🔴 분모: 짝지어진 거래 %d건 (정상순서 %d · 뒤집힘 %d)" % (tot, norm, inv))
+print("# 🔴 분모: CIPSEND 거래 %d건 (정상순서 %d · 뒤집힘 %d · **에코실종/지연 %d**)" % (tot, norm, inv, noecho))
+print("#    ⚠ 세 번째 갈래는 2026-08-18 에 추가됐다 — 그 전 판은 이것을 분모에서 조용히 뺐다")
 if tot == 0:
     print("# 🔴 0건 — 표지가 없거나 패턴이 안 맞는다. **판정 불가**"); raise SystemExit(0)
 print()
@@ -75,8 +89,10 @@ print("  뒤집힌 거래의 CIPSEND 크기 분포 : %s" % dict(invsizes.most_co
 print("  정상  거래의 CIPSEND 크기 분포 : %s" % dict(normsizes.most_common(8)))
 print()
 print("## 그 뒤 T2 가 났는가 — **이것이 판정선이다**")
-print("  뒤집힌 거래 중 T2 : %d / %d" % (inv_t2, inv))
-print("  정상  거래 중 T2 : %d / %d" % (norm_t2, norm))
+print("  뒤집힌 거래 중 T2   : %d / %d" % (inv_t2, inv))
+print("  에코실종 거래 중 T2 : %d / %d   ← 🔴 이 갈래가 새로 보인다" % (noecho_t2, noecho))
+print("  에코실종 크기 분포  : %s" % dict(noechosizes.most_common(8)))
+print("  정상  거래 중 T2   : %d / %d" % (norm_t2, norm))
 print()
 print("## 읽는 법")
 print("· 뒤집힘이 T2 거래에만 몰리면 **기전 후보**다. 정상 거래에도 흔하면 원인이 아니다")
