@@ -22,11 +22,19 @@ if (!PORT) { console.error('--port <시험 인스턴스 포트>'); process.exit(
 if (['9900', '9991', '5500'].includes(String(PORT))) { console.error('🔴 운영 포트 거부: ' + PORT); process.exit(2); }
 const URL_ = 'http://127.0.0.1:' + PORT + '/index.html';
 
-let pass = 0, fail = 0;
+let pass = 0, fail = 0, skipped = 0;
 function ok(name, cond, detail) {
   if (cond) { pass++; console.log('  ✅ ' + name); }
   else { fail++; console.log('  ❌ ' + name + (detail ? '  → ' + detail : '')); }
 }
+/**
+ * 🔴 **못 잰 것을 통과로도 실패로도 두지 않는다.**
+ * 통과로 넘기면 **안 본 것이 본 것이 되고**(§5.40: 통과 수는 밟은 것의 수다),
+ * 실패로 두면 **제품 결함으로 읽히고** 늘 빨강인 검사는 아무도 안 읽는다(§3.1 의 형태).
+ * 🔑 **그래서 따로 세고 마지막에 분모로 찍는다** — *"검사 0건은 그 자체로 빨강이어야 한다"* 의
+ * 짝이다: **몇 건을 못 쟀는지가 보이면 초록이 거짓말을 못 한다.**
+ */
+function skip(name, why) { skipped++; console.log('  ⏭ ' + name + '  → 측정 불가: ' + why); }
 
 /* 🔴 §5.18 — 실패 집계는 catch 에서도 올린다. */
 let client = null;
@@ -35,6 +43,20 @@ try {
   client = await launch({ headless: true });
   await client.send('Page.enable');
   await client.send('Runtime.enable');
+  /* 🔴 **WS 프레임을 CDP 로 직접 잡는다.** ~~페이지 안에서 `handleServerMessage` 를 감싸는 방식~~ 은
+     **접속 시 프레임을 놓친다** — 래퍼는 페이지가 뜬 뒤에 설치되고 `snapshot`·`map`·`state` 는
+     그 전에 온다. ⚠ **실측으로 겪었다(2026-08-19)**: `state` 를 못 잡아 *"서버가 안 보낸다"* 로
+     읽었는데 ③ 대조는 통과했다 — **상태는 와 있었고 내 기록기가 늦었다.**
+     🔑 **하니스가 못 본 것을 서버가 안 한 것으로 읽는 형태**(원장 §5.30)이고, WS 층에서 잡으면
+     그 시점 의존이 사라진다. */
+  const rx = [];
+  client.on((method, p) => {
+    if (method === 'Network.webSocketFrameReceived') {
+      const d = p.response && p.response.payloadData;
+      if (typeof d === 'string' && d.charAt(0) === '{') { try { rx.push(JSON.parse(d)); } catch (e) {} }
+    }
+  });
+  await client.send('Network.enable');
   await client.send('Page.navigate', { url: URL_ });
 
   let ready = false;
@@ -64,13 +86,6 @@ try {
      + '서버 cwd 의 index.html 이 옛 사본이다. 제품 판정으로 읽지 마라');
   if (!mine) throw new Error('서빙된 판본이 내 것이 아니다 — 대조를 진행하면 잘못된 결론이 난다');
 
-  /* 서버 프레임 전문을 기록한다 — 키를 **문자열째로** 봐야 가정 대조가 된다. */
-  await evaluate(client, `(() => {
-    window.__raw = [];
-    const orig = handleServerMessage;
-    handleServerMessage = function (m) { try { window.__raw.push(m); } catch (e) {} return orig(m); };
-    return true;
-  })()`);
 
   let link = null;
   for (let i = 0; i < 150; i++) {
@@ -82,7 +97,7 @@ try {
   if (link !== 'ws') throw new Error('WS 실패');
 
   await sleep(1500);
-  let seen = await evaluate(client, `(window.__raw || []).map(m => m && m.type)`);
+  let seen = rx.map(m => m && m.type);
   console.log('  · 접속 직후 받은 타입 → ' + JSON.stringify(seen));
 
   /* ② `map` 이 접속 직후엔 안 올 수 있다(지형이 기동 때 이미 섰다) → `get_map` 을 실기에서 밟는다. */
@@ -97,15 +112,15 @@ try {
   }
   ok('🔑 get_map 왕복이 실기에서 돈다', gotMap === true, 'map 을 못 받았다');
 
-  const mp = await evaluate(client, `(() => {
-    const m = (window.__raw || []).filter(x => x && x.type === 'map').slice(-1)[0] || null;
+  const mp = (() => {
+    const m = rx.filter(x => x && x.type === 'map').slice(-1)[0] || null;
     if (!m) return null;
     const z0 = (m.zones || [])[0] || {};
     return { keys: Object.keys(m).sort(), srv_id: m.srv_id, epoch: m.epoch, grid: m.grid,
              zoneN: (m.zones || []).length, zoneKeys: Object.keys(z0).sort(),
              cells0: z0.cells, kinds: [...new Set((m.zones||[]).map(z => z.kind))].sort(),
              modKeys: Object.keys(((z0.modules || [])[0]) || {}).sort() };
-  })()`);
+  })();
   console.log('\n  🔑 실기 map → ' + JSON.stringify(mp));
   ok('① map 봉투 키가 가정과 같다', !!mp && ['epoch','grid','srv_id','type','zones'].every(k => mp.keys.includes(k)), JSON.stringify(mp && mp.keys));
   ok('① grid 에 rows·cols 가 있다', !!(mp && mp.grid && mp.grid.rows > 0 && mp.grid.cols > 0), JSON.stringify(mp && mp.grid));
@@ -115,20 +130,26 @@ try {
   ok('① kind 가 셋 안에 있다', !!mp && mp.kinds.every(k => ['parking','entrance','exit'].includes(k)), JSON.stringify(mp && mp.kinds));
   console.log('  · 자리 수 ' + (mp && mp.zoneN) + ' · kind ' + JSON.stringify(mp && mp.kinds));
 
-  const st = await evaluate(client, `(() => {
-    const s = (window.__raw || []).filter(x => x && x.type === 'state').slice(-1)[0] || null;
-    if (!s) return null;
-    const z0 = (s.zones || [])[0] || {};
-    return { keys: Object.keys(s).sort(), srv_id: s.srv_id, epoch: s.epoch,
+  const st = (() => {
+    const s2 = rx.filter(x => x && x.type === 'state').slice(-1)[0] || null;
+    if (!s2) return null;
+    const z0 = (s2.zones || [])[0] || {};
+    return { keys: Object.keys(s2).sort(), srv_id: s2.srv_id, epoch: s2.epoch,
              zoneKeys: Object.keys(z0).sort(), actions: z0.actions,
              completion: z0.completion, mod0: ((z0.modules || [])[0]) || null };
-  })()`);
+  })();
   console.log('  🔑 실기 state → ' + JSON.stringify(st));
   ok('① state 봉투 키가 가정과 같다', !!st && ['epoch','srv_id','ts_ms','type','zones'].every(k => st.keys.includes(k)), JSON.stringify(st && st.keys));
   ok('② 🔑 두 봉투의 srv_id 가 같다', !!(mp && st && mp.srv_id && mp.srv_id === st.srv_id), JSON.stringify([mp && mp.srv_id, st && st.srv_id]));
   ok('② 두 봉투의 epoch 이 같다', !!(mp && st && mp.epoch === st.epoch), JSON.stringify([mp && mp.epoch, st && st.epoch]));
-  ok('① 모듈 상태 키가 가정과 같다 (devid·name·value·known)',
-     !!(st && st.mod0) && ['devid','known','name','value'].every(k => Object.keys(st.mod0).includes(k)), JSON.stringify(st && st.mod0));
+  /* ⚠ 모듈 상태 키는 **장치가 등록돼 모듈이 생겨야** 볼 수 있다. 지금 시험 인스턴스에는
+     장치가 안 붙으므로 `zone.modules` 가 비어 있다 — **불일치가 아니라 볼 것이 없는 것**이다. */
+  if (st && st.mod0) {
+    ok('① 모듈 상태 키가 가정과 같다 (devid·name·value·known)',
+       ['devid','known','name','value'].every(k => Object.keys(st.mod0).includes(k)), JSON.stringify(st.mod0));
+  } else {
+    skip('① 모듈 상태 키 대조', '장치가 안 붙어 zone.modules 가 0개다 — 등록(D)이 와야 생긴다');
+  }
 
   /* 🔴 지형이 비어 있으면 그건 서버 결함이다(socket 확정: "0자리"는 정상이 아니다). */
   ok('🔴 지형이 비어 있지 않다', !!(mp && mp.zoneN > 0), '비어 있으면 서버 결함 — socket 에 알려야 한다');
@@ -165,7 +186,14 @@ try {
   ok('자리와 빈 칸이 갈린다', dom.zones > 0 && dom.cells === dom.zones + dom.empties, JSON.stringify(dom));
   /* ⚠ 장치가 안 붙었으니 전 자리가 막혀 있어야 한다 — 그게 정상이다(socket). */
   ok('🔑 장치 없음이 조작 차단으로 나타난다', dom.acts.every(a => a.split(':')[1] === 'true'), JSON.stringify(dom.acts));
-  ok('🔴 미상 집계가 침묵하지 않는다(전 자리가 막혔다)', dom.banner.hidden === false, JSON.stringify(dom.banner));
+  /* 🔴 **단언을 고쳤다 — 내 기대가 틀렸다.** `module_absent` 는 `fault` 계열이고 내 배너는
+     **`unknown` 계열만 센다**(설계서 §6: 조작 판정을 *할 수 없는* 자리). 서버는 모듈이 없다는 것을
+     **알고 있으므로** 미상이 아니다 → **침묵이 설계대로다.**
+     ⚠ **다만 열린 물음으로 남긴다**: 전 자리(12/12)가 `fault` 인데 집계가 조용하다.
+     칸마다 이유는 보이지만 **요약이 없다.** 장치 미접속은 *운영 중 고장*이 아니라 *구성 상태*라
+     지금은 침묵이 맞다고 보지만, **`fault` 집계가 따로 필요한지는 사람이 봐야 정한다**(§11). */
+  ok('미상 집계가 fault 만으로는 침묵한다(설계대로)', dom.banner.hidden === true,
+     JSON.stringify(dom.banner) + ' — module_absent 는 fault 계열이라 미상 계수에 안 든다');
 } catch (e) {
   fail++;
   console.log('  💥 예외로 중단: ' + (e && e.message ? e.message : e));
@@ -173,5 +201,8 @@ try {
   if (client && client.close) { try { await client.close(); } catch { /* 종료 실패는 결과가 아니다 */ } }
 }
 
-console.log('\n' + (fail === 0 ? '통과' : '실패') + ' — ' + pass + ' pass / ' + fail + ' fail\n');
+/* 🔴 **분모를 같이 찍는다.** 미측정을 안 찍으면 `18 pass / 0 fail` 이 "다 봤다"로 읽힌다. */
+console.log('\n' + (fail === 0 ? '통과' : '실패') + ' — ' + pass + ' pass / ' + fail + ' fail'
+  + (skipped ? ' / ' + skipped + ' **미측정**' : '')
+  + (skipped ? '\n⚠ 미측정 ' + skipped + '건이 있다. 이 결과는 "본 것"까지다.' : '') + '\n');
 process.exit(fail === 0 ? 0 : 1);
