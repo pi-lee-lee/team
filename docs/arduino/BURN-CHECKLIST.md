@@ -75,8 +75,14 @@ SendMessage → monitor-engineer
 - [ ] 포트가 실제로 비었는지 확인:
 
 ```bash
-lsof /dev/cu.usbmodem21201        # 아무것도 안 나와야 한다
+PORT=$(arduino-cli board list | awk '/arduino:avr:uno/{print $1}')   # ← 이름을 박지 마라
+echo "$PORT"                      # 예: /dev/cu.usbmodem1101
+lsof "$PORT"                      # 아무것도 안 나와야 한다
 ```
+
+> ### 🔴 **포트 이름은 USB 재연결마다 바뀐다.** 실제로 `usbmodem21201` → `usbmodem1101` 로 바뀌었고
+> **monitor 의 탭이 그 때문에 죽었다**(2026-08-18 `07:22:37` · `포트 복구 실패 6회`).
+> **이름을 박아 두면 다음 재연결에서 조용히 막힌다** — 원장 §5.7 이 `SERVER_IP` 로 데인 것과 같은 형태다.
 
 ---
 
@@ -88,7 +94,7 @@ lsof /dev/cu.usbmodem21201        # 아무것도 안 나와야 한다
 arduino-cli board list
 ```
 
-포트가 `/dev/cu.usbmodem21201` 이 아니면 **아래 모든 명령의 포트를 바꿔라**(재연결로 바뀐다).
+**위 `$PORT` 를 아래 모든 명령에 쓴다.** 이름을 손으로 적지 마라 — 재연결마다 바뀐다.
 
 **빌드 → 업로드** (폴더명 == 스케치명 규칙 때문에 사본이 필요하다 · 원장 §4.2):
 
@@ -96,7 +102,7 @@ arduino-cli board list
 mkdir -p arduino/.burn/client
 cp 조별과제샘플/client.ino arduino/.burn/client/client.ino
 arduino-cli compile --fqbn arduino:avr:uno --output-dir arduino/.burn/out arduino/.burn/client
-arduino-cli upload -p /dev/cu.usbmodem21201 --fqbn arduino:avr:uno --input-dir arduino/.burn/out
+arduino-cli upload -p "$PORT" --fqbn arduino:avr:uno --input-dir arduino/.burn/out
 ```
 
 > `--input-dir` 로 **방금 빌드한 그것**을 올린다. 다시 빌드시키지 않는다 —
@@ -109,7 +115,7 @@ arduino-cli upload -p /dev/cu.usbmodem21201 --fqbn arduino:avr:uno --input-dir a
 플래시를 **다시 읽어서** 방금 올린 것과 **바이트로** 비교한다.
 
 ```bash
-avrdude -c arduino -p atmega328p -P /dev/cu.usbmodem21201 -b 115200 \
+avrdude -c arduino -p atmega328p -P "$PORT" -b 115200 \
         -U flash:r:arduino/.burn/chip.hex:i
 ```
 

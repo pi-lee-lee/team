@@ -328,6 +328,23 @@ int main() {
                                 "★ 거래는 **한 번**이다 (ACK 를 따로 보내지 않는다)");
   }
 
+  // ── [12j] 🔴 **게이트가 열려 있어도 ACK 은 즉시 나가지 않는다** (REQ-0185 ①) ──
+  //   이번 수정의 핵심이다. 예전에는 `sendAck` 이 `sendLine` 을 직접 불러
+  //   **슬롯 창을 안 보고 즉시 송신**했고, 그것이 수신 창의 하행과 겹쳐 프레임을 깼다(창 B 5건).
+  //   ⚠ **이 시험은 수정 전 판본에서 반드시 실패한다** — 그때는 게이트가 열려 있으면 나갔다.
+  //   ★ 나머지 회귀가 전부 통과해서 "거동이 안 바뀐 것처럼" 보였다. 그래서 이 시험이 필요하다.
+  printf("\n[12j] 게이트가 열려 있어도 ACK 은 즉시 나가지 않는다 (슬롯 규율)\n");
+  arm(nullptr);
+  ackqClear();
+  ok(!awaitingSendOk,           "게이트가 열린 상태 (예전이면 즉시 나갔다)");
+  {
+    const size_t before = wifi.sentLines.size();
+    feedDown("R,601,A1,u1,");
+    ok(wifi.sentLines.size() == before,
+       "★★ 전선에 아무것도 안 나갔다 — ACK 이 슬롯을 우회하지 않는다");
+    ok(ackqCount == 1,          "★★ 대신 큐에 담겼다 (배치가 자기 창에서 보낸다)");
+  }
+
   // ── [12h] 🔴 배치에 S 와 ACK 가 **한 거래**로 같이 담긴다 ──────────────────
   //   이것이 슬롯 설계의 핵심이다. 확인하지 않으면 "묶었다"가 주장으로만 남는다.
   printf("\n[12h] 배치 — S 프레임과 ACK 들이 한 거래에 함께 담긴다\n");
@@ -587,6 +604,52 @@ int main() {
     handleFrameLine(good);
     ok(cksumNg == 1,             "★ 정상 프레임은 올리지 않는다");
   }
+
+  // ── [24] 🔴 `[CNT]` 도 슬롯 규율을 지킨다 (REQ-0187 ②) ─────────────────────
+  //   이 줄이 **손실원이었다**: 142B 가 TX 링버퍼(64B)를 넘겨 블로킹하고,
+  //   그동안 `pumpSerialRaw()` 가 안 돌아 도착 중인 하행이 사라졌다.
+  //   창 B·C·D 에서 `[CKSUM NG]` 시각이 `[CNT]` 시각과 정합했다(monitor 전수 대조).
+  //   ⚠ **이 시험은 수정 전 판본에서 반드시 실패한다** — 그때는 창과 무관하게 찍었다.
+  printf("\n[24] [CNT] 가 수신 창에서는 안 나간다 (슬롯 규율을 진단 출력에도)\n");
+  arm(nullptr);
+  g_clockAutoAdvance = false;
+  g_millis = 200000;                            // ⚠ 주기(60s)를 확실히 넘긴 시각대로 옮긴다
+  slotStart = millis();
+  cntLastAt = millis() - CNT_PERIOD_MS - 1;     // ★ 주기는 이미 넘긴 상태
+  //   ⚠ 이 줄이 없으면 `cntTick` 이 **주기 검사에서 먼저 return** 해서
+  //     창 검사에 도달조차 안 한다 — 그러면 "안 찍혔다"가 엉뚱한 이유로 통과한다.
+  {
+    // 수신 창 한복판 — 여기서 찍으면 하행과 겹친다
+    g_millis += TX_WINDOW_MS + 100;
+    const uint32_t before = cntLastAt;
+    Serial.out.clear();
+    cntTick(millis());
+    ok(Serial.out.find("[CNT]") == std::string::npos,
+       "★★ 수신 창에서는 [CNT] 를 찍지 않는다 (미룬다)");
+    ok(cntLastAt == before,     "★ 주기 타이머도 안 건드린다 — 다음 창에서 찍힌다");
+  }
+  {
+    // 다음 슬롯의 송신 창으로 — 여기서는 찍혀야 한다
+    slotStart = millis();
+    cntLastAt = millis() - CNT_PERIOD_MS - 1;   // 주기 조건을 다시 만족시킨다
+    Serial.out.clear();
+    cntTick(millis());
+    ok(Serial.out.find("[CNT]") != std::string::npos,
+       "★★ 송신 창에서는 정상적으로 찍는다 (진단이 사라지지 않는다)");
+  }
+  {
+    // 오프라인이면 하행이 없으므로 창을 안 기다린다 — 진단이 통째로 멈추면 안 된다
+    netOnline = false;
+    slotStart = millis();
+    cntLastAt = millis() - CNT_PERIOD_MS - 1;
+    g_millis += TX_WINDOW_MS + 100;             // 수신 창이지만 오프라인이다
+    Serial.out.clear();
+    cntTick(millis());
+    ok(Serial.out.find("[CNT]") != std::string::npos,
+       "★★ 오프라인이면 창과 무관하게 찍는다 (링크가 죽어도 진단은 남는다)");
+    netOnline = true;
+  }
+  g_clockAutoAdvance = true;
 
   // ── [13] SEND FAIL 은 실패로 센다 — **원래 있던 구멍** ─────────────────────
   // 프롬프트까지 받고 페이로드도 썼는데 전송이 실패한 것이라 `busy` 와 전혀 다르다.

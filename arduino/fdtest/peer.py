@@ -10,7 +10,9 @@
   개입이므로 `arduino/INTERVENTIONS.md` 에 먼저 적고 monitor 에 알린 뒤에 돌려라.
 
 쓰는 법:
-    python3 arduino/fdtest/peer.py --port /dev/cu.usbmodem21201 --secs 60
+    PORT=$(arduino-cli board list | awk '/arduino:avr:uno/{print $1}')
+    python3 arduino/fdtest/peer.py --port "$PORT" --secs 60
+    # ⚠ 포트 이름을 박지 마라 — USB 재연결마다 바뀐다(21201 → 1101 로 바뀐 전례)
 """
 import argparse, sys, time
 
