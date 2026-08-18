@@ -548,17 +548,26 @@ try {
       console.log('  🔑 completion 이 지난 값 → ' + JSON.stringify(seq));
       ok('⑦ 서버가 응답했다', acks.length > 0, JSON.stringify(acks.map(m => m.type)));
       /* 🔑 **화면 문구**: socket 이 잡은 결함 — 차단봉을 열면 `"예약되었습니다"` 가 나가고 있었다. */
-      const msg = await evaluate(client, `(() => { const a = [...document.querySelectorAll('#messages .msg')]; return a.length ? a[a.length - 1].textContent.slice(0, 120) : null; })()`);
+      /* 🔴 **최신 메시지는 `a[0]` 이다.** `showMessage` 가 `insertBefore(box, firstChild)` 로 넣는다 —
+         ~~`a[a.length - 1]`~~ 을 읽어서 **가장 오래된 메시지**("서버에 연결되었습니다")를 집었고,
+         그것으로 *"성공 경로는 문구를 내지 않는다"* 라고 결론지어 **동료 둘에게 그대로 보고했다.**
+         🔑 원장 §5.21 과 **같은 결함**이다(하니스가 엉뚱한 메시지를 읽었다). 그때는 데모 시작 메시지였고
+         이번엔 접속 메시지다 — **둘 다 "그 자리에 늘 있는 오래된 줄"** 이다.
+         ⚠ 그래서 목록을 읽을 때는 **삽입 방향을 코드로 확인**하고, 가능하면 **내용으로 골라라**(⑤가 그렇게 한다). */
+      const msg = await evaluate(client, `(() => { const a = [...document.querySelectorAll('#messages .msg')]; return a.length ? a[0].textContent.slice(0, 140) : null; })()`);
       console.log('  🔑 화면 문구 → ' + JSON.stringify(msg));
       /* 🔴 **앞 판본은 "예약 문구가 아니다"를 단언했고 통과했다 — 문구가 *아예 없어서* 통과했다.**
          `clearCmdPending(rid, false)`(성공)는 문구를 내지 않는다(설계: 피드백은 자리 요약·모듈 값).
          🔑 **부정형 단언은 대상이 없을 때도 참이다** — 오늘 세 번째 헛통과 형태다.
          → 문구 경로는 **미측정**으로 내리고, **있어야 하는 것**을 규칙으로 잰다. */
-      if (msg && /예약되었습니다|예약이 취소/.test(msg)) {
-        ok('⑦ 🔴 차단봉 응답이 예약 문구가 아니다', false, JSON.stringify(msg));
-      } else {
-        skip('⑦ 차단봉 성공 문구', '성공 경로는 문구를 내지 않는다(설계) — "예약 문구" 회귀는 이 경로로 못 잰다. 마지막 메시지: ' + JSON.stringify(msg));
-      }
+      /* 🔴 **정정**: 앞 판본은 *"성공 경로는 문구를 내지 않는다"* 로 미측정 처리했다. **틀렸다** —
+         목록의 **오래된 쪽**을 읽고 있었다(위 주석). 문구는 나온다:
+         `"E1 · 차단봉 열기 — 적용되었습니다 (실제 반영 여부는 다음 스냅샷으로 확인합니다)"`.
+         🔑 그래서 **긍정형으로 단언한다** — 그 자리를 가리키고 그 조작을 이름으로 부르는가.
+         부정형(*"예약 문구가 아니다"*)만 두면 **문구가 사라져도 초록이다.** */
+      ok('⑦ 🔴 차단봉 응답이 그 조작을 이름으로 말한다',
+         !!(msg && msg.includes(gate.zone) && /차단봉/.test(msg) && !/예약되었습니다|예약이 취소/.test(msg)),
+         JSON.stringify(msg));
       /* 🔑 대신 **자리 요약이 `completion` 을 반영하는가**를 잰다 — 이것이 사용자가 실제로 읽는 것이다.
          값을 박지 않는다: 넷 각각이 **서로 다른 문구**로 나오고 **`unknown` 만 자리 이름**이면 된다. */
       const sumCmp = await (async () => {
