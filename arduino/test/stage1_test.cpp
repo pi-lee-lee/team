@@ -1172,6 +1172,55 @@ int main() {
     ok(!regPending,         "★★ 체크섬이 틀린 Q 는 무시한다 (잡음 방어)");
   }
 
+  // ── [34] 🔴 축 3(모듈 표) — **거동 변화 0 을 바이트로 확인한다** ──────────
+  //
+  // ⚠ **PASS 수는 리팩터링이 무해했다는 증거가 아니다.** 오늘 두 번 확인했다:
+  //   형식을 바꿨는데 안 깨졌고([31] 이 필요했다), 배선을 넣었더니 깨졌다([12d] 가 그 증거였다).
+  //   🔑 **기대가 "아무 일도 안 일어난다"인 축은 바이트로 못 박지 않으면 검증이 없다.**
+  printf("\n[34] 모듈 표 도입 — 거동 변화 0 (바이트 대조)\n");
+  {
+    ok(moduleCount() == SLOT_N,
+                            "★★ moduleCount() == SLOT_N — 표와 옛 상수가 같은 값이다");
+    ok(MODULE_N == 10,      "★ 표 길이가 10 이다");
+
+    // ① 이름이 옛 계산식과 한 글자도 다르지 않은가
+    static const char* EXPECT[10] =
+      {"A1","A2","A3","A4","A5","B1","B2","B3","B4","B5"};
+    bool allName = true;
+    for (uint8_t i = 0; i < MODULE_N; i++) {
+      char nm[4]; moduleNameOf(i, nm);
+      if (strcmp(nm, EXPECT[i]) != 0) { allName = false;
+        printf("      🔴 i=%u: 표 '%s' 대 기대 '%s'\n", i, nm, EXPECT[i]); }
+    }
+    ok(allName,             "★★ 열 개 이름이 옛 계산식과 전부 같다");
+
+    // ② 핀이 SLOT_PIN 과 같은가 — **표와 핀 표가 갈리면 엉뚱한 칸을 읽는다**
+    bool allPin = true;
+    for (uint8_t i = 0; i < MODULE_N; i++)
+      if (pgm_read_byte(&MODULE_TABLE[i].pin) != slotPin(i)) { allPin = false;
+        printf("      🔴 i=%u: 표 핀 %u 대 SLOT_PIN %u\n", i,
+               pgm_read_byte(&MODULE_TABLE[i].pin), slotPin(i)); }
+    ok(allPin,              "★★ 표의 핀이 SLOT_PIN 과 전부 같다 (이행 중 두 표가 공존한다)");
+
+    // ③ 🔴 **전선에 나가는 바이트가 그대로인가** — 이 축의 최종 판정이다
+    wifi.refusePrompt = false;
+    occMask = 0x346; resMask = 0; testArmed = false;
+    seqNo = 3; g_millis = 389000;
+    char sbuf[64];
+    buildStatus(sbuf, sizeof sbuf);
+    printf("      S = %s\n", sbuf);
+    ok(strcmp(sbuf, "S,3,18B,000,389,P1,48") == 0,
+                            "★★ S 프레임이 표 도입 전과 **바이트 단위로** 같다");
+
+    char rbuf[BATCH_CAP + 1];
+    uint16_t rn = buildRegistration(rbuf, sizeof rbuf);
+    printf("      등록 %uB\n", (unsigned)rn);
+    ok(rn == 118,           "★★ 등록이 118B — 표 도입 전과 같다");
+    ok(strncmp(rbuf, "D,*,6,", 6) == 0,
+                            "★★ 배출률 선언이 맨 앞이고 값이 6 이다");
+    occMask = 0;
+  }
+
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }

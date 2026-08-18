@@ -2030,10 +2030,9 @@ static bool sendLine(const char* line) {
 // ─────────────────────────────────────────────────────────────────────────
 // S — 상태 프레임 (§2.4)
 // ─────────────────────────────────────────────────────────────────────────
-static void bitsToStr(uint16_t mask, char* out11) {
-  for (uint8_t i = 0; i < SLOT_N; i++) out11[i] = ((mask >> i) & 1) ? '1' : '0';
-  out11[SLOT_N] = '\0';
-}
+// ✏️ 2026-08-18 — `bitsToStr`(10진 1칸=1비트)를 **지웠다.** `bitsToHex` 로 전부 옮겼고
+//   호출부가 하나도 안 남았다. 🔴 남겨 두면 위험하다: 그 함수는 `SLOT_N`(컴파일 상수)을 돌고
+//   새 함수는 `n`(모듈 수)을 받는다 — **나중에 누가 옆에 있는 쪽을 부르면 유동화한 날 조용히 틀린다.**
 
 // ─────────────────────────────────────────────────────────────────────────
 // 🔴 자리 비트열의 **hex 인코딩** (socket 명세 §5 · 2026-08-18 확정)
@@ -2062,7 +2061,7 @@ static void bitsToStr(uint16_t mask, char* out11) {
 //   길이도 체크섬도 통과하고 자리만 어긋나는 그 부류다.
 // ⚠ 그리고 **`n` 은 입력+출력 합이다**(명세 위험 다섯째) — 차단봉·안내등도 비트열에 들어간다.
 //   ACK 은 "받았다"이지 "됐다"가 아니므로, **도달 확인은 다음 `S` 의 마스크 변화로 한다.**
-static uint8_t moduleCount(void) { return SLOT_N; }
+static uint8_t moduleCount(void);   // ★ 표가 원천이다 — 정의는 MODULE_TABLE 뒤에 있다
 
 // ─────────────────────────────────────────────────────────────────────────
 // 🔴 등록(`D`) — 접속하면 자기가 무엇을 가졌는지 먼저 알린다 (socket 명세 §5)
@@ -2106,11 +2105,45 @@ static bool     regPending  = false;   // 다음 송신 창에 `D` 를 보내야
 static uint16_t regSends    = 0;       // 보낸 횟수(재전송 포함) — 진단용
 static void markNeedsRegistration(void) { regPending = true; }
 
-// 슬롯 i 의 모듈 명칭. 지금은 A1..A5 · B1..B5 로 고정이다.
-//   🔮 유동화하면 이 함수가 등록표를 읽게 된다 — **`moduleCount()` 와 짝이다.**
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴 **모듈 표 — 자리 유동화의 단일 원천** (2026-08-18 · 축 3)
+//
+// 왜: 이름·종류·핀이 **세 곳에 흩어져** 있었다. 모듈을 하나 더 달려면 세 곳을 맞춰 고쳐야 하고
+//     **하나만 어긋나도 길이·체크섬은 통과하고 자리만 틀린다** — 오늘 `occMask` 에서 잡은 그 부류다.
+//     표로 모으면 **한 줄만 고친다.**
+//
+// ⚠ **이 단계의 기대는 "거동 변화 0"** 이다(PLAN-axes 축 3). 값이 하나라도 달라지면 그것이 결함이다.
+// ⚠ **표를 런타임에 바꾸지 않는다.** N:1 도 지금 안 만든다 —
+//    🔑 **쓰이지 않는 일반화는 검증되지 않은 코드다**(socket 의 `cells` 규율과 같다).
+struct ModuleDef {
+  char    name[3];      // "A1" + NUL — 사람이 읽는 **명칭**이지 고유 키가 아니다
+  char    kind[3];      // KIND_* 두 글자. 첫 글자 O = 명령을 받는다 · I = 관측 전용
+  uint8_t pin;
+};
+static const ModuleDef MODULE_TABLE[] PROGMEM = {
+  {"A1", KIND_PARK_SENSOR,  2}, {"A2", KIND_PARK_SENSOR,  3}, {"A3", KIND_PARK_SENSOR,  4},
+  {"A4", KIND_PARK_SENSOR,  5}, {"A5", KIND_PARK_SENSOR,  6},
+  {"B1", KIND_PARK_SENSOR,  9}, {"B2", KIND_PARK_SENSOR, 10}, {"B3", KIND_PARK_SENSOR, 11},
+  {"B4", KIND_PARK_SENSOR, 12}, {"B5", KIND_PARK_SENSOR, A0},
+};
+static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_TABLE[0]));
+
+// 🔴 **상한을 컴파일 시점에 박는다.** `occMask`·`resMask`·`ovrActive` 가 전부 `uint16_t` 다.
+//   표에 17번째가 들어오는 순간 `1u << 16` 이 **아무 일도 안 하고** 그 자리가 조용히 사라진다 —
+//   **길이도 체크섬도 통과한다.** 표를 만든 이득("한 줄만 고치면 된다")이
+//   그대로 결함의 배달 경로가 되는 자리라, 여기서 빌드를 깨는 것이 유일한 방어다.
+static_assert(MODULE_N <= 16,
+              "마스크가 uint16_t 다 — 17번째 모듈은 조용히 사라진다. 마스크 폭을 먼저 늘려라");
+// ⚠ 유동화 이행 중에는 둘이 같아야 한다. 달라지면 핀 표·초기값이 어긋난 것이다.
+static_assert(MODULE_N == SLOT_N,
+              "이행 중이다 — 표와 SLOT_N 이 갈리면 SLOT_PIN·SLOT_SRC_DEFAULT 가 안 맞는다");
+
+// ★ **표 하나가 `n` 의 원천이다.** 폭·뒤집기 축·등록 줄 수가 전부 이 값을 따라간다.
+static uint8_t moduleCount(void) { return MODULE_N; }
+
 static void moduleNameOf(uint8_t i, char* out4) {
-  out4[0] = (i < 5) ? 'A' : 'B';
-  out4[1] = (char)('1' + (i % 5));
+  out4[0] = (char)pgm_read_byte(&MODULE_TABLE[i].name[0]);
+  out4[1] = (char)pgm_read_byte(&MODULE_TABLE[i].name[1]);
   out4[2] = '\0';
 }
 
@@ -2118,7 +2151,11 @@ static void moduleNameOf(uint8_t i, char* out4) {
 //   ⚠ **출력 모듈도 이 비트열에 들어가야 한다**(명세 위험 다섯째) — 차단봉·안내등이 생기면
 //     여기서 종류를 돌려주고 `moduleCount()` 가 그만큼 커진다. **`n` 은 입력+출력 합이다.**
 //   🔑 이유: ACK 은 "받았다"이지 "됐다"가 아니다. **도달 확인은 다음 `S` 의 마스크 변화로 한다.**
-static const char* moduleKindOf(uint8_t i) { (void)i; return KIND_PARK_SENSOR; }
+static void moduleKindOf(uint8_t i, char* out3) {
+  out3[0] = (char)pgm_read_byte(&MODULE_TABLE[i].kind[0]);
+  out3[1] = (char)pgm_read_byte(&MODULE_TABLE[i].kind[1]);
+  out3[2] = '\0';
+}
 
 // 등록 배치를 만든다. 성공하면 길이, 실패하면 0.
 //   ⚠ **`D` 여러 줄 + `S` 는 상한을 넘는다.** 그래서 명세가 *"첫 슬롯은 `D` 만"* 으로 정했다.
@@ -2140,7 +2177,9 @@ static uint16_t buildRegistration(char* buf, uint16_t cap) {
     char nm[4];
     moduleNameOf(i, nm);
     char line[24];
-    int lw = snprintf(line, sizeof line, "D,%s,%s,", nm, moduleKindOf(i));
+    char kd[3];
+    moduleKindOf(i, kd);
+    int lw = snprintf(line, sizeof line, "D,%s,%s,", nm, kd);
     if (lw <= 0 || (unsigned)lw + 3 > sizeof line) return 0;
     appendChecksum(line, (uint8_t)lw);
     const uint16_t ll = (uint16_t)strlen(line);
