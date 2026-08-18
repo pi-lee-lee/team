@@ -89,7 +89,10 @@ static void arm(const char* refuse /* nullptr 이면 정상 프롬프트 */) {
   ackqDrops      = 0;
   ackqStale      = 0;        // ★ REQ-0204
   ackqClear();
-  ssOverflows    = 0;        // ★ REQ-0167 — 여기도 같이 늘린다(위 주석이 시키는 대로)
+  ssOverflows    = 0;
+  sendOkMatch    = 0;        // ★ REQ-0218
+  sendOkByStream = 0;
+  pendDrops      = 0;        // ★ REQ-0167 — 여기도 같이 늘린다(위 주석이 시키는 대로)
   slotSent       = false;
   cksumNg        = 0;        // ★ REQ-0174
   rxLen          = 0;
@@ -685,6 +688,46 @@ int main() {
     sendSlotBatch(&acks, &bytes);             // 배치가 만들려다 캐시에 없음을 발견한다
     ok(ackqStale == 1,          "★★ 캐시 밀림이 ackstale 에 계상된다");
     ok(ackqDrops == 0,          "★★ 큐 넘침은 0 이다 (반대 방향도 안 섞인다)");
+  }
+
+  // ── [26] 🔴 `SEND OK` 를 **바이트 흐름**에서 잡는다 (REQ-0218 ②) ──────────
+  //   줄 경로는 세 곳에서 놓친다: ① pendLine 이 두 번째 줄을 버린다 ② 접두 비교라
+  //   앞에 뭐가 붙으면 실패 ③ RX_CAP 초과 줄은 통째로 버려진다.
+  //   **셋 다 게이트가 안 풀려 T2 8초 → 링크 재수립으로 끝난다.**
+  //   ⚠ 수정 전 판본에서는 ①②가 실제로 실패한다 — 그것이 이 시험의 존재 이유다.
+  printf("\n[26] SEND OK 를 바이트 흐름에서 잡는다 (줄 경로가 놓치는 것들)\n");
+
+  // ① 앞에 다른 바이트가 붙어도 잡는다 (접두 비교로는 실패하는 형태)
+  arm(nullptr);
+  sendLine(FRAME);
+  ok(awaitingSendOk,            "게이트가 닫힌 상태");
+  {
+    const char* glued = "\xA6,12382,P1,39SEND OK";   // 페이로드 에코에 붙어 온 경우
+    for (const char* q = glued; *q; ++q) feedRxChar(*q);
+    ok(!awaitingSendOk,         "★★ 앞에 붙어 와도 게이트가 풀린다 (접두 비교로는 못 잡는다)");
+    ok(sendOkByStream == 1,     "★ okstream 에 계상된다 — 줄 경로가 놓치던 양이 보인다");
+  }
+
+  // ② 송신 중(inSend)이라 pendLine 이 버리는 두 번째 줄이어도 잡는다
+  arm(nullptr);
+  sendLine(FRAME);
+  ok(awaitingSendOk,            "게이트가 닫힌 상태");
+  {
+    inSend = true;                       // 송신 중 — 줄은 pendLine 으로 간다
+    for (const char* q = "echo-line-1\n"; *q; ++q) feedRxChar(*q);   // 첫 줄이 pendLine 을 채운다
+    ok(pendReady,               "첫 줄이 pendLine 을 차지했다");
+    for (const char* q = "SEND OK\n"; *q; ++q) feedRxChar(*q);       // 두 번째 줄 → 버려진다
+    ok(!awaitingSendOk,         "★★ 버려지는 줄이어도 바이트 흐름이 잡는다 (T2 8초를 막는다)");
+    inSend = false;
+  }
+
+  // ③ 기다리지 않을 때는 안 찾는다 (오탐 창을 좁힌다)
+  arm(nullptr);
+  ok(!awaitingSendOk,           "게이트가 열린 상태");
+  {
+    const uint16_t before = sendOkByStream;
+    for (const char* q = "SEND OK\n"; *q; ++q) feedRxChar(*q);
+    ok(sendOkByStream == before, "★ 기다리지 않을 때는 매칭하지 않는다 (오탐 축소)");
   }
 
   // ── [13] SEND FAIL 은 실패로 센다 — **원래 있던 구멍** ─────────────────────

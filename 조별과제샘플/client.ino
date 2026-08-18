@@ -410,6 +410,17 @@ static bool    pendReady = false;
 //   ⚠ 읽으면 지워지므로 **하한**이다(여러 번 넘쳐도 확인 지점 사이에서는 1로 뭉친다).
 //   ⚠ `rxOverflow` 와 **다른 것**이다: 저건 "줄이 너무 길다", 이건 "우리가 늦게 꺼냈다".
 static uint16_t ssOverflows = 0;
+// ★ REQ-0218 ② — 아래 셋은 `feedRxChar()` 보다 **앞에 있어야 한다**(그 안에서 쓴다).
+//   뜻과 설계 근거는 원래 자리(3단 게이트 블록)에 그대로 있다.
+static bool     awaitingSendOk = false;   // 앞 전송의 SEND OK 를 아직 못 봤다
+static bool     sendOkT1Passed = false;   // 이 라운드에서 T1 을 넘어 `okto` 를 이미 셌다
+// ★ REQ-0218 ② — `SEND OK` 바이트 흐름 매칭 상태(1B)와 그 경로로 잡은 수.
+//   `okstream` 이 크면 **줄 경로로는 놓치고 있었다는 뜻**이다 — 이 수정의 효과가 그 칸에 보인다.
+static uint8_t  sendOkMatch = 0;
+static uint16_t sendOkByStream = 0;
+// ★ monitor 요청 — `inSend` 중 `pendLine` 이 가득 차 **버린 줄 수.**
+//   **버린 줄은 로그에 안 나오므로 시리얼로는 (가)/(나)를 못 가른다.** 이 칸이 그것을 가른다.
+static uint16_t pendDrops = 0;
 
 // 🔴 2026-08-17 (REQ-0174 ①) — **줄의 첫 바이트가 도착한 시점의 슬롯 오프셋.**
 //
@@ -962,7 +973,23 @@ static void feedRxChar(char c) {
       // ★ REQ-0174 — 줄과 **그 줄의 도착 오프셋**을 같이 미룬다. 여기서 오프셋을 안 들고 가면
       //   나중에 처리 시각으로 계산돼 위험 구간이 통째로 보이지 않는다(위 `rxLineOff` 주석).
       if (!pendReady) { memcpy(pendLine, rxLine, (size_t)n + 1); pendLineOff = rxLineOff; pendReady = true; }
-      // 두 번째 줄은 버린다. 서버가 재전송하므로(§7.3) 잃지 않는다
+      else {
+        // 🔴 2026-08-18 (monitor 요청) — **버린 줄을 센다.**
+        //   monitor 는 (가)"우리가 페이로드를 먼저 보냈다" 와 (나)"pendLine 이 첫 줄을 미뤄
+        //   순서가 뒤집혔다" 를 **시리얼로 구분할 수 없다** — 버린 줄은 출력이 안 되기 때문이다.
+        //   **이 계수기 하나가 그것을 가른다: (가)면 0, (나)면 T2 마다 오른다.**
+        //
+        // ⚠ 이 칸은 **바이트 흐름 매칭(REQ-0218 ②)과 독립이다.** 줄 조립 경로는 그대로이므로
+        //   **매칭이 `SEND OK` 를 구해도 이 수는 오른다.**
+        //   🔑 그래서 **고치면서 동시에 원인을 확정할 수 있다** — 읽는 법:
+        //     `okstream > 0` **그리고** `penddrop > 0`  →  **(나) 확정**
+        //        (버려질 뻔한 `SEND OK` 를 바이트 매칭이 구했다는 뜻)
+        //     `okstream == 0`                          →  매칭이 할 일이 없었다 → **(가) 쪽**
+        //
+        // ⚠ 옛 주석 *"서버가 재전송하므로 잃지 않는다"* 는 **데이터 줄에만 참이다.**
+        //   `SEND OK` 는 ESP 가 한 번만 보내는 제어 응답이라 **재전송이 없다.**
+        if (pendDrops < 65535) pendDrops++;
+      }
     } else {
       memcpy(workLine, rxLine, (size_t)n + 1);
       workLineOff = rxLineOff;
@@ -970,6 +997,34 @@ static void feedRxChar(char c) {
     }
     return;
   }
+  // 🔴 2026-08-18 (REQ-0218 ②) — **`SEND OK` 를 줄이 아니라 바이트 흐름에서 찾는다.**
+  //
+  // 줄 단위로 찾으면 세 곳에서 놓친다:
+  //   ① `inSend` 중 완성된 **두 번째 줄부터는 버려진다**(`pendLine` 은 깊이 1)
+  //      ⚠ 그 자리의 주석 *"서버가 재전송하므로 잃지 않는다"* 는 **`SEND OK` 에는 안 통한다** —
+  //        **ESP 가 한 번만 보내는 제어 응답**이라 버려지면 영영 안 온다
+  //   ② 앞에 다른 바이트가 붙어 한 줄이 되면 `strncmp` **접두 비교**가 실패한다
+  //   ③ 줄이 `RX_CAP` 을 넘으면 통째로 버려진다
+  // **셋 다 "게이트가 안 풀림 → T2 8초 → 링크 재수립"으로 끝난다.**
+  //
+  // ★ 슬라이딩 매칭은 **상태 1바이트**면 된다. 줄 조립과 무관하므로 위 셋을 전부 지난다.
+  // ⚠ `awaitingSendOk` 일 때만 찾는다 — **기다리지 않을 때는 찾을 이유가 없고**,
+  //   그만큼 하행 페이로드에 우연히 `SEND OK` 가 섞여 생기는 오탐 창이 좁아진다.
+  if (awaitingSendOk) {
+    static const char SENDOK[] = "SEND OK";
+    if (c == SENDOK[sendOkMatch]) {
+      if (++sendOkMatch == 7) {                    // 찾았다
+        sendOkMatch = 0;
+        awaitingSendOk = false; sendOkT1Passed = false;
+        if (sendOkByStream < 65535) sendOkByStream++;
+      }
+    } else {
+      sendOkMatch = (c == SENDOK[0]) ? 1 : 0;      // 겹침 재시작(`SSEND OK` 같은 경우)
+    }
+  } else {
+    sendOkMatch = 0;
+  }
+
   if (c == '\r') return;                                   // AT 응답의 CR. 명세는 CR 을 보내지 않는다
   if (rxLen >= RX_CAP - 1) { rxOverflow = true; return; }  // 넘치는 줄은 통째로 버린다
   // ★ REQ-0174 — **줄의 첫 바이트**에서 슬롯 오프셋을 확정한다. 이것이 진짜 도착 시각이다.
@@ -1295,9 +1350,10 @@ static uint16_t      promptResyncs = 0;
 //
 // ⚠ **비블로킹이어야 한다.** 여기서 `SEND OK` 를 눌러 기다리면 하트비트(1Hz)와 하행(`+IPD`)
 //   처리가 통째로 밀린다. 그래서 "기다린다"가 아니라 **"아직이면 이번 주기를 건너뛴다"** 다.
-static bool          awaitingSendOk  = false;  // 앞 전송의 SEND OK 를 아직 못 봤다
+// ⚠ `awaitingSendOk`·`sendOkT1Passed` 의 **선언은 파일 앞쪽으로 옮겼다**(REQ-0218) —
+//   `feedRxChar()` 가 `SEND OK` 를 바이트 흐름에서 잡으려면 그보다 앞에 있어야 한다.
+//   **뜻과 주석은 여기 그대로 둔다.**   ↓ 아래 설명은 옮긴 변수에 대한 것이다
 static uint32_t      sendOkWaitFrom  = 0;      // 그 기다림이 시작된 시각
-static bool          sendOkT1Passed  = false;  // 이 라운드에서 T1 을 이미 넘어 `okto` 를 셌다
 //   ⚠ 없으면 T1~T2 구간의 **매 주기마다** `okto` 가 오른다 — 사건 수가 아니라 증상 수가 되어
 //     monitor 계수와 정의가 어긋난다(원장 §8.2-1 이 `espResets` 에서 겪은 그것).
 // 안전망: `SEND OK` 가 **영영 안 올 수도 있다.** AT 펌웨어 판본에 따라 안 주거나,
@@ -1538,6 +1594,10 @@ static void cntTick(uint32_t now) {
   Serial.print(F(" ssovf="));        Serial.print(ssOverflows);
   // ★ REQ-0174 — 체크섬 불일치(하행 프레임 파괴). 서버 계수로는 안 보이는 손실이다.
   Serial.print(F(" cksumng="));      Serial.print(cksumNg);
+  // ★ REQ-0218 — 바이트 흐름으로 잡은 `SEND OK` 수. **줄 경로가 놓치던 양**이다.
+  Serial.print(F(" okstream="));     Serial.print(sendOkByStream);
+  // ★ monitor 요청 — `okstream` 과 **짝으로 읽는다**(위 feedRxChar 주석의 판정표).
+  Serial.print(F(" penddrop="));     Serial.print(pendDrops);
   Serial.print(F(" skip="));         Serial.print(sendSkips);
   Serial.print(F(" online="));       Serial.println(netOnline ? 1 : 0);
 }
@@ -1732,8 +1792,25 @@ static bool sendPayload(const char* line, uint16_t len) {
   uint8_t pr = waitForPrompt();
   bool ok = (pr == PROMPT_OK);
   if (ok) {
-    wifi.write((const uint8_t*)line, (size_t)len);
+    // 🔴 2026-08-18 (REQ-0218 ①) — **쓰면서 링버퍼를 비운다.**
+    //
+    // 왜: 예전에는 `len` 바이트를 **통째로** 쓰고 그 사이 아무것도 안 꺼냈다.
+    //   그동안 ESP 는 **에코를 되돌려 보낸다.** `SoftwareSerial` 수신 링버퍼는 **64B** 인데
+    //   우리가 1B 쓰는 동안 ESP 도 1B 보내므로(같은 보율) **64B 를 쓰면 버퍼가 정확히 찬다.**
+    //   → 그 뒤 도착분이 **조용히 사라지고, 그 뒤에 오는 `SEND OK` 도 같이 사라진다.**
+    //
+    // ★ 실측 지문(REQ-0218): `[AT]` 줄 길이가 **63 에 20건 몰려 있다.** `63 + LF = 64B` —
+    //   **링버퍼 크기와 정확히 같다.** `dbgLine()` 은 자르지 않으므로 로그 문제가 아니다.
+    //   그리고 선언 크기 **48B 이상에서 `SEND OK` 손실률이 2~4배**로 올랐다(세 창 동일 방향).
+    //
+    // ⚠ **왜 16바이트마다인가**: 최악에도 링버퍼에 16B 만 쌓인다 → **64B 대비 4배 여유.**
+    //   더 촘촘히 하면 오버헤드만 늘고, 더 성기면 여유가 준다.
+    for (uint16_t i = 0; i < len; i++) {
+      wifi.write((uint8_t)line[i]);
+      if ((i & 0x0F) == 0x0F) pumpSerialRaw();     // 16B 마다 꺼낸다
+    }
     wifi.write('\n');
+    pumpSerialRaw();                                // 마지막 조각도 비운다
     // ★ 2단계: 여기서부터 ESP 가 **실제로 WiFi 로 보내는 중**이다. 그 끝을 알려주는 것이
     //   `SEND OK` 다. 추측(80ms) 대신 그 신호를 기다린다 — 단, 비블로킹으로.
     awaitingSendOk = true;
