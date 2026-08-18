@@ -204,7 +204,9 @@ static bool       DOWN_IMMEDIATE     = false;
 // 🔴 **유입 = 배출이면 한 번만 밀려도 영구히 못 따라잡는다**(ρ=1). 그래서 여유가 필수다.
 // ⚠ **실측이 이 값을 더 강하게 만든다**: 연타 구간 `ack=` 분포가 `{0:133, 3:1, 8:7}` 이고
 //   8짜리 대부분이 미전송이었다 — **부하에서 배출률이 6 밑으로 떨어진다. 4 를 올리지 마라.**
-static const int  DEV_ACK_DRAIN_PER_SLOT = 6;                          // arduino 설계 보장
+static const int  DEV_ACK_DRAIN_PER_SLOT = 6;   // arduino 확정 · REQ-0206
+// ⚠ monitor 실측 8 은 **조건부다**(S 가 짧고 rid 3자리일 때만). tmask 가 붙거나
+//    rid 5자리면 6 으로 떨어진다 → **설계 보장은 6.** 실측을 설계값으로 승격시키지 않는다.
 static const int  DOWN_BATCH_MAX_N = (2 * DEV_ACK_DRAIN_PER_SLOT) / 3; // = 4 · 리터럴 아님
 
 
