@@ -928,6 +928,50 @@ int main() {
     ok(linelen < 300,      "★★ [CNT] 줄이 300B 미만이다 (송신 창 여유 안)");
   }
 
+  // ── [29] 🔴 출력 **도중** 계수기가 늘어도 불가능한 값이 안 나온다 ──────────
+  //
+  // `cntTick` 이 줄을 찍는 중간에 `pumpSerialRaw()` 가 돈다. 그때 `awaitingSendOk` 가
+  // true 면(=CIPSEND 직후의 **정상** 상태) 바이트 매처가 `SEND OK` 를 잡아 계수기가 는다.
+  // **먼저 찍힌 `okstream` 은 옛 값, 나중 찍힌 `bigokst` 는 새 값** → `bigokst > okstream`.
+  // ⚠ **시험 [28] 은 이걸 못 잡는다** — 출력 중에 바이트를 안 먹이기 때문이다.
+  printf("\n[29] 출력 도중 계수기가 늘어도 bigokst > okstream 이 안 나온다\n");
+  {
+    sendOkByStream = 5; okStreamBig = 5; okLostByLine = 0; okLostBig = 0;
+    awaitingSendOk = true; sendOkMatch = 0;         // 정상 상태를 만든다
+    curTxLen = 100;                                  // 큰 대역
+    wifi.deliver("SEND OK\r\n");                    // ⚠ 출력 중 pump 가 이걸 읽는다
+
+    size_t m3 = Serial.out.size();
+    g_millis += 60001;
+    cntTick(millis());
+    std::string f3 = Serial.out.substr(m3);
+
+    auto fieldOf = [&](const char* key) -> long {
+      size_t k = f3.find(key);
+      if (k == std::string::npos) return -1;
+      return strtol(f3.c_str() + k + strlen(key), nullptr, 10);
+    };
+    long okst = fieldOf(" okstream=");
+    long bigo = fieldOf(" bigokst=");
+    ok(okst >= 0 && bigo >= 0 && bigo <= okst,
+                            "★★ bigokst <= okstream — 한 시점의 스냅샷으로 찍힌다");
+
+    // 🔴 **줄 무결성** — `[CNT]` 한가운데로 다른 출력이 끼면 monitor 의 파서가 깨진다.
+    //   실제로 그렇게 나왔었다: `… pendfill=0[AT] "SEND OK" (7)⏎ bigfill=0 …`
+    //   **계측기를 고치려다 계측기를 깬 꼴**이라 검사로 박는다.
+    size_t c1 = f3.find("[CNT]");
+    size_t c2 = f3.find('\n', c1);
+    std::string cntline = (c1 != std::string::npos && c2 != std::string::npos)
+                            ? f3.substr(c1, c2 - c1) : std::string();
+    ok(!cntline.empty() && cntline.find("[AT]") == std::string::npos,
+                            "★★ [CNT] 줄 한가운데에 다른 출력이 안 낀다");
+    ok(cntline.find("online=") != std::string::npos,
+                            "★★ 한 줄 안에 마지막 칸까지 다 있다 (중간에 안 잘린다)");
+    ok(fieldOf(" oklost=") >= 0,
+                            "★ oklost 칸이 나간다 (대책 ②의 진짜 분자)");
+    awaitingSendOk = false;
+  }
+
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }

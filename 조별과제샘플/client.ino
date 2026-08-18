@@ -442,6 +442,11 @@ static uint8_t  curTxLen     = 0;
 static uint16_t pendFillsBig = 0;   // curTxLen >= 64 인 동안 담은 수
 static uint16_t pendDropsBig = 0;   // curTxLen >= 64 인 동안 버린 수
 static uint16_t okStreamBig  = 0;   // curTxLen >= 64 인 동안 바이트매칭이 구한 수
+// 🔴 **대책 ②(바이트 매칭)의 진짜 분자.** `okstream` 이 아니다 — 위 주석 참고.
+//   `oklost > 0` 이면 **줄 경로만 있었을 때 실제로 잃었을 SEND OK 가 있었다**는 뜻이고,
+//   그것이 곧 T2 였다. **이 칸이 0 이면 대책 ②는 이 창에서 한 일이 없다.**
+static uint16_t okLostByLine = 0;
+static uint16_t okLostBig    = 0;
 static const uint8_t RXBUF_THRESHOLD = 64;   // = _SS_MAX_RX_BUFF. 기전 경계이지 표본 기준이 아니다
 
 // 🔴 2026-08-17 (REQ-0174 ①) — **줄의 첫 바이트가 도착한 시점의 슬롯 오프셋.**
@@ -1016,6 +1021,19 @@ static void feedRxChar(char c) {
         //
         // ⚠ 옛 주석 *"서버가 재전송하므로 잃지 않는다"* 는 **데이터 줄에만 참이다.**
         //   `SEND OK` 는 ESP 가 한 번만 보내는 제어 응답이라 **재전송이 없다.**
+        // 🔴 2026-08-18 정정 — **`okstream` 은 "구조"를 못 센다.**
+        //   바이트 매처는 7번째 글자에서 발화한다 — **줄이 완성되기 전이다.**
+        //   즉 줄 경로와의 경주에서 **항상 이긴다.** 그래서 `okstream` 은
+        //   "줄 경로가 놓쳤을 것"이 아니라 **탐지된 SEND OK 총수**다.
+        //   ⚠ 그 결과 아래 판정표의 `okstream > 0 → (나)` 는 **뭐든 성공하면 참**이라 쓸 수 없다.
+        //
+        // ★ **진짜 분자는 이것이다: 버려진 줄 안에 `SEND OK` 가 있었나.**
+        //   여기서만 "줄 경로였으면 영영 잃었을 SEND OK" 를 셀 수 있다 —
+        //   `rxLine` 에 완성된 줄이 아직 그대로 있다.
+        if (strstr(rxLine, "SEND OK") != NULL) {
+          if (okLostByLine < 65535) okLostByLine++;
+          if (curTxLen >= RXBUF_THRESHOLD && okLostBig < 65535) okLostBig++;
+        }
         if (pendDrops < 65535) pendDrops++;
         if (curTxLen >= RXBUF_THRESHOLD && pendDropsBig < 65535) pendDropsBig++;
       }
@@ -1625,19 +1643,43 @@ static void cntTick(uint32_t now) {
   // ★ REQ-0174 — 체크섬 불일치(하행 프레임 파괴). 서버 계수로는 안 보이는 손실이다.
   Serial.print(F(" cksumng="));      Serial.print(cksumNg);
   // ★ REQ-0218 — 바이트 흐름으로 잡은 `SEND OK` 수. **줄 경로가 놓치던 양**이다.
-  Serial.print(F(" okstream="));     Serial.print(sendOkByStream);
+  // 🔴 2026-08-18 — **okstream 계열은 스냅샷으로 찍는다.**
+  //   이 줄을 찍는 도중 `pumpSerialRaw()` 가 돈다. `cntTick` 중에 `inSend` 는 false 지만
+  //   **`awaitingSendOk` 는 흔히 true 다**(CIPSEND 직후의 정상 상태).
+  //   그 pump 가 `SEND OK` 를 매칭하면 `okstream`/`bigokst` 가 **출력 도중에 늘어나서**
+  //   먼저 찍힌 `okstream` 은 옛 값, 나중 찍힌 `bigokst` 는 새 값이 된다.
+  //   → **`bigokst > okstream` 이라는 불가능한 출력**이 나오고, 읽는 쪽은 펌웨어 결함으로 읽는다.
+  //   ⚠ `pendfill`/`bigfill`/`bigdrop` 은 `inSend` 가 필요해서 이 문제가 없다.
+  //     **이 계열만 해당한다** — 그래서 여기만 스냅샷한다.
+  // 🔴 **출력 도중에는 `pumpSerialRaw()` 를 부르지 않는다.** 한 번 넣었다가 뺐다.
+  //   이유: pump 가 `[AT] "..."` 를 찍어 **`[CNT]` 줄 한가운데로 끼어든다.**
+  //   시험에서 실제로 그렇게 나왔다: `… pendfill=0[AT] "SEND OK" (7)\n bigfill=0 …`
+  //   **monitor 의 파서가 그 줄을 못 읽는다.** 계측기를 고치려다 계측기를 깬 꼴이다.
+  //   ⚠ 그러면 블로킹은 어떻게 되나 — **계산으로 안전하다:**
+  //     `[CNT]` 약 220B @115200 ≈ 19ms · TX 링버퍼 64B 를 넘는 156B 만큼 ≈ 13.5ms 블로킹.
+  //     그동안 들어올 하행은 9600bps 에서 **약 13B** 이고, SoftwareSerial 링버퍼 64B 에 여유가 있다.
+  //   🔑 그리고 `cntTick` 은 **송신 창 안에서만** 나간다(§11.2-2) — 하행이 오는 시간대가 아니다.
+  //   ⚠ 줄이 이보다 크게 길어지면 이 계산을 다시 해라. **300B 시험이 그 경보다**(시험 [28]).
+  const uint16_t okStreamSnap = sendOkByStream;
+  const uint16_t okLostSnap   = okLostByLine;
+  const uint16_t okStreamBigSnap = okStreamBig;
+  const uint16_t okLostBigSnap   = okLostBig;
+  Serial.print(F(" okstream="));     Serial.print(okStreamSnap);
   // ★ monitor 요청 — `okstream` 과 **짝으로 읽는다**(위 feedRxChar 주석의 판정표).
   Serial.print(F(" penddrop="));     Serial.print(pendDrops);
   // 🔴 2026-08-18 — **`penddrop` 의 분모.** 이것이 0 이면 위 `penddrop=0` 은
   //   "안 넘쳤다"가 아니라 **"셀 일이 없었다"** 이고, 그 둘은 다른 결론으로 이어진다.
   Serial.print(F(" pendfill="));     Serial.print(pendFills);
-  pumpSerialRaw();                   // ⚠ 줄이 길어진 만큼 중간에 ESP 수신을 비운다(아래 주석)
   // ⚠ monitor 요청 — **대역(`>=64B`)별.** 누적 총계로는 창 G 의 갈림(`48~63` 0/43 · `>=64` 9/34)이 안 보인다.
   //   🔑 `64` 는 `_SS_MAX_RX_BUFF` = **기전 경계**다. monitor 의 `48` 은 표본 추출 기준이라 **다른 축이다.**
   Serial.print(F(" bigfill="));      Serial.print(pendFillsBig);
   Serial.print(F(" bigdrop="));      Serial.print(pendDropsBig);
-  Serial.print(F(" bigokst="));      Serial.print(okStreamBig);
-  pumpSerialRaw();
+  Serial.print(F(" bigokst="));      Serial.print(okStreamBigSnap);
+  // ★ **대책 ②의 진짜 분자.** `okstream` 이 아니다 — 바이트 매처는 줄 완성 **전**에 발화해
+  //   항상 줄 경로를 이기므로, `okstream` 은 그냥 탐지 총수다.
+  //   **`oklost` 는 "줄 경로였으면 영영 잃었을 SEND OK"** 이고 그것이 곧 T2 였다.
+  Serial.print(F(" oklost="));       Serial.print(okLostSnap);
+  Serial.print(F(" bigoklost="));    Serial.print(okLostBigSnap);
   Serial.print(F(" skip="));         Serial.print(sendSkips);
   Serial.print(F(" online="));       Serial.println(netOnline ? 1 : 0);
 }
