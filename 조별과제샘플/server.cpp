@@ -229,6 +229,7 @@ static const int  DEV_S_WORST_ASSUMED_B = 60;   // n=10 기준 · arduino REQ-02
 // 접속 → 자기 송신 창까지 최대 1슬롯 · `S`(승격) 1슬롯 · `D` 1슬롯 = 3슬롯이 최소 경로다.
 static const int  REG_TIMEOUT_MS = 3 * DOWN_SLOT_MS;   // = 3600ms
 static const int  REG_Q_MAX      = 3;                  // `Q` 상한 — **비용이 서버에 있어서 서버가 둔다**
+static const int  GETMAP_MAX_PER_SEC = 5;   // 화면 하나가 1초에 이보다 자주 물으면 뭔가 잘못된 것이다
 static const int  REG_MODS_MAX   = 32;                 // 방어적 상한. 전선 예산은 장치가 더 낮게 건다
 
 // 🔴🔴 **송신 시점 문턱 — 증거가 있는 창과 없는 창을 다르게 취급한다** (REQ-0210)
@@ -800,6 +801,8 @@ struct Server {
     //   떨어뜨리면 **"바꿨는데 안 올린 경로"** 가 생기고, 그건 **탐지 장치가 있는데 안 울리는 것**이라
     //   아예 없는 것보다 나쁘다.
     long long map_epoch;
+    // `get_map` 남용 방어 — **정합성용이 아니라 서버 보호용**이다(설계 §6.8)
+    long long getmap_win_ms; int getmap_in_win; long long getmap_rejects;
     sock_t lsn_ard, lsn_http, lsn_phone;
     std::map<sock_t, std::string> phones;   // 폰 연결 → 수신 버퍼 (연결마다 따로!)
     // ⚠ `ard` 는 이제 "아두이노 연결"이 아니라 **주차 노드의 연결**이다(REQ-0083).
@@ -1016,6 +1019,7 @@ struct Server {
     // 🔑 `park` 의 필드들은 **`Node` 의 생성자가 초기화한다.** 여기 목록에 다시 적지 않는다 —
     //   적으면 참조에 임시값을 묶으려는 것이 되어 컴파일이 안 된다(그게 이 설계의 안전장치다).
     Server() : grid_rows(5), grid_cols(5), map_epoch(0),   // 선언 순서(-Wreorder)
+               getmap_win_ms(0), getmap_in_win(0), getmap_rejects(0),
                lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK),
                reg_ok(0), reg_bad(0), reg_qsent(0), reg_giveups(0), reg_widthbad(0),
                dup_devid_reject(0), takeover_grace(0),  // 선언 순서와 일치시킨다(-Wreorder)
@@ -1461,6 +1465,10 @@ struct Server {
     void bump_epoch(const std::string& why) {
         map_epoch++;
         logf("=", "지형 판 " + std::to_string(map_epoch) + " (" + why + ")");
+        // 🔑 **판이 오르면 곧바로 보낸다.** 안 보내면 화면은 `state.epoch` 불일치를 보고
+        //   `get_map` 을 물어야 하고, **그 사이 "모른다"로 그리는 창이 생긴다.**
+        //   보내는 쪽이 먼저 움직이면 그 창이 없다.
+        push_map();
     }
 
     // 기본 지형. ⚠ **기본값이지 고정값이 아니다** — 설정 적재가 생기면 이 함수를 대체한다.
@@ -2047,6 +2055,47 @@ struct Server {
         }
         return o + "\"";
     }
+    // ── REQ-0203 4b: `map` 봉투 (설계 §6.8) ─────────────────────────────────────
+    // 🔴 **`slots[]`(옛 `snapshot`)를 대체하지 않는다. 더한다.**
+    //   화면이 `map` 을 받은 적 없으면 옛 경로로 그리고, 받으면 격자로 바꾼다(web 의 이중 경로).
+    //   **그래야 이 배포가 화면을 안 깨뜨리고, 화면 배포도 서버를 안 기다린다.**
+    // ⚠ **한 번에 완결해서 보낸다. 조각내지 않는다** — 화면이 "모른다"로 그리는 창을 짧게 하려는 것이다.
+    std::string map_json() {
+        std::ostringstream o;
+        o << "{\"type\":\"map\",\"epoch\":" << map_epoch
+          << ",\"grid\":{\"rows\":" << grid_rows << ",\"cols\":" << grid_cols << "}"
+          << ",\"zones\":[";
+        for (size_t i = 0; i < zones.size(); i++) {
+            const Zone& z = zones[i];
+            if (i) o << ",";
+            o << "{\"id\":" << jstr(z.id) << ",\"kind\":" << jstr(z.kind) << ",\"cells\":[";
+            for (size_t c = 0; c < z.cells.size(); c++) {
+                if (c) o << ",";
+                o << "[" << z.cells[c].first << "," << z.cells[c].second << "]";
+            }
+            o << "],\"modules\":[";
+            for (size_t m = 0; m < z.modules.size(); m++) {
+                if (m) o << ",";
+                const std::string& dv = z.modules[m].first;
+                const std::string& nm = z.modules[m].second;
+                // `kind` 와 `idx` 는 **그 모듈을 등록한 노드**가 갖고 있다 — 이름만으로 찾으면 안 된다(복합 키).
+                std::string kind; int idx = -1;
+                std::vector<Node*> ns = all_nodes();
+                for (size_t k = 0; k < ns.size(); k++) {
+                    if (ns[k]->devid != dv) continue;
+                    for (size_t j = 0; j < ns[k]->mods.size(); j++)
+                        if (ns[k]->mods[j].first == nm) { kind = ns[k]->mods[j].second; idx = (int)j; }
+                }
+                o << "{\"devid\":" << jstr(dv) << ",\"name\":" << jstr(nm)
+                  << ",\"kind\":" << jstr(kind) << ",\"idx\":" << idx << "}";
+            }
+            o << "]}";
+        }
+        o << "]}";
+        return o.str();
+    }
+    void push_map() { ws_broadcast(map_json()); }
+
     std::string snapshot_json() {
         std::ostringstream o;
         o << "{\"type\":\"snapshot\",\"ts\":" << epoch_ms()
@@ -2893,6 +2942,27 @@ struct Server {
         std::string slot = jget(msg, "slot");
         std::string uid  = jget(msg, "user_id");
         if (uid == "null") uid.clear();
+
+        // ---- REQ-0203 4b: `get_map` (설계 §6.8)
+        // 🔑 **접속 시의 `map` 과 같은 봉투를 쓴다.** 다른 타입을 만들면 같은 것을 두 형식으로
+        //   만들게 되고 한쪽만 고치는 날이 온다.
+        // 🔴 **창을 기다리지 않고 즉답한다** — 이건 하행 전선이 아니라 화면 소켓이다.
+        if (type == "get_map") {
+            // ⚠ **연속 요청 상한.** 화면이 `epoch` 비교를 잘못 구현하면 **무한 재요청**이 된다.
+            //   `get_map` 은 상태를 안 바꾸니 몇 번 와도 안전하고, **상한은 서버 보호용이지
+            //   정합성용이 아니다** — 그래서 거절해도 화면의 정확성은 안 깨진다.
+            const long long t = now_ms();
+            if (t - getmap_win_ms >= 1000) { getmap_win_ms = t; getmap_in_win = 0; }
+            if (++getmap_in_win > GETMAP_MAX_PER_SEC) {
+                getmap_rejects++;
+                logf("!", "get_map 이 1초에 " + std::to_string(getmap_in_win)
+                          + "회 — 상한 초과로 거절(누적 " + std::to_string(getmap_rejects) + ")");
+                send_err(fd, rid, "rate_limited", "요청이 너무 잦습니다");
+                return;
+            }
+            if (fd != BAD_SOCK && conns.count(fd)) ws_send(fd, map_json());
+            return;
+        }
 
         // ---- §12B 시뮬레이터 한 걸음 (개정 5)
         // **무장 여부를 확인하지 않는다.** 테스트 모드와 별개라는 것이 이 기능의 요구다(§12B.3).
@@ -4357,6 +4427,50 @@ static int selftest() {
                 std::cout << (ok25 ? "  ✓ " : "  ✗ ") << "점유·예약 변경 → 판 " << t.map_epoch
                           << " (기대 " << e0 << " — 상태는 판을 안 올린다)\n";
                 if (!ok25) bad++;
+            }
+
+            // ㉓ 🔴 **`map` 봉투** (REQ-0203 4b) — web 이 이 형식에 맞춰 이미 구현했다
+            {
+                Server t;
+                t.build_default_zones();
+                t.park.devid = "P1";
+                t.park.mods.push_back(std::make_pair(std::string("A1"), std::string("IP")));
+                t.bind_modules(t.park);
+                std::string j = t.map_json();
+                bool ok26 = (j.find("\"type\":\"map\"") != std::string::npos
+                             && j.find("\"epoch\":2") != std::string::npos
+                             && j.find("\"rows\":5") != std::string::npos
+                             && j.find("\"cells\":[[0,0]]") != std::string::npos
+                             && j.find("\"devid\":\"P1\",\"name\":\"A1\",\"kind\":\"IP\",\"idx\":0")
+                                != std::string::npos);
+                std::cout << (ok26 ? "  ✓ " : "  ✗ ") << "map 봉투: type·epoch·grid·cells·모듈("
+                          << "devid+name+kind+idx) 전부 포함\n";
+                if (!ok26) bad++;
+
+                // 🔴 **`kind`·`idx` 를 노드에서 찾는다 — 이름만으로 찾으면 안 된다**(복합 키)
+                //    다른 노드가 같은 `name` 을 가져도 섞이면 안 된다.
+                Node& other = t.aux["P9"]; other.devid = "P9";
+                other.mods.push_back(std::make_pair(std::string("A1"), std::string("OB")));
+                std::string j2 = t.map_json();
+                bool ok27 = (j2.find("\"devid\":\"P1\",\"name\":\"A1\",\"kind\":\"IP\"")
+                             != std::string::npos
+                             && j2.find("\"kind\":\"OB\"") == std::string::npos);
+                std::cout << (ok27 ? "  ✓ " : "  ✗ ") << "복합 키: 다른 노드의 같은 이름 모듈이 "
+                          << "섞이지 않는다 (기대: P1 의 IP 만)\n";
+                if (!ok27) bad++;
+                t.aux.clear();
+            }
+
+            // ㉔ 🔴 **`get_map` 상한** — 화면이 비교를 잘못 구현하면 무한 재요청이 된다
+            {
+                Server t; t.build_default_zones();
+                long long r0 = t.getmap_rejects;
+                for (int i = 0; i < GETMAP_MAX_PER_SEC + 3; i++)
+                    t.on_ws_message(BAD_SOCK, "{\"type\":\"get_map\",\"rid\":\"r\"}");
+                bool ok28 = (t.getmap_rejects == r0 + 3);
+                std::cout << (ok28 ? "  ✓ " : "  ✗ ") << "get_map 상한: " << (GETMAP_MAX_PER_SEC + 3)
+                          << "회 중 거절 " << t.getmap_rejects << " (기대 3)\n";
+                if (!ok28) bad++;
             }
 
             s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
