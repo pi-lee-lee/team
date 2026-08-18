@@ -861,6 +861,10 @@ struct Server {
     std::vector<std::pair<std::string,std::string> > prev_mods_snapshot;
     long long mod_order_changed;   // 🔴 약속이 깨진 횟수. **0 이 정상이고 1 이상은 조사 대상이다**
     int  mod_bits_n;             // 해독한 비트 수. **0 = 안 읽었다**(모른다이지 0 이 아니다)
+    // 🔴 **분모를 같이 만든다.** `장치거절 0` 만 찍으면 **`0` 이 혼자 서서 건강처럼 보인다** —
+    //   `치유 0/386` 은 분모가 보여서 `0` 이 건강임을 말할 수 있는데, 이건 말할 수 없다.
+    //   ⚠ **`0/0` 은 최소한 `0/0` 이라고 말해 준다. 분모 칸이 없는 것이 더 나쁘다**(monitor 지적).
+    long long gate_tries;        // `G` 를 전선에 **띄운** 수 = 장치거절의 분모
     long long dev_reject;        // 🔴 `result=3`(장치가 거절) — `ack_fail_count`(안 갔다)와 **다른 칸**이다
     long long heal_checks;       // §7.6 예약 불일치 **검사**가 실제로 돈 횟수 (분모)
     long long heal_fires;        // 그중 불일치를 찾아 `C` 를 재하달한 횟수 (분자)
@@ -1073,7 +1077,7 @@ struct Server {
                lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK),
                reg_ok(0), reg_bad(0), reg_qsent(0), reg_giveups(0), reg_widthbad(0),
                occ_undecoded(0), occ_undecoded_warned(false),
-               mod_order_changed(0), mod_bits_n(0), dev_reject(0),
+               mod_order_changed(0), mod_bits_n(0), gate_tries(0), dev_reject(0),
                heal_checks(0), heal_fires(0), res_undecoded(0), res_undecoded_warned(false),
                dup_devid_reject(0), takeover_grace(0),  // 선언 순서와 일치시킨다(-Wreorder)
                aux_conflicts(0), admit_rejects(0),
@@ -1325,7 +1329,7 @@ struct Server {
         // 🔴 **분모를 찍는다** — `치유 0/0` 과 `치유 0/1200` 은 완전히 다른 문장이다.
         //   앞은 **검사가 안 돈 것**(2026-08-19 에 7시간 그랬다)이고 뒤는 **건강한 것**이다.
         //   ⚠ 분자만 찍으면 둘이 똑같이 `0` 으로 보인다. 그래서 검사 수를 같이 낸다.
-        s += " · 장치거절 " + std::to_string(dev_reject);
+        s += " · 장치거절 " + std::to_string(dev_reject) + "/" + std::to_string(gate_tries);
         // 🔴 **계수를 만들고 요약에 안 내보냈다**(2026-08-19 발견). monitor 에게 *"`순서변경` 을 봐라"* 라고
         //   알려 둔 상태였다 — **없는 칸을 보라고 한 것이다.** 그쪽 파서는 표지 기준이라 조용히 못 찾는다.
         //   🔑 §"조건을 적었으면 그것을 보는 감시를 같은 자리에 만들어라" 의 **한 걸음 뒤 판본**이다:
@@ -2726,7 +2730,10 @@ struct Server {
         p.sent_ms = now_ms(); p.tries = 1;
         pend[rid] = p;
         gate_want[idx] = open ? 1 : 0;      // 🔑 **대조할 값을 여기서 남긴다**(ACK 이 지우기 전에)
+        // 🔑 **큐에 들어간 것만 센다.** 거절되면 전선에 안 나갔으므로 장치거절의 분모가 아니다 —
+        //   분모에 넣으면 "장치가 멀쩡한데 거절률이 낮아 보이는" 착시가 생긴다.
         if (!enqueue_down(pend[rid], build_line(gate_prefix(p)), true, false)) pend.erase(rid);
+        else gate_tries++;
     }
     static std::string sim_prefix(const Pending& p) {
         char buf[32];

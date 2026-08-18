@@ -10,6 +10,10 @@
    🔴 못 잰다 : 타이밍·반이중 UART·`SEND OK` 지연 — **전부 실물에서만 난다**
               **여기서 "정상"이 나와도 장치가 정상이라는 뜻이 아니다.**
 
+⚠ **실물이 못 주는 것 하나를 이 도구가 준다: `G` 의 거절 갈래(`result=3`).**
+   실물은 가상 모듈이 정상이면 **거의 항상 `result=0`** 이라 그 갈래가 안 돌아간다.
+   `--gate-result 3` 으로 그 경로를 밟는다. 🔑 **반복이 필요한 갈래는 실물이 아니라 여기서 잰다.**
+
 사용:
     python3 net/mock_node.py --port 10091 --devid P1 --seconds 120
 """
@@ -50,6 +54,16 @@ def bits_to_hex(bits, n):
     return ("%0*X" % ((n + 3) // 4, v))
 
 
+def build_reg(drain, n, gate_names):
+    """등록 묶음. 🔴 **자리 먼저, 차단봉은 끝에** — 명세 §7.4 의 약속이고 서버가 대조한다."""
+    pkt = line("D,*,%d,%d," % (drain, n))
+    for sl in SLOTS:
+        pkt += line("D,%s,IP," % sl)
+    for g in gate_names:
+        pkt += line("D,%s,OBV," % g)        # `V` 접미 = 가상. 종류(OB)는 안 바뀐다
+    return pkt
+
+
 def main():
     ap = argparse.ArgumentParser(description="모의 노드 (시험 전용)")
     ap.add_argument("--host", default="127.0.0.1")
@@ -59,10 +73,19 @@ def main():
     ap.add_argument("--slot-ms", type=int, default=1200, help="S 주기(ms)")
     ap.add_argument("--seconds", type=float, default=120.0)
     ap.add_argument("--occupied", default="", help="점유로 둘 자리 목록(쉼표) 예: A1,B2")
+    ap.add_argument("--gates", type=int, default=0,
+                    help="차단봉(OBV) 모듈 수. 자리 뒤에 붙는다 — **끝에만 붙인다**(명세 §7.4)")
+    ap.add_argument("--gate-result", type=int, default=0, choices=[0, 3],
+                    help="`G` 에 돌려줄 result. **3 = 장치가 수행 불가** — 실물로는 밟기 어려운 갈래다")
     a = ap.parse_args()
 
     occ_set = set(x.strip() for x in a.occupied.split(",") if x.strip())
-    n = len(SLOTS)
+    # 🔴 **차단봉은 자리 뒤에 온다.** 명세 §7.4 의 "끝에만 붙인다" 를 이 도구도 지킨다 —
+    #    여기서 순서를 다르게 만들면 **서버의 순서 대조 검사가 거짓 경보를 낸다.**
+    gate_names = ["E1", "X1", "G3", "G4"][:max(0, a.gates)]
+    names = SLOTS + gate_names
+    n = len(names)
+    gate_state = [0] * len(gate_names)      # 장치가 들고 있는 차단봉 상태 — `S` 에 에코된다
     s = socket.create_connection((a.host, a.port), timeout=5)
     print("[mock] 접속 %s:%d · devid=%s · n=%d" % (a.host, a.port, a.devid, n), flush=True)
 
@@ -72,7 +95,9 @@ def main():
     sent_reg = False
     try:
         while time.time() < t_end:
-            occ = [1 if sl in occ_set else 0 for sl in SLOTS]
+            # 🔑 **비트 `>= len(SLOTS)` 는 자리 점유가 아니라 차단봉 상태다**(명세 §7.2).
+            #    같은 비트열인데 의미가 다르고 그 구분은 `kind` 에 있다.
+            occ = [1 if sl in occ_set else 0 for sl in SLOTS] + list(gate_state)
             res = [0] * n
             body = "S,%d,%s,%s,%d,%s," % (
                 seq, bits_to_hex(occ, n), bits_to_hex(res, n), uptime, a.devid)
@@ -82,9 +107,7 @@ def main():
 
             # 🔑 **둘째 슬롯부터 `D`**(명세 §5). 첫 슬롯은 `S` 만 — 그것이 승격을 만든다.
             if not sent_reg and seq == 1:
-                pkt = line("D,*,%d,%d," % (a.drain, n))
-                for sl in SLOTS:
-                    pkt += line("D,%s,IP," % sl)
+                pkt = build_reg(a.drain, n, gate_names)
                 s.sendall(pkt.encode())
                 sent_reg = True
                 print("[mock] 등록 %d줄 · %dB 보냄" % (n + 1, len(pkt)), flush=True)
@@ -101,11 +124,28 @@ def main():
                         if ln.startswith("Q,"):
                             # 🔴 `Q` 는 "등록을 다시 보내라"다. 상한을 두지 않는다 —
                             #    비용이 서버 창에 있으므로 상한은 서버가 갖는다(명세 §5).
-                            pkt = line("D,*,%d,%d," % (a.drain, n))
-                            for sl in SLOTS:
-                                pkt += line("D,%s,IP," % sl)
-                            s.sendall(pkt.encode())
+                            s.sendall(build_reg(a.drain, n, gate_names).encode())
                             print("[mock] Q 받음 → 등록 재전송", flush=True)
+                        elif ln.startswith("G,"):
+                            # 🔴 `G,<rid>,<idx>,<op>,<ck>` — **실물로는 밟기 어려운 거절 갈래**를
+                            #    이 도구가 만든다. `--gate-result 3` 이면 상태를 안 바꾸고 3 을 돌려준다.
+                            #    ⚠ **거절해도 ACK 은 보낸다.** 안 보내면 서버가 `ack_timeout` 을 내고
+                            #      **"안 갔다"와 "갔는데 거절됐다"가 같은 칸에 섞인다**(명세 §7.3).
+                            f = ln.split(",")
+                            if len(f) >= 4:
+                                try:
+                                    grid, gidx, gop = int(f[1]), int(f[2]), int(f[3])
+                                except ValueError:
+                                    continue
+                                k = gidx - len(SLOTS)
+                                if a.gate_result == 0 and 0 <= k < len(gate_state):
+                                    gate_state[k] = 1 if gop else 0
+                                    gres = 0
+                                else:
+                                    gres = 3
+                                s.sendall(line("A,%d,G%d,%d," % (grid, gidx % 10, gres)).encode())
+                                print("[mock] G idx=%d op=%d → result=%d" % (gidx, gop, gres),
+                                      flush=True)
             except (BlockingIOError, socket.error):
                 pass
             s.setblocking(True)
