@@ -1427,14 +1427,20 @@ MODULE_TABLE 은 PROGMEM **컴파일 상수** → 런타임에 순서가 안 바
 
 | | 어디에 실리나 | 뜻 | 값 |
 |---|---|---|---|
-| `err.reason` | 요청에 대한 **거절 응답** | *"이번 요청을 못 받았다"* | `bad_request` · `device_offline` · `not_supported` · `module_absent` · `rate_limited` · `queue_full` · `already_pending` · `ack_timeout` |
+| `error.code` 🔴 | 요청에 대한 **거절 응답**(`{"type":"error","rid":…,"code":…,"message":…}`) | *"이번 요청을 못 받았다"* | `bad_request` · `device_offline` · `not_supported` · `module_absent` · `rate_limited` · `queue_full` · `already_pending` · `ack_timeout` |
 | `actions[].reason` | `state` 의 **자리별 조작 가능성** | *"지금 이 조작이 막혀 있다"* | `module_absent` · `node_offline` · `node_unregistered` · `pending` |
 
 ## 🔴 같은 개념에 **다른 이름**이 붙어 있다
 ```
-device_offline   (err)  ↔  node_offline       (actions)
-already_pending  (err)  ↔  pending            (actions)
+device_offline   (error.code)  ↔  node_offline   (actions[].reason)
+already_pending  (error.code)  ↔  pending        (actions[].reason)
 ```
+🔴 **봉투 이름도 다르다**: 거절은 `"type":"error"` 이고 **키는 `code`** 다. `"err"` 도 `"reason"` 도 아니다.
+⚠ **내가 앞서 `err.reason` 이라고 세 번 적었다 — 전부 틀렸다.** 실측(2026-08-19):
+```json
+{"type":"error","rid":"q2","code":"pending","message":"지금은 조작할 수 없습니다"}
+```
+🔑 **이름을 코드에서 확인하지 않고 기억으로 적었다.** §(59) 의 *"기억이 답할 수 없는 것을 기억에게 물었다"* 와 같다.
 > ### **화면이 이 둘을 한 표로 다루면 같은 상태가 두 칸에 들어간다.**
 ⚠ **왜 안 통일하나**: 통일하려면 **둘 중 한쪽의 전선 값을 바꿔야 하고, 그건 화면 코드를 깨뜨린다.**
 **지금은 사실을 적어 두는 것이 값이 크다.** 통일은 다음 개정에서 **한 번에** 한다.
