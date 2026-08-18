@@ -68,6 +68,19 @@ CASES = [
     ("arduino · 공백+세미콜론 치환식 + 남의 파일",
      ARD, "sed -i '' 's/  a = 0;/  a = 0;  b = 0;/' cpp/y.cpp", False),
 
+
+    # ── 🔴 2026-08-18 추가 — **히어독 본문은 데이터다** (루트·socket 둘 다 밟았다)
+    #    본문에 적힌 경로가 검사 대상이 되어, 설명·예시를 담은 명령이 차단됐다.
+    #    ⚠ 짝으로 둔다: 본문 안은 통과하고 **여는 줄의 리다이렉션 대상은 여전히 막혀야** 한다.
+    ("arduino · 히어독 본문에 남의 경로(설명문)",
+     ARD, "cat > arduino/x.ino <<EOF" + '\n' + "rm cpp/y.cpp" + '\n' + "EOF", True),
+    ("arduino · 히어독으로 남의 파일에 쓰기",
+     ARD, "cat > cpp/y.cpp <<EOF" + '\n' + "hi" + '\n' + "EOF", False),
+
+    # ── 미치환 셸 변수는 경로로 보지 않는다 (socket 보고: `$r/$ROUNDS` 가 차단됐다)
+    ("arduino · 진행 표시의 변수 경로",
+     ARD, 'echo "round $r/$ROUNDS"', True),
+
     # ── 원래 통과해야 하는 것 (회귀)
     ("arduino · 루트 소유 스크립트 호출",        ARD, "team/bin/req.sh list",           True),
     ("arduino · cd 뒤 읽기 전용 명령",           ARD, CD + "cat cpp/y.cpp",             True),

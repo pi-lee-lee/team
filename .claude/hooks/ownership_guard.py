@@ -180,6 +180,39 @@ _SEGSPLIT = re.compile(r"(?:\|\||&&|[;|&\n]|\$\(|`)")
 _SEG_SEPS = {";", ";;", "&", "&&", "|", "||", "(", ")", "\n"}
 
 
+_HEREDOC_START = re.compile(r"<<-?\s*([\"\']?)([A-Za-z_][A-Za-z0-9_]*)\1")
+
+
+def _strip_heredocs(cmd):
+    """히어독 **본문**을 검사 대상에서 뺀다. 여는 줄과 리다이렉션 대상은 남긴다.
+
+    ⚠ 2026-08-18: 본문이 그대로 검사돼 **문서·설명·예시에 적힌 경로가 차단 대상**이 됐다.
+    루트가 훅 패치를 설명하는 주석을 히어독에 담았다가 자기 명령이 막혔고, socket 도
+    같은 계열로 막혔다. **본문은 데이터이지 그 명령이 고치는 대상이 아니다.**
+
+    🔴 **집행은 유지된다** — 여는 줄(`cat > <파일> <<EOF`)의 리다이렉션 대상은
+    본문 밖이라 그대로 검사된다. 시험에 통과/차단 짝으로 박아 뒀다.
+
+    ⚠ 이걸로 미탐이 하나 생긴다: 본문에 담긴 코드를 해석기가 실행하는 형태
+    (`python3 - <<PY … PY`)는 본문이 안 보이므로 못 잡는다. **그건 원래도 못 잡았다** —
+    CLAUDE.md 가 명시한 대로 이 훅은 실수를 잡는 그물이지 샌드박스가 아니다.
+    """
+    lines = (cmd or "").split("\n")
+    out, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        out.append(line)
+        m = _HEREDOC_START.search(line)
+        i += 1
+        if not m:
+            continue
+        delim = m.group(2)
+        while i < len(lines) and lines[i].strip() != delim:
+            i += 1
+        i += 1                      # 종료 구분자 줄도 버린다
+    return "\n".join(out)
+
+
 def _segment_tokens(cmd):
     """명령을 **구획별 토큰 목록**으로 나눈다 — 셸 인용을 존중한다.
 
@@ -199,6 +232,7 @@ def _segment_tokens(cmd):
     ⚠ 따옴표가 안 닫힌 명령은 shlex 가 예외를 낸다 → **예전 방식으로 되돌린다.**
     검사를 건너뛰면 무사통과하므로, 거칠어도 나누는 쪽이 안전하다.
     """
+    cmd = _strip_heredocs(cmd)
     try:
         lex = shlex.shlex(cmd or "", posix=True, punctuation_chars=True)
         lex.whitespace_split = True
@@ -251,6 +285,12 @@ def bash_candidates(cmd, own):
             if i == 0:
                 continue  # 실행 파일 자리 — 호출은 수정이 아니다
             if not tok or tok.startswith("-"):
+                continue
+            if "$" in tok:
+                # 미치환 셸 변수 — 어디를 가리키는지 **알 수 없다.**
+                # `$r/$ROUNDS` 같은 진행 표시가 경로로 잡혀 차단됐다(socket 보고).
+                # 값을 모르는 채 차단하면 오탐이고, 통과시키면 미탐이다.
+                # 🔴 오탐 쪽을 고른다 — CLAUDE.md 가 정한 성격(그물이지 샌드박스가 아니다)에 맞다.
                 continue
             if not _PATHY.fullmatch(tok):
                 continue
