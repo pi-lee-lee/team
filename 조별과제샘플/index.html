@@ -2347,6 +2347,26 @@ function isOutputKind(kind) {
   return typeof kind === 'string' && kind.charAt(0) === 'O';
 }
 
+/**
+ * 🔴 **`kind` 는 "2글자 종류 + 선택적 `V` 접미"다** (socket 확정 2026-08-19 · `D,E1,OBV`).
+ *
+ * 🔑 `V` 는 **새 종류가 아니라 직교하는 한 비트**다 — 그래서 종류 표는 다섯 그대로 두고
+ * **읽을 때 떼어 낸다.** 종류마다 가상판을 표에 더하면 다섯이 열이 되고, 새 종류가 생길 때
+ * **두 줄을 더해야 하는데 한 줄만 더하는 실수**가 반드시 나온다.
+ *
+ * ⚠ **`isOutputKind` 는 안 고쳐도 됐다** — `kind[0]` 만 보므로 `OBV` 도 출력으로 맞게 읽는다.
+ *    깨지는 것은 **라벨과 정렬**뿐이었다(`MOD_KIND_LABEL['OBV']` 없음 → 원문 `"OBV"` 가 그대로
+ *    화면에 뜨고, `MOD_KIND_ORDER.indexOf('OBV')` 가 `-1` → 맨 뒤로 밀린다).
+ *    🔑 **socket 의 파서는 한 줄도 안 고쳤다. 화면만 규칙이 필요했다** — 계약의 같은 변경이
+ *    도메인마다 다른 크기로 온다.
+ */
+function baseKind(kind) {
+  return isVirtualKind(kind) ? kind.slice(0, 2) : kind;
+}
+function isVirtualKind(kind) {
+  return typeof kind === 'string' && kind.length === 3 && kind.charAt(2) === 'V';
+}
+
 /** `blocked_reason` 코드 → 계열. 🔴 계열은 **서버가 코드에 실어 준 것**이고 화면이 짐작하지 않는다. */
 const REASON_FAMILY = {
   node_offline: 'unknown', node_unregistered: 'unknown',
@@ -2370,7 +2390,9 @@ function orderedModules(mods) {
   const list = Array.isArray(mods) ? mods.slice() : [];
   return list.map(function (m, i) { return { m: m, i: i }; })
     .sort(function (a, b) {
-      const ka = MOD_KIND_ORDER.indexOf(a.m && a.m.kind), kb = MOD_KIND_ORDER.indexOf(b.m && b.m.kind);
+      /* 🔑 `V` 를 떼고 순위를 본다 — 안 떼면 `OBV` 가 `-1` 이 되어 **차단봉이 목록 맨 뒤로 밀린다.**
+         가상이든 실물이든 **같은 종류는 같은 자리에 있어야** 사용자가 비교할 수 있다. */
+      const ka = MOD_KIND_ORDER.indexOf(baseKind(a.m && a.m.kind)), kb = MOD_KIND_ORDER.indexOf(baseKind(b.m && b.m.kind));
       const ra = ka < 0 ? MOD_KIND_ORDER.length : ka, rb = kb < 0 ? MOD_KIND_ORDER.length : kb;
       return ra !== rb ? ra - rb : a.i - b.i;   // 같은 순위면 도착 순서 유지(안정)
     })
@@ -2595,12 +2617,26 @@ function renderModuleRow(mod, smod, zs, dupKind) {
      아니라 `"장치가 켰다고 보고합니다"` 까지만 말할 수 있다(§5.34.2) — 그 구분을 이 한 글자가 나른다.
      ⚠ 접근 이름에는 기호가 아니라 **문장**으로 적는다(§7.2: 좁은 곳은 기호, 넓은 곳은 문장). */
   const isAct = isOutputKind(mod.kind);
-  const label = MOD_KIND_LABEL[mod.kind] || mod.kind || mod.name || '(이름 없음)';
+  /* 🔴 `V` 접미(가상 모듈)를 떼고 라벨을 찾는다 — 안 떼면 표에 없어서 **원문 `"OBV"` 가 그대로
+     화면에 뜬다.** 그리고 **가상이라는 사실을 라벨에 적는다**: 사용자가 없는 장치의 값을
+     실물로 읽으면 안 된다.
+     🔑 **`*`(장치가 보고한 값)와 `(가상)`은 다른 축이다.** `*` 는 *"내가 관측한 게 아니라 되비친 값"*,
+     `(가상)` 은 *"그 장치가 물리적으로 없다"* 다. **둘이 같이 붙을 수 있고 그게 맞다.**
+     ⚠ `dupKind`(같은 종류가 둘 이상일 때 `name` 으로 가르기)는 **그대로 둔다** — 실물 `OB` 와
+     가상 `OBV` 는 라벨이 이미 갈리므로(`차단봉` / `차단봉 (가상)`) 이름을 덧붙일 필요가 없다. */
+  const virt = isVirtualKind(mod.kind);
+  const label = (MOD_KIND_LABEL[baseKind(mod.kind)] || mod.kind || mod.name || '(이름 없음)')
+              + (virt ? ' (가상)' : '');
   /* 같은 `kind` 가 그 자리에 둘 이상이면 `name` 으로 가른다. `name` 은 **노드 안에서만 유효한
      명칭**이라 그 자체로는 고유하지 않다(§5.42) — 그래서 기본 표시는 `kind` 라벨이다. */
   nameEl.textContent = label + (dupKind ? ' (' + (mod.name || '?') + ')' : '') + (isAct ? '*' : '');
-  nameEl.title = isAct ? (label + ' — 장치가 보고한 값입니다 (실제 점등·개방은 확인할 수 없습니다)')
-                       : (label + ' — 장치가 측정한 값입니다');
+  /* 🔴 가상 모듈은 **한 층 더 약하다.** 실물 출력은 *"장치가 켰다고 보고한다"* 까지 말할 수 있지만,
+     가상은 **켤 물건이 없다** — 값은 장치가 흉내낸 것이다. 층 표(§5.34.2)에 이 줄이 하나 더 붙는다.
+     ⚠ 이걸 안 갈라 쓰면 시험용 가상 모듈의 값을 **실제 개방으로 읽는다.** */
+  nameEl.title = virt
+    ? (label + ' — 이 자리에 실제 장치가 없습니다. 장치가 흉내낸 값이며 실제 동작이 아닙니다')
+    : isAct ? (label + ' — 장치가 보고한 값입니다 (실제 점등·개방은 확인할 수 없습니다)')
+            : (label + ' — 장치가 측정한 값입니다');
   const valEl = document.createElement('span');
 
   let mark = '·', loud = '0';

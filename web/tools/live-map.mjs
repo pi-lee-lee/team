@@ -390,7 +390,17 @@ try {
     await evaluate(client, `document.querySelector('#confirm-dialog button[value="ok"]').click()`);
     /* 🔴 아이들은 1초다. 아래 sleep(2500) 뒤에 재면 **항상 지나 있다** — 그러면 검사가
        영원히 "미측정"으로 통과해 버린다. **보낸 직후**에 표본을 떠 둔다.
-       🔑 시간에 걸린 것은 "나중에 확인"이 안 된다. 표본을 그 순간에 떠야 한다. */
+       🔑 시간에 걸린 것은 "나중에 확인"이 안 된다. 표본을 그 순간에 떠야 한다.
+
+       🔴 **그런데 "직후"를 클릭 직후로 잡으면 흔들린다.** `confirmDialog` 는 `close` 이벤트로
+       풀리므로 `.click()` 이 돌아온 시점엔 **아직 안 보냈다.** 실측: 한 회차는 `left=997`(맞음),
+       다음 회차는 `left=0`(전송 전에 떠서 미측정) — **같은 코드가 회차마다 갈렸다.**
+       ⚠ 그리고 실패 방향이 "미측정"이라 **조용히 안 재고 지나간다.** 빨강보다 나쁘다.
+       → **전선에 프레임이 나간 것을 확인한 뒤** 표본을 뜬다. 아이들 1초 안에 충분히 든다. */
+    for (let i = 0; i < 40; i++) {
+      if (tx.some(m => m && m.type === 'reserve')) break;
+      await sleep(20);
+    }
     const cdShot = await evaluate(client, `(() => {
       let left = -1; try { left = cooldownLeftMs(); } catch (e) {}
       const locked = [...document.querySelectorAll('#zone-grid .zbtn')].filter(b => b.getAttribute('aria-disabled') === 'true');
