@@ -3,9 +3,9 @@ id: REQ-0177
 title: 관측을 내려라 — 유휴 구간이라 판정 가치가 없다 · 00:20 재개 예약 (사용자 지시)
 from: root
 to: monitor-engineer
-status: open
+status: done
 created: 2026-08-17T22:32:44+0900
-updated: 2026-08-17T22:32:44+0900
+updated: 2026-08-18T01:10:50+0900
 files: ["monitor/serial-winA2.log"]
 parent: none
 ---
@@ -80,3 +80,8 @@ parent: none
      team/bin/req.sh done REQ-0177 --by monitor-engineer --note "<한 줄 요약>" -->
 
 _(미처리)_
+
+### 처리 완료 · root · 2026-08-18T01:10:50+0900
+
+관측 정지는 세션 종료로 이미 완료됐고(ps 0건·lsof 0건) 그 뒤 창 B 를 새로 열어 판정까지 끝났다. 00:20 재개 예약은 사용자가 취소했다(시간 경과·한도 해제). 이 REQ 의 남은 항목은 없다.
+

@@ -491,3 +491,43 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-17T22:24:09+0900 | 발행 | REQ-0176 | root → socket-engineer | 3차 재실행 ① (inj4) — 계측기 수정 후 같은 조건 · 사용자 지시 '3차 진행' |
 | 2026-08-17T22:24:30+0900 | 완료 | REQ-0176 | root → socket-engineer | 3차 재실행 ① (inj4) — 계측기 수정 후 같은 조건 · 사용자 지시 '3차 진행' |
 | 2026-08-17T22:32:45+0900 | 발행 | REQ-0177 | root → monitor-engineer | 관측을 내려라 — 유휴 구간이라 판정 가치가 없다 · 00:20 재개 예약 (사용자 지시) |
+| 2026-08-18T00:31:00+0900 | 발행 | REQ-0178 | root → socket-engineer | 창 B 배포 완료(build=aeb5283) — 3차 ②(inj5) 를 돌려라 · 왕복 최대 값을 arduino 에 넘겨라 |
+| 2026-08-18T00:32:07+0900 | 착수 | REQ-0178 | socket-engineer → socket-engineer | 창 B 배포 완료(build=aeb5283) — 3차 ②(inj5) 를 돌려라 · 왕복 최대 값을 arduino 에 넘겨라 |
+| 2026-08-18T00:33:13+0900 | 발행 | REQ-0179 | root → socket-engineer | 설계 — 브릿지 명세를 써라 (파킹↔아두이노모듈) · 노드별 큐 복제 · 전선 예산은 arduino 와 합의 |
+| 2026-08-18T00:34:14+0900 | 발행 | REQ-0180 | root → arduino-engineer | 설계 — ESP 클래스 명세(init/read/write/reset) · 자리·모듈 유동화 · 전선 예산은 socket 과 합의 |
+| 2026-08-18T00:35:04+0900 | 발행 | REQ-0181 | root → web-engineer | 설계 — 상태 모형을 모듈 단위로 · 격자 렌더링 구조 · 표시량은 사용자 답 대기(막지 않는다) |
+| 2026-08-18T00:36:39+0900 | 발행 | REQ-0182 | root → socket-engineer | inj6 복제 회차 — 창 B 장치측 관측 누락을 메운다(루트 실수) · 왕복 751ms 파급 정리 |
+| 2026-08-18T00:37:49+0900 | 착수 | REQ-0180 | arduino-engineer → arduino-engineer | 설계 — ESP 클래스 명세(init/read/write/reset) · 자리·모듈 유동화 · 전선 예산은 socket 과 합의 |
+| 2026-08-18T00:38:10+0900 | 착수 | REQ-0181 | web-engineer → web-engineer | 설계 — 상태 모형을 모듈 단위로 · 격자 렌더링 구조 · 표시량은 사용자 답 대기(막지 않는다) |
+| 2026-08-18T00:40:15+0900 | 진행 | REQ-0180 | arduino-engineer → arduino-engineer | 설계 — ESP 클래스 명세(init/read/write/reset) · 자리·모듈 유동화 · 전선 예산은 socket 과 합의 — 명세 착수 전. 선행 발견 정리 완료: sendAck 슬롯 우회(client.ino:1853) · ack= 가 ACK 총수 분모가 아님(큐 경유만 셈) · 굽기 목록 넷 확정. 굽기는 inj6 순서 확정 뒤 — 루트 대기 |
+| 2026-08-18T00:43:47+0900 | 착수 | REQ-0179 | socket-engineer → socket-engineer | 설계 — 브릿지 명세를 써라 (파킹↔아두이노모듈) · 노드별 큐 복제 · 전선 예산은 arduino 와 합의 |
+| 2026-08-18T00:45:02+0900 | 완료 | REQ-0181 | web-engineer → web-engineer | 설계 — 상태 모형을 모듈 단위로 · 격자 렌더링 구조 · 표시량은 사용자 답 대기(막지 않는다) |
+| 2026-08-18T00:46:03+0900 | 발행 | REQ-0183 | web-engineer → socket-engineer | actionable·blocked_reason 을 서버가 계산해 달라 — 조합 규칙이 두 곳에 생기면 거짓 허용이 된다 |
+| 2026-08-18T00:47:16+0900 | 착수 | REQ-0183 | socket-engineer → socket-engineer | actionable·blocked_reason 을 서버가 계산해 달라 — 조합 규칙이 두 곳에 생기면 거짓 허용이 된다 |
+| 2026-08-18T00:53:15+0900 | 완료 | REQ-0178 | socket-engineer → socket-engineer | 창 B 배포 완료(build=aeb5283) — 3차 ②(inj5) 를 돌려라 · 왕복 최대 값을 arduino 에 넘겨라 |
+| 2026-08-18T00:54:42+0900 | 완료 | REQ-0183 | socket-engineer → socket-engineer | actionable·blocked_reason 을 서버가 계산해 달라 — 조합 규칙이 두 곳에 생기면 거짓 허용이 된다 |
+| 2026-08-18T00:54:55+0900 | 발행 | REQ-0184 | web-engineer → socket-engineer | 액추에이터 모듈의 상태 에코가 계약에 없다 — 화면이 켜짐을 단정하면 거짓 완료가 된다 |
+| 2026-08-18T00:59:59+0900 | 착수 | REQ-0184 | socket-engineer → socket-engineer | 액추에이터 모듈의 상태 에코가 계약에 없다 — 화면이 켜짐을 단정하면 거짓 완료가 된다 |
+| 2026-08-18T01:00:23+0900 | 완료 | REQ-0184 | socket-engineer → socket-engineer | 액추에이터 모듈의 상태 에코가 계약에 없다 — 화면이 켜짐을 단정하면 거짓 완료가 된다 |
+| 2026-08-18T01:08:32+0900 | 완료 | REQ-0179 | socket-engineer → socket-engineer | 설계 — 브릿지 명세를 써라 (파킹↔아두이노모듈) · 노드별 큐 복제 · 전선 예산은 arduino 와 합의 |
+| 2026-08-18T01:10:50+0900 | 완료 | REQ-0177 | root → monitor-engineer | 관측을 내려라 — 유휴 구간이라 판정 가치가 없다 · 00:20 재개 예약 (사용자 지시) |
+| 2026-08-18T01:10:51+0900 | 완료 | REQ-0182 | root → socket-engineer | inj6 복제 회차 — 창 B 장치측 관측 누락을 메운다(루트 실수) · 왕복 751ms 파급 정리 |
+| 2026-08-18T01:11:57+0900 | 발행 | REQ-0185 | root → arduino-engineer | 굽기 — sendAck 을 슬롯 창에 묶는다(창 B 판정이 지목한 원인) + 계측기 넷 · 축 개수는 네 판단 |
+| 2026-08-18T01:13:09+0900 | 착수 | REQ-0185 | arduino-engineer → arduino-engineer | 굽기 — sendAck 을 슬롯 창에 묶는다(창 B 판정이 지목한 원인) + 계측기 넷 · 축 개수는 네 판단 |
+| 2026-08-18T01:20:20+0900 | 완료 | REQ-0185 | arduino-engineer → arduino-engineer | 굽기 — sendAck 을 슬롯 창에 묶는다(창 B 판정이 지목한 원인) + 계측기 넷 · 축 개수는 네 판단 |
+| 2026-08-18T09:01:50+0900 | 발행 | REQ-0186 | root → arduino-engineer | IP 변경 재플래싱 — SERVER_IP 192.168.0.29 (주소만) · 포트 이름도 바뀌었다 usbmodem1101 |
+| 2026-08-18T09:02:35+0900 | 발행 | REQ-0187 | root → socket-engineer | 서버 재기동 — PC IP 192.168.0.29 로 변경 · 코드에 IP 가 있는지 확인 후 재기동 · inj7 예측 채점 |
+| 2026-08-18T09:03:52+0900 | 착수 | REQ-0186 | arduino-engineer → arduino-engineer | IP 변경 재플래싱 — SERVER_IP 192.168.0.29 (주소만) · 포트 이름도 바뀌었다 usbmodem1101 |
+| 2026-08-18T09:03:57+0900 | 발행 | REQ-0188 | root → monitor-engineer | 창 C 판정 — inj7 로 파괴 4건 남았다(예측 ① 빗나감) · ssovf 유휴 증가 · 다음 창은 망이 다르다 |
+| 2026-08-18T09:05:07+0900 | 착수 | REQ-0188 | monitor-engineer → monitor-engineer | 창 C 판정 — inj7 로 파괴 4건 남았다(예측 ① 빗나감) · ssovf 유휴 증가 · 다음 창은 망이 다르다 |
+| 2026-08-18T09:05:34+0900 | 완료 | REQ-0187 | socket-engineer → socket-engineer | 서버 재기동 — PC IP 192.168.0.29 로 변경 · 코드에 IP 가 있는지 확인 후 재기동 · inj7 예측 채점 |
+| 2026-08-18T09:06:07+0900 | 완료 | REQ-0188 | monitor-engineer → monitor-engineer | 창 C 판정 — inj7 로 파괴 4건 남았다(예측 ① 빗나감) · ssovf 유휴 증가 · 다음 창은 망이 다르다 |
+| 2026-08-18T10:02:10+0900 | 발행 | REQ-0189 | root → monitor-engineer | 창 D 개방 — 장치 복구됨(09:16:08 전원 리셋) · 새 망이라 창 A~C 와 합산 금지 · 기준선 회차 |
+| 2026-08-18T10:02:43+0900 | 발행 | REQ-0190 | root → socket-engineer | inj8-pre — 새 망의 기준선 회차 · 같은 코드 다른 망 · 판별자가 이 망에서도 서는지 |
+| 2026-08-18T10:04:33+0900 | 착수 | REQ-0189 | monitor-engineer → monitor-engineer | 창 D 개방 — 장치 복구됨(09:16:08 전원 리셋) · 새 망이라 창 A~C 와 합산 금지 · 기준선 회차 |
+| 2026-08-18T10:19:07+0900 | 완료 | REQ-0186 | arduino-engineer → arduino-engineer | IP 변경 재플래싱 — SERVER_IP 192.168.0.29 (주소만) · 포트 이름도 바뀌었다 usbmodem1101 |
+| 2026-08-18T11:23:28+0900 | 발행 | REQ-0191 | root → monitor-engineer | 기록 공백을 메우고 측정 종료를 선언하라 — 창 D 판정 · 창 E 경과 · 종료 절에 유보 다섯 |
+| 2026-08-18T11:24:29+0900 | 발행 | REQ-0192 | root → arduino-engineer | 기록 공백 — cntTick 굽기 경과를 원장에 올리고 소스를 커밋하라 (착수 금지·정리만) |
+| 2026-08-18T11:24:40+0900 | 착수 | REQ-0191 | monitor-engineer → monitor-engineer | 기록 공백을 메우고 측정 종료를 선언하라 — 창 D 판정 · 창 E 경과 · 종료 절에 유보 다섯 |
+| 2026-08-18T11:25:07+0900 | 통보 | REQ-0193 | monitor-engineer → root | 기록 공백 메우기 — 창 D 판정(파괴 3건 · CNT 정합 3 대 3) · 창 E 개방 · 주입 두 회차 시각표 · 모르는 칸은 모른다로 표시 |
+| 2026-08-18T11:25:38+0900 | 착수 | REQ-0192 | arduino-engineer → arduino-engineer | 기록 공백 — cntTick 굽기 경과를 원장에 올리고 소스를 커밋하라 (착수 금지·정리만) |
