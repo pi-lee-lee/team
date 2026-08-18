@@ -3,9 +3,9 @@ id: REQ-0202
 title: 🔴 구현 1.5 — cmdPending 구멍 즉시 수정 (사용자가 실물 재현) · ack_budget_ms 를 써라
 from: root
 to: web-engineer
-status: open
+status: claimed
 created: 2026-08-18T13:57:37+0900
-updated: 2026-08-18T13:57:37+0900
+updated: 2026-08-18T14:41:49+0900
 files: ["조별과제샘플/index.html", "web/tools/"]
 parent: none
 ---
