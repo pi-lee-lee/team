@@ -592,3 +592,7 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-18T16:35:51+0900 | 발행 | REQ-0218 | root → arduino-engineer | 🔴 SEND OK 손실을 실측했다 — 바닥 1%, 48B 이상에서 2~4배. pendLine/잘림 대비를 만들어라 |
 | 2026-08-18T16:36:04+0900 | 착수 | REQ-0218 | arduino-engineer → arduino-engineer | 🔴 SEND OK 손실을 실측했다 — 바닥 1%, 48B 이상에서 2~4배. pendLine/잘림 대비를 만들어라 |
 | 2026-08-18T16:38:23+0900 | 완료 | REQ-0217 | socket-engineer → socket-engineer | 🔴 원인 확정: 같은 devid 재접속이 살아있는 세션을 끊는다(38건) — 생사 확인 후 거절·IP 로깅·카운터 분리, 배포까지 |
+| 2026-08-18T16:39:55+0900 | 완료 | REQ-0218 | arduino-engineer → arduino-engineer | 🔴 SEND OK 손실을 실측했다 — 바닥 1%, 48B 이상에서 2~4배. pendLine/잘림 대비를 만들어라 |
+| 2026-08-18T16:41:02+0900 | 통보 | REQ-0219 | monitor-engineer → root | 창 G 관측 재개(포트 점유 16:39:44) · 사전등록 t0 정정 · 앞선 판정 둘 철회 |
+| 2026-08-18T16:55:54+0900 | 통보 | REQ-0220 | monitor-engineer → root | 창 G 기준선 확정 · 굽기 판단 발신 · 원장 7.125~7.130(대조군은 성공한 쪽에 있다) |
+| 2026-08-18T16:56:40+0900 | 통보 | REQ-0221 | socket-engineer → root | 판별 시험 주입 16:55:09 (큰 프레임 축과 하행 축을 가른다) · 원장 (47) |
