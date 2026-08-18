@@ -3215,6 +3215,45 @@ static void drainPending(void) {
 //              → 그래도 ALREADY CONNECTED 만 오면 다시 CIPCLOSE
 //              → CIPCLOSE 3회가 안 먹으면 **AT+RST 로 올라가 전체 초기화**
 // 마지막 층이 없으면 또 무한 루프가 된다.
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴 `espInit()` — **UART 를 열고 부팅 사다리를 시작만 한다** (설계문서 §1.2 · 축 4)
+//
+// ⚠ **반환값을 두지 않는다.** `init` 이 진짜로 아는 것은 **"UART 를 열었다"** 뿐이다:
+//   · 사다리는 약 12초 걸리고 **실패할 수 있다.** 여기서 막으면 WiFi 없는 자리에서
+//     **영영 `setup` 을 못 나온다.**
+//   · 🔴 **모듈이 여러 장치에 흩어지므로** 한 대가 WiFi 를 못 잡아도 나머지가 돌아야 하고,
+//     **그 한 대도 로컬 센서는 계속 읽어야 한다. 링크가 없다고 물리 세계가 멈추지 않는다.**
+//   · 1단(`AT+RST`)의 응답은 **비동기**라 `setup` 에서는 아직 안 왔다.
+//     **그 이상을 반환값에 담으면 거짓이 된다.**
+// 🔮 반환값을 둔다면 **"모듈 기동 실패(하드웨어)"와 "아직 링크 없음(정상)"을 갈라라.**
+//   합치면 호출부가 정상 상태를 오류로 읽는다.
+// 🔴🔴 **이것은 거동 변경이다. 다음 굽기 항목이고 자기 축을 갖는다** (2026-08-18)
+//
+// ⚠ **`espRead`/`espWrite`/`espReset` 과 성격이 다르다:**
+//   ```
+//   espRead·espWrite·espReset : 이름만 바꿈 → hex 차이 **0**   (이미 한 함수였다)
+//   🔴 espInit               : 둘을 합침   → hex **15줄 상이** (원래 한 함수가 아니었다)
+//   ```
+// **무엇이 바뀌나** — `millis()` 호출 시점이 **29줄만큼 앞당겨진다:**
+//   ```
+//   원래 : wifi.begin(9600)  … 29줄(randomSeed·applySlotPinMode×10·simOcc·pinMode) …  netStepAt = millis()
+//   지금 : 셋을 한자리에서
+//   ```
+// ⚠ **무해하다**(`netStepWait = 500` 이라 여유가 크다). **그러나 변화가 없는 것은 아니다.**
+//   🔑 **무해를 근거로 "변화 0"이라고 적으면 다음 사람이 그 축을 안 센다.**
+// ⚠ `always_inline` 을 강제해도 그대로였다 — **원인이 인라인이 아니라 순서**임을 배제로 확인했다.
+// 🔴 **어느 쪽으로 옮겨도 순서는 바뀐다** — 원래 코드가 **두 곳에 흩어져 있었기 때문**이다.
+//   `netStep` 자리로 옮기면 이번엔 `wifi.begin` 이 29줄 늦어진다.
+//
+// > **흩어진 것을 모으면 그것이 곧 거동 변경이다.**
+// > **경계가 있다는 것과 한 함수였다는 것은 다르다.**
+static void espInit(void) {
+  wifi.begin(9600);                 // §3.3 AT+UART_DEF 로 보율을 바꾸지 않는다
+  netStep     = 0;
+  netStepAt   = millis();
+  netStepWait = 500;
+}
+
 static void espReset(unsigned long now) {
   if (netOnline) {
     // ★ REQ-0071 — 사다리는 **연속 30초 온라인**이라야 0단으로 내려온다.
@@ -3511,7 +3550,7 @@ static void statusTick(unsigned long now) {
 // ─────────────────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
-  wifi.begin(9600);                 // §3.3 AT+UART_DEF 로 보율을 바꾸지 않는다
+  espInit();                        // ★ UART 를 열고 사다리를 시작만 한다 (설계문서 §1.2)
 
   // ★ 슬롯 위상의 원점. **반드시 여기서 잡는다** — 0 으로 두면 첫 `statusTick` 에서
   //   `now - 0` 만큼의 슬롯을 한꺼번에 소진하느라 while 이 헛돈다(부팅 몇 초면 수 회).
@@ -3540,9 +3579,8 @@ void setup() {
   pinMode(PIN_ESP_RST, INPUT);
 #endif
 
-  netStep = 0;
-  netStepAt = millis();
-  netStepWait = 500;
+  // ✏️ 사다리 초기화는 `espInit()` 안으로 옮겼다 — **UART 열기와 같이 있어야 하는 것**이다.
+  //   떨어져 있으면 한쪽만 고치는 실수가 난다.
 
 #if DEBUG
   Serial.println(F("\n[PARKING NODE] proto v1 / 10 slots / dev=" DEVICE_ID));
