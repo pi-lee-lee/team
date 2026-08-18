@@ -14,7 +14,7 @@
 포트를 여는 순간 DTR 이 올라가 Uno 가 **한 번** 리셋된다. 그 시각을 헤더에 박아
 분석에서 '우리가 만든 리셋'으로 표시할 수 있게 한다.
 
-사용: python3 monitor/serial_tap.py --port /dev/cu.usbmodem1101 --baud 115200 \
+사용: python3 monitor/serial_tap.py --port /dev/cu.usbmodem21201 --baud 115200 \
           --out monitor/serial-esplink.log
 """
 from __future__ import annotations
@@ -39,7 +39,7 @@ def stamp() -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--port", default="/dev/cu.usbmodem1101")
+    ap.add_argument("--port", default="/dev/cu.usbmodem21201")
     ap.add_argument("--baud", type=int, default=115200)
     ap.add_argument("--out", default="monitor/serial-esplink.log")
     args = ap.parse_args()
