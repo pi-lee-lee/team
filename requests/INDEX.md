@@ -535,3 +535,14 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-18T11:26:38+0900 | 통보 | REQ-0195 | socket-engineer → root | 주입 회차 원장 정리(inj7·inj8pre·inj8) + 예측 셋 채점 · 판별자 오탐 · 어긋나는 수 하나 |
 | 2026-08-18T11:26:39+0900 | 완료 | REQ-0191 | monitor-engineer → monitor-engineer | 기록 공백을 메우고 측정 종료를 선언하라 — 창 D 판정 · 창 E 경과 · 종료 절에 유보 다섯 |
 | 2026-08-18T11:28:23+0900 | 완료 | REQ-0192 | arduino-engineer → arduino-engineer | 기록 공백 — cntTick 굽기 경과를 원장에 올리고 소스를 커밋하라 (착수 금지·정리만) |
+| 2026-08-18T11:30:29+0900 | 완료 | REQ-0190 | socket-engineer → socket-engineer | inj8-pre — 새 망의 기준선 회차 · 같은 코드 다른 망 · 판별자가 이 망에서도 서는지 |
+| 2026-08-18T11:37:33+0900 | 발행 | REQ-0196 | root → arduino-engineer | 설계 재개 — ESP 클래스 명세(REQ-0180)를 마저 써라 · cntTick 자리도 표에 넣어라 |
+| 2026-08-18T11:39:37+0900 | 착수 | REQ-0196 | arduino-engineer → arduino-engineer | 설계 재개 — ESP 클래스 명세(REQ-0180)를 마저 써라 · cntTick 자리도 표에 넣어라 |
+| 2026-08-18T11:40:46+0900 | 발행 | REQ-0197 | root → socket-engineer | 설계 재개 — 브릿지 명세 미결 넷을 마저 써라 · 완료 판정은 지금 답할 수 있다 |
+| 2026-08-18T11:41:38+0900 | 완료 | REQ-0180 | arduino-engineer → arduino-engineer | 설계 — ESP 클래스 명세(init/read/write/reset) · 자리·모듈 유동화 · 전선 예산은 socket 과 합의 |
+| 2026-08-18T11:41:38+0900 | 완료 | REQ-0196 | arduino-engineer → arduino-engineer | 설계 재개 — ESP 클래스 명세(REQ-0180)를 마저 써라 · cntTick 자리도 표에 넣어라 |
+| 2026-08-18T11:42:37+0900 | 발행 | REQ-0198 | root → web-engineer | 설계 재개 — 표시량 A 확정(칸 안에 다) · §5 시각 형태를 채워라 |
+| 2026-08-18T11:43:32+0900 | 착수 | REQ-0198 | web-engineer → web-engineer | 설계 재개 — 표시량 A 확정(칸 안에 다) · §5 시각 형태를 채워라 |
+| 2026-08-18T11:44:03+0900 | 착수 | REQ-0197 | socket-engineer → socket-engineer | 설계 재개 — 브릿지 명세 미결 넷을 마저 써라 · 완료 판정은 지금 답할 수 있다 |
+| 2026-08-18T11:46:00+0900 | 완료 | REQ-0197 | socket-engineer → socket-engineer | 설계 재개 — 브릿지 명세 미결 넷을 마저 써라 · 완료 판정은 지금 답할 수 있다 |
+| 2026-08-18T11:53:37+0900 | 완료 | REQ-0198 | web-engineer → web-engineer | 설계 재개 — 표시량 A 확정(칸 안에 다) · §5 시각 형태를 채워라 |
