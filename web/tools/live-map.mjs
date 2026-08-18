@@ -342,6 +342,38 @@ try {
   ok('🔴 점유된 자리에는 예약이 열려 있지 않다 (REQ-0235)', badResv.length === 0,
      JSON.stringify(badResv) + ' — socket 이 ⓐ 로 확정하고 고쳤다. 배포 전이면 이 빨강이 정상이다');
 
+  /* 🔴 위 초록이 말하는 것은 **"예약이 안 열렸다"뿐이다** — `occupied` 가 **옳게 그려지는지**는
+     다른 주장이다(§5.80 한 검사에 한 주장). 그래서 따로 잰다:
+     ```
+     버튼은 잠기고 · 기호는 **없고**(정상 상태다) · 배너는 **안 센다**
+     ```
+     🔑 세 번째가 이 계열 결정의 핵심 근거다 — `unknown` 으로 뒀으면 **점유된 자리 수만큼 배너가
+     뜬다.** 주차장에 차가 있는 것은 정상이므로 그건 *"정상에서 침묵한다"* 를 깨뜨린다(설계서 §6). */
+  {
+    const w = rx.filter(x => x && x.type === 'state').slice(-1)[0] || null;
+    const occZones = (w ? w.zones || [] : []).filter(z => z.actions && z.actions.reserve
+                                                    && z.actions.reserve.reason === 'occupied').map(z => z.id);
+    if (!occZones.length) skip('점유 사유(occupied) 표시', '이번 자료에 reason=occupied 가 없다 — 전 자리가 비어 있다');
+    else {
+      const view = await evaluate(client, `(() => {
+        const out = {};
+        for (const b of document.querySelectorAll('#zone-grid .zbtn[data-act="reserve"]')) {
+          out[b.dataset.zone] = { off: b.getAttribute('aria-disabled') === 'true',
+                                  mark: (b.textContent.match(/[⏱⚠⏳]/) || [''])[0],
+                                  title: (b.title || '').slice(0, 40) };
+        }
+        const ban = document.getElementById('slots-banner');
+        return { btns: out, bannerHidden: ban ? ban.hidden : null };
+      })()`);
+      const bad = occZones.filter(id => !view.btns[id] || view.btns[id].off !== true || view.btns[id].mark !== '');
+      console.log('  🔑 점유 사유 표시 → ' + JSON.stringify({ zones: occZones, view: occZones.map(id => view.btns[id]), bannerHidden: view.bannerHidden }));
+      ok('🔑 점유 사유는 잠기지만 기호를 붙이지 않는다 (계열 normal)', bad.length === 0, JSON.stringify(bad));
+      ok('🔑 🔴 점유는 미상 배너를 띄우지 않는다 (정상에서 침묵한다)', view.bannerHidden === true,
+         JSON.stringify({ occ: occZones.length, bannerHidden: view.bannerHidden })
+           + ' — unknown 계열로 뒀으면 여기서 배너가 떴다');
+    }
+  }
+
   const target = await evaluate(client, `(() => {
     const occ = ${JSON.stringify([...occNow])};
     const b = [...document.querySelectorAll('#zone-grid .zbtn[data-act="reserve"]')]
