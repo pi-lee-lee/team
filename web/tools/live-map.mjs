@@ -18,8 +18,24 @@ const argv = process.argv.slice(2);
 const arg = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
 const PORT = arg('--port', null);
 if (!PORT) { console.error('--port <시험 인스턴스 포트>'); process.exit(2); }
-/* 🔴 운영 포트 거부 — 팀 표준(원장 §5.5). 기본값 없음 + 운영 거부. */
-if (['9900', '9991', '5500'].includes(String(PORT))) { console.error('🔴 운영 포트 거부: ' + PORT); process.exit(2); }
+/* 🔴 운영 포트 거부 — 팀 표준(원장 §5.5). 기본값 없음 + 운영 거부.
+   ⚠ **통합 검증은 장치가 붙은 인스턴스(운영)에서 한다**(사용자 지시 2026-08-19). **가드를 지우지 않는다** —
+   지우면 다음에 실수로 붙는다. 대신 **예외를 명시적으로** 만든다: `--allow-prod` 를 손으로 줘야 하고,
+   줬다는 사실을 **화면에 크게 찍고 조작을 전부 시각과 함께 기록**한다.
+   🔑 **사용자 브라우저가 같은 화면을 볼 수 있으므로 조작은 최소 횟수**여야 한다(루트 지시). */
+const ALLOW_PROD = argv.includes('--allow-prod');
+if (['9900', '9991', '5500'].includes(String(PORT))) {
+  if (!ALLOW_PROD) { console.error('🔴 운영 포트 거부: ' + PORT + ' — 통합 검증이면 --allow-prod 를 명시해라'); process.exit(2); }
+  console.log('🔴🔴 운영 인스턴스(' + PORT + ')에 붙는다 — 사용자 지시에 의한 예외.');
+  console.log('     사용자 브라우저가 같은 화면을 볼 수 있다. 조작은 최소로, 전부 기록한다.\n');
+}
+/** 조작을 언제 무엇을 했는지 남긴다 — socket 이 서버 로그와 맞출 수 있게. */
+const acted = [];
+function actLog(what) {
+  const t = new Date().toISOString().slice(11, 23);
+  acted.push(t + ' ' + what);
+  console.log('  🕐 ' + t + ' — ' + what);
+}
 const URL_ = 'http://127.0.0.1:' + PORT + '/index.html';
 
 let pass = 0, fail = 0, skipped = 0;
@@ -49,8 +65,12 @@ try {
      읽었는데 ③ 대조는 통과했다 — **상태는 와 있었고 내 기록기가 늦었다.**
      🔑 **하니스가 못 본 것을 서버가 안 한 것으로 읽는 형태**(원장 §5.30)이고, WS 층에서 잡으면
      그 시점 의존이 사라진다. */
-  const rx = [];
+  const rx = [], tx = [];
   client.on((method, p) => {
+    if (method === 'Network.webSocketFrameSent') {
+      const d = p.response && p.response.payloadData;
+      if (typeof d === 'string' && d.charAt(0) === '{') { try { tx.push(JSON.parse(d)); } catch (e) {} }
+    }
     if (method === 'Network.webSocketFrameReceived') {
       const d = p.response && p.response.payloadData;
       if (typeof d === 'string' && d.charAt(0) === '{') { try { rx.push(JSON.parse(d)); } catch (e) {} }
@@ -170,6 +190,11 @@ try {
   })()`);
   console.log('\n  🔴 ③ 옛 slots[] 대 새 state → ' + JSON.stringify(cmp));
   ok('③ 두 경로가 같은 말을 한다', !!(cmp && cmp.skip === false && cmp.diff.length === 0), JSON.stringify(cmp));
+  /* ⚠ **이 통과는 "둘 다 맞다"가 아니다.** socket 확인(2026-08-19): 서버가 장치의 점유 비트열을
+     **hex 를 10진으로** 읽고 있었다 → `occupied` 자체가 틀린 값일 수 있다. 두 경로는 **같은 값**에서
+     나오므로 **같이 틀린다.** 🔑 이 검사가 재는 것은 *일치*뿐이고 *정확*이 아니다. 점유가 고쳐지면
+     ③은 다시 재야 한다(같은 검사로 충분하다 — 일치는 그때도 필요조건이다). */
+  console.log('  ⚠ ③은 두 경로의 *일치*만 잰다 — 서버 점유 디코딩 결함(socket, 수정 중)이라 *정확*은 미측정');
 
   /* 화면이 실제로 무엇을 그렸나 — 격자가 켜졌고 자리/빈 칸이 갈리는가 */
   const dom = await evaluate(client, `(() => {
@@ -179,21 +204,161 @@ try {
              empties: g.querySelectorAll('.zcell--empty').length,
              banner: (() => { const b = document.getElementById('slots-banner');
                               return { hidden: b.hidden, text: b.textContent.slice(0, 90) }; })(),
-             acts: [...g.querySelectorAll('.zbtn')].slice(0, 3).map(b => b.dataset.act + ':' + b.getAttribute('aria-disabled') + ':' + b.title.slice(0, 40)) };
+             acts: [...g.querySelectorAll('.zbtn')].slice(0, 3).map(b => b.dataset.act + ':' + b.getAttribute('aria-disabled') + ':' + b.title.slice(0, 40)),
+             allActs: [...g.querySelectorAll('.zbtn')].map(b => ({ zone: b.dataset.zone, act: b.dataset.act,
+                                                                   off: b.getAttribute('aria-disabled') === 'true' })) };
   })()`);
   console.log('  · 화면 → ' + JSON.stringify(dom));
   ok('개정 격자가 켜지고 옛 격자가 숨는다', dom.on === true && dom.oldHidden === true);
   ok('자리와 빈 칸이 갈린다', dom.zones > 0 && dom.cells === dom.zones + dom.empties, JSON.stringify(dom));
-  /* ⚠ 장치가 안 붙었으니 전 자리가 막혀 있어야 한다 — 그게 정상이다(socket). */
-  ok('🔑 장치 없음이 조작 차단으로 나타난다', dom.acts.every(a => a.split(':')[1] === 'true'), JSON.stringify(dom.acts));
-  /* 🔴 **단언을 고쳤다 — 내 기대가 틀렸다.** `module_absent` 는 `fault` 계열이고 내 배너는
-     **`unknown` 계열만 센다**(설계서 §6: 조작 판정을 *할 수 없는* 자리). 서버는 모듈이 없다는 것을
-     **알고 있으므로** 미상이 아니다 → **침묵이 설계대로다.**
-     ⚠ **다만 열린 물음으로 남긴다**: 전 자리(12/12)가 `fault` 인데 집계가 조용하다.
-     칸마다 이유는 보이지만 **요약이 없다.** 장치 미접속은 *운영 중 고장*이 아니라 *구성 상태*라
-     지금은 침묵이 맞다고 보지만, **`fault` 집계가 따로 필요한지는 사람이 봐야 정한다**(§11). */
-  ok('미상 집계가 fault 만으로는 침묵한다(설계대로)', dom.banner.hidden === true,
-     JSON.stringify(dom.banner) + ' — module_absent 는 fault 계열이라 미상 계수에 안 든다');
+  /* 🔴 **세 번째로 같은 실수를 했다.** 여기 원래 단언은 *"장치가 없으니 전 자리가 막혀 있다"* 였고,
+     장치가 붙어 `reserve` 가 열리자 **제품이 옳은데 검사가 빨강**이 됐다. 배너에서 두 번 겪고
+     규칙으로 바꿨는데 **이 줄만 조건에 박힌 채 남아 있었다**(원장 §5.33 을 옆줄에 적어 두고도 놓쳤다).
+     🔑 규칙으로 바꾼다 — **버튼 잠김 == 서버가 그 조작을 `ok:true` 라 하지 않았다.**
+     이 불변식은 장치 유무·거절 코드·자리 수와 **무관**하므로 조건이 바뀌어도 안 틀린다.
+     ⚠ 화면과 전선을 각각 읽으므로 사이에 새 `state` 가 오면 **거짓 빨강**이 난다 → 재읽기로 가른다
+        (흔들리는 검사는 결국 무시당한다 — 빨강을 아끼는 게 아니라 **믿을 수 있게** 만드는 것이다). */
+  let actCmp = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const wire = rx.filter(x => x && x.type === 'state').slice(-1)[0] || null;
+    const byId = new Map((wire ? wire.zones || [] : []).map(z => [z.id, z.actions || {}]));
+    const acts = attempt === 0 ? dom.allActs
+      : await evaluate(client, `[...document.querySelectorAll('#zone-grid .zbtn')].map(b => ({ zone: b.dataset.zone, act: b.dataset.act, off: b.getAttribute('aria-disabled') === 'true' }))`);
+    const bad = (acts || []).filter(b => {
+      const a = (byId.get(b.zone) || {})[b.act];
+      return b.off !== !(a && a.ok === true);
+    });
+    actCmp = { buttons: (acts || []).length, mismatch: bad.length, sample: bad.slice(0, 3) };
+    if (!wire || bad.length === 0) break;
+  }
+  ok('🔑 버튼 잠김이 서버의 actions.ok 와 일치한다', !!(actCmp && actCmp.buttons > 0 && actCmp.mismatch === 0),
+     JSON.stringify(actCmp));
+  /* 🔴 **단언을 두 번 고쳤다. 두 번 다 내 단언이 한 조건에 박혀 있었다.**
+     ① 처음: *"전 자리가 막혔으니 배너가 뜬다"* → `module_absent` 는 **`fault`** 라 미상 계수에 안 든다
+     ② 다음: *"fault 만이니 침묵한다"* → 등록이 생기자 `node_offline`(**`unknown`**)이 와서 **뜬다**
+     🔑 **둘 다 결과를 박은 것이 원인이다.** → **규칙을 단언한다**: **미상 계열 차단이 하나라도 있으면
+     뜨고, 없으면 침묵한다.** 그러면 조건이 바뀌어도 이 검사가 안 틀린다.
+     (설계서 §6 · 원장 §5.33 — `busy`·`fault` 는 안 센다. `fault` 집계 필요 여부는 열린 물음이다.) */
+  const unknownBlocks = (() => {
+    const s4 = rx.filter(x => x && x.type === 'state').slice(-1)[0];
+    const FAM = { node_offline: 1, node_unregistered: 1 };
+    let n = 0;
+    for (const z of (s4 && s4.zones) || []) {
+      let hit = false;
+      for (const k of Object.keys(z.actions || {})) {
+        const a = z.actions[k] || {};
+        if (a.ok !== true && FAM[a.reason]) hit = true;
+      }
+      if (hit || !z.actions) n++;
+    }
+    return n;
+  })();
+  console.log('  · 미상 계열로 막힌 자리 수 → ' + unknownBlocks);
+  ok('미상 집계가 규칙대로다 (미상 차단 ' + unknownBlocks + '건 → 배너 ' + (unknownBlocks > 0 ? '뜸' : '침묵') + ')',
+     dom.banner.hidden === (unknownBlocks === 0),
+     JSON.stringify(dom.banner) + ' — fault·busy 는 안 센다(설계서 §6)');
+  /* ══ ⑥ `fault` 가 두 상태를 갈라 주는가 — **보기만 한다. 고치지 않는다**(루트) ═══ */
+  console.log('\n[⑥] 거절 코드가 "구성"과 "고장"을 갈라 주는가 (관찰만)');
+  const reasons = (() => {
+    const s3 = rx.filter(x => x && x.type === 'state').slice(-1)[0];
+    const out = {};
+    for (const z of (s3 && s3.zones) || []) for (const k of Object.keys(z.actions || {})) {
+      const r = (z.actions[k] || {}).reason; if (r) out[r] = (out[r] || 0) + 1;
+    }
+    return out;
+  })();
+  console.log('  · 나온 거절 코드 → ' + JSON.stringify(reasons));
+  /* 🔴 원장 §5.44.1: 장치가 한 번도 안 붙어도 `module_absent`(fault)로 온다 — 계약표는 그 상태를
+     `node_unregistered`(unknown)로 정의한다. **등록이 생긴 지금 그 코드가 사라지는지**가 관찰점이다. */
+  ok('⑥ 등록이 생기면 module_absent 가 줄어든다(관찰)', !reasons.module_absent || reasons.module_absent < 12,
+     JSON.stringify(reasons) + ' — 12개 그대로면 등록이 자리에 안 붙었다는 뜻이다');
+  if (reasons.node_unregistered) console.log('  🔑 node_unregistered 가 실기에서 나왔다 — 구성/고장 구분이 산다');
+  else skip('⑥ node_unregistered 실물 확인', '지금 자료에 그 코드가 없다 — 등록 전 순간을 못 잡았다');
+
+  /* ══ ⑤ 조작이 전선까지 나가는가 — 🔴 **최소 횟수**. 예약 한 번 + 반드시 취소 ═══ */
+  console.log('\n[⑤] 조작이 실제로 나가는가 (최소 1회 · 반드시 취소까지)');
+  const target = await evaluate(client, `(() => {
+    const b = [...document.querySelectorAll('#zone-grid .zbtn[data-act="reserve"]')]
+      .find(x => x.getAttribute('aria-disabled') === 'false');
+    return b ? b.dataset.zone : null;
+  })()`);
+  if (!target) {
+    skip('⑤ 예약 왕복', '누를 수 있는 자리가 없다 — 전 자리가 막혀 있다(장치·등록 상태를 먼저 봐라)');
+  } else {
+    actLog('예약 클릭 — 자리 ' + target);
+    await evaluate(client, `document.querySelector('#zone-grid .zbtn[data-act="reserve"][data-zone=' + ${JSON.stringify(JSON.stringify(target))} + ']').click()`);
+    let d = false;
+    for (let i = 0; i < 40; i++) { d = await evaluate(client, `document.getElementById('confirm-dialog').open === true`).catch(() => false); if (d) break; await sleep(50); }
+    ok('⑤ 확인 대화상자가 열린다', d === true);
+    /* 🔴 **사후 진단이 나를 속였다.** 확인 뒤 2.5초에 읽은 oldAction 은 "reserve"(통과 조건)인데
+       화면은 그 순간 거부 문구를 띄웠다 → **판정은 클릭 순간에 났고 그 뒤에 조건이 회복됐다.**
+       🔑 그래서 **누르기 직전**을 따로 찍는다. 시간에 따라 갈리는 것은 사후에 못 잡는다. */
+    const pre = await evaluate(client, `(() => {
+      const s = (typeof state !== 'undefined' && state.snapshot) || null;
+      const os = s ? (s.slots || []).find(x => x.id === ${JSON.stringify(target)}) : null;
+      let act = os ? '?' : 'no-old-slot';
+      try { if (os) act = (tileView(os) || {}).action; } catch (e) { act = 'throw:' + e.message; }
+      let ca = '?'; try { ca = canAct(); } catch (e) { ca = 'throw:' + e.message; }
+      return { oldAction: act, canAct: ca, hasSnap: !!s, ageMs: s && s.receivedAt ? Date.now() - s.receivedAt : null,
+               deviceOnline: s ? s.device && s.device.online : null };
+    })()`).catch(e => ({ err: String(e) }));
+    console.log('  🔑 누르기 직전 → ' + JSON.stringify(pre));
+    actLog('확인 누름 — 예약 요청 전송');
+    await evaluate(client, `document.querySelector('#confirm-dialog button[value="ok"]').click()`);
+    await sleep(2500);
+    const sentRv = tx.filter(m => m && m.type === 'reserve').slice(-1)[0] || null;
+    const resp = rx.filter(m => m && (m.type === 'queued' || m.type === 'ack' || m.type === 'error'))
+                   .filter(m => sentRv && m.rid === sentRv.rid).map(m => m.type + (m.code ? '/' + m.code : ''));
+    console.log('  · 보낸 예약 → ' + JSON.stringify(sentRv) + '  · 응답 → ' + JSON.stringify(resp));
+    /* 🔴 **"안 나갔다"로 끝내면 원인을 못 짚는다.** 확인을 눌러도 안 나가는 길은 화면 안에 둘뿐이고
+       (`requestReserve` 의 확인-후 재검증) **문구 하나가 그 둘을 가른다** —
+       "장치 연결이 끊겨"(deviceDown) 대 "그 사이 자리 상태가 바뀌어"(옛 경로가 예약 불가로 본다).
+       🔑 재검증은 **옛 `slots[]`** 를 보는데 버튼은 **새 `actions`** 로 그려지므로, 둘이 갈리면
+       사용자는 **눌리는 버튼을 누르고 거부를 받는다.** 그래서 실패 시 이 진단을 같이 찍는다. */
+    if (!sentRv) {
+      const why = await evaluate(client, `(() => {
+        const m = [...document.querySelectorAll('#messages .msg')].map(x => x.textContent).filter(t => t.indexOf(${JSON.stringify(target)} + ' · ') === 0).slice(-1)[0] || null;
+        /* 🔴 ~~window.state && state.snapshot~~ 로 썼다가 **거짓 "없다"** 를 받았다.
+           최상위 const state 는 **window 의 속성이 안 된다**(전역 객체에 붙는 건 var·함수뿐).
+           그래서 window.state 가 undefined → 진단이 no-snapshot 을 찍었고 **나는 그것을
+           "화면이 스냅샷을 못 받았다"로 읽었다.** ③이 바로 위에서 state.snapshot 을 잘 읽고
+           통과한 것과 모순이었는데 그 모순을 안 봤다.
+           🔑 **진단이 "없다"고 할 때 먼저 의심할 것은 대상이 아니라 내 읽는 법이다.**
+           ⚠ 그리고 이 주석은 **템플릿 문자열 안**이다 — 역따옴표를 쓰면 문자열이 끊겨
+           SyntaxError 가 난다(방금 그렇게 깨졌다). 여기서는 강조에 역따옴표를 쓰지 마라. */
+        const s = (typeof state !== 'undefined' && state.snapshot) || null;
+        const z = ((state.zoneState && state.zoneState.zones) || []).find(x => x.id === ${JSON.stringify(target)}) || null;
+        /* 🔑 재검증이 실제로 무엇을 보는지 그대로 찍는다 — tileView(옛 자리).action 이 판정자다.
+           이것이 reserve 가 아니면 버튼이 열려 있어도 **확인 뒤에 거부**된다. */
+        const os = s ? (s.slots || []).find(x => x.id === ${JSON.stringify(target)}) : null;
+        let oldAction = os ? 'tileView-실패' : 'no-old-slot';
+        try { if (os && typeof tileView === 'function') oldAction = (tileView(os) || {}).action; } catch (e) { oldAction = 'throw:' + e.message; }
+        return { msg: m, oldAction: oldAction, deviceOnline: s ? s.device && s.device.online : 'no-snapshot',
+                 oldSlot: s ? (s.slots || []).find(x => x.id === ${JSON.stringify(target)}) || 'not-in-slots' : 'no-snapshot',
+                 newActions: z ? z.actions : null, newOccupied: z ? z.occupied : null };
+      })()`).catch(e => ({ err: String(e) }));
+      console.log('  🔑 왜 안 나갔나 → ' + JSON.stringify(why));
+    }
+    ok('⑤ 예약이 전선 형식으로 나갔다 (type·slot·rid)',
+       !!(sentRv && sentRv.type === 'reserve' && sentRv.slot === target && sentRv.rid), JSON.stringify(sentRv));
+    ok('⑤ 서버가 응답했다 (queued/ack/error)', resp.length > 0, JSON.stringify(resp) + ' — 무응답이면 화면 자체 타임아웃이 돈다');
+
+    /* 🔴 **반드시 되돌린다.** 시험이 상태를 남기면 사용자가 실제 예약으로 읽는다. */
+    const canCancel = await evaluate(client, `!!document.querySelector('#zone-grid .zbtn[data-act="cancel"][data-zone=' + ${JSON.stringify(JSON.stringify(target))} + ']')`);
+    if (canCancel) {
+      actLog('취소 클릭 — 자리 ' + target);
+      await evaluate(client, `document.querySelector('#zone-grid .zbtn[data-act="cancel"][data-zone=' + ${JSON.stringify(JSON.stringify(target))} + ']').click()`);
+      for (let i = 0; i < 40; i++) { const dd = await evaluate(client, `document.getElementById('confirm-dialog').open === true`).catch(() => false); if (dd) break; await sleep(50); }
+      actLog('확인 누름 — 취소 요청 전송');
+      await evaluate(client, `document.querySelector('#confirm-dialog button[value="ok"]').click()`);
+      await sleep(2000);
+      ok('⑤ 🔴 취소까지 보냈다(상태를 남기지 않는다)', tx.some(m => m && m.type === 'cancel'), JSON.stringify(tx.map(m => m.type)));
+    } else {
+      /* 예약이 확정되지 않았으면 취소 버튼이 없다 — 남은 상태도 없다는 뜻이다. */
+      skip('⑤ 취소 왕복', '취소 버튼이 없다 = 예약이 확정되지 않았다 → 남긴 상태도 없다');
+    }
+  }
+  if (acted.length) console.log('\n  🕐 이번 실행에서 한 조작 ' + acted.length + '건:\n     ' + acted.join('\n     '));
 } catch (e) {
   fail++;
   console.log('  💥 예외로 중단: ' + (e && e.message ? e.message : e));
