@@ -2110,6 +2110,80 @@ struct Server {
     }
     void push_map() { ws_broadcast(map_json()); }
 
+    // ── REQ-0203 4c: `state` 봉투 + `actions` (설계 §6.5·§6.8·§6.9) ──────────────
+    // 🔴 **`actions` 는 서버가 계산해 *값으로* 준다.** 화면이 "모듈 목록 + 노드 생사"로 조합하지 않는다 —
+    //   조합 규칙이 화면에도 생기면 두 답이 갈리고 **관대한 쪽이 이기면 죽은 노드에 명령이 나간다.**
+    // 🔑 **키의 존재/부재가 한 비트를 나른다**: 없으면 "그 조작은 지금 이 자리에 없다"(버튼을 안 그린다),
+    //   있는데 `ok:false` 면 "뜻은 있는데 막혔다". **뜻 없는 것을 `ok:false` 로 보내면 화면이
+    //   영영 안 풀리는 막힌 버튼을 그린다.**
+    Node* node_of(const std::string& devid) {
+        std::vector<Node*> ns = all_nodes();
+        for (size_t i = 0; i < ns.size(); i++) if (ns[i]->devid == devid) return ns[i];
+        return NULL;
+    }
+    // 자리 하나의 막힌 이유. 빈 문자열 = 안 막혔다. **코드 다섯 중에서만 고른다**(§6.5).
+    std::string zone_block_reason(const Zone& z) {
+        if (z.modules.empty()) return "module_absent";
+        for (size_t i = 0; i < z.modules.size(); i++) {
+            Node* n = node_of(z.modules[i].first);
+            if (!n) return "module_absent";
+            // ⚠ **주차 노드만 생사 판정이 있다**(`device_online`). 보조 노드는 `online` 필드를 쓴다.
+            bool up = (n == &park) ? device_online() : n->online;
+            if (!up) return "node_offline";
+            if (!n->reg_done) return "node_unregistered";
+        }
+        // 같은 자리에 이미 전선/큐에 나간 명령이 있으면 사용자 조작을 겹치지 않는다
+        for (std::map<uint16_t, Pending>::iterator it = pend.begin(); it != pend.end(); ++it)
+            if (it->second.slot == z.id) return "pending";
+        return "";
+    }
+    void emit_action(std::ostringstream& o, bool& first,
+                     const char* name, const std::string& reason) {
+        if (!first) o << ",";
+        first = false;
+        o << jstr(name) << ":{\"ok\":" << (reason.empty() ? "true" : "false")
+          << ",\"reason\":" << (reason.empty() ? std::string("null") : jstr(reason)) << "}";
+    }
+    std::string state_json() {
+        std::ostringstream o;
+        o << "{\"type\":\"state\",\"srv_id\":" << jstr(srv_id)
+          << ",\"epoch\":" << map_epoch << ",\"ts_ms\":" << epoch_ms() << ",\"zones\":[";
+        for (size_t i = 0; i < zones.size(); i++) {
+            const Zone& z = zones[i];
+            if (i) o << ",";
+            const std::string blk = zone_block_reason(z);
+            int si = slot_index(z.id);                 // 주차 자리면 옛 상태를 그대로 쓴다
+            o << "{\"id\":" << jstr(z.id);
+            if (si >= 0) o << ",\"occupied\":" << (slots[si].occupied ? "true" : "false")
+                           << ",\"reserved\":" << (slots[si].reserved ? "true" : "false");
+            o << ",\"actions\":{";
+            bool first = true;
+            if (z.kind == "parking" && si >= 0) {
+                // 🔑 **뜻이 있는 것만 넣는다.** 예약이 없는 자리의 `cancel` 은 **키 자체를 안 보낸다**
+                if (!slots[si].reserved) emit_action(o, first, "reserve", blk);
+                else                     emit_action(o, first, "cancel",  blk);
+            } else if (z.kind == "entrance" || z.kind == "exit") {
+                emit_action(o, first, "open_gate",  blk);
+                emit_action(o, first, "close_gate", blk);
+            }
+            o << "}";
+            // §3.5 완료 판정 — ⚠ **지금은 모듈 값이 없어 `unknown` 뿐이다.** 4d 이후에 채운다
+            o << ",\"completion\":\"unknown\",\"modules\":[";
+            for (size_t m = 0; m < z.modules.size(); m++) {
+                if (m) o << ",";
+                // 🔴 **모듈 값은 아직 비트열에서 안 뽑는다. `known:false` 로 정직하게 낸다** —
+                //    모르면 덜 주장한다. 값을 지어내면 화면이 그것을 사실로 그린다.
+                o << "{\"devid\":" << jstr(z.modules[m].first)
+                  << ",\"name\":" << jstr(z.modules[m].second)
+                  << ",\"value\":null,\"known\":false}";
+            }
+            o << "]}";
+        }
+        o << "]}";
+        return o.str();
+    }
+    void push_state() { ws_broadcast(state_json()); }
+
     std::string snapshot_json() {
         std::ostringstream o;
         o << "{\"type\":\"snapshot\",\"ts\":" << epoch_ms()
@@ -2149,7 +2223,12 @@ struct Server {
         o << "]}";
         return o.str();
     }
-    void push_snapshot() { ws_broadcast(snapshot_json()); }
+    void push_snapshot() {
+        ws_broadcast(snapshot_json());
+        // 🔑 **옛 봉투와 같은 순간에 새 봉투를 낸다** — 같은 서버 상태에서 파생시키므로
+        //   두 경로가 서로 다른 말을 할 수 없다(web §1.2 의 "한 화면이 두 진실" 방지).
+        ws_broadcast(state_json());
+    }
 
     // ---------- 이음매: 디바이스 → 도메인 (REQ-0096 단계 C)
     // **디바이스 계층은 이것만 부른다.** 무엇을 할지는 도메인이 정한다.
@@ -4496,6 +4575,38 @@ static int selftest() {
                 std::cout << (ok28 ? "  ✓ " : "  ✗ ") << "get_map 상한: " << (GETMAP_MAX_PER_SEC + 3)
                           << "회 중 거절 " << t.getmap_rejects << " (기대 3)\n";
                 if (!ok28) bad++;
+            }
+
+            // ㉕ 🔴 **`state` 봉투와 `actions`** (REQ-0203 4c)
+            {
+                Server t; t.build_default_zones(); t.init_srv_id();
+                std::string j = t.state_json();
+                // 모듈이 없으면 `module_absent` — 그리고 **뜻 없는 조작은 키 자체가 없다**
+                bool a1 = (j.find("\"reserve\":{\"ok\":false,\"reason\":\"module_absent\"}")
+                           != std::string::npos)
+                       && (j.find("\"cancel\"") == std::string::npos);
+                std::cout << (a1 ? "  ✓ " : "  ✗ ") << "모듈 없음 → reserve 막힘(module_absent) · "
+                          << "예약 없으니 **cancel 키 자체가 없다**\n";
+                if (!a1) bad++;
+
+                // 예약되면 `reserve` 가 사라지고 `cancel` 이 나온다 — **존재/부재가 한 비트다**
+                t.slots[0].reserved = 1;
+                std::string j2 = t.state_json();
+                bool a2 = (j2.find("\"cancel\":{") != std::string::npos);
+                std::cout << (a2 ? "  ✓ " : "  ✗ ") << "예약 뒤 → cancel 키가 생긴다\n";
+                if (!a2) bad++;
+
+                // 입출구는 조작이 둘이다 — 🔑 **`bool` 하나였으면 못 갈렸을 자리**
+                bool a3 = (j2.find("\"open_gate\":{") != std::string::npos
+                           && j2.find("\"close_gate\":{") != std::string::npos);
+                std::cout << (a3 ? "  ✓ " : "  ✗ ") << "입출구: open_gate·close_gate 둘 다 나온다\n";
+                if (!a3) bad++;
+
+                // 🔴 `state` 가 `srv_id`·`epoch` 를 싣는다 — 화면이 낡음을 스스로 안다
+                bool a4 = (j2.find("\"srv_id\":") != std::string::npos
+                           && j2.find("\"epoch\":1") != std::string::npos);
+                std::cout << (a4 ? "  ✓ " : "  ✗ ") << "state 에 srv_id·epoch 가 실린다\n";
+                if (!a4) bad++;
             }
 
             s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
