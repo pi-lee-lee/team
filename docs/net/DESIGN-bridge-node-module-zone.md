@@ -706,17 +706,29 @@ state : {"type":"state", "epoch":N, …}     🔴 **자기가 계산될 때 쓴 
 {"type":"state","epoch":7,"ts_ms":1755500000123,
  "zones":[{"id":"A1",
            "occupied":true,"reserved":false,
-           "actionable":true,"blocked_reason":null,
+           "actions":{"reserve":{"ok":true,"reason":null},
+                      "cancel":{"ok":false,"reason":"not_reserved"}},
            "completion":"complete",
            "modules":[{"devid":"P1","name":"sensor","value":1,"known":true}]}]}
+
+{"type":"state","epoch":7,"ts_ms":1755500000123,
+ "zones":[{"id":"E1","kind":"entrance",
+           "actions":{"open_gate":{"ok":false,"reason":"node_offline"},
+                      "set_sign":{"ok":true,"reason":null}},
+           "completion":"partial",
+           "modules":[…]}]}
+```
+🔴 **`entrance` 예제를 같이 둔 이유**: `parking` 만 보면 `actions` 와 `actionable:bool` 이
+**같아 보인다.** **갈리는 것은 조작이 둘 이상인 자리**다. 예제 하나로는 그 차이가 안 보인다.
+```
 ```
 | 키 | 뜻 | 계산 주체 |
 |---|---|---|
 | `epoch` | 지형의 판 번호. **단조 증가** | 서버 |
 | `grid.rows`/`cols` | 격자 크기. **기본 5×5 이지만 설정에서 온다** | 서버(설정 적재) |
 | `cells` | `[[row,col], …]` — **지금은 항상 길이 1**(서버가 강제) | 서버 |
-| `actionable` | 조작 가능성 **판정 하나** | 🔴 서버(§6.5·§6.9) |
-| `blocked_reason` | 막힌 이유 **코드**(문구 아님) · 가능할 땐 `null` | 서버 |
+| `actions` | 🔴 **조작별** `{ok, reason}` 맵. **`bool` 하나가 아니다**(§6.5 에서 버렸다) | 🔴 서버(§6.5·§6.9) |
+| `actions[x].reason` | 막힌 이유 **코드**(문구 아님) · `ok` 면 `null` | 서버 |
 | `completion` | `complete`/`partial`/`unknown` (§3.5) | 서버 |
 | `value`·`known` | 모듈 값과 **그 값을 아는가** | 서버 |
 | `idx` | **비트열 자리** | 장치(등록 순서) |
@@ -757,6 +769,17 @@ state : {"type":"state", "epoch":N, …}     🔴 **자기가 계산될 때 쓴 
 > ### **옛 사본으로 계속 그리면 "화면의 정상이 서버의 정상"이 된다**(web §5.34).
 > **낡았다는 것을 아는데 그대로 그리는 것은, 모르고 그리는 것보다 나쁘다** — **알고도 숨긴 것**이다.
 🔑 **서버 쪽 몫은 그 창을 짧게 만드는 것**이다: `get_map` 즉답 · `map` 은 한 번에 완결(조각 내지 않는다).
+
+### 🔴🔴 정정 — **내가 §6.5 에서 버린 `bool` 을 이 절에서 되살렸다** (web 이 잡았다)
+
+첫 판의 §6.8 은 `"actionable":true,"blocked_reason":null` 로 적혀 있었다. **§6.5 는 이미
+`bool` 을 버리고 `actions` 맵으로 간다고 합의돼 있었다.** → **`actions` 가 맞다. 위 형식을 고쳤다.**
+
+> ### **결론을 적어 두고 그 결론을 자기 새 글에 적용하지 않았다.**
+🔑 **이 형태를 우리 둘이 각자 한 번씩 밟았다** — web 은 *"입출구는 예약이 아니다"* 를 적어 놓고
+자료 구조를 단일 `bool` 로 요구했고 내가 잡았다. **이번엔 반대다.**
+⚠ **`parking` 만 보면 둘이 같아 보여서 놓치기 쉽다** — **갈리는 것은 입출구다.**
+그래서 **예제에 `entrance` 를 같이 넣었다.** 예제가 하나면 다음 사람이 또 `bool` 로 줄인다.
 
 ### 🔑 판정/설명 분리가 두 도메인에서 같은 모양으로 나왔다 (web 확인)
 
