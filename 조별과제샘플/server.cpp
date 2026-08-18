@@ -1433,6 +1433,21 @@ struct Server {
         }
     }
 
+    // ── REQ-0203 3a: **노드를 하나로 훑는 길** ──────────────────────────────────
+    // 🔴 **색인을 저장하지 않는다. 부를 때마다 만든다.**
+    //   저장하면 `park`·`aux` 가 바뀔 때마다 갱신해야 하고, **한 곳만 빠뜨리면 색인이 낡는다** —
+    //   그건 "노드가 사라진 것처럼 보이는" 결함이고 로그에도 안 남는다.
+    //   **낡을 수 없는 구조가 갱신을 잘 하는 것보다 낫다.**
+    // ⚠ 지금은 **아무도 안 쓴다**(자가검증만). 다음 단계에서 라우팅이 이걸 탄다 —
+    //   **먼저 길을 놓고 그 다음에 차를 올린다.** 한 단계에 둘을 하면 거동 변화 0 을 못 보인다.
+    std::vector<Node*> all_nodes() {
+        std::vector<Node*> v;
+        if (!park.devid.empty() || park.fd != BAD_SOCK) v.push_back(&park);
+        for (std::map<std::string, AuxNode>::iterator it = aux.begin(); it != aux.end(); ++it)
+            v.push_back(&it->second);
+        return v;
+    }
+
     // 🔑 **`kind` 첫 글자가 "명령을 받는가"를 답한다**(설계 §5 · `O` = 받는다).
     // 🔴 **실패 방향을 못 박는다: `O` 가 아니면 명령을 보내지 않는다.**
     //    알 수 없는 글자도 **명령 금지 쪽으로 떨어진다** — 모르는 장치에 명령을 보내는 것이
@@ -4206,6 +4221,25 @@ static int selftest() {
                           << "회 (기대 0)\n";
                 if (!ok20) bad++;
                 t.ard = BAD_SOCK;
+            }
+
+            // ㉑ 🔴 **`all_nodes()` 가 주차 + 보조를 다 훑는다** (REQ-0203 3a)
+            //    ⚠ 색인을 저장하지 않는 선택의 값을 여기서 확인한다 — **`aux` 를 바꾼 뒤
+            //      아무것도 갱신하지 않고 바로 물어봐도 맞아야 한다.**
+            {
+                Server t;
+                bool e0 = t.all_nodes().empty();                 // 아무것도 없을 때
+                t.park.devid = "P1"; t.park.fd = sv[0];
+                bool one = (t.all_nodes().size() == 1);
+                t.aux["P2"].fd = sv[1];                          // 갱신 호출 없이 바로
+                t.aux["P3"].fd = sv[1];
+                std::vector<Node*> v = t.all_nodes();
+                bool three = (v.size() == 3 && v[0] == &t.park);  // 주차가 먼저다
+                bool ok21 = (e0 && one && three);
+                std::cout << (ok21 ? "  ✓ " : "  ✗ ") << "all_nodes(): 0 → 1 → "
+                          << v.size() << " (기대 3 · 주차가 앞 · **갱신 호출 없이**)\n";
+                if (!ok21) bad++;
+                t.park.fd = BAD_SOCK; t.aux.clear();
             }
 
             s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
