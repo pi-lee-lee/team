@@ -474,7 +474,11 @@ static void ramProbe(void) {
 // ─────────────────────────────────────────────────────────────────────────
 // rid 멱등 캐시 (§4.2) — 최근 8건, 결과까지 같이 들고 있는다
 // ─────────────────────────────────────────────────────────────────────────
-static const uint8_t CACHE_N = 8;
+// 🔴 2026-08-18 (REQ-0204) — **8 → 16.** `ACKQ_N` 보다 커야 한다.
+//   큐에 든 `rid` 의 **내용은 이 캐시에만 있다**(큐는 rid 만 담는다).
+//   **캐시가 큐보다 작으면 큐에 있는데 내용이 사라져** `sendSlotBatch` 가 그것을 버린다 —
+//   **큐를 늘려도 캐시가 병목이면 같은 손실이 다른 칸에서 난다.**
+static const uint8_t CACHE_N = 16;
 struct AckRec {
   uint16_t rid;
   char     slot[2];
@@ -530,11 +534,34 @@ static void cachePut(uint16_t rid, char s0, char s1, uint8_t result) {
 // 멱등 캐시와 겹치지 않는다 — **직교한다:**
 //   · 캐시 = 같은 `rid` 가 **또 오면** 상태를 다시 안 바꾼다 (중복 **수신**)
 //   · 큐   = 만든 답을 **못 보냈으면** 나중에 보낸다      (송신 **지연**)
-static const uint8_t ACKQ_N = 4;      // 60초 간격이면 1이면 충분. 사람이 연달아 누르는 경우를 위해 4
+// 🔴 2026-08-18 (REQ-0204) — **4 → 12.** 옛 근거가 틀렸다.
+//   ~~"60초 간격이면 1이면 충분. 사람이 연달아 누르는 경우를 위해 4"~~
+//   **사용자는 20~30번 연타한다.** 실측: `ackdrop +31`(서로 다른 rid 31개 — 아래 중복 방지가 있으므로).
+//   서버는 그 rid 를 3회 재전송하고 `ack_timeout` 을 냈고, 화면에 **"장치가 응답하지 않았습니다"** 가 떴다.
+//
+// ★ 새 값의 근거는 **"몇 명이 누르나"가 아니라 "배출이 멈추는 최악 구간"** 이다:
+//   배출은 슬롯마다 도는데(1.2초) **오프라인·게이트 닫힘 구간에는 0 이다.**
+//   `TX_STALL_MS = 10000` 이 그 최악을 10초로 묶는다 → **10초 × 1건/초(web 전역 아이들) = 10건.**
+//   여유 2 를 더해 **12**. ⚠ **유입률이 바뀌면(아이들 제거 등) 이 값도 다시 계산해야 한다.**
+static const uint8_t ACKQ_N = 12;
+
+// 🔴 **불변식: `CACHE_N >= ACKQ_N`.** 주석이 아니라 **컴파일이 막는다.**
+//   큐는 `rid` 만 담고 **내용은 캐시에만 있다.** 캐시가 더 작으면 **큐에 있는데 내용이 사라져**
+//   `sendSlotBatch` 가 그것을 버린다(`ackstale`) — **큐만 늘리면 손실이 다른 칸으로 옮겨갈 뿐이다.**
+//   ★ 원장 §8.2-14: **규칙을 적어 두는 것과 그 규칙이 적용되게 하는 것은 다른 물건이다.**
+//     그래서 문장이 아니라 **다음 사람이 큐만 올리면 빌드가 깨지는 형태**로 둔다.
+static_assert(CACHE_N >= ACKQ_N,
+              "CACHE_N 은 ACKQ_N 이상이어야 한다 — 큐는 rid 만 담고 내용은 캐시에 있다");
 static uint16_t      ackq[ACKQ_N];
 static uint8_t       ackqCount = 0;
 static uint8_t       ackqHead  = 0;   // 다음에 내보낼 자리
-static uint16_t      ackqDrops = 0;   // ★ 가득 차서 버린 수 — **조용히 버리면 지금과 같아진다**
+static uint16_t      ackqDrops = 0;   // ★ **큐가 가득 차서** 밀어낸 수 (유입 초과)
+// 🔴 2026-08-18 (REQ-0204) — **원인을 갈라 센다.** 예전에는 아래 둘이 같은 칸이었다:
+//     ① 큐가 가득 참        → 유입이 배출보다 빠르다      → 대책: 큐/배출을 키운다
+//     ② 캐시에서 밀려남      → 캐시가 큐보다 작다          → 대책: 캐시를 키운다
+//   **대책이 다른데 한 칸이었다.** `ackdrop 31` 이 어느 쪽인지 아무도 몰랐다.
+//   ★ 원장 §5.1 과 같은 뿌리 — **합쳐 세면 "무엇을 고쳐야 하나"를 못 읽는다.**
+static uint16_t      ackqStale = 0;   // ★ **캐시에서 밀려나** 내용을 만들 수 없어 버린 수
 
 static void ackqPush(uint16_t rid) {
   for (uint8_t i = 0; i < ackqCount; i++)                    // 같은 rid 가 이미 있으면 안 넣는다
@@ -1497,7 +1524,10 @@ static void cntTick(uint32_t now) {
   //     그 칸의 0 은 "안 났다"가 아니라 "그 칩엔 없었다"다.
   Serial.print(F(" stuck="));        Serial.print(sendOkGiveups);   // T2 초과 → 링크 재수립
   Serial.print(F(" ackq="));         Serial.print(ackqCount);       // 지금 보류 중인 ACK
-  Serial.print(F(" ackdrop="));      Serial.print(ackqDrops);       // 큐가 넘쳐 버린 ACK
+  Serial.print(F(" ackdrop="));      Serial.print(ackqDrops);       // 큐가 넘쳐 버린 ACK(유입 초과)
+  // ★ REQ-0204 — 캐시에서 밀려 버린 ACK. **대책이 다르므로 칸을 가른다.**
+  //   ⚠ 칸을 더해 이 줄이 길어지는 것은 이제 안전하다 — `cntTick` 이 송신 창 안에서만 나간다(§11.2-2).
+  Serial.print(F(" ackstale="));     Serial.print(ackqStale);
   // ★ 2026-08-17 슬롯 — **정수 계수는 `DEBUG` 밖**이다(원장 §8.4-2 의 경계).
   //   `[SLOT]` 줄은 매 슬롯 나가 대역을 먹으므로 `DEBUG` 안에 두지만, **누적은 여기 남긴다.**
   //   그래야 `DEBUG=0` 시연 빌드에서도 슬롯이 지켜졌는지 셀 수 있다.
@@ -1929,7 +1959,7 @@ static bool sendSlotBatch(uint8_t* ackOut, uint16_t* bytesOut) {
   while (ackqCount > 0 && cacheFind(ackq[ackqHead]) < 0) {
     ackqHead = (uint8_t)((ackqHead + 1) % ACKQ_N);
     ackqCount--;
-    if (ackqDrops < 65535) ackqDrops++;
+    if (ackqStale < 65535) ackqStale++;      // ★ REQ-0204 — 큐 넘침(ackdrop)과 **다른 사건**이다
 #if DEBUG
     Serial.println(F("[ACKQ] 캐시에서 밀려나 만들 수 없다 — 버린다"));
 #endif

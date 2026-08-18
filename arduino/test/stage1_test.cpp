@@ -87,6 +87,7 @@ static void arm(const char* refuse /* nullptr 이면 정상 프롬프트 */) {
   sendOkGiveups  = 0;
   cifsrRefused   = false;
   ackqDrops      = 0;
+  ackqStale      = 0;        // ★ REQ-0204
   ackqClear();
   ssOverflows    = 0;        // ★ REQ-0167 — 여기도 같이 늘린다(위 주석이 시키는 대로)
   slotSent       = false;
@@ -399,17 +400,19 @@ int main() {
 
   // ── [12e] 큐가 넘치면 버리되 **세어서 드러낸다** ───────────────────────────
   // ⚠ 조용히 버리면 지금과 같아진다 — 폐기 경로가 안 보이면 그게 다음 사고가 된다.
+  // ✏️ **2026-08-18 개정 (REQ-0204)** — `ACKQ_N` 이 4 → 12 로 늘었다.
+  //   시험이 상수를 박고 있으면 값이 바뀔 때마다 깨진다 → **`ACKQ_N` 을 그대로 쓴다.**
   printf("\n[12e] 큐 넘침 — 버리되 ackdrop 으로 드러낸다\n");
   arm(nullptr);
   ackqClear();
   ackqDrops = 0;
   sendLine(FRAME);                          // 게이트를 닫아 둔다
-  for (int i = 0; i < 6; i++) {             // 깊이 4 에 6건을 넣는다
+  for (int i = 0; i < ACKQ_N + 2; i++) {    // 깊이보다 2건 더 넣는다
     char body[24];
     snprintf(body, sizeof(body), "R,%d,A1,u1,", 100 + i);
     feedDown(body);
   }
-  ok(ackqCount == 4,            "★ 깊이 상한(4)을 지킨다");
+  ok(ackqCount == ACKQ_N,       "★ 깊이 상한(ACKQ_N)을 지킨다");
   ok(ackqDrops == 2,            "★★ 넘친 2건이 ackdrop 에 남는다 (조용히 안 버린다)");
 
   // ── [12f] 소켓이 끊기면 큐를 비운다 ────────────────────────────────────────
@@ -650,6 +653,39 @@ int main() {
     netOnline = true;
   }
   g_clockAutoAdvance = true;
+
+  // ── [25] 🔴 버림의 **두 원인이 갈려 세어진다** (REQ-0204) ────────────────
+  //   예전에는 둘 다 `ackdrop` 이었다 — **대책이 다른데 한 칸이라 무엇을 고칠지 못 읽었다.**
+  //     ① 큐가 가득 참   → 유입 초과 → 큐/배출을 키운다        → `ackdrop`
+  //     ② 캐시에서 밀려남 → 캐시가 작다 → 캐시를 키운다          → `ackstale`
+  //   ⚠ 이 시험은 수정 전 판본에서 **컴파일되지 않는다**(`ackqStale` 이 없다) —
+  //     §8.2-15-2 대로 컴파일 실패를 시험 실패로 쓰지 않는다. **가르는 동작 자체**를 확인한다.
+  printf("\n[25] 큐 넘침(ackdrop)과 캐시 밀림(ackstale)이 갈려 세어진다\n");
+  arm(nullptr);
+  ackqClear();
+  ackqDrops = ackqStale = 0;
+  {
+    // ① 큐 넘침만 만든다 — 캐시에는 다 들어 있게 둔다
+    sendLine(FRAME);                          // 게이트를 닫아 ACK 이 큐에 쌓이게
+    for (int i = 0; i < ACKQ_N + 3; i++) {
+      char body[24];
+      snprintf(body, sizeof(body), "R,%d,A1,u1,", 700 + i);
+      feedDown(body);
+    }
+    ok(ackqDrops == 3,          "★★ 넘친 3건이 ackdrop 에만 계상된다");
+    ok(ackqStale == 0,          "★★ 캐시 밀림은 0 이다 (두 원인이 안 섞인다)");
+  }
+  {
+    // ② 캐시 밀림만 만든다 — 큐에 든 rid 를 캐시에서 밀어낸다
+    ackqClear();
+    ackqDrops = ackqStale = 0;
+    ackqPush(9001);                           // 캐시에 없는 rid 를 직접 넣는다
+    ok(ackqCount == 1,          "큐에 1건");
+    uint8_t  acks = 0; uint16_t bytes = 0;
+    sendSlotBatch(&acks, &bytes);             // 배치가 만들려다 캐시에 없음을 발견한다
+    ok(ackqStale == 1,          "★★ 캐시 밀림이 ackstale 에 계상된다");
+    ok(ackqDrops == 0,          "★★ 큐 넘침은 0 이다 (반대 방향도 안 섞인다)");
+  }
 
   // ── [13] SEND FAIL 은 실패로 센다 — **원래 있던 구멍** ─────────────────────
   // 프롬프트까지 받고 페이로드도 썼는데 전송이 실패한 것이라 `busy` 와 전혀 다르다.
