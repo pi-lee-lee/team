@@ -282,6 +282,30 @@ static const int  TAKEOVER_GRACE_MS = 5 * DOWN_SLOT_MS;   // = 6000ms · 다른 
 // 🔑 **리터럴로 두지 않는 이유**: 슬롯 주기가 바뀌면 이 값이 **따라 움직여야 한다.**
 // 박아 두면 `DOWN_SLOT_MS` 를 고친 사람이 이 상수를 잊고, 그러면 오늘과 똑같은 일이 다시 난다.
 static const int  ACK_TIMEOUT_MS = 2 * DOWN_SLOT_MS;   // §7.3 · 유도값(2400ms)
+
+// ── 🔴 A[1] `rid` 폭 고정과 격리 — 정본은 `docs/net/DESIGN-rid-width-and-quarantine.md`
+//
+// **왜 폭을 자르나**: `N=3` 의 이득이 `rid` 자릿수에 걸려 있다(원장 §8.23-(58)).
+//   rid 3자리 → ACK 13B → N=3 이면 62B ✅ (대역 밖)
+//   rid 4자리 → ACK 14B → N=3 이면 65B 🔴 (이득 소멸)
+// 단조 증가는 uint16 끝까지 자라므로 **설정을 안 바꿔도 지표가 저절로 움직인다.**
+// 그래서 고정하는 것은 "지금 값"이 아니라 **자릿수의 상한**이다.
+static const uint16_t RID_SPACE = 1000;    // rid ∈ [0,999] — 최대 3자리
+static const uint16_t RID_NONE  = 0xFFFF;  // "발행 못 했다" — RID_SPACE 밖이라 유효값과 안 겹친다
+
+// 🔴 **폭보다 먼저 답해야 하는 것은 재사용 주기다** (arduino `docs/arduino/LEDGER.md` §25.3).
+// 장치는 최근 서로 다른 `rid` **16개**를 멱등 캐시에 들고 있고, 그 안에서 값이 재등장하면
+// **명령을 적용하지 않고 옛 ACK 을 재전송한다.** 서버는 ACK 을 받으므로 타임아웃도 안 뜬다 —
+// **실패가 성공처럼 보인다.** `RID_SPACE=1000` 은 되돌아오기까지 1000건이라 이 창을 넘는다.
+// ⚠ **이 값 아래로 내려갈 때는 반드시 이 상수를 같이 봐라. 16 이하면 구조적으로 항상 충돌한다.**
+static const int  DEV_RID_CACHE_N = 16;    // arduino CACHE_N (그쪽 소스 판독 · 실기 실측 아님)
+
+// 격리 — 해제된 rid 를 얼마나 묵혔다 재사용하나. **리터럴 금지: 상수에서 유도한다.**
+// 근거: 서버가 한 명령을 포기하는 것은 `ACK_MAX_TRIES` 번의 타임아웃을 다 쓴 뒤다.
+//       그보다 늦게 오는 ACK 은 **재전송 예산 전체보다 늦은 것**이므로 없는 것으로 다룬다.
+// ⚠ **이건 가정이지 관측이 아니다** — 장치가 그보다 늦게 ACK 하지 않는다는 것을 잰 적이 없다.
+//   그래서 `ack_unknown_rid` 를 요약에 낸다. **가정이 깨지면 그 칸이 오른다.**
+static const long long RID_QUARANTINE_MS = (long long)ACK_TIMEOUT_MS * ACK_MAX_TRIES;  // 7200ms
 static const int  SOAK_REPORT_MS = 60000;   // 소크 관측 주기 보고(REQ-0065)
 static const int  LOG_KEEP       = 2;       // §9.1 최신 2건
 static const uint64_t WS_MAX_FRAME = 64 * 1024;  // 클라이언트가 선언한 길이의 상한
@@ -991,7 +1015,27 @@ struct Server {
 
     std::map<sock_t, Conn> conns;      // HTTP/WS 클라이언트
     std::map<uint16_t, Pending> pend;
-    uint16_t next_rid;
+    uint16_t next_rid;                 // 🔴 이제 **커서**다. [0,RID_SPACE) 를 순환한다
+    // 격리표 — rid → (재사용 가능 시각, **해제 순번**). `pend` 를 떠날 때 여기 들어간다.
+    //
+    // 🔴 **순번을 시각과 따로 든다.** 처음엔 시각 하나만 들고 "가장 이른 시각"을 가장 오래 묵은
+    //   것으로 삼았는데 **자가검증이 그것을 깨뜨렸다**: 발행이 빠르면 `now_ms()` 가 같은 값을
+    //   돌려주어 **동률**이 되고, 동률에서는 늘 같은 칸이 뽑혀 **재사용 간격이 1** 이 됐다.
+    //   ⚠ 그 값이면 장치 멱등창(16) 안에서 재사용이 일어나 **명령이 조용히 삼켜진다.**
+    //   🔑 **시각으로 순서를 매기면 시계 해상도가 곧 순서다.** 순서가 필요하면 순번을 따로 들어라.
+    struct RidQ {
+        long long until_ms;            // 이 시각 전에는 재사용하지 않는다
+        long long seq;                 // 해제 순번 — **강제 해제 때 FIFO 를 보장한다**
+        RidQ() : until_ms(0), seq(0) {}
+    };
+    std::map<uint16_t, RidQ> rid_quar;
+    long long rid_rel_seq;             // 해제 순번 발급기(단조)
+    long long rid_alloc_n;             // 발행 누계 (분모)
+    long long rid_skips;               // 발행하려다 pend/격리라 건너뛴 횟수
+    long long rid_forced;              // 🔴 공간이 차서 격리를 조기 해제한 횟수. 0 이 정상
+    long long rid_exhausted;           // 🔴 pend 가 공간을 다 먹어 발행 자체를 못 한 횟수
+    long long ack_unknown_rid;         // pend 에 없는 rid 의 ACK — 늦은 ACK/재전송 중복
+    long long ack_slot_mismatch;       // 🔴 ACK 에코 자리 ≠ 서버가 보낸 자리 (멱등 캐시 서명)
     std::string last_bits;             // data_log 중복 쓰기 방지
 
     // §7.5 예약 은퇴 — occupied 1→0 전이를 보려면 직전 프레임이 기준선으로 필요하다.
@@ -1105,7 +1149,11 @@ struct Server {
                xs_uptime(-1), xs_last_ms(0), xs_dev(""),
                xs_reconnect_reboot(0), xs_reconnect_link(0),
                xs_reconnect_unknown(0),
-               next_rid(1), base_valid(false), test_armed(false),
+               next_rid(1),
+               rid_rel_seq(0),
+               rid_alloc_n(0), rid_skips(0), rid_forced(0), rid_exhausted(0),
+               ack_unknown_rid(0), ack_slot_mismatch(0),
+               base_valid(false), test_armed(false),
                resync_count(0), no_disk(false),
                soak_start_ms(0), ard_sessions(0), sess_start_ms(0), sess_frames(0),
                sess_last_line_ms(0), sess_max_gap_ms(0), all_frames(0), all_max_gap_ms(0),
@@ -1364,6 +1412,21 @@ struct Server {
         s += " · 치유 " + std::to_string(heal_fires) + "/" + std::to_string(heal_checks)
            + (heal_checks == 0 ? " 🔴검사0" : "")
            + " · 예약미해독 " + std::to_string(res_undecoded);
+        // 🔴 A[1] — **세는 것과 보이는 것은 다른 일이다.** `mod_order_changed` 를 만들어 놓고
+        //   요약에 안 내보내 **monitor 에게 없는 칸을 보라고 한** 사고가 있었다. 같은 것을 반복하지 않는다.
+        //   🔑 **분모를 같이 낸다** — `발행` 이 없으면 `건너뜀 0` 은 건강이 아니라 **표본 0** 이다.
+        //   각 칸이 낮아지는 *다른* 이유는 `docs/net/DESIGN-rid-width-and-quarantine.md` §5 표에 있다.
+        s += " · rid 발행 " + std::to_string(rid_alloc_n)
+           + "(다음 " + std::to_string((unsigned)(next_rid % RID_SPACE))
+           + "/" + std::to_string((unsigned)RID_SPACE) + ")"
+           + " 격리 " + std::to_string((long long)rid_quar.size())
+           + " 건너뜀 " + std::to_string(rid_skips)
+           + " 강제 " + std::to_string(rid_forced)
+           + (rid_forced > 0 ? " 🔴" : "")
+           + (rid_exhausted > 0 ? (" 고갈 " + std::to_string(rid_exhausted) + " 🔴") : "")
+           + " · ACK 미상rid " + std::to_string(ack_unknown_rid)
+           + " 자리불일치 " + std::to_string(ack_slot_mismatch)
+           + (ack_slot_mismatch > 0 ? " 🔴" : "");
         return s;
     }
 
@@ -1957,7 +2020,7 @@ struct Server {
     // `ack_timeout` 을 쓰면 "나갔는데 응답이 없다"는 **거짓 문장**이 로그에 남는다.
     void fail_down_item(const DownQ& q, const char* code, const char* msg) {
         std::map<uint16_t, Pending>::iterator it = pend.find(q.wire_rid);
-        if (it != pend.end()) pend.erase(it);
+        if (it != pend.end()) { pend.erase(it); rid_release(q.wire_rid); }
         if (q.ws_fd != BAD_SOCK) send_err(q.ws_fd, q.brid, code, msg);
     }
 
@@ -2688,11 +2751,68 @@ struct Server {
 #endif
     }
 
+    // ── 🔴 A[1] `rid` 발행 — 정본 `docs/net/DESIGN-rid-width-and-quarantine.md`
+    //
+    // **하드 규칙 ①**: `pend` 에 있는 rid 는 **절대** 발행하지 않는다. 어기면 ACK 이 엉뚱한
+    //   명령에 붙어 **자료를 조용히 오염시킨다.** 압력이 아무리 높아도 이 규칙은 안 푼다.
+    // **소프트 규칙 ②**: 해제된 rid 는 `RID_QUARANTINE_MS` 묵힌다(늦은 ACK 보호).
+    //   공간이 차면 **가장 오래 묵은 것부터 조기 해제**하고 `rid_forced` 를 올린다.
+    //   🔑 거절 경로를 새로 만들지 않는 이유: 화면 계약(`blocked_reason`)에 사유가 하나 늘면
+    //   **이 배포가 재려는 `>=64B` 진입률 축에 다른 축이 섞인다**(설계 §3.3).
+    uint16_t alloc_rid() {
+        const long long t = now_ms();
+        // 1차 — 커서에서 한 바퀴. `pend` 도 아니고 격리도 안 걸린 첫 값.
+        for (uint16_t i = 0; i < RID_SPACE; i++) {
+            uint16_t cand = (uint16_t)(next_rid % RID_SPACE);
+            next_rid = (uint16_t)((cand + 1) % RID_SPACE);
+            if (pend.count(cand)) { rid_skips++; continue; }
+            std::map<uint16_t, RidQ>::iterator q = rid_quar.find(cand);
+            if (q != rid_quar.end()) {
+                if (t < q->second.until_ms) { rid_skips++; continue; }
+                rid_quar.erase(q);                  // 격리 기간이 지났다
+            }
+            rid_alloc_n++;
+            return cand;
+        }
+        // 2차 — 한 바퀴가 다 막혔다. **격리만 조기 해제한다. `pend` 는 안 건드린다.**
+        // 🔴 **해제 *순번* 이 가장 작은 것을 고른다. 시각이 아니다.**
+        //   시각으로 고르면 같은 밀리초에 해제된 것들이 동률이 되어 **같은 칸이 반복해서 뽑히고**
+        //   재사용 간격이 1까지 떨어진다 — 자가검증 ㉜(a)가 실제로 그것을 잡았다.
+        uint16_t best = RID_NONE; long long best_seq = 0;
+        for (std::map<uint16_t, RidQ>::iterator it = rid_quar.begin();
+             it != rid_quar.end(); ++it) {
+            if (pend.count(it->first)) continue;    // 하드 규칙 ①
+            if (best == RID_NONE || it->second.seq < best_seq) { best = it->first; best_seq = it->second.seq; }
+        }
+        if (best == RID_NONE) {
+            // `pend` 가 1000칸을 다 먹은 극단. **여기서만 발행을 포기한다.**
+            rid_exhausted++;
+            return RID_NONE;
+        }
+        rid_quar.erase(best);
+        rid_forced++; rid_alloc_n++;
+        return best;
+    }
+
+    // `pend` 를 떠난 rid 를 격리에 넣는다. 🔴 **모든 해제 지점에서 부른다** —
+    // 한 곳이라도 빠지면 그 rid 는 격리 없이 재사용되어 이 변경 이전 거동으로 되돌아간다.
+    // ⚠ 그리고 그 누락은 **아무 증상도 안 낸다.** 늦은 ACK 이 와야 드러난다.
+    void rid_release(uint16_t rid) {
+        if (rid >= RID_SPACE) return;   // 옛 판이 남긴 큰 값 — 순환 공간 밖이라 격리 대상이 아니다
+        RidQ q;
+        q.until_ms = now_ms() + RID_QUARANTINE_MS;
+        q.seq      = ++rid_rel_seq;     // 🔑 시계 해상도와 무관한 **순서**
+        rid_quar[rid] = q;
+    }
+
     // ---------- 아두이노로 요청 내리기
     void dispatch(char kind, sock_t ws_fd, const std::string& brid,
                   const std::string& slot, const std::string& uid) {
-        uint16_t rid = next_rid++;
-        if (next_rid == 0) next_rid = 1;
+        uint16_t rid = alloc_rid();
+        if (rid == RID_NONE) {
+            logf("!", "rid 공간 고갈 — 하행 발행 포기 (pend=" + std::to_string(pend.size()) + ")");
+            return;
+        }
         Pending p;
         p.wire_rid = rid; p.ws_fd = ws_fd; p.browser_rid = brid;
         p.slot = slot;
@@ -2709,15 +2829,15 @@ struct Server {
         if (kind == 'R') snprintf(buf, sizeof(buf), "R,%u,%s,%s,", rid, slot.c_str(), p.user_id.c_str());
         else             snprintf(buf, sizeof(buf), "C,%u,%s,", rid, slot.c_str());
         // 🔑 **전송하지 않는다. 큐에 담는다.** 나가는 것은 다음 창(= 다음 `S` 도착)이다.
-        if (!enqueue_down(pend[rid], build_line(buf), true, false)) pend.erase(rid);
+        if (!enqueue_down(pend[rid], build_line(buf), true, false)) { pend.erase(rid); rid_release(rid); }
     }
 
     // §2.4 `T` — 테스트 모드 제어. R/C 와 같은 pend 표·재전송·타임아웃을 그대로 탄다.
     // Pending.user_id 를 tval 보관에 재사용하고, slot 에 "??" 가 들어갈 수 있다.
     void dispatch_test(sock_t ws_fd, const std::string& brid,
                        char op, const std::string& slot, const std::string& tval) {
-        uint16_t rid = next_rid++;
-        if (next_rid == 0) next_rid = 1;
+        uint16_t rid = alloc_rid();
+        if (rid == RID_NONE) { logf("!", "rid 공간 고갈 — T 발행 포기"); return; }
         Pending p;
         p.wire_rid = rid; p.ws_fd = ws_fd; p.browser_rid = brid;
         p.slot = slot; p.user_id = tval; p.kind = 'T';
@@ -2728,18 +2848,18 @@ struct Server {
         // 여기서 정한다). 대가가 있다: `T` 는 §8.7·§8.17 에서 **착지 타이밍을 재는 도구**였는데
         // 큐에 태우면 안전한 창으로 강제되어 **"착지 시점을 의도적으로 맞춘 시험"의 수단이 사라진다.**
         // → 그 시험이 필요하면 `--down-immediate` 로 옛 거동을 쓴다. **도구가 바뀐 사실은 원장 §8.23.**
-        if (!enqueue_down(pend[rid], build_line(test_prefix(p)), true, false)) pend.erase(rid);
+        if (!enqueue_down(pend[rid], build_line(test_prefix(p)), true, false)) { pend.erase(rid); rid_release(rid); }
     }
     // §12B — 시뮬레이터 한 걸음. **무장 여부로 막지 않는다**(테스트 모드와 별개).
     void dispatch_sim(sock_t ws_fd, const std::string& brid) {
-        uint16_t rid = next_rid++;
-        if (next_rid == 0) next_rid = 1;
+        uint16_t rid = alloc_rid();
+        if (rid == RID_NONE) { logf("!", "rid 공간 고갈 — M 발행 포기"); return; }
         Pending p;
         p.wire_rid = rid; p.ws_fd = ws_fd; p.browser_rid = brid;
         p.kind = 'M'; p.top = 0;
         p.sent_ms = now_ms(); p.tries = 1;
         pend[rid] = p;
-        if (!enqueue_down(pend[rid], build_line(sim_prefix(p)), true, false)) pend.erase(rid);
+        if (!enqueue_down(pend[rid], build_line(sim_prefix(p)), true, false)) { pend.erase(rid); rid_release(rid); }
     }
     // ── 🔴 자리 조작 `G` — **전선 형식은 arduino 의 파서에서 읽어 맞췄다**(REQ-0228 · 말로 받지 않았다)
     //
@@ -2771,8 +2891,8 @@ struct Server {
     }
     void dispatch_gate(sock_t ws_fd, const std::string& brid,
                        const std::string& slot, int idx, bool open) {
-        uint16_t rid = next_rid++;
-        if (next_rid == 0) next_rid = 1;
+        uint16_t rid = alloc_rid();
+        if (rid == RID_NONE) { logf("!", "rid 공간 고갈 — G 발행 포기"); return; }
         Pending p;
         p.wire_rid = rid; p.ws_fd = ws_fd; p.browser_rid = brid;
         p.slot = slot; p.kind = 'G'; p.mod_idx = idx;
@@ -2782,7 +2902,7 @@ struct Server {
         gate_want[idx] = open ? 1 : 0;      // 🔑 **대조할 값을 여기서 남긴다**(ACK 이 지우기 전에)
         // 🔑 **큐에 들어간 것만 센다.** 거절되면 전선에 안 나갔으므로 장치거절의 분모가 아니다 —
         //   분모에 넣으면 "장치가 멀쩡한데 거절률이 낮아 보이는" 착시가 생긴다.
-        if (!enqueue_down(pend[rid], build_line(gate_prefix(p)), true, false)) pend.erase(rid);
+        if (!enqueue_down(pend[rid], build_line(gate_prefix(p)), true, false)) { pend.erase(rid); rid_release(rid); }
         else gate_q++;
     }
     static std::string sim_prefix(const Pending& p) {
@@ -2896,7 +3016,7 @@ struct Server {
                 continue;
             }
         }
-        for (size_t i = 0; i < dead.size(); i++) pend.erase(dead[i]);
+        for (size_t i = 0; i < dead.size(); i++) { pend.erase(dead[i]); rid_release(dead[i]); }
     }
 
     // 그 자리에 아직 ACK 를 못 받은 요청이 있는가.
@@ -3257,7 +3377,9 @@ struct Server {
                                         send_err(it->second.ws_fd, it->second.browser_rid,
                                                  "node_unregistered",
                                                  "장치 구성이 바뀌어 조작을 취소했습니다");
+                                    uint16_t drid = it->first;
                                     pend.erase(it++);
+                                    rid_release(drid);
                                 } else ++it;
                             }
                             gate_want.clear();
@@ -3278,9 +3400,18 @@ struct Server {
             std::string slot = f[2];
             int result = atoi(f[3].c_str());
             std::map<uint16_t, Pending>::iterator it = pend.find(rid);
-            if (it == pend.end()) { logf("!", "모르는 rid 의 ACK — 무시 (재전송 중복일 수 있다)"); return; }
+            if (it == pend.end()) {
+                // 🔴 **계수한다.** 여기는 격리 가정(설계 §3.1)이 깨졌을 때 오르는 칸이다 —
+                //   `RID_QUARANTINE_MS` 보다 늦게 오는 ACK 이 없다는 것을 **잰 적이 없다.**
+                //   ⚠ 재전송 중복도 같은 칸에 온다. **둘을 여기서 못 가른다** — 값이 오르면
+                //   그때 로그 시각으로 갈라야 한다. 그 한계를 요약 표에 적어 뒀다.
+                ack_unknown_rid++;
+                logf("!", "모르는 rid 의 ACK — 무시 (재전송 중복일 수 있다) rid=" + std::to_string(rid));
+                return;
+            }
             Pending p = it->second;
             pend.erase(it);
+            rid_release(rid);
 
             // ── 왕복 실측 (설계 §1) — **`W_srv` 를 상수로 두지 않기 위한 유일한 입력**
             // 이 값은 `RTT + 장치 처리시간` 이라 **RTT 의 상한**이고, 창을 좁히는 방향이라
@@ -3292,6 +3423,24 @@ struct Server {
                     rtt_last_ms = rtt; rtt_n++;
                     if (rtt > rtt_max_ms) rtt_max_ms = rtt;
                 }
+            }
+
+            // ── 🔴 에코 자리 대조 — **장치 멱등 캐시 재전송의 서명**을 여기서 본다
+            //
+            // arduino `docs/arduino/LEDGER.md` §25.3: 장치는 최근 서로 다른 `rid` **16개**를
+            // 캐시에 들고 있고, 그 안에서 값이 재등장하면 **명령을 적용하지 않고 옛 ACK 을
+            // 재전송한다.** 그러면 **에코된 자리가 옛 명령의 자리**다.
+            // ⚠ **서버는 ACK 을 받으므로 `ack_timeout` 이 안 뜬다 — 실패가 성공처럼 보인다.**
+            // 🔑 그래서 이 계수가 **`rid` 폭을 줄인 이 변경의 안전 지표**다(설계 §5).
+            //
+            // ⚠ **탐지만 한다. 거동은 안 바꾼다.** 바로 아래 줄이 "전선 값이 유효한 자리면
+            //   그걸 쓴다"인데 주석은 "전선 값을 믿지 않는다"라고 적혀 있다 — **둘이 어긋나 있고
+            //   그것을 고치는 것은 거동 변경**이라 이 배포에 안 넣는다(설계 §6.1 · 루트 결정 대기).
+            if (slot != "??" && slot_index(slot) >= 0 && !p.slot.empty() && slot != p.slot) {
+                ack_slot_mismatch++;
+                logf("!", "🔴 ACK 에코 자리 불일치 rid=" + std::to_string(rid)
+                          + " 보낸자리=" + p.slot + " 에코=" + slot
+                          + " — 장치 멱등 캐시 재전송 의심(arduino §25.3)");
             }
 
             // result=3 이면 slot 은 "??" 다(§2.4). 전선의 자리 값을 믿지 않고
@@ -3915,6 +4064,25 @@ struct Server {
                      g_park_dev_pin.empty() ? "(none, first-S-wins)" : g_park_dev_pin.c_str(),
                      w_srv());
             logf("=", cb);
+            // 🔴 A[1] — **폭 계약을 기동 로그에 값으로 낸다.** 남의 원장 사본이 아니라
+            //   "지금 이 서버가 쓰는 값"이 로그에 남아야 arduino 가 `ACK_worst` 를 다시 계산할 수 있다.
+            {
+                char rb[224];
+                snprintf(rb, sizeof(rb),
+                         "rid 계약 — 공간 %u([0,%u] · 최대 %d자리) · 격리 %lldms(=ACK_TIMEOUT×ACK_MAX_TRIES) "
+                         "· 장치 멱등창 %d (arduino §25.3)",
+                         (unsigned)RID_SPACE, (unsigned)(RID_SPACE - 1),
+                         (int)std::to_string((unsigned)(RID_SPACE - 1)).size(),
+                         RID_QUARANTINE_MS, DEV_RID_CACHE_N);
+                logf("=", rb);
+            }
+            // 🔴 **조건을 적었으면 그것을 보는 감시를 같은 자리에 만든다.**
+            //   재사용 주기가 장치 멱등창(16)에 가까워지면 명령이 **조용히 삼켜진다.**
+            //   ⚠ 여유 4배는 임의로 고른 문턱이다 — **관측용이지 증명이 아니다.**
+            if ((int)RID_SPACE <= DEV_RID_CACHE_N * 4) {
+                logf("!", "🔴 rid 공간이 장치 멱등창의 4배 이하다 — 재사용이 캐시 안에서 일어날 수 있다."
+                          " 명령이 조용히 삼켜진다(arduino §25.3). 폭을 줄인 사람이 이 줄을 읽어야 한다");
+            }
             init_srv_id();
             // 🔴 **여기서 부르지 않으면 자리가 비어 있고 `map` 이 빈 배열로 나간다.**
             //   첫 배포에서 실제로 그랬다 — **자가검증에서만 부르고 있었다.**
@@ -5549,6 +5717,86 @@ static int selftest() {
                     t.ard = BAD_SOCK;
                     closesock(os_[0]); closesock(os_[1]);
                 }
+            }
+
+            // ㉜ 🔴 **A[1] `rid` 폭 고정과 격리** — 정본 `docs/net/DESIGN-rid-width-and-quarantine.md`
+            //
+            // 🔴 **분모를 먼저 적는다.** 아래 검사가 **밟지 못하는 것**:
+            //   · 장치 멱등 캐시의 실제 삼킴 — 실기 장치가 있어야 한다. 여기서는 못 만든다
+            //   · 늦은 ACK 의 실제 최대 지연 — 격리 값(§3.1)은 **가정이고 잰 적이 없다**
+            //   · 재시작 충돌(§4) — 확률 1.6% 사건이라 시험으로 재현할 수 없다
+            //   **그러므로 이 항목이 전부 ✓ 라도 "안전이 증명됐다"가 아니다.**
+            {
+                // (a)(d) 2000회 발행 — **폭 상한**과 **재사용 간격**을 같이 본다.
+                //   🔑 (d)가 핵심이다: 폭을 줄이면 재사용 주기가 짧아지고, 그것이
+                //   장치 멱등창(16) 안에 들어가면 **명령이 조용히 삼켜진다**(arduino §25.3).
+                Server t;
+                std::vector<int> last_at(RID_SPACE, -1);
+                int minDist = 1 << 30; bool inRange = true; size_t maxDigits = 0;
+                for (int i = 0; i < 2000; i++) {
+                    uint16_t r = t.alloc_rid();
+                    if (r == RID_NONE || r >= RID_SPACE) { inRange = false; break; }
+                    size_t dg = std::to_string((unsigned)r).size();
+                    if (dg > maxDigits) maxDigits = dg;
+                    if (last_at[r] >= 0 && i - last_at[r] < minDist) minDist = i - last_at[r];
+                    last_at[r] = i;
+                    t.rid_release(r);          // 곧바로 해제 → 격리에 들어간다
+                }
+                bool okA = inRange && maxDigits <= 3 && minDist >= DEV_RID_CACHE_N;
+                std::cout << (okA ? "  ✓ " : "  ✗ ") << "rid 폭 ≤3자리(실측 " << maxDigits
+                          << ") · 최소 재사용 간격 " << minDist
+                          << " ≥ 장치 멱등창 " << DEV_RID_CACHE_N << "\n";
+                if (!okA) bad++;
+            }
+            {
+                // (b) 🔴 **하드 규칙 — `pend` 에 있는 rid 는 절대 발행하지 않는다.**
+                //     999칸을 `pend` 로 막고 한 칸만 비워 둔다. 그 칸이 나와야 한다.
+                Server t;
+                for (uint16_t r = 0; r < RID_SPACE; r++) if (r != 500) t.pend[r] = Pending();
+                uint16_t got = t.alloc_rid();
+                bool okB = (got == 500 && t.rid_skips > 0 && t.rid_forced == 0);
+                std::cout << (okB ? "  ✓ " : "  ✗ ") << "pend 를 피해 유일한 빈 칸을 고른다 (got "
+                          << got << " · 기대 500 · 건너뜀 " << t.rid_skips << ")\n";
+                if (!okB) bad++;
+                t.pend.clear();
+            }
+            {
+                // (c) 격리 시간 안에는 안 나온다 — **한 칸만 시간이 지난 상태로 둔다.**
+                Server t;
+                for (uint16_t r = 0; r < RID_SPACE; r++) t.rid_release(r);
+                t.rid_quar[321].until_ms = now_ms() - 1;        // 이 칸만 격리가 풀렸다
+                uint16_t got = t.alloc_rid();
+                bool okC = (got == 321 && t.rid_forced == 0);
+                std::cout << (okC ? "  ✓ " : "  ✗ ") << "격리 중인 rid 를 건너뛴다 (got " << got
+                          << " · 기대 321 · 강제 " << t.rid_forced << " 기대 0)\n";
+                if (!okC) bad++;
+            }
+            {
+                // (e) 전부 격리 중이면 **가장 오래 묵은 것**을 강제 해제한다(§3.3).
+                //     ⚠ 거절 경로를 새로 만들지 않는다 — 화면 계약에 축이 늘면 이 배포의 측정이 흐려진다.
+                //     🔴 **순번 FIFO 로 고른다**(시각이 아니다 — 같은 밀리초 동률이 순서를 무너뜨린다).
+                //        654 를 **가장 먼저** 해제해 두면 나머지 999개가 뒤에 쌓여도 그것이 나와야 한다.
+                Server t;
+                t.rid_release(654);                            // 가장 먼저 해제 = 순번 1
+                for (uint16_t r = 0; r < RID_SPACE; r++) if (r != 654) t.rid_release(r);
+                uint16_t got = t.alloc_rid();
+                bool okE = (got == 654 && t.rid_forced == 1);
+                std::cout << (okE ? "  ✓ " : "  ✗ ") << "공간이 차면 **가장 먼저 해제된** 격리를 내준다 (got "
+                          << got << " · 기대 654 · 강제 " << t.rid_forced << ")\n";
+                if (!okE) bad++;
+            }
+            {
+                // (f) 🔴 **실기 호출 지점이 `alloc_rid()` 를 타는가.**
+                //     ⚠ 위 (a)~(e)는 `alloc_rid()` 를 직접 부른다 — **네 발행 지점 중 하나가
+                //     옛 `next_rid++` 로 남아 있어도 전부 통과한다.** 그 구멍을 여기서 막는다.
+                //     (CLAUDE.md §"자기 시험의 분모를 아는 것은 자기뿐이다")
+                Server t; t.ard = BAD_SOCK;
+                long long n0 = t.rid_alloc_n;
+                t.dispatch_sim(BAD_SOCK, "selftest-M");
+                bool okF = (t.rid_alloc_n == n0 + 1);
+                std::cout << (okF ? "  ✓ " : "  ✗ ") << "dispatch_sim 이 alloc_rid 를 탄다 (발행 "
+                          << (t.rid_alloc_n - n0) << " · 기대 1)\n";
+                if (!okF) bad++;
             }
 
             s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
