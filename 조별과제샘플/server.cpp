@@ -3509,6 +3509,11 @@ struct Server {
                      w_srv());
             logf("=", cb);
             init_srv_id();
+            // 🔴 **여기서 부르지 않으면 자리가 비어 있고 `map` 이 빈 배열로 나간다.**
+            //   첫 배포에서 실제로 그랬다 — **자가검증에서만 부르고 있었다.**
+            //   ⚠ 자가검증이 스스로 지형을 만들어 쓰기 때문에 **시험은 전부 통과한다.**
+            //   **"시험 경로 ≠ 실기 경로"의 가장 조용한 형태다.**
+            build_default_zones();
             logf("=", "서버 인스턴스 id — " + srv_id
                       + " (🔑 `epoch` 는 **이 id 안에서만** 단조다. id 가 바뀌면 판을 비교하지 마라)");
         }
@@ -4632,6 +4637,20 @@ static int selftest() {
                            && j2.find("\"epoch\":1") != std::string::npos);
                 std::cout << (a4 ? "  ✓ " : "  ✗ ") << "state 에 srv_id·epoch 가 실린다\n";
                 if (!a4) bad++;
+            }
+
+            // ㉗ 🔴 **기동 경로가 지형을 만드는가** — 시험이 자기 지형을 만들면 이걸 못 잡는다
+            //    실제로 첫 배포에서 `zones` 가 빈 채 나갔고 **시험은 전부 통과했다.**
+            {
+                Server t;                                   // 🔑 **아무것도 안 부른 상태**
+                bool empty0 = t.zones.empty() && t.map_epoch == 0;
+                std::string j = t.map_json();
+                bool ok31 = (empty0 && j.find("\"zones\":[]") != std::string::npos);
+                std::cout << (ok31 ? "  ✓ " : "  ✗ ") << "새 Server 는 지형이 비어 있다 — "
+                          << "**기동 경로가 build_default_zones() 를 불러야 한다**"
+                          << " (map 의 zones=" << (j.find("\"zones\":[]") != std::string::npos ? "빈 배열" : "채워짐")
+                          << ")\n";
+                if (!ok31) bad++;
             }
 
             // ㉖ 🔴 **조작 요청 라우팅** (REQ-0203 4d) — **거절 사유가 갈려야 한다**
