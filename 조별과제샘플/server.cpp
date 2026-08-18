@@ -186,6 +186,27 @@ static const int  DOWNQ_WAIT_CAP_MS  = 4 * DOWN_SLOT_MS;   // 4.8초 — 큐 대
 // 원장 §8.17 이 아직 못 갈랐다고 적어 둔 물음("`R`/`C` 라서 안전한가, 착지가 좋았던 것인가")은
 // 하행을 원하는 순간에 쏠 수단이 없으면 **영영 못 가른다.** 기본값은 off 다.
 static bool       DOWN_IMMEDIATE     = false;
+// ── 🔴 건수 상한 — **바이트와 다른 축이다** (REQ-0206/0207 · 2026-08-18)
+//
+// **바이트 상한만으로는 못 막는다**: 명령이 작을수록 헐거워진다.
+//   시뮬 9B → 192B 가 **21건**을 통과시킨다 · 예약 28B → 6건에서 걸린다
+//   🔴 **가장 작은 명령이 가장 위험한데, 사용자가 연타한 것이 정확히 그것이었다.**
+//
+// **왜 건수인가**: 회선은 바이트를 나르지만 **장치는 건당 ACK 하나를 만든다.**
+// **같은 시스템에 단위가 다른 제약이 둘 있다** — 하나를 부정하며 다른 하나를 같이 지웠던 것을 되돌린다.
+//
+// **유도**(arduino 확정): 장치의 슬롯당 ACK 배출 **설계 보장 6**
+//   (실측 8 은 `S` 가 짧고 rid 3자리일 때만 · `tmask` 나 5자리 rid 면 6으로 떨어진다 → 설계값은 6)
+// ```
+//   유입 N · 배출 D. 한 슬롯을 놓치면 적체 2N →  다음 슬롯 2N−D  →  그다음 3N−2D
+//   2슬롯에 회복하려면  3N − 2D ≤ 0  →  **N ≤ 2D/3**  →  D=6 이면 **4**
+// ```
+// 🔴 **유입 = 배출이면 한 번만 밀려도 영구히 못 따라잡는다**(ρ=1). 그래서 여유가 필수다.
+// ⚠ **실측이 이 값을 더 강하게 만든다**: 연타 구간 `ack=` 분포가 `{0:133, 3:1, 8:7}` 이고
+//   8짜리 대부분이 미전송이었다 — **부하에서 배출률이 6 밑으로 떨어진다. 4 를 올리지 마라.**
+static const int  DEV_ACK_DRAIN_PER_SLOT = 6;                          // arduino 설계 보장
+static const int  DOWN_BATCH_MAX_N = (2 * DEV_ACK_DRAIN_PER_SLOT) / 3; // = 4 · 리터럴 아님
+
 
 // ── ACK 마감 — 🔴 **값이 아니라 유도식이다** (창 C~E 실측이 입력을 확정했다)
 //
@@ -650,6 +671,11 @@ struct Server {
         std::string slot;
         uint16_t    wire_rid;
         long long   deadline_ms; // enqueue 때 **한 번 박는다**
+        // 🔑 **분류는 이미 코드에 있었다**: `ws_fd == BAD_SOCK` = 서버 내부 발생.
+        // 재동기·치유·은퇴·폰 배정이 전부 그것이고, 브라우저 조작만 fd 를 갖는다.
+        // **기준**: "이 명령이 없으면 서버와 장치가 갈린 채로 남는가?" → 그렇다면 중요다.
+        // 🔴 **치유 명령이 연타에 밀려나면 치유 자체가 죽는다.**
+        bool        important;   // true = 중요(거절 금지 · 배출 우선)
     };
     std::vector<DownQ> downq;
     long long downq_bytes;
@@ -659,7 +685,11 @@ struct Server {
     //   `q_rejected` = 큐가 넘쳤다 → **설계 문제**(cap·깊이를 다시 봐야 한다)
     //   `q_nodev`    = 장치가 없다 → **링크 문제**(cap 과 아무 상관 없다)
     // 합쳐 두면 `큐거절 3` 을 보고 cap 을 올리려 하는데 실제로는 장치가 없었던 것일 수 있다.
-    long long q_rejected;        // queue_full 로 거절한 수
+    long long q_rejected;        // queue_full 로 거절한 수(두 축의 합)
+    // 🔴 **바이트 축과 건수 축을 갈라 센다.** 같은 `queue_full` 이라도 처방이 다르다:
+    //   바이트 초과 → `cap`(전선이 못 나른다) · 건수 초과 → 장치 ACK 배출률(장치가 못 삼킨다)
+    //   합쳐 놓으면 `cap` 을 올려 놓고 왜 안 낫는지 몇 시간 찾게 된다(§8.23-(38) 과 같은 함정).
+    long long q_full_n;          // 그중 **건수 축**으로 거절한 수
     long long q_nodev;           // 장치 연결이 없어 거절한 수
     long long q_dup;             // already_pending 로 거절한 수
     // ⚠ **창 수**다(창당 1). 줄 수로 세면 같은 줄이 창마다 다시 세어져 누계가 부풀려진다 —
@@ -805,7 +835,7 @@ struct Server {
                // 🔴 이 여섯(+다섯)은 **선언만 돼 있고 초기화 목록에 없었다.** 쓰기 시작하는 순간
                // 쓰레기값이 지표로 나간다 — 원장이 통째로 경고하는 그 형태다. 여기서 닫는다.
                downq_bytes(0), batch_count(0), batch_lines(0),
-               q_rejected(0), q_nodev(0), q_dup(0),
+               q_rejected(0), q_full_n(0), q_nodev(0), q_dup(0),
                q_deferred(0), q_dropped_link(0),
                rtt_max_ms(0), rtt_last_ms(0), rtt_n(0), win_skips(0), dmax_flushes(0),
                last_dmax_ms(0),
@@ -1010,7 +1040,8 @@ struct Server {
            // 🔴 **네 칸을 갈라 둔다** — 합치면 `큐거절 3` 을 보고 cap 을 올리려 하는데
            // 실제로는 장치가 없었던 것일 수 있다. 원인이 갈리면 진단이 갈린다.
            + " · 큐넘침 " + std::to_string(q_rejected)
-           + "(장치없음 " + std::to_string(q_nodev)
+           + "(건수축 " + std::to_string(q_full_n)
+           + "/장치없음 " + std::to_string(q_nodev)
            + "/중복 " + std::to_string(q_dup)
            + "/링크버림 " + std::to_string(q_dropped_link) + ")"
            + " · 대기 " + std::to_string(downq.size())
@@ -1478,6 +1509,30 @@ struct Server {
                      line.size());
             logf("!", b);
         }
+        const bool important = (p.ws_fd == BAD_SOCK);   // 서버 내부 발생 = 중요(§분류)
+
+        // 🔴 **사용자 계열만 건수로 막는다. 중요는 거절하지 않는다.**
+        // 사용자 조작은 **거절하면 사용자가 안다**(다시 누르면 된다). 중요는 버리면
+        // **아무도 모르게 서버와 장치가 갈린 채 남는다** — 그래서 문턱을 안 건다.
+        // 깊이는 유도값이다: **한 창에 `DOWN_BATCH_MAX_N` 이 나가므로 마감 안에 나갈 수 있는 양**
+        //   = 4건/창 × (4800ms ÷ 1200ms) = **16건**
+        if (!force && !important) {
+            int user_n = 0;
+            for (size_t k = 0; k < downq.size(); k++) if (!downq[k].important) user_n++;
+            const int user_cap = DOWN_BATCH_MAX_N * (DOWNQ_WAIT_CAP_MS / DOWN_SLOT_MS);
+            if (user_n >= user_cap) {
+                q_rejected++; q_full_n++;
+                char b[160];
+                snprintf(b, sizeof(b), "사용자 계열 큐 상한(%d건) 초과 — 거절 rid=%u",
+                         user_cap, p.wire_rid);
+                logf("!", b);
+                // 🔑 **침묵이 아니라 거절이다**(§8.20) — 조용히 버리면 사용자가 더 세게 누른다
+                if (p.ws_fd != BAD_SOCK)
+                    send_err(p.ws_fd, p.browser_rid, "queue_full",
+                             "요청이 밀려 있습니다. 잠시 후 다시 눌러 주세요");
+                return false;
+            }
+        }
         if (!force && downq_bytes + (long long)line.size() > downq_max_b()) {
             q_rejected++;
             char b[160];
@@ -1497,6 +1552,7 @@ struct Server {
         // 같은 rid 에 대해 **단조 비증가**가 된다(설계 §4-B). `ahead` 로 다시 계산하면
         // 앞이 밀릴 때 값이 늘어 단조성이 깨진다.
         q.deadline_ms = now_ms() + DOWNQ_WAIT_CAP_MS;
+        q.important = important;
         downq.push_back(q);
         downq_bytes += (long long)line.size();
         // 🔴 **`tries` 를 건드리지 않는다.** 재전송이 이 함수를 다시 타므로 여기서 0 으로 밀면
@@ -1528,15 +1584,24 @@ struct Server {
         // 바이트 상한까지만 담는다. **남은 것은 버리지 않고 다음 창으로 미룬다.**
         std::string payload;
         std::vector<DownQ> batch;
-        while (!downq.empty()) {
-            const DownQ& q = downq.front();
-            // ⚠ 첫 줄은 상한을 넘어도 담는다 — 안 그러면 큰 줄 하나가 큐를 영구히 막는다.
-            if (!payload.empty() &&
-                payload.size() + q.line.size() > (size_t)DOWN_BATCH_CAP_B) break;
-            payload += q.line;
-            batch.push_back(q);
-            downq_bytes -= (long long)q.line.size();
-            downq.erase(downq.begin());
+        // 🔴 **중요 계열을 먼저 담는다.** 각 계열 안에서는 FIFO 다(예약/취소가 뒤집히면 안 된다).
+        // **계열 사이에는 순서 보장이 필요 없다** — 상태 정정과 새 의도는 서로 독립이다.
+        for (int pass = 0; pass < 2; pass++) {
+            const bool want = (pass == 0);
+            for (size_t k = 0; k < downq.size(); ) {
+                const DownQ& q = downq[k];
+                if (q.important != want) { k++; continue; }
+                // ⚠ 첫 줄은 상한을 넘어도 담는다 — 안 그러면 큰 줄 하나가 큐를 영구히 막는다.
+                if (!payload.empty() &&
+                    payload.size() + q.line.size() > (size_t)DOWN_BATCH_CAP_B) break;
+                // 🔴 **건수 상한 — 바이트와 다른 축이다.** 장치의 ACK 배출률에서 유도됐다.
+                if ((int)batch.size() >= DOWN_BATCH_MAX_N) break;
+                payload += q.line;
+                batch.push_back(q);
+                downq_bytes -= (long long)q.line.size();
+                downq.erase(downq.begin() + k);
+            }
+            if ((int)batch.size() >= DOWN_BATCH_MAX_N) break;
         }
         if (downq_bytes < 0) downq_bytes = 0;
         if (batch.empty()) return;
@@ -2765,9 +2830,11 @@ struct Server {
             char cb[192];
             snprintf(cb, sizeof(cb),
                      "계약값 — ACK_TIMEOUT %dms(=2x슬롯) · ACK_MAX_TRIES %d · "
-                     "ack_budget_ms %lld · 큐대기마감 %dms · cap %dB · W_srv %lldms",
+                     "ack_budget_ms %lld · 큐대기마감 %dms · cap %dB/%d건 · "
+                     "사용자큐상한 %d건 · W_srv %lldms",
                      ACK_TIMEOUT_MS, ACK_MAX_TRIES, ack_budget_ms(),
-                     DOWNQ_WAIT_CAP_MS, DOWN_BATCH_CAP_B, w_srv());
+                     DOWNQ_WAIT_CAP_MS, DOWN_BATCH_CAP_B, DOWN_BATCH_MAX_N,
+                     DOWN_BATCH_MAX_N * (DOWNQ_WAIT_CAP_MS / DOWN_SLOT_MS), w_srv());
             logf("=", cb);
         }
         logf("⏱", "소크 관측 시작 — " + std::to_string(SOAK_REPORT_MS / 1000) + "초마다 요약, 종료(Ctrl-C) 시 한 줄 총평");
@@ -3429,6 +3496,65 @@ static int selftest() {
                           << " · 장치없음 " << s.q_nodev
                           << " (기대: 정리됨 · ACK실패 0 · 장치없음 >0)\n";
                 if (!ok9) bad++;
+            }
+
+            // ⑩ 🔴 **건수 상한 — 바이트가 남아도 `DOWN_BATCH_MAX_N` 에서 끊긴다**
+            //    바이트만으로는 못 막는 자리다: 작은 명령 6건은 바이트 상한에 한참 못 미친다.
+            {
+                s.ard = sv[0];                       // ⑨ 가 끊어 놓았다 — 되살린다
+                s.ard_last_ms = now_ms();
+                s.downq.clear(); s.downq_bytes = 0;
+                while (recv(sv[1], b, sizeof(b), MSG_DONTWAIT) > 0) {}
+                for (int k = 0; k < 6; k++) s.dispatch_sim(BAD_SOCK, "");   // M = 9B 짜리 6건
+                size_t before = s.downq.size();
+                s.flush_downq("selftest 건수상한", false);
+                bool ok10 = (before == 6 && (int)s.downq.size() == 6 - DOWN_BATCH_MAX_N);
+                std::cout << (ok10 ? "  ✓ " : "  ✗ ") << "건수 상한: 담긴 " << before
+                          << "건 중 " << (before - s.downq.size()) << "건 나감 · "
+                          << s.downq.size() << "건 남음 (기대 6 담김 · "
+                          << DOWN_BATCH_MAX_N << " 나감)\n";
+                if (!ok10) bad++;
+            }
+
+            // ⑪ 🔴 **중요 계열이 먼저 나간다** — 치유 명령이 연타에 밀리면 치유가 죽는다
+            {
+                s.ard = sv[0];
+                s.ard_last_ms = now_ms();
+                while (recv(sv[1], b, sizeof(b), MSG_DONTWAIT) > 0) {}
+                s.downq.clear(); s.downq_bytes = 0;
+                for (int k = 0; k < 3; k++) s.dispatch_sim(sv[1], "user");  // 사용자(fd 있음)
+                s.dispatch('C', BAD_SOCK, "", "B4", "");                    // 중요(내부 발생)
+                s.flush_downq("selftest 우선순위", false);
+                int r = (int)recv(sv[1], b, sizeof(b), MSG_DONTWAIT);
+                std::string got(b, r > 0 ? r : 0);
+                bool ok11 = (got.compare(0, 2, "C,") == 0);   // 중요가 맨 앞이어야 한다
+                std::cout << (ok11 ? "  ✓ " : "  ✗ ") << "중요 우선: 첫 줄이 "
+                          << got.substr(0, 2) << " (기대 C,)\n";
+                if (!ok11) bad++;
+            }
+
+            // ⑫ 🔴 **사용자는 거절되고 중요는 거절되지 않는다** — 이 비대칭이 이번 변경의 핵심이다.
+            //    사용자 거절은 **화면에 뜬다**(다시 누르면 된다). 중요를 거절하면 **아무도 모르게**
+            //    서버와 장치가 갈린 채 남는다. 대칭으로 "단순화"하면 그 침묵이 돌아온다.
+            {
+                s.ard = sv[0];
+                s.ard_last_ms = now_ms();
+                s.downq.clear(); s.downq_bytes = 0;
+                while (recv(sv[1], b, sizeof(b), MSG_DONTWAIT) > 0) {}
+                const int cap_n = DOWN_BATCH_MAX_N * (DOWNQ_WAIT_CAP_MS / DOWN_SLOT_MS);
+                long long rej0 = s.q_full_n;
+                for (int k = 0; k < cap_n + 3; k++) s.dispatch_sim(sv[1], "u");  // 사용자 연타
+                size_t user_q = s.downq.size();
+                long long rej = s.q_full_n - rej0;
+                s.dispatch('C', BAD_SOCK, "", "B9", "");                         // 중요 — 넘쳐도 들어간다
+                bool ok12 = ((int)user_q == cap_n && rej == 3 &&
+                             (int)s.downq.size() == cap_n + 1 && s.downq.back().important);
+                std::cout << (ok12 ? "  ✓ " : "  ✗ ") << "사용자 " << cap_n
+                          << "건에서 막힘(거절 " << rej << ") · 중요는 통과 → 큐 "
+                          << s.downq.size() << " (기대 사용자 " << cap_n
+                          << " · 거절 3 · 큐 " << (cap_n + 1) << ")\n";
+                if (!ok12) bad++;
+                s.downq.clear(); s.downq_bytes = 0;
             }
 
             s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
