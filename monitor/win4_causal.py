@@ -43,7 +43,9 @@ from __future__ import annotations
 import os
 import sys
 
-DAY = "2026-08-17"
+DAY = None   # 🔴 2026-08-19: 날짜를 박아 두면 **다른 날 로그가 조용히 빠진다**.
+             #   서버 로그는 여러 날에 걸쳐 있고, 옛 판 프레임이 오늘 것으로 읽힌다(socket 실측).
+             #   None 이면 날짜 필터를 끄고, 쓸 때는 인자로 받는다.
 SER = "monitor/serial-win4.log"
 SRV = os.path.expanduser("~/parking-logs/parking-server.log")
 T_START, T_END = "07:53:49", "14:48:10"
