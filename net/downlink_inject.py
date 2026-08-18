@@ -84,6 +84,10 @@ class Injector:
         # 큐 도입(REQ-0158) 뒤 생긴 **중간 상태**. 결말이 아니므로 다른 칸과 합치지 않는다 —
         # 합치면 "아직 전선에 안 나간 것"이 성공이나 실패로 세어진다.
         self.n_queued = 0
+        # 🔴 서버가 밀려 거절한 수(`queue_full`). **전선에 안 나갔다** — `device_offline` 과
+        # 같은 부류지만 **원인이 반대**라 칸을 가른다(장치 부재 대(對) 서버 배압).
+        self.n_queue_full = 0
+        self.qf_streak = 0
         self.streak_offline = 0     # `device_offline` 연속 — `check_stop` 만 갱신한다
         self.stopped_reason = None  # 중단 조건으로 멈췄으면 그 이유. None = 정상 종료
 
@@ -163,6 +167,19 @@ class Injector:
                                   "(서버가 3회 재전송했다)**. D1/D2 후보 — 분모에 넣어라. "
                                   "②(시리얼 +IPD)가 있어야 D1 과 D2 가 갈린다" % rid)
                     return "timeout"
+                # 🔴 `queue_full` — **서버가 스스로 거절했고 전선에는 안 나갔다.**
+                # 2026-08-18 배포(건수 상한)로 **새로 생긴 코드**다. 이 분기가 없으면
+                # `알 수 없는 거절` 로 흘러 `--stop-errors` 를 5건 만에 채우고 주입이 멈춘다 —
+                # 🔑 **고의로 과부하를 거는 시험에서 배압 신호를 고장으로 세는 셈**이다.
+                # ⚠ `device_offline` 과 **같은 부류지만 원인이 반대다**: 장치가 없는 게 아니라
+                #   서버가 밀려 있다. 합치면 "장치가 죽었다"로 오독된다 → **별도 칸.**
+                if code == "queue_full":
+                    self.n_queue_full += 1
+                    self.qf_streak += 1
+                    self.log("=", "큐 가득 %s — 서버가 거절했다(전선에 안 나갔다). "
+                                  "🔴 하행 실패가 **아니다**. 연속 %d건"
+                             % (rid, self.qf_streak))
+                    return "queue_full"
                 # 모르는 코드는 **어느 칸으로도 밀지 않는다** — 합치면 그 순간 증거가 사라진다
                 self.n_error += 1
                 self.log("!", "🔴 알 수 없는 서버 거절 %s code=%s — **분류하지 않았다.** "
@@ -221,6 +238,8 @@ class Injector:
             self.streak_offline += 1
         else:
             self.streak_offline = 0
+        if kind != "queue_full":
+            self.qf_streak = 0
 
         a = self.a
         # ① 장치 오프라인 연속 — **장치가 없는데 넣으면 분모만 오염시킨다**
@@ -236,6 +255,14 @@ class Injector:
         if a.stop_timeouts and self.n_timeout >= a.stop_timeouts:
             return ("응답없음 %d건 (문턱 %d) — 하행이 재전송까지 소진하고 실패하고 있다"
                     % (self.n_timeout, a.stop_timeouts))
+        # ⑤ 🔴 **전부 `queue_full` 이면 자극이 장치까지 안 간다 — 계속해도 얻는 게 없다**
+        #    창을 채우는 것이 목적인데 **서버 문턱에서 전부 되돌아오면 하행이 0 이다.**
+        #    ⚠ 이건 고장 신호가 **아니다**(설계대로 동작한 것). 그래서 `--stop-errors` 와
+        #    합치지 않고 **자기 칸에서 자기 문턱**을 본다 — 합치면 배압을 고장으로 센다.
+        if a.stop_queue_full and self.qf_streak >= a.stop_queue_full:
+            return ("queue_full 이 %d건 연속 (문턱 %d) — 자극이 전선까지 안 간다. "
+                    "주입 속도를 낮추거나 창을 다시 잡아라"
+                    % (self.qf_streak, a.stop_queue_full))
         # ④ 알 수 없는 거절·예외·재접속 — **모르는 것이 반복되면 멈추고 사람이 본다**
         if a.stop_errors and (self.n_error + self.n_reconnect) >= a.stop_errors:
             return ("알 수 없는 거절/예외/재접속 합 %d건 (문턱 %d)"
@@ -381,6 +408,8 @@ def main():
                     help="result≠4 가 누적 N건이면 멈춘다 — 상태를 바꾸고 있다는 뜻 (0=끔)")
     ap.add_argument("--stop-timeouts", type=int, default=3,
                     help="응답없음 누적 N건이면 멈춘다. **창 A 3차가 이 칸에서 3 을 찍었다** (0=끔)")
+    ap.add_argument("--stop-queue-full", type=int, default=20,
+                    help="queue_full 연속 N건이면 멈춘다 — 자극이 전선까지 안 간다는 뜻 (0=끔)")
     ap.add_argument("--stop-errors", type=int, default=5,
                     help="알 수 없는 거절+예외+재접속 합 N건이면 멈춘다 (0=끔)")
     ap.add_argument("--rid-prefix", default="inj",
