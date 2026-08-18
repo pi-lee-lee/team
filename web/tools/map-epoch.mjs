@@ -229,6 +229,42 @@ try {
   b = await evaluate(client, bnr);
   ok('🔴 busy 는 세지 않는다(곧 풀린다)', b.hidden === true, JSON.stringify(b));
 
+  /* ══ [9] 조작 버튼 — 실제로 요청이 나가는가 / 못 보내는 것을 말하는가 ═════════ */
+  console.log('\n[9] 조작 버튼 (칸=컨테이너 · 조작=버튼)');
+  await evaluate(client, inject({ type: 'state', epoch: 20, ts_ms: 4, zones: [
+    { id: 'A1', occupied: false, reserved: false, completion: 'complete',
+      actions: { reserve: { ok: true, reason: null } },
+      modules: [{ devid: 'P1', name: 'sensor', value: 0, known: true },
+                { devid: 'P2', name: 'sign', value: 1, known: true }] },
+    { id: 'E1', kind: 'entrance', completion: 'complete',
+      /* 🔴 서버는 가능하다고 하지만 **요청 형식이 계약에 없다** → 화면이 못 보낸다 */
+      actions: { open_gate: { ok: true, reason: null } },
+      modules: [{ devid: 'P3', name: 'gate', value: 0, known: true }] } ] }));
+  await sleep(200);
+  const btns = await evaluate(client, `[...document.querySelectorAll('#zone-grid .zbtn')].map(b => ({
+    zone: b.dataset.zone, act: b.dataset.act, dis: b.getAttribute('aria-disabled'), t: b.title }))`);
+  console.log('  · ' + JSON.stringify(btns));
+  const rv = btns.find(x => x.act === 'reserve'), og = btns.find(x => x.act === 'open_gate');
+  ok('보낼 수 있는 조작은 누를 수 있다', !!(rv && rv.dis === 'false'), JSON.stringify(rv));
+  /* 🔴 감추지 않는다. 보여 주고 **왜 못 누르는지 말한다.** */
+  ok('🔴 요청 형식이 없는 조작은 보이지만 막힌다', !!(og && og.dis === 'true'), JSON.stringify(og));
+  ok('그 이유가 "화면이 보낼 수 없다"로 적힌다', !!(og && /형식이 아직 계약에 없습니다/.test(og.t)), JSON.stringify(og));
+
+  /* 예약 버튼이 **옛 경로를 그대로 다시 쓰는지** — 확인 대화상자가 뜨면 그 증거다. */
+  await evaluate(client, `document.querySelector('#zone-grid .zbtn[data-act="reserve"]').click()`);
+  let dlg = false;
+  for (let i = 0; i < 40; i++) {
+    dlg = await evaluate(client, `document.getElementById('confirm-dialog').open === true`).catch(() => false);
+    if (dlg === true) break;
+    await sleep(50);
+  }
+  ok('🔑 예약 버튼이 옛 확인 대화상자를 그대로 쓴다', dlg === true,
+     '안 뜨면 낙관적 UI·롤백·queued 타이머를 다시 만들어야 한다는 뜻이다');
+  await evaluate(client, `document.getElementById('confirm-dialog').close('')`);   // 취소로 닫는다
+  await sleep(120);
+  const sent2 = await evaluate(client, `(window.__sent || []).map(p => p.type)`);
+  ok('취소로 닫으면 아무것도 안 보낸다', !sent2.includes('reserve'), JSON.stringify(sent2));
+
 } catch (e) {
   fail++;
   console.log('  💥 예외로 중단: ' + (e && e.message ? e.message : e));

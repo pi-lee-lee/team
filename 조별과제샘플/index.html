@@ -2073,6 +2073,36 @@ el.grid.addEventListener('click', function (event) {
   else if (btn.dataset.action === 'cancel') requestCancel(slotId);
 });
 
+/**
+ * 개정 격자의 조작 버튼. 🔴 **칸이 버튼이던 구조를 버렸다** — `actions` 가 조작별이 된 순간
+ * "칸 = 조작 하나"가 깨졌고(입출구는 조작이 둘), **버튼 안에 버튼을 넣을 수 없다**(설계서 §4.2).
+ *
+ * 🔑 **예약·취소는 옛 경로를 그대로 다시 쓴다**(`requestReserve`/`requestCancel`).
+ * 그러면 **확인 대화상자 · 낙관적 UI · 롤백 · `queued`/`ack_budget_ms` 타이머 · 아이들 1초**가
+ * **한 줄도 다시 안 만들어진다.** 자리 지시자도 옛 요청 형식(`slot`)을 그대로 쓴다 —
+ * ⚠ **개정에서 낱말이 `zone` 으로 갈렸지만 요청 키가 바뀌는지는 계약에 없다.**
+ * **확정된 것(`slot`)을 쓰는 것이 짐작하지 않는 쪽**이고, 그래야 **옛 서버와 새 서버가 같은 요청을 받는다.**
+ */
+el.zoneGrid.addEventListener('click', function (event) {
+  const btn = event.target.closest('.zbtn');
+  if (!btn) return;
+  const zoneId = btn.dataset.zone, act = btn.dataset.act;
+
+  /* `aria-disabled` 는 클릭을 막지 않는다 — 막으면 이유를 들을 수 없다(§3.2 의 그 이유). */
+  if (btn.getAttribute('aria-disabled') === 'true') {
+    showMessage(zoneId + ' · ' + (btn.title || '지금은 할 수 없습니다'), 'info');
+    return;
+  }
+  if (act === 'reserve') { requestReserve(zoneId); return; }
+  if (act === 'cancel')  { requestCancel(zoneId);  return; }
+
+  /* 🔴 **요청 형식이 계약에 없는 조작.** 조용히 아무 일도 안 하지 않는다 —
+     그러면 사용자가 "안 먹혔나" 하고 더 누르고, 그게 내가 §5.16 에서 막으려던 것이다.
+     **못 보낸다는 사실을 말한다.** 형식이 정해지면 이 분기가 사라진다. */
+  showMessage(zoneId + ' · ' + (ACTION_LABEL[act] || act)
+    + ' — 이 조작의 요청 형식이 아직 계약에 없어 보내지 못합니다 (화면 문제가 아닙니다)', 'err');
+});
+
 /* ────────────────────────────────────────────────────────────────
    7. 서버 메시지 처리 (§5.3)
    ──────────────────────────────────────────────────────────────── */
@@ -2340,11 +2370,20 @@ function renderZone(li, z, zs) {
     b.dataset.zone = z.id;
     b.dataset.act = key;
     b.textContent = ACTION_LABEL[key];
-    const okAct = a.ok === true;
+    /* 🔴 **서버가 가능하다고 해도 화면이 못 보내면 누를 수 없다.** 요청 형식이 계약에 있는
+       조작만 활성화한다 — `reserve`/`cancel` 은 옛 형식이 있고, `open_gate`/`close_gate` 는 없다.
+       ⚠ **버튼을 감추지 않는다**: 서버가 그 조작을 제공한다는 것은 사실이므로 **보여 주고,
+       왜 못 누르는지 말한다.** 감추면 "왜 차단봉을 못 여나"를 코드에서 찾게 된다. */
+    const sendable = (key === 'reserve' || key === 'cancel');
+    const okAct = a.ok === true && sendable;
     /* 🔑 `aria-disabled` 를 쓴다 — 진짜 `disabled` 면 키보드·스크린리더가 그 버튼에 닿지 못해
        **왜 못 누르는지를 들을 수 없다**(원장 §3.2, 의도된 설계). */
     b.setAttribute('aria-disabled', okAct ? 'false' : 'true');
-    if (!okAct && a.reason) {
+    if (a.ok === true && !sendable) {
+      b.textContent = ACTION_LABEL[key] + ' ⏳';
+      b.title = '이 조작의 요청 형식이 아직 계약에 없습니다 — 서버는 가능하다고 말하지만 화면이 보낼 수 없습니다';
+      b.setAttribute('aria-label', ACTION_LABEL[key] + ' — ' + b.title);
+    } else if (!okAct && a.reason) {
       const fam = familyOf(a.reason);
       b.textContent = ACTION_LABEL[key] + ' ' + (FAMILY_MARK[fam] || '');
       b.title = REASON_TEXT[a.reason] || ('지금 할 수 없습니다 (' + a.reason + ')');
