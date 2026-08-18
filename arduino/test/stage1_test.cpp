@@ -1261,6 +1261,41 @@ int main() {
     occMask = 0;
   }
 
+  // ── [35] 🔴 **등록 예약이 실제 전이 경로에서 선다** ────────────────────────
+  //
+  // ⚠ 왜 따로 있나: [32] 는 `markNeedsRegistration()` 을 **직접 부른다.**
+  //   소스에는 그 호출이 **세 곳**(정상 접속 · 초기 경합 · 소켓 닫힘)에 있는데
+  //   **시험이 하나도 안 탄다** → 🔴 **셋 중 하나가 빠져도 212 PASS 가 그대로 나온다.**
+  //   🔑 옛 시험 [19] 가 `handleLine` 을 직접 불러 실기 경로를 건너뛴 것과 **같은 형태**다.
+  //   증상: 재접속했는데 등록이 안 되고, 서버는 `Q` 3회 뒤 `node_unregistered` 로 굳힌다.
+  printf("\n[35] 등록 예약이 **실제 연결 줄**로 선다 (세 경로 전부)\n");
+  {
+    struct Case { const char* line; const char* what; };
+    // ⚠ `ALREAY CONNECT` 는 오타가 아니다 — 구형 ai-thinker 펌웨어의 실제 출력이다(원장 §8).
+    const Case cases[] = {
+      { "Linked",          "정상 접속(Linked)" },
+      { "CONNECT",         "정상 접속(CONNECT)" },
+      { "ALREAY CONNECT",  "초기 경합(ALREAY CONNECT · 펌웨어 오타)" },
+      { "Unlink",          "소켓 닫힘(Unlink)" },
+      { "CLOSED",          "소켓 닫힘(CLOSED)" },
+    };
+    for (const auto& c : cases) {
+      regPending = true; regAfterS = false;        // 반대 상태로 만들어 둔다
+      char buf2[32];
+      snprintf(buf2, sizeof buf2, "%s", c.line);
+      handleLine(buf2);
+      char msg[128];
+      snprintf(msg, sizeof msg, "★★ %s → 등록이 다시 예약된다", c.what);
+      // 🔑 **`regAfterS` 여야 한다** — 새 소켓이면 `S` 가 먼저다(승격 전이므로)
+      ok(!regPending && regAfterS, msg);
+    }
+    // 🔴 그리고 **`Q` 는 반대여야 한다** — 이미 승격된 뒤라 바로 `D` 다
+    regPending = false; regAfterS = true;
+    requestRegistrationNow();
+    ok(regPending && !regAfterS,
+                            "★★ Q 경로는 반대다 — regPending 이 서고 regAfterS 는 내려간다");
+  }
+
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }
