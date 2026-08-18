@@ -502,11 +502,30 @@ try {
     }
 
     /* ── 차단봉 조작 — 🔴 완료는 **ACK 이 아니라 다음 S 의 에코**다(socket §7.2) ── */
-    const gate = await evaluate(client, `(() => {
-      const b = [...document.querySelectorAll('#zone-grid .zbtn')]
-        .find(x => (x.dataset.act === 'open_gate' || x.dataset.act === 'close_gate') && x.getAttribute('aria-disabled') === 'false');
-      return b ? { zone: b.dataset.zone, act: b.dataset.act } : null;
-    })()`);
+    /* 🔴 **지금 값과 *반대* 조작을 고른다** (socket 지적 2026-08-19).
+       앞 판본은 그냥 첫 버튼(=`open_gate`)을 눌렀는데 **에코 비트가 이미 1 이었다** —
+       `settled` 가 떴지만 **상태 변화는 한 번도 안 밟혔다.** 🔴 **"명령이 상태를 바꾼다"가
+       실물에서 미검증인 채로 초록이었다** — 오늘 네 번째 헛통과이고 **이번엔 하니스가 아니라
+       제품 측정에서** 났다.
+       🔑 그래서 **바꿀 것이 있는 조작을 고른다**: 값이 참이면 닫기, 거짓이면 열기.
+       ⚠ 값을 모르면(`known:false`) 어느 쪽이 변화인지 알 수 없으므로 **미측정**으로 둔다 —
+          찍어서 맞히면 그게 또 헛통과다. */
+    const gate = await (async () => {
+      const w = rx.filter(x => x && x.type === 'state').slice(-1)[0] || null;
+      const btns = await evaluate(client, `[...document.querySelectorAll('#zone-grid .zbtn')]
+        .filter(x => x.dataset.act === 'open_gate' || x.dataset.act === 'close_gate')
+        .map(x => ({ zone: x.dataset.zone, act: x.dataset.act, off: x.getAttribute('aria-disabled') === 'true' }))`);
+      for (const z of (w ? w.zones || [] : [])) {
+        /* `state` 의 모듈에는 `kind` 가 없다(그건 `map` 쪽이다) — 값이 확정된 것을 고른다.
+           입·출구 자리는 모듈이 하나(`OBV`)라 이걸로 충분하다. */
+        const m = (z.modules || []).find(x => x && x.known === true && typeof x.value === 'boolean');
+        if (!m) continue;
+        const want = m.value === true ? 'close_gate' : 'open_gate';
+        const b = (btns || []).find(x => x.zone === z.id && x.act === want && !x.off);
+        if (b) return { zone: z.id, act: want, valueBefore: m.value, wantAfter: !m.value };
+      }
+      return null;
+    })();
     if (!gate) {
       const why = await evaluate(client, `[...document.querySelectorAll('#zone-grid .zbtn')].filter(x => x.dataset.act && x.dataset.act.indexOf('gate') >= 0).map(x => x.dataset.zone + '/' + x.dataset.act + ':' + x.title.slice(0, 40))`).catch(() => null);
       skip('⑦ 차단봉 조작 왕복', '누를 수 있는 차단봉 버튼이 없다 → ' + JSON.stringify(why));
@@ -594,6 +613,28 @@ try {
            계약상 정상 응답이고, 그건 **장치 쪽 사실**이지 화면 결함이 아니다. 값을 그대로 보고한다. */
         skip('⑦ 에코가 요청과 일치했다(settled)', '지난 값: ' + JSON.stringify(seq) + ' — mismatch 면 장치가 못 움직인 것이다(화면 결함 아님)');
       } else ok('⑦ 🔴 에코가 요청과 일치해 settled 로 갔다', true, JSON.stringify(seq));
+
+      /* 🔴 **여기가 본체다: 값이 실제로 뒤집혔는가.** `settled` 는 *"요청과 에코가 같다"* 이므로
+         **이미 그 상태였으면 아무것도 안 바뀌고도 `settled`** 다(socket 실측: `open_gate` 인데
+         비트가 이미 1 이었다). **"명령이 상태를 바꾼다"는 별개의 진술이고 따로 재야 한다.** */
+      const after = await (async () => {
+        for (let i = 0; i < 40; i++) {
+          const w = rx.filter(x => x && x.type === 'state').slice(-1)[0] || null;
+          const z = w ? (w.zones || []).find(x => x.id === gate.zone) : null;
+          const m = z ? (z.modules || []).find(x => x && x.known === true && typeof x.value === 'boolean') : null;
+          if (m && m.value === gate.wantAfter) return m.value;
+          await sleep(150);
+        }
+        const w = rx.filter(x => x && x.type === 'state').slice(-1)[0] || null;
+        const z = w ? (w.zones || []).find(x => x.id === gate.zone) : null;
+        const m = z ? (z.modules || []).find(x => x && x.known === true && typeof x.value === 'boolean') : null;
+        return m ? m.value : null;
+      })();
+      console.log('  🔑 에코 전이 → ' + JSON.stringify({ before: gate.valueBefore, want: gate.wantAfter, after: after }));
+      ok('⑦ 🔴🔴 명령이 장치 상태를 실제로 바꿨다 (에코 비트가 뒤집혔다)',
+         after === gate.wantAfter && after !== gate.valueBefore,
+         JSON.stringify({ before: gate.valueBefore, want: gate.wantAfter, after: after })
+           + ' — 같으면 이미 그 상태였다는 뜻이고 그때 settled 는 아무것도 증명하지 않는다');
     }
   }
 
