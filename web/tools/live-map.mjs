@@ -12,7 +12,7 @@
  *
  * 사용: node web/tools/live-map.mjs --port 10000
  */
-import { launch, evaluate, sleep } from './cdp.mjs';
+import { launch, evaluate, sleep, localStamp } from './cdp.mjs';
 
 const argv = process.argv.slice(2);
 const arg = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
@@ -32,7 +32,9 @@ if (['9900', '9991', '5500'].includes(String(PORT))) {
 /** 조작을 언제 무엇을 했는지 남긴다 — socket 이 서버 로그와 맞출 수 있게. */
 const acted = [];
 function actLog(what) {
-  const t = new Date().toISOString().slice(11, 23);
+  /* 🔴 **현지 시각.** UTC 로 찍었더니 서버 로그(KST)와 시(hour)가 어긋나 같은 사건이 15시간
+     떨어져 남았다(§5.64). 조작 기록은 **남의 로그와 맞추는 것이 목적**이라 이게 치명적이었다. */
+  const t = localStamp();
   acted.push(t + ' ' + what);
   console.log('  🕐 ' + t + ' — ' + what);
 }

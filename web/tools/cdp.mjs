@@ -168,3 +168,25 @@ export async function waitFor(client, expression, { timeout = 15000, every = 200
   }
   throw new Error('조건이 ' + timeout + 'ms 안에 참이 되지 않았다: ' + what + ' (마지막 값 ' + JSON.stringify(last) + ')');
 }
+
+/**
+ * 🔴 **현지 시각 도장** — `HH:MM:SS.mmm` (로컬). (2026-08-19)
+ *
+ * ~~`new Date().toISOString().slice(11,23)`~~ 을 쓰다가 **내 기록이 UTC** 로 찍혔다.
+ * 서버 로그는 **현지(KST)** 다. 그래서 같은 사건이 내 기록 `20:19:17.092` ·
+ * 서버 로그 `05:19:17` 로 남았고 — **분·초는 같은데 시(hour)만 어긋났다.**
+ * socket 이 대조하다 잡았다.
+ *
+ * 🔑 **분·초가 맞아떨어지니 "같은 사건"임은 알 수 있었지만, 그건 운이다** — 사건이 1분 이상
+ * 떨어져 있으면 **다른 사건으로 보이거나 순서가 뒤집혀 보인다.**
+ * ⚠ 우리 원장의 *"로그에 날짜가 없으면 시:분:초를 오늘로 읽어 반드시 오독한다"* 의 이웃이다.
+ * **여기서는 날짜가 아니라 시간대가 어긋났고, 결과는 같다.**
+ *
+ * 🔴 **정의를 한 곳에만 둔다.** 도구마다 각자 포맷하면 그게 곧 두 번째 판정자다 —
+ * 하나는 UTC, 하나는 로컬로 갈리는 것이 정확히 그렇게 생긴다.
+ */
+export function localStamp(d) {
+  const t = d || new Date();
+  const p = (n, w) => String(n).padStart(w || 2, '0');
+  return p(t.getHours()) + ':' + p(t.getMinutes()) + ':' + p(t.getSeconds()) + '.' + p(t.getMilliseconds(), 3);
+}

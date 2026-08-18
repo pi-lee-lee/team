@@ -16,7 +16,7 @@
  *
  * 사용: node web/tools/watch-unregistered.mjs --port 9900 --allow-prod --seconds 180
  */
-import { launch, evaluate, sleep } from './cdp.mjs';
+import { launch, evaluate, sleep, localStamp } from './cdp.mjs';
 
 const argv = process.argv.slice(2);
 const arg = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
@@ -28,7 +28,8 @@ if (['9900', '9991', '5500'].includes(String(PORT)) && !argv.includes('--allow-p
   console.error('🔴 운영 포트 거부: ' + PORT + ' — --allow-prod 를 명시해라'); process.exit(2);
 }
 const URL_ = 'http://127.0.0.1:' + PORT + '/index.html';
-const stamp = () => new Date().toISOString().slice(11, 23);
+/* 🔴 **현지 시각으로 찍는다** — UTC 로 찍었더니 서버 로그(KST)와 시(hour)가 어긋났다(§5.64). */
+const stamp = () => localStamp();
 
 /** 이 판본이 내 것인지 — §5.43: `200` 은 "내 코드가 서빙된다"가 아니다. */
 async function fingerprint(client) {
