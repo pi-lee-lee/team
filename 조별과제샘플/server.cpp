@@ -225,6 +225,18 @@ static const int  DOWN_BATCH_MAX_N = (2 * DEV_ACK_DRAIN_PER_SLOT) / 3; // = 4 ·
 //     그것이면 충분하다 — **`S_worst` 가 이 가정을 넘으면 배출 6 의 전제가 깨진 것**이다.
 static const int  DEV_S_WORST_ASSUMED_B = 60;   // n=10 기준 · arduino REQ-0206
 
+// 🔴🔴 **송신 시점 문턱 — 증거가 있는 창과 없는 창을 다르게 취급한다** (REQ-0210)
+// `S` 가 도착해서 여는 창에는 **증거가 있다**: 장치가 방금 말했고 지금 수신 구간이다.
+// **창 포기는 증거가 없다** — `S` 가 안 왔다는 것 말고 아는 것이 없다. 그런데 지금까지
+// **같은 양(4건)을 같은 확신으로 쏘고 있었다.**
+//
+// 증거 없이 보내는 양은 **판정에 필요한 최소 표본**이다. 링크가 사는지 죽었는지는
+// **한 건이면 답이 나온다**(ACK 이 오면 다음 창이 정상으로 열린다). 더 보내도 정보는
+// 안 늘고 **노출만 배로 는다.**
+// ⚠ **이 값은 유도값이 아니라 정의다.** REQ-0210 이 "유도 못 한 것은 그렇게 적어라"고
+//   요구했으므로 분명히 해 둔다 — *최소 표본 = 1* 은 계산 결과가 아니라 탐침의 뜻 자체다.
+static const int  DOWN_PROBE_N = 1;
+
 
 // ── ACK 마감 — 🔴 **값이 아니라 유도식이다** (창 C~E 실측이 입력을 확정했다)
 //
@@ -731,6 +743,13 @@ struct Server {
     // ⚠ **서버에 조용한 것은 장치가 송신 안 한다는 뜻이 아니다**(`busy s...`·`[TX-RESYNC]` 가
     // 정확히 그 상태다). 설계 §3 의 "포기하고 쏜다"는 단수다. 슬롯당 1회로 묶는다.
     long long last_dmax_ms;
+    // 🔴 **창 포기는 침묵 한 번에 한 번이다** (REQ-0210 · 슬롯당 1회에서 바꿈)
+    // 종전 규칙은 **침묵이 길수록 더 많이 쏘았다**: 8초 침묵이면 2.4초에 첫 포기, 그 뒤
+    // 슬롯마다 한 번 = **약 5회**. 하필 **장치가 가장 못 받는 구간에서 가장 많이 쏜 것**이다.
+    // 🔑 **재시도는 조건이 바뀌었을 때 뜻이 있다. `S` 가 안 온 동안 조건은 안 바뀐다** —
+    //   같은 근거로 다시 쏘는 것은 새 시도가 아니라 같은 시도의 반복이다.
+    // → 장치가 **한 줄이라도 말하면** 다시 무장한다(그것이 "조건이 바뀌었다"의 관측 가능한 형태).
+    bool      dmax_armed;
     // §9.1 `device.last_frame_ts` 전용 — **epoch 시각**이다. ard_last_ms 를 쓰면 안 된다:
     // 그건 now_ms() 기반(윈도우에서는 부팅 후 경과)이라 바깥으로 나가면 수십 년짜리 값이 된다(28행 경고).
     long long ard_last_epoch_ms;
@@ -859,7 +878,7 @@ struct Server {
            q_nodev(0), q_dup(0),
                q_deferred(0), q_dropped_link(0),
                rtt_max_ms(0), rtt_last_ms(0), rtt_n(0), win_skips(0), dmax_flushes(0),
-               last_dmax_ms(0),
+               last_dmax_ms(0), dmax_armed(true),
                ard_last_epoch_ms(0), ard_uptime(-1), ard_seq(-1),
                ard_dev("?"),
                xs_uptime(-1), xs_last_ms(0), xs_dev(""),
@@ -1591,7 +1610,9 @@ struct Server {
 
     // 창이 열렸다(= `S` 가 도착했다). **큐 전부를 한 거래로 묶어** 내보낸다.
     //   ignore_window : `S` 가 안 와서 창을 포기하는 경로(설계 §3)
-    void flush_downq(const char* why, bool ignore_window) {
+    // `max_n` = 이번 창에 전선에 올릴 **최대 건수**. 기본은 유도값이고, 증거 없는
+    // 경로(창 포기)는 `DOWN_PROBE_N` 을 넘긴다 — **송신 지점이 한 곳이라 우회가 없다.**
+    void flush_downq(const char* why, bool ignore_window, int max_n = DOWN_BATCH_MAX_N) {
         if (downq.empty() || ard == BAD_SOCK) return;
         long long t = now_ms();
         if (!ignore_window && ard_seen) {
@@ -1621,13 +1642,13 @@ struct Server {
                 if (!payload.empty() &&
                     payload.size() + q.line.size() > (size_t)DOWN_BATCH_CAP_B) break;
                 // 🔴 **건수 상한 — 바이트와 다른 축이다.** 장치의 ACK 배출률에서 유도됐다.
-                if ((int)batch.size() >= DOWN_BATCH_MAX_N) break;
+                if ((int)batch.size() >= max_n) break;
                 payload += q.line;
                 batch.push_back(q);
                 downq_bytes -= (long long)q.line.size();
                 downq.erase(downq.begin() + k);
             }
-            if ((int)batch.size() >= DOWN_BATCH_MAX_N) break;
+            if ((int)batch.size() >= max_n) break;
         }
         if (downq_bytes < 0) downq_bytes = 0;
         if (batch.empty()) return;
@@ -2073,11 +2094,15 @@ struct Server {
         // **그게 맞다.** 승격 직후 재하달은 창 개념이 없고, 보통은 같은 틱의 첫 `S` 처리가
         // 먼저 내보내므로 여기까지 오지 않는다.
         // ⚠ **슬롯당 1회로 묶는다**(위 `last_dmax_ms` 주석). 안 묶으면 200ms 버스트가 된다.
+        // 🔴 `dmax_armed` 가 주 조건이다. 슬롯 문턱은 **그물로 남긴다** —
+        //    재무장 논리에 결함이 생겨도(예: 줄이 폭주) 버스트로 돌아가지 않게.
         if (!downq.empty() && ard != BAD_SOCK && (t - ard_last_ms) > DOWN_DMAX_MS
-            && (t - last_dmax_ms) >= DOWN_SLOT_MS) {
+            && dmax_armed && (t - last_dmax_ms) >= DOWN_SLOT_MS) {
             last_dmax_ms = t;
+            dmax_armed = false;        // 장치가 한 줄이라도 말할 때까지 다시 안 쏜다
             dmax_flushes++;            // 그래서 이 수가 "몇 번 포기했나"로 읽힌다
-            flush_downq("S 가 안 온다 — 창 포기", true);
+            // ⚠ **탐침 크기로 쏜다**(4건 아님) — 증거가 없는 자리다.
+            flush_downq("S 가 안 온다 — 창 포기(탐침)", true, DOWN_PROBE_N);
         }
         std::vector<uint16_t> dead;
         for (std::map<uint16_t, Pending>::iterator it = pend.begin(); it != pend.end(); ++it) {
@@ -2181,6 +2206,10 @@ struct Server {
         //   그게 이 감시가 없을 때의 모습이다. **적어 두기만 하면 다음 사람이 안 본다.**
         // 🔑 새 배출률을 **여기서 계산하지 않는다**(arduino 의 상수를 복제하게 된다).
         //   서버는 **"전제가 깨졌다"까지만 말하고**, 값은 원본을 가진 쪽이 준다.
+        // 🔑 **장치가 말했다 = 조건이 바뀌었다.** 창 포기를 다시 무장한다(REQ-0210).
+        //    `S` 만이 아니라 **어떤 줄이든** 무장한다 — 깨진 줄도 "링크가 살아 있다"는 증거다.
+        dmax_armed = true;
+
         if (!line.empty() && line[0] == 'S') {
             if ((int)line.size() > s_max_b) s_max_b = (int)line.size();
             if ((int)line.size() > DEV_S_WORST_ASSUMED_B && !s_worst_warned) {
@@ -3507,14 +3536,36 @@ static int selftest() {
             s.last_dmax_ms = 0;
             s.dispatch('R', BAD_SOCK, "", "B2", "00000000");
             s.dispatch('R', BAD_SOCK, "", "B4", "00000000");
+            s.dispatch('R', BAD_SOCK, "", "B6", "00000000");
             long long dm0 = s.dmax_flushes;
+            size_t q_before = s.downq.size();
             s.tick();                                          // 첫 포기 — 나가야 한다
             s.tick();                                          // 곧바로 또 — **나가면 안 된다**
             s.tick();
+            // 🔴 **여기가 옛 규칙과 갈리는 자리다.** 슬롯이 지나도 장치가 조용하면
+            //    **다시 쏘면 안 된다**(옛 규칙은 슬롯당 1회라 여기서 또 쐈다).
+            s.last_dmax_ms = now_ms() - (DOWN_SLOT_MS + 100);
+            s.tick();
             bool ok8 = (s.dmax_flushes == dm0 + 1);
-            std::cout << (ok8 ? "  ✓ " : "  ✗ ") << "창 포기 3틱 연속 → 창포기 "
-                      << (s.dmax_flushes - dm0) << "회 (기대 1 — 슬롯당 1회로 묶임)\n";
+            std::cout << (ok8 ? "  ✓ " : "  ✗ ") << "장치 침묵 중 4틱(슬롯 경과 포함) → 창포기 "
+                      << (s.dmax_flushes - dm0) << "회 (기대 1 — **침묵당 1회**)\n";
             if (!ok8) bad++;
+
+            // 🔴 탐침 크기 — 증거 없이 4건을 쏘지 않는다
+            bool ok8b = (q_before >= 3 && s.downq.size() == q_before - DOWN_PROBE_N);
+            std::cout << (ok8b ? "  ✓ " : "  ✗ ") << "탐침 크기: 큐 " << q_before
+                      << " → " << s.downq.size() << " (기대 " << DOWN_PROBE_N << "건만 나감)\n";
+            if (!ok8b) bad++;
+
+            // 🔴 재무장 — 장치가 한 줄이라도 말하면 조건이 바뀐 것이다
+            s.on_ard_line("X,noise");                          // 깨진 줄도 살아 있다는 증거다
+            s.ard_last_ms = now_ms() - (DOWN_DMAX_MS + 100);   // 그 줄은 오래전이었다고 둔다
+            s.last_dmax_ms = now_ms() - (DOWN_SLOT_MS + 100);
+            s.tick();
+            bool ok8c = (s.dmax_flushes == dm0 + 2);
+            std::cout << (ok8c ? "  ✓ " : "  ✗ ") << "장치가 말한 뒤 → 창포기 "
+                      << (s.dmax_flushes - dm0) << "회 (기대 2 — 재무장됨)\n";
+            if (!ok8c) bad++;
             while (recv(sv[1], b, sizeof(b), MSG_DONTWAIT) > 0) {}
 
             // ⑨ 🔴 **링크가 끊긴 뒤 거짓 `ack_timeout` 이 안 나간다**
