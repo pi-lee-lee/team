@@ -28,6 +28,7 @@ Bash 검사는 셸 파서가 아니라 휴리스틱이다. `>` 리다이렉션·
 import json
 import os
 import re
+import shlex
 import sys
 
 PROJECT_ROOT = "/Users/idong-u/learn"
@@ -176,6 +177,46 @@ _SED_EXPR = re.compile(r"^[sy]/(?:[^/\\]|\\.)*/(?:[^/\\]|\\.)*/[A-Za-z0-9]*$")
 _SEGSPLIT = re.compile(r"(?:\|\||&&|[;|&\n]|\$\(|`)")
 
 
+_SEG_SEPS = {";", ";;", "&", "&&", "|", "||", "(", ")", "\n"}
+
+
+def _segment_tokens(cmd):
+    """명령을 **구획별 토큰 목록**으로 나눈다 — 셸 인용을 존중한다.
+
+    ⚠ 2026-08-18: 예전에는 정규식으로 `;`/`&&`/`|` 를 먼저 자르고 각 조각을
+    `seg.split()` 했다. **둘 다 따옴표를 안 봤다.** 그래서 치환식 안의 `;` 와 공백에서
+    표현식이 부서졌고, 남은 조각 `'s/` 가 `_PATHY` 에 걸려 **경로 후보**가 됐다.
+    차단 메시지는 `대상: s` — **무엇이 막힌 것인지 알 수 없는 형태**였다(arduino 보고).
+
+    `_SED_EXPR` 예외가 있었지만 소용없었다: **치환식이 통째로 와야 매치되는데
+    이미 부서진 뒤**였다. 방어선을 정규식이 아니라 **토큰화**로 옮긴다.
+
+    🔴 **집행은 안 약해진다** — 인용은 인용으로만 처리하고, 뒤따르는 파일 인자는
+    그대로 토큰으로 남아 검사된다. 리다이렉션 기호는 **구획 경계로 쓰지 않는다**:
+    경계로 쓰면 대상 파일이 다음 구획의 첫 토큰(=실행 파일 자리)이 되어 **건너뛰어진다.**
+    (시험: "cd 뒤 남의 파일에 리다이렉션" 이 그것을 지킨다)
+
+    ⚠ 따옴표가 안 닫힌 명령은 shlex 가 예외를 낸다 → **예전 방식으로 되돌린다.**
+    검사를 건너뛰면 무사통과하므로, 거칠어도 나누는 쪽이 안전하다.
+    """
+    try:
+        lex = shlex.shlex(cmd or "", posix=True, punctuation_chars=True)
+        lex.whitespace_split = True
+        toks = list(lex)
+    except ValueError:
+        return [seg.split() for seg in _SEGSPLIT.split(cmd or "")]
+
+    segs, cur = [], []
+    for t in toks:
+        if t in _SEG_SEPS:
+            segs.append(cur)
+            cur = []
+        else:
+            cur.append(t)
+    segs.append(cur)
+    return segs
+
+
 def bash_candidates(cmd, own):
     """명령어 문자열에서 '파일 경로처럼 생긴' 토큰을 뽑는다.
 
@@ -186,8 +227,7 @@ def bash_candidates(cmd, own):
     """
     exts = set((own.get("ext_rules") or {}).keys())
     out = []
-    for seg in _SEGSPLIT.split(cmd or ""):
-        toks = seg.split()
+    for toks in _segment_tokens(cmd):
         # 디렉터리 이동 구획은 통째로 건너뛴다. `cd` 의 인자는 **가려는 곳**이지
         # 고치려는 대상이 아니다.
         #

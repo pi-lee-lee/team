@@ -16,8 +16,20 @@ import subprocess
 import sys
 
 HOOK = "/Users/idong-u/learn/.claude/hooks/ownership_guard.py"
-ARD = "da685332-6164-4a1e-9eec-f47b15af6249"        # arduino-engineer
-WEB = "d27ae462-1ac2-4bb6-9364-739125a1c6ae"        # web-engineer
+# ⚠ 2026-08-18: 예전에는 session_id 를 여기 **박아 뒀다.** 팀을 재기동하면 id 가
+# 바뀌므로 시험이 통째로 낡았고, **오탐 6건이 "실패"로 떠 있는데 훅은 멀쩡**했다.
+# 🔴 시험이 거짓으로 빨간 상태였던 것이 더 나쁘다 — 진짜 회귀가 섞여도 안 보인다.
+# 그래서 원장에서 읽는다. 등록이 없으면 그 사실을 말하고 멈춘다(조용히 넘어가지 않는다).
+def _sid(role):
+    reg = json.load(open("/Users/idong-u/learn/.claude/team/registry.json"))
+    for sid, v in (reg.get("agents") or {}).items():
+        if v.get("role") == role:
+            return sid
+    sys.exit(f"registry.json 에 {role} 이 없다 — 팀을 먼저 기동하라")
+
+
+ARD = _sid("arduino-engineer")
+WEB = _sid("web-engineer")
 ROOT_SID = "00000000-0000-0000-0000-000000000000"   # 미등록 = 루트 취급
 
 CD = "cd /Users/idong-u/learn; "
@@ -45,6 +57,16 @@ CASES = [
     ("arduino · cd 두 번 뒤 남의 파일 수정",     ARD, CD + CD + SED + "cpp/y.cpp",      False),
     ("web · cd 뒤 남의 .ino 수정",               WEB, CD + SED + "arduino/x.ino",       False),
     ("루트 · cd 뒤 남의 web 파일 삭제",          ROOT_SID, CD + "rm web/a.png",         False),
+
+
+    # ── 🔴 2026-08-18 추가 — **공백·세미콜론을 품은 치환식** (arduino 실제 피해 사례)
+    #    옛 코드는 `;` 로 구획을 자르고 공백으로 토큰을 잘라 표현식이 부서졌다.
+    #    남은 조각 `'s/` 가 경로 후보가 되어 `대상: s` 로 차단됐다 — **원인을 알 수 없는 메시지**.
+    #    ⚠ 아래 둘은 짝이다. 위가 통과하고 **아래가 막혀야** 고친 것이 집행을 안 깎았다는 뜻이다.
+    ("arduino · 공백+세미콜론 치환식 + 자기 파일",
+     ARD, "sed -i '' 's/  a = 0;/  a = 0;  b = 0;/' arduino/test/x.cpp", True),
+    ("arduino · 공백+세미콜론 치환식 + 남의 파일",
+     ARD, "sed -i '' 's/  a = 0;/  a = 0;  b = 0;/' cpp/y.cpp", False),
 
     # ── 원래 통과해야 하는 것 (회귀)
     ("arduino · 루트 소유 스크립트 호출",        ARD, "team/bin/req.sh list",           True),
