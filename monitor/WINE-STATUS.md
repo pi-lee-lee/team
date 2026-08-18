@@ -1,4 +1,4 @@
-# winE 현재 상태 — 2026-08-18 14:50:23 자동 생성
+# winE 현재 상태 — 2026-08-18 15:00:24 자동 생성
 
 > 🔴 **이것은 판정이 아니다.** 생존과 적재량을 보는 눈금이다.
 > 판정은 창을 닫고 동결 파서로 한다 — `monitor/HANDOFF-winE.md` 참조.
@@ -8,8 +8,8 @@
 |---|---|
 | tap 프로세스 | 🟢 살아 있다 (pid 72812) |
 | 시리얼 로그 성장 | 🟢 자라는 중 |
-| 시리얼 마지막 줄 시각 | `14:50:22` |
-| 시리얼 크기 | 3,277,655 B · 70,765 줄 |
+| 시리얼 마지막 줄 시각 | `15:00:24` |
+| 시리얼 크기 | 3,405,736 B · 73,490 줄 |
 
 ## 시리얼 누계 — 🔴 **로그 줄 수다. 펌웨어 `[CNT]` 계수기가 아니다**
 
@@ -19,33 +19,33 @@
 
 | 표지(줄 수) | 누계 | 찾은 문자열 |
 |---|---|---|
-| `fail3` | 0  ⚠ 훑은 줄 70,765 | `전송 3회 연속 실패` |
+| `fail3` | 0  ⚠ 훑은 줄 73,490 | `전송 3회 연속 실패` |
 | `banner` | 1 | `[PARKING NODE]` |
 | `espbanner` | 1 — **우리 DTR 1 / 사건 0** | `System Ready` |
 | `zeroip` | 2 | `"0.0.0.0"` |
-| `txresync` | 0  ⚠ 훑은 줄 70,765 | `[TX-RESYNC]` |
-| `txdrop` | 0  ⚠ 훑은 줄 70,765 | `[TX-DROP]` |
+| `txresync` | 0  ⚠ 훑은 줄 73,490 | `[TX-RESYNC]` |
+| `txdrop` | 0  ⚠ 훑은 줄 73,490 | `[TX-DROP]` |
 | `txwait_skip` | 40 | `이번 주기는 건너뛴다` |
 | `txwait_okto` | 7 | `T1 초과` |
-| `busy` | 0  ⚠ 훑은 줄 70,765 | `"busy ` |
-| `tx` | 13,170 | `[TX] ` |
-| `sendok` | 13,168 | `"SEND OK"` |
-| `ipd` | 479 | `+IPD,` |
+| `busy` | 0  ⚠ 훑은 줄 73,490 | `"busy ` |
+| `tx` | 13,670 | `[TX] ` |
+| `sendok` | 13,668 | `"SEND OK"` |
+| `ipd` | 488 | `+IPD,` |
 | `connect` | 4 | `online (CONNECT)` |
 | `ipfound` | 15 | `★ IP 확보` |
 | `cipstart_err` | 13 | `Unlink` |
-| `stall` | 0  ⚠ 훑은 줄 70,765 | `★ 정지 감지` |
+| `stall` | 0  ⚠ 훑은 줄 73,490 | `★ 정지 감지` |
 
-펌웨어 `[CNT]` 마지막 줄: `up=15840 drop=1 esprst=1 resync=0 sendfail=0 okto=7 stuck=1 ackq=0 ackdrop=314 slot=13200 oow=469 smiss=2 ssovf=139 cksumng=8 skip=40 online=1`
+펌웨어 `[CNT]` 마지막 줄: `up=16440 drop=1 esprst=1 resync=0 sendfail=0 okto=7 stuck=1 ackq=0 ackdrop=345 slot=13700 oow=480 smiss=2 ssovf=152 cksumng=10 skip=40 online=1`
 
 ## 서버 누계 (파일 전체 — 창 구간이 아니다)
 
 | 표지 | 누계 |
 |---|---|
 | `srv_accept` | 86 |
-| `srv_sframe` | 107,873 |
-| `srv_ack` | 3,185 |
-| `srv_down` | 3,664 |
+| `srv_sframe` | 108,373 |
+| `srv_ack` | 3,222 |
+| `srv_down` | 3,733 |
 | `srv_offline` | 0 |
 
 ---
