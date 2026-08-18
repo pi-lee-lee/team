@@ -2035,6 +2035,78 @@ static void bitsToStr(uint16_t mask, char* out11) {
   out11[SLOT_N] = '\0';
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴 자리 비트열의 **hex 인코딩** (socket 명세 §5 · 2026-08-18 확정)
+//
+// 왜: 10진 1칸=1비트라 폭이 `n` 에 비례한다. hex 면 `n=10` 에서 60B → 39B 로 줄고
+//     배출률 `D` 가 6 → 7 이 된다. `n=15` 에서도 `D=7` 이 유지된다.
+//
+// 🔴 **비트 순서가 우리 `mask` 와 반대다. 이것이 이 함수의 존재 이유다:**
+//     `occMask` 안 : 슬롯 i = **비트 i** (LSB 쪽이 슬롯 0)
+//     전선 hex     : 슬롯 i = **비트 (n−1−i)** (= 10진 문자열을 그대로 이진수로 읽은 값)
+//   ⚠ **뒤집지 않으면 길이도 체크섬도 통과하고 자리만 뒤집힌다.** 명세가 ③으로 못 박은 함정이다.
+//   검산: 슬롯 {1,2,6,8,9} → mask 0x346 → 뒤집으면 0x18B → 문자열 "0110001011" 과 일치 ✅
+//
+// ⚠ **`0000…`·`1111…` 로 시험하지 마라** — 뒤집혀도 같아서 순서를 검증하지 못한다.
+//   **비대칭 패턴만이 검증자다.**
+//
+// ⚠ **`n` 은 `SLOT_N` 이 아니다.** 자리 유동화 뒤에는 **등록된 모듈 수**다.
+//   지금은 값이 같지만 **이름을 갈라 둔다** — 안 그러면 유동화하는 날 조용히 틀린다.
+//   폭도 뒤집기 축도 둘 다 `n` 을 쓴다. `SLOT_N` 을 여기 쓰면 오늘은 맞고 내일 틀린다.
+// 🔴 **`n` 의 단일 원천.** 자리 유동화의 축이 여기 하나로 모인다.
+//
+// 지금은 `SLOT_N` 을 돌려준다 — **거동 변화 0 이 이 단계의 기대다**(축 3).
+// 🔮 유동화하면 **등록된 모듈 수**를 돌려주게 되고, 그때 `S` 폭·hex 폭·뒤집기 축이
+//    **전부 이 함수 하나를 따라 움직인다.** 그것이 이 함수를 지금 만드는 이유다.
+// ⚠ **`SLOT_N` 을 인코더에 직접 쓰면 오늘은 맞고 유동화하는 날 조용히 틀린다** —
+//   길이도 체크섬도 통과하고 자리만 어긋나는 그 부류다.
+// ⚠ 그리고 **`n` 은 입력+출력 합이다**(명세 위험 다섯째) — 차단봉·안내등도 비트열에 들어간다.
+//   ACK 은 "받았다"이지 "됐다"가 아니므로, **도달 확인은 다음 `S` 의 마스크 변화로 한다.**
+static uint8_t moduleCount(void) { return SLOT_N; }
+
+// 🔑 폭 = ceil(n/4). 왼쪽 0 채움 고정폭 — **가변이면 길이로 n 을 검증할 수 없다.**
+static uint8_t hexWidthFor(uint8_t n) { return (uint8_t)((n + 3) / 4); }
+// mask 가 uint16_t 라 n ≤ 16 이고, 그때 폭은 4다. **버퍼를 이 값으로 잡는다.**
+static const uint8_t HEX_W_MAX = 4;
+static_assert(HEX_W_MAX >= (16 + 3) / 4,
+              "HEX_W_MAX 는 n=16 의 폭 이상이어야 한다 — mask 가 uint16_t 이므로 n 의 상한이 16 이다");
+
+// mask(슬롯 i = 비트 i) → 대문자 hex 고정폭. out 은 최소 hexWidthFor(n)+1 바이트.
+static void bitsToHex(uint16_t mask, uint8_t n, char* out) {
+  uint16_t v = 0;
+  for (uint8_t i = 0; i < n; i++)
+    if (mask & (uint16_t)(1u << i)) v |= (uint16_t)(1u << (n - 1 - i));   // ★ 뒤집기
+  const uint8_t w = hexWidthFor(n);
+  static const char HEXD[] = "0123456789ABCDEF";                          // ① 대문자만
+  for (uint8_t k = 0; k < w; k++)
+    out[w - 1 - k] = HEXD[(v >> (4 * k)) & 0x0F];
+  out[w] = '\0';
+}
+
+// 전선 hex → mask. 실패하면 false — **받는 쪽도 검사한다**(명세 ④: 한쪽만 검사하면 그쪽 버그만 잡힌다).
+//   ⚠ 거부 사유 셋: 폭이 다르다 · hex 가 아니다 · **상위 패딩 비트가 0 이 아니다.**
+//   셋째가 특히 중요하다 — **길이도 체크섬도 통과하는데 값만 틀리는 경로**다.
+static bool hexToBits(const char* in, uint8_t n, uint16_t* out) {
+  const uint8_t w = hexWidthFor(n);
+  uint16_t v = 0;
+  for (uint8_t k = 0; k < w; k++) {
+    const char c = in[k];
+    uint8_t d;
+    if      (c >= '0' && c <= '9') d = (uint8_t)(c - '0');
+    else if (c >= 'A' && c <= 'F') d = (uint8_t)(c - 'A' + 10);
+    else return false;                       // ① 소문자도 거부한다 — 정본은 대문자 하나다
+    v = (uint16_t)((v << 4) | d);
+  }
+  if (in[w] != '\0' && in[w] != ',') return false;   // ② 폭이 더 길다
+  // ④ 남는 상위 비트는 반드시 0
+  if (n < 16 && (v >> n) != 0) return false;
+  uint16_t m = 0;
+  for (uint8_t i = 0; i < n; i++)
+    if (v & (uint16_t)(1u << (n - 1 - i))) m |= (uint16_t)(1u << i);      // ★ 되뒤집기
+  *out = m;
+  return true;
+}
+
 // buf[64] 인 근거 (§2.1-6 · §2.5):
 //   전선 한 줄은 LF 포함 최대 64B → 문자열은 63자 + NUL = 64. 즉 이 버퍼가 규격 상한과 정확히 같다.
 //   실제 최장은 tmask 를 실은 S 프레임이고, devid 8자 기준 61B(LF 포함) = 60자 + NUL = **61바이트**.
@@ -2043,16 +2115,21 @@ static void bitsToStr(uint16_t mask, char* out11) {
 // S 프레임 **본문만** 만든다(체크섬 포함, LF 없음). 배치가 이것을 첫 줄로 쓴다.
 //   길이를 돌려준다. 0 이면 만들지 못한 것이다.
 static uint8_t buildStatus(char* buf, uint8_t cap) {
-  char occ[SLOT_N + 1], res[SLOT_N + 1];
-  bitsToStr(occMask, occ);
-  bitsToStr(resMask, res);
+  // 🔴 2026-08-18 — **hex 로 바꿨다** (socket 명세 §5 확정). `n=10` 에서 폭 10 → 3.
+  //   ⚠ **셋을 같이 바꾼다.** `occ`·`res`·`tm` 중 하나만 바꾸면 **같은 슬롯을 두고 두 필드가
+  //     어긋나고**, 길이도 체크섬도 통과한다 — 명세가 경고한 바로 그 부류다.
+  //   ⚠ 버퍼는 `HEX_W_MAX + 1`. `n ≤ 16` 이므로 폭은 최대 4다.
+  const uint8_t mn = moduleCount();                 // ★ 여기 하나가 n 의 원천이다
+  char occ[HEX_W_MAX + 1], res[HEX_W_MAX + 1];
+  bitsToHex(occMask, mn, occ);
+  bitsToHex(resMask, mn, res);
 
   int n;
   if (testArmed) {
     // §2.4 tmask — 무장 중에만 붙는 선택 필드. 각 비트 = 그 칸의 occupied 가 주입된 값인가.
     // occupied 에는 주입값이 이미 반영돼 있고, tmask 는 "그게 진짜인가"만 알려준다.
-    char tm[SLOT_N + 1];
-    bitsToStr(ovrActive, tm);
+    char tm[HEX_W_MAX + 1];
+    bitsToHex(ovrActive, mn, tm);                   // ★ 셋째도 같은 변환 — 빠뜨리면 어긋난다
     n = snprintf(buf, cap, "S,%u,%s,%s,%lu,%s,%s,",
                  (unsigned int)seqNo, occ, res,
                  (unsigned long)(millis() / 1000UL), DEVICE_ID, tm);

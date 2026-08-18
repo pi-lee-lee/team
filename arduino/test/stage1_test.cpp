@@ -972,6 +972,105 @@ int main() {
     awaitingSendOk = false;
   }
 
+  // ── [30] 🔴 hex 인코딩 — **비대칭 패턴으로만 검증한다** (socket 명세 §5) ────
+  //
+  // ⚠ `0000…`·`1111…` 는 **뒤집혀도 같아서** 비트 순서를 검증하지 못한다.
+  //   명세가 박은 왕복 예제 중 **비대칭인 것들**이 유일한 검증자다.
+  printf("\n[30] hex 인코딩 왕복 — 비대칭 패턴이 비트 순서를 검증한다\n");
+  {
+    // 도우미: "0110001011" 같은 문자열 → mask (슬롯 i = 문자열 위치 i, mask 는 비트 i)
+    auto strToMask = [](const char* bits) -> uint16_t {
+      uint16_t m = 0;
+      for (uint8_t i = 0; bits[i]; i++) if (bits[i] == '1') m |= (uint16_t)(1u << i);
+      return m;
+    };
+    struct Case { const char* bits; uint8_t n; const char* hex; };
+    // 🔑 명세의 왕복 예제 그대로다. **비대칭이 앞에 온다.**
+    const Case cases[] = {
+      { "0110001011",       10, "18B"  },   // ★ 순서 검증자
+      { "011000101100110",  15, "3166" },   // ★ 순서 검증자
+      { "10101",             5, "15"   },   // ★ 순서 검증자
+      { "1000000000000001", 16, "8001" },   // ★ 양 끝 — 뒤집기에 특히 민감하다
+      { "0000000000",       10, "000"  },   // ⚠ 이것만으로는 아무것도 증명 못 한다
+      { "1111111111",       10, "3FF"  },   // ⚠ 위와 같다
+    };
+    for (const auto& c : cases) {
+      char out[8];
+      uint16_t m = strToMask(c.bits);
+      bitsToHex(m, c.n, out);
+      char msg[128];
+      snprintf(msg, sizeof msg, "★★ n=%u %s -> %s", c.n, c.bits, c.hex);
+      ok(strcmp(out, c.hex) == 0, msg);
+
+      uint16_t back = 0xFFFF;
+      bool okdec = hexToBits(c.hex, c.n, &back);
+      snprintf(msg, sizeof msg, "★★ n=%u %s 를 되돌리면 같다 (왕복)", c.n, c.hex);
+      ok(okdec && back == m, msg);
+    }
+
+    // ④ 패딩 검증 — **길이도 체크섬도 통과하는데 값만 틀리는 경로**
+    uint16_t dummy = 0;
+    ok(!hexToBits("58B", 10, &dummy),
+                            "★★ n=10 에서 상위 패딩이 0 이 아니면 거부한다 (58B)");
+    ok( hexToBits("18B", 10, &dummy),
+                            "★ 같은 폭이라도 패딩이 0 이면 받는다 (18B)");
+    // ① 소문자 거부 — 정본은 하나다
+    ok(!hexToBits("18b", 10, &dummy), "★ 소문자는 거부한다 (정본은 대문자)");
+    // ② 폭 고정
+    ok(hexWidthFor(10) == 3 && hexWidthFor(15) == 4 && hexWidthFor(16) == 4 && hexWidthFor(5) == 2,
+                            "★★ 폭 = ceil(n/4) — 길이로 n 을 검증할 수 있다");
+
+    // 🔴 뒤집기가 실제로 일어나는지 **직접** 본다 — mask 와 hex 의 비트 순서가 반대다
+    ok(strToMask("0110001011") == 0x346,
+                            "★★ mask 안에서는 슬롯 i = 비트 i (0x346)");
+    { char o[8]; bitsToHex(0x346, 10, o);
+      ok(strcmp(o, "18B") == 0,
+                            "★★ 전선에서는 슬롯 i = 비트 (n-1-i) (0x18B) — 반대다"); }
+
+    // ⚠ 축 3 의 기대: **거동 변화 0**. moduleCount 가 지금은 SLOT_N 과 같아야 한다
+    ok(moduleCount() == SLOT_N,
+                            "★★ moduleCount() == SLOT_N — 유동화 전에는 거동이 안 바뀐다");
+  }
+
+  // ── [31] 🔴 `S` 프레임이 **실제로** hex 로 나가고 짧아진다 ────────────────
+  //
+  // ⚠ 왜 따로 있나: `bitsToStr` → `bitsToHex` 로 바꿨는데 **시험이 하나도 안 깨졌다.**
+  //   그건 **어느 시험도 `S` 의 자리 필드를 안 보고 있었다**는 뜻이다.
+  //   🔑 통과 수는 그 경로를 봤다는 뜻이 아니다(원장 §16.4 ③).
+  printf("\n[31] S 프레임이 실제로 hex 로 나간다 (형식 전환 확인)\n");
+  {
+    occMask = 0x346;            // 슬롯 {1,2,6,8,9} — ★ 비대칭이라 순서를 검증한다
+    resMask = 0;
+    testArmed = false;
+    char buf[64];
+    uint8_t n = buildStatus(buf, sizeof buf);
+    printf("      S = %s   (%u B)\n", buf, (unsigned)n);
+    ok(n > 0,                                  "★ 프레임이 만들어진다");
+    ok(strstr(buf, ",18B,") != NULL,
+                            "★★ 자리 필드가 hex '18B' 다 (10진 '0110001011' 이 아니다)");
+    ok(strstr(buf, "0110001011") == NULL,
+                            "★★ 옛 10진 표기가 남아 있지 않다");
+    ok(strstr(buf, ",000,") != NULL,
+                            "★ res 도 같이 hex 로 바뀌었다 (하나만 바뀌면 어긋난다)");
+
+    // 폭이 실제로 줄었나 — 명세의 근거(D 6→7)가 이 감소에 서 있다
+    ok(n < 45,              "★★ S 프레임이 45B 미만이다 (10진일 때 60B 대)");
+
+    // tmask 갈래도 같은 변환을 타는가 — **셋째 마스크를 빠뜨리기 쉬운 자리다**
+    testArmed = true; ovrActive = 0x346;
+    uint8_t n2 = buildStatus(buf, sizeof buf);
+    printf("      S(tmask) = %s   (%u B)\n", buf, (unsigned)n2);
+    ok(n2 > 0 && strstr(buf, "0110001011") == NULL,
+                            "★★ tmask 갈래에도 10진이 안 남는다 (셋째 마스크)");
+    {
+      // '18B' 가 두 번 나와야 한다 — occ 와 tmask 둘 다
+      const char* f = strstr(buf, "18B");
+      ok(f != NULL && strstr(f + 1, "18B") != NULL,
+                            "★★ occ 와 tmask 가 둘 다 hex 다");
+    }
+    testArmed = false; ovrActive = 0; occMask = 0;
+  }
+
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }
