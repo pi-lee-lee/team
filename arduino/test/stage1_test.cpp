@@ -1039,8 +1039,9 @@ int main() {
                             "★★ 전선에서는 슬롯 i = 비트 (n-1-i) (0x18B) — 반대다"); }
 
     // ⚠ 축 3 의 기대: **거동 변화 0**. moduleCount 가 지금은 SLOT_N 과 같아야 한다
-    ok(moduleCount() == SLOT_N,
-                            "★★ moduleCount() == SLOT_N — 유동화 전에는 거동이 안 바뀐다");
+    // ✏️ 2026-08-19 가상 모듈이 들어와 moduleCount() > SLOT_N 이 됐다
+    ok(moduleCount() >= SLOT_N,
+                            "★★ 표가 실물 자리를 전부 앞쪽에 포함한다");
   }
 
   // ── [31] 🔴 `S` 프레임이 **실제로** hex 로 나가고 짧아진다 ────────────────
@@ -1053,19 +1054,25 @@ int main() {
     occMask = 0x346;            // 슬롯 {1,2,6,8,9} — ★ 비대칭이라 순서를 검증한다
     resMask = 0;
     testArmed = false;
+    // 🔴 가상 차단봉을 **닫힌 상태로 고정**한다 — 안 하면 slotNo 에 따라 값이 흔들려
+    //   이 시험이 비결정적이 된다(자율 토글이 slotNo 를 본다).
+    vGateManual = true; vGateState = 0;
     char buf[64];
     uint8_t n = buildStatus(buf, sizeof buf);
     printf("      S = %s   (%u B)\n", buf, (unsigned)n);
     ok(n > 0,                                  "★ 프레임이 만들어진다");
-    ok(strstr(buf, ",18B,") != NULL,
-                            "★★ 자리 필드가 hex '18B' 다 (10진 '0110001011' 이 아니다)");
+    // 🔴 **n=10 → 12 로 바뀌어 값이 이동했다. 손으로 재계산한 값이다:**
+    //   슬롯 i → 비트 (n−1−i) 이므로 {1,2,6,8,9} → 비트 {10,9,5,3,2} = 0x62C
+    //   ⚠ **같은 점유인데 hex 가 다르다** — 이것이 `n` 이 바뀔 때의 위험 그 자체다.
+    ok(strstr(buf, ",62C,") != NULL,
+                            "★★ 자리 필드가 hex '62C' 다 (n=12 에서 재계산)");
     ok(strstr(buf, "0110001011") == NULL,
                             "★★ 옛 10진 표기가 남아 있지 않다");
     ok(strstr(buf, ",000,") != NULL,
                             "★ res 도 같이 hex 로 바뀌었다 (하나만 바뀌면 어긋난다)");
 
     // 폭이 실제로 줄었나 — 명세의 근거(D 6→7)가 이 감소에 서 있다
-    ok(n < 45,              "★★ S 프레임이 45B 미만이다 (10진일 때 60B 대)");
+    ok(n < 45,              "★★ S 프레임이 45B 미만이다 (폭 3 유지 — n=12 가 공짜 상한)");
 
     // tmask 갈래도 같은 변환을 타는가 — **셋째 마스크를 빠뜨리기 쉬운 자리다**
     testArmed = true; ovrActive = 0x346;
@@ -1075,8 +1082,8 @@ int main() {
                             "★★ tmask 갈래에도 10진이 안 남는다 (셋째 마스크)");
     {
       // '18B' 가 두 번 나와야 한다 — occ 와 tmask 둘 다
-      const char* f = strstr(buf, "18B");
-      ok(f != NULL && strstr(f + 1, "18B") != NULL,
+      const char* f = strstr(buf, "62C");
+      ok(f != NULL && strstr(f + 1, "62C") != NULL,
                             "★★ occ 와 tmask 가 둘 다 hex 다");
     }
     testArmed = false; ovrActive = 0; occMask = 0;
@@ -1200,9 +1207,10 @@ int main() {
   //   🔑 **기대가 "아무 일도 안 일어난다"인 축은 바이트로 못 박지 않으면 검증이 없다.**
   printf("\n[34] 모듈 표 도입 — 거동 변화 0 (바이트 대조)\n");
   {
-    ok(moduleCount() == SLOT_N,
-                            "★★ moduleCount() == SLOT_N — 표와 옛 상수가 같은 값이다");
-    ok(MODULE_N == 10,      "★ 표 길이가 10 이다");
+    // ✏️ 2026-08-19 — 가상 모듈이 들어와 `moduleCount() > SLOT_N` 이 됐다
+    ok(moduleCount() >= SLOT_N,
+                            "★★ 표가 실물 자리를 전부 포함한다");
+    ok(MODULE_N == 12,      "★ 표 길이가 12 다 (실물 10 + 가상 2)");
 
     // ① 🔴 **이름 열 개가 서버의 자리 id 와 같아야 한다** (socket 통보 2026-08-18)
     //   서버는 `D,<name>,<kind>` 의 **name 이 자리 id 와 같으면** 그 자리에 붙인다.
@@ -1212,8 +1220,9 @@ int main() {
     //   (겸해서 옛 계산식과의 동일성도 본다 — 표 도입이 무해했다는 증거)
     static const char* EXPECT[10] =
       {"A1","A2","A3","A4","A5","B1","B2","B3","B4","B5"};
+    // ⚠ **실물 열 개만 본다** — 가상 모듈(E1·X1)은 아래에서 따로 검사한다
     bool allName = true;
-    for (uint8_t i = 0; i < MODULE_N; i++) {
+    for (uint8_t i = 0; i < SLOT_N; i++) {
       char nm[4]; moduleNameOf(i, nm);
       if (strcmp(nm, EXPECT[i]) != 0) { allName = false;
         printf("      🔴 i=%u: 표 '%s' 대 기대 '%s'\n", i, nm, EXPECT[i]); }
@@ -1221,8 +1230,10 @@ int main() {
     ok(allName,             "★★ 열 개 이름이 옛 계산식과 전부 같다");
 
     // ② 핀이 SLOT_PIN 과 같은가 — **표와 핀 표가 갈리면 엉뚱한 칸을 읽는다**
+    // ⚠ **실물 범위(SLOT_N)까지만 돈다** — 가상 모듈은 핀이 없고
+    //   `SLOT_PIN[]` 은 크기가 `SLOT_N` 이라 그 밖은 배열 밖 읽기다.
     bool allPin = true;
-    for (uint8_t i = 0; i < MODULE_N; i++)
+    for (uint8_t i = 0; i < SLOT_N; i++)
       if (pgm_read_byte(&MODULE_TABLE[i].pin) != slotPin(i)) { allPin = false;
         printf("      🔴 i=%u: 표 핀 %u 대 SLOT_PIN %u\n", i,
                pgm_read_byte(&MODULE_TABLE[i].pin), slotPin(i)); }
@@ -1235,8 +1246,11 @@ int main() {
     char sbuf[64];
     buildStatus(sbuf, sizeof sbuf);
     printf("      S = %s\n", sbuf);
-    ok(strcmp(sbuf, "S,3,18B,000,389,P1,48") == 0,
-                            "★★ S 프레임이 표 도입 전과 **바이트 단위로** 같다");
+    // ✏️ 2026-08-19 — 가상 모듈로 n 이 12 가 되어 이 리터럴이 바뀌었다. **의도한 변경이다.**
+    //   🔑 이 시험의 원래 목적(표 도입이 무해했다)은 이미 달성됐고(커밋 021e16e),
+    //     지금은 **"n 이 바뀌면 자리 필드가 이동한다"를 못 박는 자리**로 성격이 바뀌었다.
+    ok(strstr(sbuf, ",62C,") != NULL,
+                            "★★ n=12 에서 자리 필드가 62C 다 (18B 가 아니다)");
 
     char rbuf[BATCH_CAP + 1];
     uint16_t rn = buildRegistration(rbuf, sizeof rbuf);
@@ -1244,9 +1258,11 @@ int main() {
     // ✏️ 118B → 121B · drain 6 → 7 : **둘 다 의도한 변경이다**
     //   +3B = `n`(모듈 수) 필드. drain 은 hex 전환으로 S_worst 가 줄어 재계산했다.
     //   🔑 **시험이 이 둘을 잡은 것이 맞다** — 값이 바뀌면 시험이 반응해야 한다.
-    ok(rn == 121,           "★★ 등록이 121B — n 필드가 들어가 3B 늘었다");
-    ok(strncmp(rbuf, "D,*,7,10,", 9) == 0,
-                            "★★ 머리가 D,*,<drain>,<n>, 이다 (drain=7 · n=10)");
+    // ✏️ 145B 다(143 이 아니라). **`OBV` 가 3글자라 가상 줄이 1B씩 더 길다** —
+    //   내 예산 계산이 2글자 kind 기준이었다. **여유는 15B 로 줄었다.**
+    ok(rn == 145,           "★★ 등록이 145B — 가상 둘(OBV 3글자) 포함. BATCH_CAP 160 까지 여유 15B");
+    ok(strncmp(rbuf, "D,*,7,12,", 9) == 0,
+                            "★★ 머리가 D,*,<drain>,<n>, 이다 (drain=7 · **n=12**)");
     // 🔴 **①선언 n · ②실제 D 줄 수 · ③hex 폭 — 셋이 서로를 정확히 못 박는다**
     {
       unsigned declaredN = 0;

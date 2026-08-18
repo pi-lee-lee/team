@@ -196,11 +196,19 @@ static uint16_t simOcc = 0;
 // 참고: D10~D12 는 SPI(SS/MOSI/MISO)다. 지금은 안 쓰지만 SD 카드·이더넷 실드를 붙이려면
 //       그 세 칸을 다른 핀으로 옮겨야 한다. 옮길 때는 아래 표 한 줄씩만 고치면 된다.
 // ─────────────────────────────────────────────────────────────────────────
+#define PIN_NONE 0xFF              // 핀 없음(가상 모듈)
 static const uint8_t SLOT_PIN[SLOT_N] PROGMEM = {
   2,  3,  4,  5,  6,      // 인덱스 0..4 = A1 A2 A3 A4 A5
   9, 10, 11, 12, A0       // 인덱스 5..9 = B1 B2 B3 B4 B5   (B5 만 아날로그 핀)
 };
-static inline uint8_t slotPin(uint8_t i) { return pgm_read_byte(&SLOT_PIN[i]); }
+// 🔴 **범위 가드** (2026-08-19) — `SLOT_PIN[]` 은 크기가 `SLOT_N`(실물 자리) 인데
+//   `moduleCount()` 는 가상 모듈까지 세므로 **그 값으로 루프를 돌면 배열 밖을 읽는다.**
+//   ⚠ 지금 모든 호출부가 `SLOT_N` 까지만 돌지만 **방어가 없으면 다음 사람이 밟는다** —
+//     PROGMEM 범위 밖 읽기는 **오류 없이 쓰레기를 돌려준다.**
+static inline uint8_t slotPin(uint8_t i) {
+  if (i >= SLOT_N) return PIN_NONE;          // 가상 모듈에는 핀이 없다
+  return pgm_read_byte(&SLOT_PIN[i]);
+}
 
 // 센서 극성. INPUT_PULLUP 을 쓰므로 "차량 감지 시 접점이 GND 로 당기는" 형식을 기본으로 본다.
 // 반대 극성 센서(감지 시 HIGH)면 이 값만 0 으로 바꾸면 된다.
@@ -2090,6 +2098,13 @@ static uint8_t moduleCount(void);   // ★ 표가 원천이다 — 정의는 MOD
 #define KIND_GUIDE_LIGHT  "OG"   // 명령 받음 · 안내등
 #define KIND_LEAD_LIGHT   "OL"   // 명령 받음 · 유도등
 #define KIND_BARRIER      "OB"   // 명령 받음 · 차단봉
+// 🔴 **`V` 는 종류가 아니라 접미다** (socket 정의 2026-08-19):
+//   `kind[0]` = 명령 가능 여부 · `kind[0..1]` = 종류 · **길이 3 이고 끝이 `V` 면 가상**
+//   ⚠ "3글자 종류"로 정의하면 `OBV`·`OGV`·`OLV`·`IPV`… 로 **표가 두 배**가 된다.
+//     **접미로 두면 표는 다섯 그대로이고 `V` 는 직교하는 한 비트다.**
+//   ⚠ `tmask` 를 못 쓴 이유: 그건 **조건부 존재**(무장 중에만)이고 가상성은 **영구 속성**이다.
+//     **영구 속성을 사라지는 필드에 실을 수 없다.**
+#define KIND_BARRIER_V    "OBV"  // 명령 받음 · 차단봉 · **가상**
 
 // 🔴 **배출률 선언값.** 이 노드가 한 주기에 배출할 수 있는 ACK 개수의 **보장 하한**이다.
 //   ⚠ **관측 최대가 아니다.** 2026-08-18 실측 `8` 은 `S` 가 짧고 rid 3자리일 때만 성립하는
@@ -2167,14 +2182,30 @@ static void requestRegistrationNow(void) { regPending = true; regAfterS = false;
 //   **socket 에 먼저 말해라** — 설정을 먼저 넣으면 안전해진다.
 struct ModuleDef {
   char    name[3];      // "A1" + NUL — 명칭이자 **지금은 자리 결속 키다**(위 경고)
-  char    kind[3];      // KIND_* 두 글자. 첫 글자 O = 명령을 받는다 · I = 관측 전용
+  char    kind[4];      // KIND_* 2글자 + 선택적 `V` 접미(가상) + NUL
   uint8_t pin;
 };
+// 🔴 **가상 모듈 스위치** (REQ-0227 · 2026-08-19)
+//   실기에 `O*`(명령 가능) 모듈이 하나도 없어 **조작 사슬이 한 번도 안 돌았다.**
+//   ⚠ **실물 모듈이 생기면 반드시 0 으로 꺼라** — 켜 둔 채 실물을 붙이면 **같은 자리에 둘이 붙는다.**
+#ifndef VIRTUAL_MODULES
+#define VIRTUAL_MODULES 1
+#endif
+
 static const ModuleDef MODULE_TABLE[] PROGMEM = {
   {"A1", KIND_PARK_SENSOR,  2}, {"A2", KIND_PARK_SENSOR,  3}, {"A3", KIND_PARK_SENSOR,  4},
   {"A4", KIND_PARK_SENSOR,  5}, {"A5", KIND_PARK_SENSOR,  6},
   {"B1", KIND_PARK_SENSOR,  9}, {"B2", KIND_PARK_SENSOR, 10}, {"B3", KIND_PARK_SENSOR, 11},
   {"B4", KIND_PARK_SENSOR, 12}, {"B5", KIND_PARK_SENSOR, A0},
+#if VIRTUAL_MODULES
+  // 🔴 **끝에만 붙인다. 중간 삽입 금지.**
+  //   `idx` 는 **등록 순서**이고 **서버의 자리 결속과 `G,<rid>,<idx>,<op>` 가 둘 다 그것을 쓴다.**
+  //   중간에 넣으면 **기존 자리의 idx 가 전부 밀려 지금 되는 결속이 조용히 깨진다.**
+  // ⚠ 이름은 **자리 id 와 같아야 한다**(원장 §20) — `E1`·`X1` 말고 다른 이름을 쓰면
+  //   등록은 성공하고 자리에는 아무것도 안 붙는다. **오류가 안 뜬다.**
+  {"E1", KIND_BARRIER_V, PIN_NONE},   // 입구 차단봉 (가상)
+  {"X1", KIND_BARRIER_V, PIN_NONE},   // 출구 차단봉 (가상)
+#endif
 };
 static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_TABLE[0]));
 
@@ -2185,8 +2216,13 @@ static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_T
 static_assert(MODULE_N <= 16,
               "마스크가 uint16_t 다 — 17번째 모듈은 조용히 사라진다. 마스크 폭을 먼저 늘려라");
 // ⚠ 유동화 이행 중에는 둘이 같아야 한다. 달라지면 핀 표·초기값이 어긋난 것이다.
-static_assert(MODULE_N == SLOT_N,
-              "이행 중이다 — 표와 SLOT_N 이 갈리면 SLOT_PIN·SLOT_SRC_DEFAULT 가 안 맞는다");
+// ✏️ 2026-08-19 — `MODULE_N == SLOT_N` 이었다. **가상 모듈이 들어와 깨졌고, 그게 가드가 작동한 것이다.**
+//   지키던 것: `SLOT_PIN[]`·`SLOT_SRC_DEFAULT` 가 `SLOT_N` 크기라 표가 그보다 크면 배열 밖을 읽는다.
+//   ✅ 해결: **실물은 앞 `SLOT_N` 개로 고정**하고 `slotPin()` 에 범위 가드를 넣었다.
+//   🔴 **가상 모듈은 반드시 표의 뒤쪽에만** 온다 — 앞에 끼면 실물 인덱스가 밀려
+//     `SLOT_PIN`·`occMask` 비트·서버 자리 결속이 **한꺼번에 어긋난다.**
+static_assert(MODULE_N >= SLOT_N,
+              "표는 실물 자리 SLOT_N 개를 **앞쪽에** 전부 포함해야 한다");
 
 // 🔴 **등록 배치가 한 슬롯에 들어가야 한다.** `buildRegistration` 은 넘치면 **통째로 0 을 돌려주고**,
 //   그러면 **등록이 영영 안 된다**(잘린 등록을 내보내지 않는 것이 옳지만, 대안이 없으면 굶는다).
@@ -2201,6 +2237,34 @@ static_assert(11 * MODULE_N + 11 <= 160,
 // ★ **표 하나가 `n` 의 원천이다.** 폭·뒤집기 축·등록 줄 수가 전부 이 값을 따라간다.
 static uint8_t moduleCount(void) { return MODULE_N; }
 
+#if VIRTUAL_MODULES
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴 가상 차단봉의 상태와 값 패턴 (REQ-0227 · 설계문서 §3)
+//
+// **자율 모드** : 명령을 한 번도 안 받았으면 **슬롯 번호로 토글**한다
+// **수동 모드** : 🔴 **첫 명령을 받으면 자율을 영구 정지**하고 명령대로만
+//   ⚠ 자율이 남아 있으면 **명령 효과가 나중에 되돌려져 "안 먹었다"로 보인다.**
+//     명령 반응이 주(主)이고 자율은 그것이 오기 전까지의 대용이다.
+//
+// ⚠ **무작위를 쓰지 않는다** — 재현이 안 되면 어긋났을 때 원인을 못 찾는다.
+// 🔑 주기를 **서로 소**로 잡았다(20 과 14):
+//     lcm = 140슬롯 ≈ 168초 안에 **네 조합(00·01·10·11)이 전부 나타난다.**
+//     같은 주기면 둘이 항상 같이 움직여 **"하나만 도는지"를 못 가른다.**
+static bool     vGateManual = false;      // 첫 명령을 받았나 (받으면 자율 정지)
+static uint16_t vGateState  = 0;          // 비트 i = MODULE_TABLE 의 SLOT_N+i 번째가 열렸나
+
+// 자율 패턴 — `slotNo` 는 부팅부터 세므로 리셋하면 위상이 처음으로 돌아간다(재현 가능)
+static bool vGateAuto(uint8_t k) {
+  return (k == 0) ? ((slotNo % 20) < 10)     // E1 : 24.1초 주기
+                  : ((slotNo % 14) <  7);    // X1 : 16.9초 주기
+}
+
+// 지금 열려 있나 — `S` 의 비트열에 실릴 값
+static bool vGateOpen(uint8_t k) {
+  return vGateManual ? ((vGateState >> k) & 1) : vGateAuto(k);
+}
+#endif
+
 static void moduleNameOf(uint8_t i, char* out4) {
   out4[0] = (char)pgm_read_byte(&MODULE_TABLE[i].name[0]);
   out4[1] = (char)pgm_read_byte(&MODULE_TABLE[i].name[1]);
@@ -2211,10 +2275,14 @@ static void moduleNameOf(uint8_t i, char* out4) {
 //   ⚠ **출력 모듈도 이 비트열에 들어가야 한다**(명세 위험 다섯째) — 차단봉·안내등이 생기면
 //     여기서 종류를 돌려주고 `moduleCount()` 가 그만큼 커진다. **`n` 은 입력+출력 합이다.**
 //   🔑 이유: ACK 은 "받았다"이지 "됐다"가 아니다. **도달 확인은 다음 `S` 의 마스크 변화로 한다.**
-static void moduleKindOf(uint8_t i, char* out3) {
-  out3[0] = (char)pgm_read_byte(&MODULE_TABLE[i].kind[0]);
-  out3[1] = (char)pgm_read_byte(&MODULE_TABLE[i].kind[1]);
-  out3[2] = '\0';
+// ⚠ `out4` 는 **4바이트**여야 한다 — 가상 접미(`OBV`)가 3글자다.
+static void moduleKindOf(uint8_t i, char* out4) {
+  for (uint8_t k = 0; k < 3; k++) {
+    const char c = (char)pgm_read_byte(&MODULE_TABLE[i].kind[k]);
+    out4[k] = c;
+    if (c == '\0') return;
+  }
+  out4[3] = '\0';
 }
 
 // 등록 배치를 만든다. 성공하면 길이, 실패하면 0.
@@ -2244,7 +2312,7 @@ static uint16_t buildRegistration(char* buf, uint16_t cap) {
     char nm[4];
     moduleNameOf(i, nm);
     char line[24];
-    char kd[3];
+    char kd[4];
     moduleKindOf(i, kd);
     int lw = snprintf(line, sizeof line, "D,%s,%s,", nm, kd);
     if (lw <= 0 || (unsigned)lw + 3 > sizeof line) return 0;
@@ -2316,7 +2384,17 @@ static uint8_t buildStatus(char* buf, uint8_t cap) {
   //   ⚠ 버퍼는 `HEX_W_MAX + 1`. `n ≤ 16` 이므로 폭은 최대 4다.
   const uint8_t mn = moduleCount();                 // ★ 여기 하나가 n 의 원천이다
   char occ[HEX_W_MAX + 1], res[HEX_W_MAX + 1];
-  bitsToHex(occMask, mn, occ);
+  // 🔴 **출력 모듈도 비트열에 들어간다**(명세 위험 다섯째 · 설계문서 §6).
+  //   `occ` 비트 0~9 = 자리 점유 · 비트 10·11 = 차단봉이 **열려 있다**.
+  //   ⚠ **같은 비트열인데 의미가 다르다** — 앞은 "차가 있다", 뒤는 "열려 있다". `kind` 로 구분한다.
+  //   🔑 **완료 판정이 이 에코로 이뤄진다.** `ACK` 은 "받았다"이지 "됐다"가 아니다 —
+  //     서버는 다음 `S` 에서 그 비트가 바뀌는 것으로 조작 성공을 안다.
+  uint16_t occOut = occMask;
+#if VIRTUAL_MODULES
+  for (uint8_t k = 0; k + SLOT_N < mn; k++)
+    if (vGateOpen(k)) occOut |= (uint16_t)(1u << (SLOT_N + k));
+#endif
+  bitsToHex(occOut, mn, occ);
   bitsToHex(resMask, mn, res);
 
   int n;
@@ -2756,7 +2834,7 @@ static void handleFrameLine(char* cand) {
   //   🔴 2026-08-18 `Q` 추가 — 서버가 "등록을 다시 보내라"고 묻는 프레임(명세 §5 ③).
   //     ⚠ **없으면 등록이 한 번 실패했을 때 복구 경로가 아예 없다.** 서버는 미완료로 두고
   //       장치는 자기가 실패한 줄 모른다(등록에 ACK 이 없다) → 그 노드는 영영 미등록이다.
-  if (cand[0] != 'R' && cand[0] != 'C' && cand[0] != 'T' && cand[0] != 'M' && cand[0] != 'Q') return;
+  if (cand[0] != 'R' && cand[0] != 'C' && cand[0] != 'T' && cand[0] != 'M' && cand[0] != 'Q' && cand[0] != 'G') return;
 
   // 체크섬. AT 잡음이 우연히 R 로 시작해도 여기서 걸린다
   if (!checksumOk(cand, len)) {
@@ -2767,6 +2845,54 @@ static void handleFrameLine(char* cand) {
 #if DEBUG
     Serial.print(F("[CKSUM NG] ")); Serial.println(cand);
 #endif
+    return;
+  }
+
+  // ── 🔴 `G` — 조작 명령 `G,<rid>,<idx>,<op>,<ck>` (socket 확정 2026-08-19) ──
+  //   `idx` = 등록 순서(= 비트열 자리) · `op` = 1(열다) / 0(닫다)
+  //   🔑 **`name` 이 아니라 `idx` 인 이유**: 이미 합의된 순서이고(등록 순서가 비트 자리를 정한다),
+  //     삼중 검산으로 지켜지며, 우리 쪽은 **배열 인덱스라 조회가 없다.**
+  //   ⚠ **조용히 버리지 않는다** — 거절도 ACK 을 보낸다. 안 그러면 서버가 `ack_timeout` 을 내고
+  //     **"안 갔다"와 "갔는데 거절됐다"가 같은 칸에 섞인다.**
+  if (cand[0] == 'G') {
+    char*   gf[6];
+    uint8_t gn = splitFields(cand, gf, 6);
+    uint16_t grid = 0;
+    if (gn == 0xFF || gn < 4 || !parseU16(gf[1], &grid)) return;   // rid 를 모르면 ACK 를 못 만든다
+    uint16_t gidx = 0, gop = 0;
+    const bool okIdx = parseU16(gf[2], &gidx) && parseU16(gf[3], &gop);
+
+    // §4.2 멱등 — 이미 본 rid 면 같은 ACK 를 다시 보낸다
+    int8_t ghit = cacheFind(grid);
+    if (ghit >= 0) {
+      sendAck(cache[ghit].rid, cache[ghit].slot[0], cache[ghit].slot[1], cache[ghit].result);
+      return;
+    }
+
+    uint8_t gres = 3;                       // 기본 = 수행할 수 없다(§2.4 result=3)
+#if VIRTUAL_MODULES
+    if (okIdx && gidx >= SLOT_N && gidx < moduleCount()) {
+      const uint8_t k = (uint8_t)(gidx - SLOT_N);
+      // 🔴 **첫 명령이 자율 토글을 영구 정지시킨다.**
+      //   안 그러면 명령 효과가 다음 주기에 되돌려져 "안 먹었다"로 보인다.
+      if (!vGateManual) {
+        vGateManual = true;
+        for (uint8_t j = 0; j + SLOT_N < moduleCount(); j++)   // 지금 상태를 그대로 굳힌다
+          if (vGateAuto(j)) vGateState |= (uint16_t)(1u << j);
+      }
+      if (gop) vGateState |=  (uint16_t)(1u << k);
+      else     vGateState &= (uint16_t)~(1u << k);
+      gres = 0;
+    }
+#endif
+#if DEBUG
+    if (gres != 0) { Serial.print(F("[G] 거절 idx=")); Serial.println(gidx); }
+    else           { Serial.print(F("[G] idx=")); Serial.print(gidx);
+                     Serial.print(F(" op=")); Serial.println(gop); }
+#endif
+    // ⚠ 캐시에 넣어야 재전송(같은 rid)이 같은 답을 받는다 — 멱등이 여기서도 성립해야 한다
+    cachePut(grid, 'G', (char)('0' + (gidx % 10)), gres);
+    sendAck(grid, 'G', (char)('0' + (gidx % 10)), gres);
     return;
   }
 
