@@ -3081,7 +3081,7 @@ static void handleLine(char* s) {
     onlineSince = millis();            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
     lastTxOkAt  = millis();            // ★ 살아있음 불변식의 출발점 — 붙자마자 발동하지 않게 한다
     sendFailStreak = 0;
-    markNeedsRegistration();           // ★ 새 소켓 = 서버가 우리를 모른다. 두 전이 모두에서 예약한다
+    markNeedsRegistration();           // ★ 새 소켓 = 서버가 우리를 모른다. **세 곳 전부**에서 예약한다(아래)
     awaitingSendOk = false; sendOkT1Passed = false;            // ★ 2단계: 새 소켓이다 — 앞 소켓의 SEND OK 를 기다리지 않는다
     closeAttempts = 0;
 #if DEBUG
@@ -3094,7 +3094,7 @@ static void handleLine(char* s) {
     onlineSince = millis();            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
     lastTxOkAt  = millis();            // ★ 살아있음 불변식의 출발점 — 붙자마자 발동하지 않게 한다
     sendFailStreak = 0;
-    markNeedsRegistration();           // ★ 새 소켓 = 서버가 우리를 모른다. 두 전이 모두에서 예약한다
+    markNeedsRegistration();           // ★ 새 소켓 = 서버가 우리를 모른다. **세 곳 전부**에서 예약한다(아래)
     awaitingSendOk = false; sendOkT1Passed = false;            // ★ 2단계: 새 소켓이다 — 앞 소켓의 SEND OK 를 기다리지 않는다
     staleSocket = false;               // 진짜로 새로 붙었다 — 낡은 소켓이 아니다
     closeAttempts = 0;
@@ -3112,7 +3112,16 @@ static void handleLine(char* s) {
   if (isClosedLine(s)) {
     netOnline = false;
     sendFailStreak = 0;
-    markNeedsRegistration();           // ★ 새 소켓 = 서버가 우리를 모른다. 두 전이 모두에서 예약한다
+    // 🔴 **이 호출은 세 곳에 있다. 세다 틀리기 쉬워 여기 적어 둔다** (2026-08-18 정정):
+    //   ① `isConnectLine`      정상 접속 (CONNECT / Linked)
+    //   ② `isAlreadyConnectLine` 초기 경합 (ALREADY / **ALREAY** CONNECT — 구형 펌웨어 오타)
+    //   ③ 여기                 소켓 닫힘 (CLOSED / Unlink)
+    //   ⚠ 옛 주석이 *"두 전이 모두에서"* 였다. **거동은 맞았고 주석만 틀렸는데**,
+    //     그 문구가 "두 곳만 보면 된다"로 읽혀 **다음 사람이 셋째를 빠뜨린다** —
+    //     실제로 내가 셀 때도 처음에 두 곳으로 알았다.
+    //   🔑 빠뜨리면 **조용히 안 된다**: 재접속 후 등록이 안 되고 시리얼에는 아무것도 안 나온다.
+    //     서버만 `Q` 3회 뒤 `node_unregistered` 로 굳힌다. → 시험 [35] 가 세 경로를 전부 밟는다.
+    markNeedsRegistration();
     awaitingSendOk = false; sendOkT1Passed = false;            // ★ 2단계: 소켓이 닫혔다 — 그 SEND OK 는 영영 오지 않는다
     // 닫혔다는 통보다 — 낡은 소켓 의심이 해소됐다. 사다리도 내려온다.
     staleSocket = false;
