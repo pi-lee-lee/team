@@ -296,6 +296,53 @@ try {
     ok('queued 뒤의 ack 가 확정으로 간다', !!(p && p.status === 'confirmed'), JSON.stringify(p));
     ok('타일이 "예약 확정됨"이 된다', !!(tile && /확정됨/.test(tile.state)), JSON.stringify(tile && tile.state));
   }
+  /* ══ C. 🔴 명령 경로(cmdPending)의 queued — **하니스가 안 밟던 자리** ═════════
+     REQ-0202. **사용자가 실물로 재현한 결함이고 이 하니스는 못 잡았다.**
+     `queued` 분기가 `state.pending` 만 봐서 테스트·시뮬 명령의 프레임을 조용히 버리고
+     6초 고정 타이머로 **거짓 실패**("응답이 없습니다 (자체 타임아웃)")를 냈다.
+     🔑 **하니스가 예약 경로만 밟은 것이 이 결함을 6시간 이상 숨겼다** — 사람이 찾았다.
+     그래서 이 경로를 넣는다. **다음에는 사람이 찾지 않게.**
+
+     ⚠ **구성 주의**: `cmdPending` 항목을 **직접 만든다.** 데모 전송 계층이 명령을 즉시 ack 해
+     버려서 실제 sender 로는 대기 상태를 만들 수 없다. **전송 계층만 건너뛰고
+     `handleServerMessage → clearCmdPending` 은 진짜 경로다**(A·B 와 같은 방식). */
+  console.log('\n[C] 명령 경로의 queued — 거짓 실패가 안 나는가 (REQ-0202)');
+  {
+    const rid = 'cmd-queued';
+    await evaluate(client, `(() => {
+      state.cmdPending.set(${JSON.stringify(rid)}, { rid: ${JSON.stringify(rid)}, kind: 'sim_step', slot: null,
+        timer: window.setTimeout(function () { clearCmdPending(${JSON.stringify(rid)}, true); }, ${ACK_TIMEOUT}) });
+      document.getElementById('messages').textContent = '';
+      return true;
+    })()`);
+    const before = await evaluate(client, `(() => { const c = state.cmdPending.get(${JSON.stringify(rid)}); return c ? c.timer : null; })()`);
+
+    await evaluate(client, inject({ type: 'queued', rid: rid, slot: null, ahead: 3, expires_ms: 4800, ack_budget_ms: SRV_BUDGET }));
+    await sleep(150);
+    const after = await evaluate(client, `(() => { const c = state.cmdPending.get(${JSON.stringify(rid)}); return c ? c.timer : null; })()`);
+    const msgs = await evaluate(client, `[...document.querySelectorAll('#messages .msg')].map(b => b.querySelector('span').textContent)`);
+    const sim = await evaluate(client, `state.simOutcome ? state.simOutcome.text : null`);
+    console.log('  · C 메시지 → ' + JSON.stringify(msgs && msgs[0]));
+    console.log('  · C 시뮬 패널 → ' + JSON.stringify(sim));
+
+    ok('명령 경로에서 타이머가 다시 걸렸다(id 가 갈렸다)', before !== null && after !== null && before !== after,
+       JSON.stringify([before, after]) + ' — 같으면 queued 를 버린 것이다(고치기 전 상태)');
+    /* 🔴 **보이는가.** 안 보이면 "그냥 빨라졌나"와 구분이 안 된다 — 이 계약의 목적이 그것이다. */
+    ok('queued 가 메시지로 보인다', !!(msgs && msgs.some(t => /서버가 받았습니다/.test(t))), JSON.stringify(msgs));
+    ok('ahead 가 문구에 나온다', !!(msgs && msgs.some(t => /앞에 3건/.test(t))), JSON.stringify(msgs));
+    ok('시뮬 패널에도 보인다', !!(sim && /서버가 받았습니다/.test(sim)), JSON.stringify(sim));
+
+    /* 🔴 결함의 정확한 서명: **6초에 거짓 실패가 나는가.** 예산이 걸렸으면 살아 있어야 한다. */
+    console.log('  · C 자체 타임아웃(' + ACK_TIMEOUT + 'ms)을 넘겨 6500ms 기다린다…');
+    await sleep(6500);
+    const alive = await evaluate(client, `state.cmdPending.has(${JSON.stringify(rid)})`);
+    const after6 = await evaluate(client, `[...document.querySelectorAll('#messages .msg')].map(b => b.querySelector('span').textContent)`);
+    ok('6초를 넘겨도 거짓 실패가 안 난다', alive === true,
+       '사라졌다 = 자체 타임아웃이 터졌다는 뜻이다 — 사용자가 본 그 증상이다');
+    ok('"자체 타임아웃" 문구가 안 떴다', !!(after6 && !after6.some(t => /자체 타임아웃/.test(t))),
+       JSON.stringify(after6));
+  }
+
 } catch (e) {
   fail++;                                       // ← §5.18: 예외도 실패다
   console.log('  💥 예외로 중단: ' + (e && e.message ? e.message : e));
