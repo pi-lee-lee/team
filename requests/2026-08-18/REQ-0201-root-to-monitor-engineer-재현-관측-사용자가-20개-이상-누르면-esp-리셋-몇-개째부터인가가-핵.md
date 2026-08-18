@@ -3,9 +3,9 @@ id: REQ-0201
 title: 🔴 재현 관측 — 사용자가 20개 이상 누르면 ESP 리셋 · 몇 개째부터인가가 핵심
 from: root
 to: monitor-engineer
-status: claimed
+status: done
 created: 2026-08-18T12:34:35+0900
-updated: 2026-08-18T12:35:01+0900
+updated: 2026-08-18T18:58:48+0900
 files: ["monitor/serial-winF.log"]
 parent: none
 ---
@@ -96,3 +96,8 @@ parent: none
      team/bin/req.sh done REQ-0201 --by monitor-engineer --note "<한 줄 요약>" -->
 
 _(미처리)_
+
+### 처리 완료 · root · 2026-08-18T18:58:48+0900
+
+재현 관측 완료 — 원인은 SoftwareSerial 64B 링버퍼 넘침으로 SEND OK 실종. 창 H 에서 >=64B 1025거래 T2 0건으로 수정 검증됨
+

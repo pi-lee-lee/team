@@ -598,3 +598,14 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-18T16:56:40+0900 | 통보 | REQ-0221 | socket-engineer → root | 판별 시험 주입 16:55:09 (큰 프레임 축과 하행 축을 가른다) · 원장 (47) |
 | 2026-08-18T18:54:10+0900 | 발행 | REQ-0222 | root → arduino-engineer | 🔴 이동 완료 — 망 상수 셋 교체 후 재굽기 (SERVER_IP 192.168.35.21 · SSID SK_WiFiGIGA50DC_2.4G) |
 | 2026-08-18T18:54:25+0900 | 착수 | REQ-0222 | arduino-engineer → arduino-engineer | 🔴 이동 완료 — 망 상수 셋 교체 후 재굽기 (SERVER_IP 192.168.35.21 · SSID SK_WiFiGIGA50DC_2.4G) |
+| 2026-08-18T18:58:38+0900 | 완료 | REQ-0222 | arduino-engineer → arduino-engineer | 🔴 이동 완료 — 망 상수 셋 교체 후 재굽기 (SERVER_IP 192.168.35.21 · SSID SK_WiFiGIGA50DC_2.4G) |
+| 2026-08-18T18:58:48+0900 | 완료 | REQ-0215 | root → socket-engineer | 🔴 devid 충돌로 오늘 세션 분석 무효 — 접속 IP 기록 여부와 동시접속 감지를 답하라 |
+| 2026-08-18T18:58:48+0900 | 완료 | REQ-0216 | root → arduino-engineer | 🔴 굽기 중지 — devid 충돌로 오늘 증상 인과가 무효. 유효·무효 경계와 devid 대응을 답하라 |
+| 2026-08-18T18:58:48+0900 | 완료 | REQ-0189 | root → monitor-engineer | 창 D 개방 — 장치 복구됨(09:16:08 전원 리셋) · 새 망이라 창 A~C 와 합산 금지 · 기준선 회차 |
+| 2026-08-18T18:58:48+0900 | 완료 | REQ-0201 | root → monitor-engineer | 🔴 재현 관측 — 사용자가 20개 이상 누르면 ESP 리셋 · 몇 개째부터인가가 핵심 |
+| 2026-08-18T19:00:33+0900 | 완료 | REQ-0199 | socket-engineer → socket-engineer | 구현 1 — ACK_TIMEOUT 유도식 (web 과 같은 배포) · 재전송이 파괴만 세게 만든다 |
+| 2026-08-18T19:00:40+0900 | 완료 | REQ-0206 | socket-engineer → socket-engineer | 🔴 서버에서 유입을 막는다 — 사용자/중요 이벤트를 갈라 차단 · 문턱은 실측으로 (사용자 결정) |
+| 2026-08-18T19:00:47+0900 | 진행 | REQ-0203 | socket-engineer → socket-engineer | 구현 2 준비 — 서버 노드별 리팩터링 (코드만 · 🔴 배포 금지) — 미착수. 열어 둔다 — 고장 대응이 우선순위를 가져갔다. ⚠ 단독 배포여야 한다(파일 전체 구조 변경이라 다른 수정과 섞이면 원인을 못 가른다). 선행 조건이 하나 늘었다: 등록 D 프레임의 배출률 선언 + S 비트열 hex 인코딩 명세(대소문자/고정폭/비트순서/패딩 0 검증)를 먼저 확정하고 코드를 만진다. |
+| 2026-08-18T19:01:23+0900 | 완료 | REQ-0202 | web-engineer → web-engineer | 🔴 구현 1.5 — cmdPending 구멍 즉시 수정 (사용자가 실물 재현) · ack_budget_ms 를 써라 |
+| 2026-08-18T19:01:32+0900 | 완료 | REQ-0211 | web-engineer → web-engineer | 🔴 문턱 ① — 화면에 미해결 건수 기준 제한 (사용자 지시) · 아이들은 유지 |
+| 2026-08-18T19:02:18+0900 | 통보 | REQ-0223 | web-engineer → root | 지시 없이 한 원장 갱신 — queue_full 이 정체 신호라는 산술 · 하니스 맹점 셋 · 시각 형태 방법 |

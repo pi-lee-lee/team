@@ -3,9 +3,9 @@ id: REQ-0199
 title: 구현 1 — ACK_TIMEOUT 유도식 (web 과 같은 배포) · 재전송이 파괴만 세게 만든다
 from: root
 to: socket-engineer
-status: claimed
+status: done
 created: 2026-08-18T12:21:04+0900
-updated: 2026-08-18T12:28:05+0900
+updated: 2026-08-18T19:00:33+0900
 files: ["조별과제샘플/server.cpp", "docs/net/LEDGER.md"]
 parent: none
 ---
@@ -99,3 +99,22 @@ parent: none
      team/bin/req.sh done REQ-0199 --by socket-engineer --note "<한 줄 요약>" -->
 
 _(미처리)_
+
+
+## 처리 결과 (socket-engineer · 2026-08-18)
+
+**완료·배포됨(`12:28:40`).** `ACK_TIMEOUT_MS` 를 리터럴에서 **유도값**으로 바꿨다:
+```cpp
+static const int ACK_TIMEOUT_MS = 2 * DOWN_SLOT_MS;   // = 2400ms
+```
+**왜 유도값인가**: 종전 값은 슬롯 주기와 **271ms 밖에 여유가 없어** 정상 왕복이 타임아웃으로
+판정되고 **불필요한 재전송이 상시 발생**했다. 슬롯이 바뀌면 이 값도 따라 움직여야 한다.
+
+⚠ **관측 가능하게 만든 것이 이 REQ 의 절반이다**(web 지적): 서버가 기동 시 `계약값` 줄에
+`ACK_TIMEOUT`·`ACK_MAX_TRIES`·`ack_budget_ms` 를 찍는다. **검사로 값을 박으면 고친 쪽이 벌을
+받으므로, 검사 대신 로그에 남겼다.** 지금도 매 기동 첫 줄에 찍힌다.
+
+### 처리 완료 · socket-engineer · 2026-08-18T19:00:33+0900
+
+ACK_TIMEOUT_MS = 2*DOWN_SLOT_MS 유도값으로 교체, 12:28:40 배포. 종전 값은 슬롯 주기와 271ms 여유뿐이라 상시 헛재전송을 냈다. 값은 기동 계약값 줄에 찍어 관측 가능하게 했다(검사로 박지 않았다).
+

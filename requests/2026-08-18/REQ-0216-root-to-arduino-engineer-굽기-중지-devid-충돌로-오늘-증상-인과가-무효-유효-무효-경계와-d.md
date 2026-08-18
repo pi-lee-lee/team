@@ -3,9 +3,9 @@ id: REQ-0216
 title: 🔴 굽기 중지 — devid 충돌로 오늘 증상 인과가 무효. 유효·무효 경계와 devid 대응을 답하라
 from: root
 to: arduino-engineer
-status: claimed
+status: done
 created: 2026-08-18T16:27:06+0900
-updated: 2026-08-18T16:28:22+0900
+updated: 2026-08-18T18:58:48+0900
 files: ["조별과제샘플/client.ino"]
 parent: none
 ---
@@ -93,3 +93,8 @@ parent: none
      team/bin/req.sh done REQ-0216 --by arduino-engineer --note "<한 줄 요약>" -->
 
 _(미처리)_
+
+### 처리 완료 · root · 2026-08-18T18:58:48+0900
+
+굽기 중지 해제됨. devid 충돌 반증(uptime 연속) 후 창 H 굽기 정상 진행·완료. devid 변경은 park-dev 잠금 뒤로 이관
+

@@ -3,9 +3,9 @@ id: REQ-0189
 title: 창 D 개방 — 장치 복구됨(09:16:08 전원 리셋) · 새 망이라 창 A~C 와 합산 금지 · 기준선 회차
 from: root
 to: monitor-engineer
-status: claimed
+status: done
 created: 2026-08-18T10:02:10+0900
-updated: 2026-08-18T10:04:33+0900
+updated: 2026-08-18T18:58:48+0900
 files: ["monitor/serial-winD.log"]
 parent: none
 ---
@@ -99,3 +99,8 @@ AP·서브넷·USB·ESP 전원이 다 바뀌어 창 C 와 직접 비교가 안 �
      team/bin/req.sh done REQ-0189 --by monitor-engineer --note "<한 줄 요약>" -->
 
 _(미처리)_
+
+### 처리 완료 · root · 2026-08-18T18:58:48+0900
+
+창 D 는 창 E~H 로 대체됨. 창 H 에서 원인 확정·수정 검증 완료
+

@@ -3,9 +3,9 @@ id: REQ-0215
 title: 🔴 devid 충돌로 오늘 세션 분석 무효 — 접속 IP 기록 여부와 동시접속 감지를 답하라
 from: root
 to: socket-engineer
-status: claimed
+status: done
 created: 2026-08-18T16:26:26+0900
-updated: 2026-08-18T16:27:25+0900
+updated: 2026-08-18T18:58:48+0900
 files: ["조별과제샘플/server.cpp"]
 parent: none
 ---
@@ -110,3 +110,8 @@ first-S-wins 가 devid 로 판정하는데 조원들의 동일 카피가 모두 
      team/bin/req.sh done REQ-0215 --by socket-engineer --note "<한 줄 요약>" -->
 
 _(미처리)_
+
+### 처리 완료 · root · 2026-08-18T18:58:48+0900
+
+REQ-0217 이 대체하고 완료(16:37:15 배포·IP 로깅 실동작 확인). devid 충돌은 실제로 안 일어났음이 uptime 연속성으로 반증됨 — 무효 선언은 철회
+
