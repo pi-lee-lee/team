@@ -209,6 +209,22 @@ static const int  DEV_ACK_DRAIN_PER_SLOT = 6;   // arduino 확정 · REQ-0206
 //    rid 5자리면 6 으로 떨어진다 → **설계 보장은 6.** 실측을 설계값으로 승격시키지 않는다.
 static const int  DOWN_BATCH_MAX_N = (2 * DEV_ACK_DRAIN_PER_SLOT) / 3; // = 4 · 리터럴 아님
 
+// 🔴🔴 **`6` 은 상수가 아니라 함수다** (arduino 정정 2026-08-18)
+//   배출 = (BATCH_CAP − S_worst − 1) ÷ (ACK_worst + 1) = (160 − 60 − 1) ÷ 16 = 6
+//   세 값에 의존한다: `BATCH_CAP`(장치가 정한 160) · **`S_worst`** · `ACK_worst`(rid 자릿수).
+//   ⚠ **`S_worst` 가 모듈 유동화 개정에서 커진다** — 자리 비트열이 지금은 10칸 고정이지만
+//     개정 후에는 `n` 가변이고 전선 상한이 `n ≤ 15` 다:
+//        n=10 → S_worst 60B → 배출 **6**      n=15 → S_worst 75B → 배출 **5**
+//   🔴 그러면 유입 4 가 조용히 1건 초과가 된다. **그 순간을 서버가 알아야 한다.**
+//
+// 🔑 **그래서 이 값을 서버가 다시 계산하지 않는다.** `BATCH_CAP`·`ACK_worst` 는 arduino 의 값이고
+//   **파생값은 원본을 가진 쪽이 계산한다**(CLAUDE.md). 사본을 두면 같은 규칙이 두 곳에 생기고
+//   갈리는 순간 어느 쪽이 맞는지 알 수 없다.
+//   → **최종형은 장치가 등록(`D`)에서 자기 배출률을 선언하는 것**이다(설계 개정에 넣는다).
+//   → **그때까지는 전제가 깨진 것을 감지만 한다.** 서버가 실제로 볼 수 있는 것은 `S` 의 길이뿐이고,
+//     그것이면 충분하다 — **`S_worst` 가 이 가정을 넘으면 배출 6 의 전제가 깨진 것**이다.
+static const int  DEV_S_WORST_ASSUMED_B = 60;   // n=10 기준 · arduino REQ-0206
+
 
 // ── ACK 마감 — 🔴 **값이 아니라 유도식이다** (창 C~E 실측이 입력을 확정했다)
 //
@@ -692,6 +708,8 @@ struct Server {
     //   바이트 초과 → `cap`(전선이 못 나른다) · 건수 초과 → 장치 ACK 배출률(장치가 못 삼킨다)
     //   합쳐 놓으면 `cap` 을 올려 놓고 왜 안 낫는지 몇 시간 찾게 된다(§8.23-(38) 과 같은 함정).
     long long q_full_n;          // 그중 **건수 축**으로 거절한 수
+    int       s_max_b;           // 관측된 `S` 프레임 최대 길이 — 배출 6 의 전제 감시
+    bool      s_worst_warned;    // 전제 붕괴 경고를 한 번만 낸다
     long long q_nodev;           // 장치 연결이 없어 거절한 수
     long long q_dup;             // already_pending 로 거절한 수
     // ⚠ **창 수**다(창당 1). 줄 수로 세면 같은 줄이 창마다 다시 세어져 누계가 부풀려진다 —
@@ -837,7 +855,8 @@ struct Server {
                // 🔴 이 여섯(+다섯)은 **선언만 돼 있고 초기화 목록에 없었다.** 쓰기 시작하는 순간
                // 쓰레기값이 지표로 나간다 — 원장이 통째로 경고하는 그 형태다. 여기서 닫는다.
                downq_bytes(0), batch_count(0), batch_lines(0),
-               q_rejected(0), q_full_n(0), q_nodev(0), q_dup(0),
+               q_rejected(0), q_full_n(0), s_max_b(0), s_worst_warned(false),
+           q_nodev(0), q_dup(0),
                q_deferred(0), q_dropped_link(0),
                rtt_max_ms(0), rtt_last_ms(0), rtt_n(0), win_skips(0), dmax_flushes(0),
                last_dmax_ms(0),
@@ -1046,6 +1065,11 @@ struct Server {
            + "/장치없음 " + std::to_string(q_nodev)
            + "/중복 " + std::to_string(q_dup)
            + "/링크버림 " + std::to_string(q_dropped_link) + ")"
+           // 🔑 **한 번 뜨는 경고는 놓친다.** 주기 요약에 계속 보이게 둔다 —
+           // 이 칸이 가정을 넘으면 하행 건수 상한의 근거가 이미 깨진 것이다.
+           + " · S최대 " + std::to_string(s_max_b) + "B/가정 "
+           + std::to_string(DEV_S_WORST_ASSUMED_B) + "B"
+           + (s_worst_warned ? "🔴" : "")
            + " · 대기 " + std::to_string(downq.size())
            + "줄(" + std::to_string(downq_bytes) + "B/" + std::to_string(downq_max_b()) + "B)"
            // 🔴 `RTT` 는 **실측이고 표본 수를 같이 낸다.** `n=0` 이면 그 값은 "0ms"가 아니라
@@ -2149,6 +2173,27 @@ struct Server {
             char rb[24];
             snprintf(rb, sizeof(rb), " (rx=%zuB)", line.size());
             logf("←ARD", line + rb);
+        }
+
+        // 🔴 **전제 감시 — 조건을 적었으면 그것을 보는 코드를 같은 자리에 둔다**(CLAUDE.md).
+        // `DOWN_BATCH_MAX_N` 은 배출 6 에서 유도됐고, 배출 6 은 `S_worst ≤ 60B` 를 전제한다.
+        // ⚠ **개정에서 그 전제가 깨지는데 서버는 아무것도 안 하고 계속 4건을 보낸다** —
+        //   그게 이 감시가 없을 때의 모습이다. **적어 두기만 하면 다음 사람이 안 본다.**
+        // 🔑 새 배출률을 **여기서 계산하지 않는다**(arduino 의 상수를 복제하게 된다).
+        //   서버는 **"전제가 깨졌다"까지만 말하고**, 값은 원본을 가진 쪽이 준다.
+        if (!line.empty() && line[0] == 'S') {
+            if ((int)line.size() > s_max_b) s_max_b = (int)line.size();
+            if ((int)line.size() > DEV_S_WORST_ASSUMED_B && !s_worst_warned) {
+                s_worst_warned = true;
+                char wb[224];
+                snprintf(wb, sizeof(wb),
+                         "전제 붕괴 — S 프레임 %dB > 가정 %dB. "
+                         "DEV_ACK_DRAIN_PER_SLOT=%d(→ 하행 %d건/창)의 근거가 깨졌다. "
+                         "arduino 에 배출률 재확인 필요(자리 수 n 이 커졌을 가능성)",
+                         (int)line.size(), DEV_S_WORST_ASSUMED_B,
+                         DEV_ACK_DRAIN_PER_SLOT, DOWN_BATCH_MAX_N);
+                logf("!!", wb);
+            }
         }
 
         // ---------- 소크 관측 (REQ-0065) — **체크섬 검사보다 먼저 센다.**
@@ -3557,6 +3602,27 @@ static int selftest() {
                           << " · 거절 3 · 큐 " << (cap_n + 1) << ")\n";
                 if (!ok12) bad++;
                 s.downq.clear(); s.downq_bytes = 0;
+            }
+
+            // ⑬ 🔴 **전제 감시가 실제로 울린다** — 감시는 "넣었다"가 아니라 "울린다"로 확인한다.
+            //    울리지 않는 감시는 **검사되지 않는 조건이 검사되는 것처럼 보이게** 만든다(CLAUDE.md).
+            {
+                bool w0 = s.s_worst_warned;
+                s.on_ard_line(std::string("S,1,") + std::string(DEV_S_WORST_ASSUMED_B, 'x'));
+                bool ok13 = (!w0 && s.s_worst_warned &&
+                             s.s_max_b > DEV_S_WORST_ASSUMED_B);
+                std::cout << (ok13 ? "  ✓ " : "  ✗ ") << "전제 감시: S "
+                          << s.s_max_b << "B > 가정 " << DEV_S_WORST_ASSUMED_B
+                          << "B → 경고 " << (s.s_worst_warned ? "울림" : "안 울림")
+                          << " (기대 울림)\n";
+                if (!ok13) bad++;
+                // ⚠ 가정 이하는 울리면 안 된다 — 늘 울리는 경고는 아무도 안 본다
+                Server s2;
+                s2.on_ard_line("S,1,short");
+                bool ok13b = (!s2.s_worst_warned && s2.s_max_b == 9);
+                std::cout << (ok13b ? "  ✓ " : "  ✗ ") << "가정 이하 S(9B) → 경고 "
+                          << (s2.s_worst_warned ? "울림" : "안 울림") << " (기대 안 울림)\n";
+                if (!ok13b) bad++;
             }
 
             s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
