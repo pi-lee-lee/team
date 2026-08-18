@@ -194,7 +194,7 @@ try {
      **hex 를 10진으로** 읽고 있었다 → `occupied` 자체가 틀린 값일 수 있다. 두 경로는 **같은 값**에서
      나오므로 **같이 틀린다.** 🔑 이 검사가 재는 것은 *일치*뿐이고 *정확*이 아니다. 점유가 고쳐지면
      ③은 다시 재야 한다(같은 검사로 충분하다 — 일치는 그때도 필요조건이다). */
-  console.log('  ⚠ ③은 두 경로의 *일치*만 잰다 — 서버 점유 디코딩 결함(socket, 수정 중)이라 *정확*은 미측정');
+  console.log('  ⚠ ③은 두 경로의 *일치*만 잰다 — *정확*은 아래 점유 검사 + socket 의 /ws 확인이 갈라 맡는다');
 
   /* 화면이 실제로 무엇을 그렸나 — 격자가 켜졌고 자리/빈 칸이 갈리는가 */
   const dom = await evaluate(client, `(() => {
@@ -233,6 +233,39 @@ try {
   }
   ok('🔑 버튼 잠김이 서버의 actions.ok 와 일치한다', !!(actCmp && actCmp.buttons > 0 && actCmp.mismatch === 0),
      JSON.stringify(actCmp));
+
+  /* ══ 점유가 화면까지 옳게 오는가 — socket 의 hex 해독 수정(49c07f6) 뒤 재측정 ═══════════
+     🔴 **socket 이 준 기댓값(A2·A3·B4)을 박지 않는다.** 다음 프레임이면 값이 달라지고
+     그러면 **제품이 옳은데 검사가 빨강**이 된다 — 오늘 세 번 한 실수의 네 번째가 된다.
+     대신 규칙을 단언한다: **주차 자리의 요약 문구 == 전선 (occupied, reserved) 조합.**
+     🔑 그리고 **층을 갈라 적는다**(원장 §5.34.2):
+        이 검사가 재는 것 = "화면이 서버 값을 그대로 그린다"
+        이 검사가 **못** 재는 것 = "서버 값이 장치의 비트와 맞다" → socket 이 /ws 로 확인했다
+     둘을 합쳐 "점유가 맞다"로 쓰면 내가 확인하지 않은 것을 확인했다고 적는 것이다. */
+  const occCmp = await (async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const wire = rx.filter(x => x && x.type === 'state').slice(-1)[0] || null;
+      if (!wire) return { skip: 'state 봉투가 없다' };
+      const want = new Map((wire.zones || []).map(z => [z.id,
+        (z.occupied && z.reserved) ? '예약한 자리에 입차' : z.occupied ? '사용 중' : z.reserved ? '예약됨' : '빈 자리']));
+      const seen = await evaluate(client, `[...document.querySelectorAll('#zone-grid .zone')].filter(e => e.dataset.kind === 'parking').map(e => ({ id: (e.querySelector('.zone__id') || {}).textContent, sum: (e.querySelector('.zone__sum') || {}).textContent }))`);
+      const bad = (seen || []).filter(s => want.has(s.id) && want.get(s.id) !== s.sum)
+                              .map(s => s.id + ' 화면"' + s.sum + '" 전선"' + want.get(s.id) + '"');
+      const occN = [...want.values()].filter(v => v !== '빈 자리').length;
+      const r = { parking: (seen || []).length, mismatch: bad.length, sample: bad.slice(0, 3),
+                  전선점유수: occN, 점유자리: (wire.zones || []).filter(z => z.occupied).map(z => z.id) };
+      if (bad.length === 0) return r;
+      if (attempt === 2) return r;
+    }
+  })();
+  console.log('  🔴 점유 화면-대-전선 → ' + JSON.stringify(occCmp));
+  ok('🔑 점유·예약이 화면에 서버 값 그대로 나온다', !!(occCmp && occCmp.parking > 0 && occCmp.mismatch === 0),
+     JSON.stringify(occCmp));
+  /* ⚠ **전 자리가 비어 있으면 이 통과는 "빈 자리"만 밟은 것이다.** 분모를 눈에 보이게 적는다 —
+     오늘 반복해서 배운 것: 통과 수는 밟은 것의 수이고, 안 밟은 갈래는 통과에 안 나타난다. */
+  if (occCmp && occCmp.전선점유수 === 0) {
+    skip('점유 "사용 중" 갈래', '지금 전 자리가 비어 있다 — 빈 자리 갈래만 밟았다(주입·실물 변화가 필요하다)');
+  }
   /* 🔴 **단언을 두 번 고쳤다. 두 번 다 내 단언이 한 조건에 박혀 있었다.**
      ① 처음: *"전 자리가 막혔으니 배너가 뜬다"* → `module_absent` 는 **`fault`** 라 미상 계수에 안 든다
      ② 다음: *"fault 만이니 침묵한다"* → 등록이 생기자 `node_offline`(**`unknown`**)이 와서 **뜬다**
@@ -285,6 +318,14 @@ try {
   if (!target) {
     skip('⑤ 예약 왕복', '누를 수 있는 자리가 없다 — 전 자리가 막혀 있다(장치·등록 상태를 먼저 봐라)');
   } else {
+    /* 🔑 아이들이 **클릭 때문에** 켜졌는지 가른다. 클릭 뒤에만 찍으면 그 구분이 영영 안 된다 —
+       "직전"과 "직후"를 같이 찍는 것이 원인 귀속의 최소 조건이다. */
+    /* 🔑 get_map 이 왜 나갔는지는 **에폭 불일치가 되풀이되는가**에 달렸다 — 그건 서버 쪽 질문일 수
+       있으므로(내 화면 결함과 별개) 같이 찍는다. 화면 안에서만 원인을 찾다가 남의 축을 놓치지 않게. */
+    const beforeClick = await evaluate(client, `(() => { try { return { cooldown: cooldownLeftMs(), link: state.link,
+      mapEpoch: state.map && state.map.epoch, zsEpoch: state.zoneState && state.zoneState.epoch,
+      mapStale: state.mapStale, olderRun: state.olderRun, heldState: !!state.heldState }; } catch (e) { return { err: e.message }; } })()`).catch(e => ({ err: String(e) }));
+    console.log('  🔑 클릭 직전 → ' + JSON.stringify(beforeClick));
     actLog('예약 클릭 — 자리 ' + target);
     await evaluate(client, `document.querySelector('#zone-grid .zbtn[data-act="reserve"][data-zone=' + ${JSON.stringify(JSON.stringify(target))} + ']').click()`);
     let d = false;
@@ -299,10 +340,17 @@ try {
       let act = os ? '?' : 'no-old-slot';
       try { if (os) act = (tileView(os) || {}).action; } catch (e) { act = 'throw:' + e.message; }
       let ca = '?'; try { ca = canAct(); } catch (e) { ca = 'throw:' + e.message; }
-      return { oldAction: act, canAct: ca, hasSnap: !!s, ageMs: s && s.receivedAt ? Date.now() - s.receivedAt : null,
+      /* 🔑 canAct() 의 거짓 조건은 **둘뿐**이다(index.html:1240) — 아이들 잔여 또는 link 가 ws/demo 가 아님.
+         둘을 같이 찍어야 어느 쪽인지 갈린다. 하나만 찍으면 또 추정이 된다. */
+      let cd = '?'; try { cd = cooldownLeftMs(); } catch (e) { cd = 'throw:' + e.message; }
+      return { oldAction: act, canAct: ca, cooldownLeftMs: cd, link: (typeof state !== 'undefined' ? state.link : null),
+               hasSnap: !!s, ageMs: s && s.receivedAt ? Date.now() - s.receivedAt : null,
                deviceOnline: s ? s.device && s.device.online : null };
     })()`).catch(e => ({ err: String(e) }));
     console.log('  🔑 누르기 직전 → ' + JSON.stringify(pre));
+    /* 🔴 아이들은 transport.send 에서만 켜진다(index.html:2981) → **무엇이 보냈는지**가 원인이다.
+       화면 안을 더 들여다보는 대신 **전선 기록**으로 답한다 — 내 하니스가 보내는 것까지 다 잡힌다. */
+    console.log('  🔑 여태 보낸 것 → ' + JSON.stringify(tx.map(m => m && m.type)));
     actLog('확인 누름 — 예약 요청 전송');
     await evaluate(client, `document.querySelector('#confirm-dialog button[value="ok"]').click()`);
     await sleep(2500);
