@@ -561,6 +561,8 @@ const STALE_MS     = 10000;
  * 진짜 경고까지 같이 흘려보내게 된다.
  */
 const UNCONFIRMED_MS = 12000;
+/** `get_map` 재청 최소 간격. 🔴 정합성용이 아니라 **내 쪽 무한 고리 차단용**이다. */
+const MAP_ASK_MIN_MS = 2000;
 const ACK_TIMEOUT  = 6000;    // §7.3 서버 최종 실패가 1500×3=4500ms → 그보다 넉넉하게
 const SETTLE_MS    = 6000;    // "확정됨" 표시를 스냅샷 없이도 걷어내는 안전장치
 const BACKOFF_MIN  = 500;
@@ -809,6 +811,18 @@ const state = {
   pollNotice: '',
   /** 마지막 시뮬 트리거의 결과 — { level:'ok'|'none'|'err', text }. 알림과 별개로 패널에 남긴다. */
   simOutcome: null,
+
+  /* ── 개정: 봉투 둘 + 판 번호 (socket 명세 §6.8 · REQ-0226) ──────────────────
+     지형(map)과 상태(state)는 **변화율이 달라서** 봉투가 갈렸다 —
+     한 봉투에 담으면 자주 보내면 낭비, 드물게 보내면 낡는다.
+     🔴 그래서 화면은 **지형 사본을 갖는다.** 그 대신 `epoch` 로 **자기 사본이 낡았음을 스스로 안다.**
+     🔑 내 §5.38.3 과 다른 점이 정확히 여기다 — 그때(`9900`)는 **낡은 것을 알 방법이 없었다.**
+        판을 실으면 **사본은 남되 탐지 가능**해진다. 막을 수 없으면 보이게 만든다. */
+  map: null,          // { epoch, rows, cols, zones:[…] } — 지형 사본. null = 아직 못 받았다
+  zoneState: null,    // { epoch, ts_ms, zones:[…] }      — 마지막으로 받은 상태
+  /** epoch 불일치를 본 적이 있나. 🔴 그동안은 **옛 사본으로 그리지 않고 "모른다"로 그린다.** */
+  mapStale: false,
+  mapAskedAt: 0,      // get_map 을 마지막으로 보낸 시각 — 무한 재요청 방지
 
   /**
    * 신선도 배너에 마지막으로 그린 "등급"(REQ-0067). 초 단위 숫자는 여기 들어가지 않는다 —
@@ -2023,8 +2037,77 @@ el.grid.addEventListener('click', function (event) {
    7. 서버 메시지 처리 (§5.3)
    ──────────────────────────────────────────────────────────────── */
 
+/* ════════════════════════════════════════════════════════════════
+   개정 봉투 둘 — `map`(지형) · `state`(상태) · `get_map`(재청)
+   원본: socket `docs/net/DESIGN-bridge-node-module-zone.md` §6.8. **값이 갈리면 원본이 이긴다.**
+   ⚠ **이름을 내가 만들지 않았다** — `map`·`state`·`get_map`·`epoch`·`grid`·`zones`·`cells` 전부 명세 것이다.
+   ════════════════════════════════════════════════════════════════ */
+
+/** 지형 사본이 지금 그릴 수 있는 상태인가. 🔴 낡았으면 **그리지 않는다**(옛 사본으로 안 그린다). */
+function mapUsable() {
+  return !!state.map && !state.mapStale;
+}
+
+/**
+ * `map` 을 다시 청한다. 응답은 **같은 `map` 봉투**로 온다(명세: 다른 타입을 만들지 않았다).
+ * ⚠ **무한 재요청을 화면 쪽에서도 막는다.** 서버에 상한이 있지만 그건 **서버 보호용**이고,
+ *    `epoch` 비교를 내가 잘못 구현하면 매 `state` 마다 청하게 된다 — 그 고리를 여기서 끊는다.
+ */
+function requestMap() {
+  const now = Date.now();
+  if (now - state.mapAskedAt < MAP_ASK_MIN_MS) return false;
+  state.mapAskedAt = now;
+  transport.send({ type: 'get_map', rid: newRid() });
+  return true;
+}
+
+/**
+ * 지형을 받는다. **검증에서 짐작하지 않는다** — 빠진 값을 기본값으로 메우지 않는다.
+ * 🔴 `grid.rows`/`cols` 가 없으면 **5×5 로 가정하지 않는다.** `5×5` 는 **설정의 기본값**이고
+ *    화면이 아는 값이 아니다(원장 §5.42). 짐작하면 **없는 격자를 그리게 된다.**
+ */
+function applyMap(msg) {
+  const g = msg && msg.grid;
+  const rows = g && Number(g.rows), cols = g && Number(g.cols);
+  const okGrid = Number.isFinite(rows) && rows > 0 && Number.isFinite(cols) && cols > 0;
+  const okEpoch = Number.isFinite(Number(msg.epoch));
+  if (!okGrid || !okEpoch || !Array.isArray(msg.zones)) {
+    showMessage('맵 정의를 이해하지 못했습니다 (격자 크기·판 번호·자리 목록 중 빠진 것이 있습니다)', 'err');
+    return;
+  }
+  state.map = { epoch: Number(msg.epoch), rows: rows, cols: cols, zones: msg.zones.slice() };
+  state.mapStale = false;
+  render();
+}
+
+/**
+ * 상태를 받는다. 🔴 **`epoch` 비교가 계약이다** — 비교를 안 하면 이 장치는 없는 것과 같다(명세).
+ * 불일치면 **그리지 않고 `map` 을 다시 청한다.**
+ */
+function applyZoneState(msg) {
+  if (!Array.isArray(msg.zones) || !Number.isFinite(Number(msg.epoch))) return;
+  const ep = Number(msg.epoch);
+  if (!state.map || ep !== state.map.epoch) {
+    /* 🔴 옛 사본으로 계속 그리지 않는다. **낡았다는 것을 알면서 그리는 것은 모르고 그리는 것보다
+       나쁘다 — 알고도 숨긴 것이다**(내 §5.34 의 형태 · socket 이 이 규율을 채택했다). */
+    state.mapStale = true;
+    state.zoneState = null;
+    requestMap();
+    render();
+    return;
+  }
+  state.zoneState = { epoch: ep, ts_ms: Number(msg.ts_ms) || null, zones: msg.zones.slice() };
+  render();
+}
+
 function handleServerMessage(msg) {
   if (!msg || typeof msg !== 'object') return;
+
+  /* 개정 봉투 둘. ⚠ **옛 `snapshot` 경로를 지우지 않는다** — 서버가 아직 `map`/`state` 를 안 보내는
+     동안에도 화면이 돌아야 한다. `map` 을 한 번도 못 받았으면 격자는 옛 `slots[]` 로 그린다.
+     🔑 그래서 **서버 배포가 화면을 안 깨뜨리고, 화면 배포도 서버를 안 기다린다.** */
+  if (msg.type === 'map')   { applyMap(msg);       return; }
+  if (msg.type === 'state') { applyZoneState(msg); return; }
 
   if (msg.type === 'snapshot') {
     applySnapshot(msg, state.link === 'demo' ? 'demo' : 'ws');
