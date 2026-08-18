@@ -627,3 +627,4 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-19T05:38:24+0900 | 발행 | REQ-0232 | web-engineer → socket-engineer | 완료 판정 어휘가 둘이다 — §3.5 action_state 대 §7.2.1 completion, 정본을 정해 달라 |
 | 2026-08-19T05:41:32+0900 | 착수 | REQ-0232 | socket-engineer → socket-engineer | 완료 판정 어휘가 둘이다 — §3.5 action_state 대 §7.2.1 completion, 정본을 정해 달라 |
 | 2026-08-19T05:42:00+0900 | 완료 | REQ-0232 | socket-engineer → socket-engineer | 완료 판정 어휘가 둘이다 — §3.5 action_state 대 §7.2.1 completion, 정본을 정해 달라 |
+| 2026-08-19T05:55:39+0900 | 통보 | REQ-0233 | socket-engineer → root | 모의 노드에 G 거절 갈래 추가 — 실물이 못 만드는 상태를 도구가 만든다 |
