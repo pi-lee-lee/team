@@ -104,7 +104,7 @@ static const size_t MAX_PLATE_BYTES = 32;   // 번호판 저장 상한(신형 10
 // 그리고 `ard_buf` 를 도착 도중에 비우므로 **몇 바이트까지 왔는지조차 안 남는다** —
 // 그게 정확히 그 시험이 재려는 값이다.
 static int        MAX_LINE       = 64;      // §2.1 (기본값. --max-line 으로만 바뀐다)
-static const int  ACK_TIMEOUT_MS = 1500;    // §7.3
+// 🔴 `ACK_TIMEOUT_MS` 는 여기 없다 — `DOWN_SLOT_MS` 에서 유도하므로 그 아래에 있다(§7.3).
 static const int  ACK_MAX_TRIES  = 3;       // 최초 + 재전송 2회
 static const int  OFFLINE_MS     = 3500;    // §3.4
 static const int  SELECT_TICK_MS = 200;     // 타이머를 돌리기 위한 select 최대 대기
@@ -186,6 +186,25 @@ static const int  DOWNQ_WAIT_CAP_MS  = 4 * DOWN_SLOT_MS;   // 4.8초 — 큐 대
 // 원장 §8.17 이 아직 못 갈랐다고 적어 둔 물음("`R`/`C` 라서 안전한가, 착지가 좋았던 것인가")은
 // 하행을 원하는 순간에 쏠 수단이 없으면 **영영 못 가른다.** 기본값은 off 다.
 static bool       DOWN_IMMEDIATE     = false;
+
+// ── ACK 마감 — 🔴 **값이 아니라 유도식이다** (창 C~E 실측이 입력을 확정했다)
+//
+// **옛 값 `1500` 은 우회 경로 시절의 값이었다.** `sendAck` 이 슬롯 창을 안 보고 즉시 나가던 때
+// 정상 왕복이 ≈135ms 였고 1500 은 그 11배였다. **그 우회를 막자 정상 왕복이 ≈1230ms 가 됐고**
+// (창 C 1229 · 창 D 1225 · 창 E 1230 — **세 창 · 두 망 · 두 펌웨어에서 고정**)
+// **1500 은 여유가 271ms 뿐인 값이 됐다** → **늦은 ACK 이 상시 재전송을 만들었다**(창 C 에서 16건 중 12건).
+// ⚠ **아무도 이 상수를 건드리지 않았는데 틀린 값이 됐다** — 남의 코드가 규율을 지키게 되면서.
+//
+// 🔴 **`rtt_max` 를 쓰지 않는다.** 창 D 최대는 **1599ms**(중앙 1225)였다 —
+// **최대는 이상치를 포함하므로 문턱을 거기 맞추면 실패 감지가 그만큼 느려진다.**
+// 그건 이 마감이 하려는 일의 반대다.
+//
+// **유도**: ACK 은 장치의 **다음 송신 창**을 기다린다 → 한 슬롯.
+//          그 창을 **한 번 놓친 경우까지 봐준다** → 한 슬롯 더.
+//          → `2 × DOWN_SLOT_MS` = 2400ms. 정상 1230 대비 여유 1170ms.
+// 🔑 **리터럴로 두지 않는 이유**: 슬롯 주기가 바뀌면 이 값이 **따라 움직여야 한다.**
+// 박아 두면 `DOWN_SLOT_MS` 를 고친 사람이 이 상수를 잊고, 그러면 오늘과 똑같은 일이 다시 난다.
+static const int  ACK_TIMEOUT_MS = 2 * DOWN_SLOT_MS;   // §7.3 · 유도값(2400ms)
 static const int  SOAK_REPORT_MS = 60000;   // 소크 관측 주기 보고(REQ-0065)
 static const int  LOG_KEEP       = 2;       // §9.1 최신 2건
 static const uint64_t WS_MAX_FRAME = 64 * 1024;  // 클라이언트가 선언한 길이의 상한
