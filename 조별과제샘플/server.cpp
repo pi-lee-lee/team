@@ -801,6 +801,12 @@ struct Server {
     //   떨어뜨리면 **"바꿨는데 안 올린 경로"** 가 생기고, 그건 **탐지 장치가 있는데 안 울리는 것**이라
     //   아예 없는 것보다 나쁘다.
     long long map_epoch;
+    // 🔴🔴 **`epoch` 는 *이 서버 인스턴스 안에서만* 단조다**(설계 §6.8).
+    //   재기동하면 0 부터 다시 시작하므로, 화면이 옛 판을 들고 있으면 **새 서버의 판 1 을
+    //   "늦게 온 옛 프레임"으로 무시한다** — 그러면 화면이 영영 새 맵을 안 받고 **오류도 안 뜬다.**
+    // 🔑 **"화면이 재접속 때 판을 버려라"를 규칙으로 두면 그건 두 곳에 있는 규칙이다.**
+    //   **값으로 실으면 화면이 안 잊는다.** → 봉투마다 `srv_id` 를 같이 보낸다.
+    std::string srv_id;
     // `get_map` 남용 방어 — **정합성용이 아니라 서버 보호용**이다(설계 §6.8)
     long long getmap_win_ms; int getmap_in_win; long long getmap_rejects;
     sock_t lsn_ard, lsn_http, lsn_phone;
@@ -1015,6 +1021,14 @@ struct Server {
     long long recov_worst_ms;     // 최악 복구시간
     int  zombie_reaps;            // 유휴 마감으로 회수한 소켓 수 — **앱 경로**
     int  keepalive_reaps;         // ETIMEDOUT 으로 죽은 소켓 수 — **OS 경로**
+
+    // ⚠ `srv_id` 는 **기동마다 달라야 한다.** 벽시계 + 소스 식별자를 쓴다 —
+    //   시각만 쓰면 같은 초에 두 번 뜨면 겹치고, 소스 식별자만 쓰면 재기동이 구분 안 된다.
+    void init_srv_id() {
+        char b[96];
+        snprintf(b, sizeof(b), "%s-%lld", BUILD_ID, (long long)epoch_ms());
+        srv_id = b;
+    }
 
     // 🔑 `park` 의 필드들은 **`Node` 의 생성자가 초기화한다.** 여기 목록에 다시 적지 않는다 —
     //   적으면 참조에 임시값을 묶으려는 것이 되어 컴파일이 안 된다(그게 이 설계의 안전장치다).
@@ -2062,7 +2076,7 @@ struct Server {
     // ⚠ **한 번에 완결해서 보낸다. 조각내지 않는다** — 화면이 "모른다"로 그리는 창을 짧게 하려는 것이다.
     std::string map_json() {
         std::ostringstream o;
-        o << "{\"type\":\"map\",\"epoch\":" << map_epoch
+        o << "{\"type\":\"map\",\"srv_id\":" << jstr(srv_id) << ",\"epoch\":" << map_epoch
           << ",\"grid\":{\"rows\":" << grid_rows << ",\"cols\":" << grid_cols << "}"
           << ",\"zones\":[";
         for (size_t i = 0; i < zones.size(); i++) {
@@ -3390,6 +3404,9 @@ struct Server {
                      g_park_dev_pin.empty() ? "(none, first-S-wins)" : g_park_dev_pin.c_str(),
                      w_srv());
             logf("=", cb);
+            init_srv_id();
+            logf("=", "서버 인스턴스 id — " + srv_id
+                      + " (🔑 `epoch` 는 **이 id 안에서만** 단조다. id 가 바뀌면 판을 비교하지 마라)");
         }
         logf("⏱", "소크 관측 시작 — " + std::to_string(SOAK_REPORT_MS / 1000) + "초마다 요약, 종료(Ctrl-C) 시 한 줄 총평");
 
@@ -4443,6 +4460,14 @@ static int selftest() {
                              && j.find("\"cells\":[[0,0]]") != std::string::npos
                              && j.find("\"devid\":\"P1\",\"name\":\"A1\",\"kind\":\"IP\",\"idx\":0")
                                 != std::string::npos);
+                // 🔴 **`srv_id` 가 봉투에 있어야 한다** — 없으면 재기동 뒤 화면이 새 맵을 무시한다
+                t.init_srv_id();
+                std::string j3 = t.map_json();
+                bool ok26b = (j3.find("\"srv_id\":") != std::string::npos && !t.srv_id.empty());
+                std::cout << (ok26b ? "  ✓ " : "  ✗ ") << "srv_id 가 map 봉투에 있다 ("
+                          << t.srv_id.substr(0, 24) << "…)\n";
+                if (!ok26b) bad++;
+
                 std::cout << (ok26 ? "  ✓ " : "  ✗ ") << "map 봉투: type·epoch·grid·cells·모듈("
                           << "devid+name+kind+idx) 전부 포함\n";
                 if (!ok26) bad++;
