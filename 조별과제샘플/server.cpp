@@ -769,7 +769,11 @@ struct Pending {             // 아두이노에 내려보내고 ACK 를 기다�
     std::string browser_rid;
     std::string slot, user_id;   // user_id = **전선에 실제로 나간 값**(ASCII 0*8 또는 빈 값)
     std::string plate;           // 서버가 보관할 원래 값(UTF-8 번호판 등). 전선에 안 나간다
-    char kind;               // 'R' | 'C' | 'T'
+    char kind;               // 'R' | 'C' | 'T' | 'M' | 'G'
+    // 🔴 `kind=='G'` 전용 — **모듈 인덱스**다. `slot` 은 사람이 읽을 자리 이름이고
+    //   전선에 나가는 것은 이 숫자다. **둘을 한 칸에 넣지 않는다** — 자리 이름과 모듈 순서는
+    //   다른 것이고(§5), 섞으면 재등록으로 순서가 바뀔 때 무엇이 틀렸는지 못 가린다.
+    int  mod_idx;
     char top;                // kind=='T' 일 때의 op: 'A'|'D'|'S'|'X'
     long long sent_ms;
     int tries;
@@ -781,7 +785,7 @@ struct Pending {             // 아두이노에 내려보내고 ACK 를 기다�
     // 🔴 ctor 가 없어서 `dispatch` 가 `top`·`queued` 를 안 세운 채 복사해 왔다.
     // 지금은 모든 경로가 곧바로 덮으므로 실동작은 맞지만 **`-Wall -Wextra` 가 이걸 안 잡는다** —
     // `Server` 의 여섯 칸이 무경고로 통과했던 것과 같은 이유다. 여기서 닫는다.
-    Pending() : wire_rid(0), ws_fd(BAD_SOCK), kind(0), top(0), sent_ms(0), tries(0), queued(false) {}
+    Pending() : wire_rid(0), ws_fd(BAD_SOCK), kind(0), mod_idx(-1), top(0), sent_ms(0), tries(0), queued(false) {}
 };
 
 struct Conn {
@@ -843,6 +847,13 @@ struct Server {
     //   아무 흔적이 없었다.** 폭 검사가 *닫히는* 쪽으로 실패해서 오독조차 안 남긴 것이다.
     //   ⚠ **`0` 이 안 남는 결함은 계수로 못 잡는다** — 그래서 "몇 번 고쳤나"(분자)가 아니라
     //   **"몇 번 검사했나"(분모)** 를 센다. `heal_checks == 0` 이면 그 자체가 빨강이다.
+    // 🔴 **`occ` 의 비트는 자리 점유만이 아니다** — 비트 `>= SLOT_N` 은 **액추에이터의 현재 상태**다
+    //   (arduino REQ-0228 답변 · 명세 §5 "위험 다섯째"). **조작 완료를 판정하는 값이 이것이다.**
+    //   ⚠ 새 칸을 만들면 같은 값이 두 곳에 생기고 **갈리는 순간 어느 쪽이 맞는지 알 방법이 없다.**
+    //   🔑 그래서 칸을 안 늘리고 **이미 오는 값을 제대로 읽는 쪽**을 골랐다(전선 예산 증가 0).
+    int  mod_bits[REG_MODS_MAX];
+    int  mod_bits_n;             // 해독한 비트 수. **0 = 안 읽었다**(모른다이지 0 이 아니다)
+    long long dev_reject;        // 🔴 `result=3`(장치가 거절) — `ack_fail_count`(안 갔다)와 **다른 칸**이다
     long long heal_checks;       // §7.6 예약 불일치 **검사**가 실제로 돈 횟수 (분모)
     long long heal_fires;        // 그중 불일치를 찾아 `C` 를 재하달한 횟수 (분자)
     long long res_undecoded;     // `S` 의 예약 마스크를 못 읽은 프레임 수
@@ -1054,6 +1065,7 @@ struct Server {
                lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK),
                reg_ok(0), reg_bad(0), reg_qsent(0), reg_giveups(0), reg_widthbad(0),
                occ_undecoded(0), occ_undecoded_warned(false),
+               mod_bits_n(0), dev_reject(0),
                heal_checks(0), heal_fires(0), res_undecoded(0), res_undecoded_warned(false),
                dup_devid_reject(0), takeover_grace(0),  // 선언 순서와 일치시킨다(-Wreorder)
                aux_conflicts(0), admit_rejects(0),
@@ -1305,6 +1317,7 @@ struct Server {
         // 🔴 **분모를 찍는다** — `치유 0/0` 과 `치유 0/1200` 은 완전히 다른 문장이다.
         //   앞은 **검사가 안 돈 것**(2026-08-19 에 7시간 그랬다)이고 뒤는 **건강한 것**이다.
         //   ⚠ 분자만 찍으면 둘이 똑같이 `0` 으로 보인다. 그래서 검사 수를 같이 낸다.
+        s += " · 장치거절 " + std::to_string(dev_reject);
         s += " · 치유 " + std::to_string(heal_fires) + "/" + std::to_string(heal_checks)
            + (heal_checks == 0 ? " 🔴검사0" : "")
            + " · 예약미해독 " + std::to_string(res_undecoded);
@@ -2268,15 +2281,36 @@ struct Server {
                 emit_action(o, first, "close_gate", blk);
             }
             o << "}";
-            // §3.5 완료 판정 — ⚠ **지금은 모듈 값이 없어 `unknown` 뿐이다.** 4d 이후에 채운다
-            o << ",\"completion\":\"unknown\",\"modules\":[";
+            // §3.5 완료 판정 — 🔴 **ACK 이 아니라 `S` 의 에코 비트로 판정한다.**
+            //   ACK 은 *"명령이 도착해 적용됐다"* 까지다. **실제로 열렸는지는 장치가 매 슬롯 에코한다.**
+            //   ⚠ ACK 으로 판정하면 장치가 받고 **못 움직였을 때** 화면이 "열렸다"로 그린다 — `거짓 완료`.
+            //   🔑 에코가 성립하는 조건: **비교할 값이 매 슬롯 온다**(원장 §8.21 이 실측한 그 조건).
+            //   값 셋만 쓴다: `pending`(내가 건 명령이 아직 있다) · `settled`(에코가 있다) · `unknown`(모른다).
+            {
+                bool any_pending = false;
+                for (std::map<uint16_t, Pending>::iterator it = pend.begin(); it != pend.end(); ++it)
+                    if (it->second.kind == 'G' && it->second.slot == z.id) any_pending = true;
+                const int gi = gate_index_of(z);
+                const char* comp = "unknown";
+                if (any_pending)                       comp = "pending";
+                else if (gi >= 0 && gi < mod_bits_n)   comp = "settled";
+                o << ",\"completion\":\"" << comp << "\",\"modules\":[";
+            }
             for (size_t m = 0; m < z.modules.size(); m++) {
                 if (m) o << ",";
-                // 🔴 **모듈 값은 아직 비트열에서 안 뽑는다. `known:false` 로 정직하게 낸다** —
-                //    모르면 덜 주장한다. 값을 지어내면 화면이 그것을 사실로 그린다.
+                // 🔴 **이제 값이 있다** — `S` 의 비트열에서 뽑는다(비트 `idx`).
+                //   ⚠ **모르면 여전히 `known:false` 다.** 등록 전이거나 폭을 못 읽었으면 `mod_bits_n == 0` 이고,
+                //     그때 `value:false` 를 내면 **화면이 "닫혀 있다"를 사실로 그린다.** 모름과 거짓은 다르다.
+                int mi = -1;
+                if (z.modules[m].first == park.devid)
+                    for (size_t k = 0; k < park.mods.size(); k++)
+                        if (park.mods[k].first == z.modules[m].second) { mi = (int)k; break; }
+                const bool known = (mi >= 0 && mi < mod_bits_n);
                 o << "{\"devid\":" << jstr(z.modules[m].first)
                   << ",\"name\":" << jstr(z.modules[m].second)
-                  << ",\"value\":null,\"known\":false}";
+                  << ",\"idx\":" << mi
+                  << ",\"value\":" << (known ? (mod_bits[mi] ? "true" : "false") : "null")
+                  << ",\"known\":" << (known ? "true" : "false") << "}";
             }
             o << "]}";
         }
@@ -2619,6 +2653,46 @@ struct Server {
         pend[rid] = p;
         if (!enqueue_down(pend[rid], build_line(sim_prefix(p)), true, false)) pend.erase(rid);
     }
+    // ── 🔴 자리 조작 `G` — **전선 형식은 arduino 의 파서에서 읽어 맞췄다**(REQ-0228 · 말로 받지 않았다)
+    //
+    //   `G,<rid>,<idx>,<op>,<ck>`
+    //     idx : **모듈 인덱스**(등록 `D` 순서). 장치는 `idx >= SLOT_N && idx < moduleCount()` 만 받는다
+    //     op  : **0 이 아니면 열기, 0 이면 닫기**
+    //   ACK  : `A,<rid>,G<d>,<result>,<ck>`  (d = idx % 10) · result 0=수행 · **3=수행 불가**
+    //
+    // ⚠ **ACK 의 둘째 칸이 자리 이름이 아니다**(`G0` 같은 값). 서버의 ACK 경로가 이미
+    //   `slot_index(slot) < 0` 이면 `p.slot` 으로 되돌리므로 그대로 동작한다 — **상관 키는 `rid`** 다.
+    // 🔴 **완료는 이 ACK 이 아니라 다음 `S` 의 비트 `idx` 로 판정한다.**
+    //   ACK 은 *"명령이 도착해 적용됐다"* 까지이고, **실제로 열렸는지는 장치가 매 슬롯 에코한다.**
+    static std::string gate_prefix(const Pending& p) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "G,%u,%d,%d,", p.wire_rid, p.mod_idx, (p.top == '1') ? 1 : 0);
+        return std::string(buf);
+    }
+    // 자리에 붙은 **명령 가능한 모듈**의 인덱스. 없으면 -1.
+    // 🔑 **자리 → 모듈 라우팅은 여기 한 곳에만 있다**(설계 §6.8) — 화면은 자리만 지목한다.
+    int gate_index_of(const Zone& z) const {
+        for (size_t m = 0; m < z.modules.size(); m++) {
+            if (z.modules[m].first != park.devid) continue;      // 지금은 주차 노드만 명령을 받는다
+            const std::string& nm = z.modules[m].second;
+            for (size_t i = 0; i < park.mods.size(); i++)
+                if (park.mods[i].first == nm && kind_commandable(park.mods[i].second))
+                    return (int)i;
+        }
+        return -1;
+    }
+    void dispatch_gate(sock_t ws_fd, const std::string& brid,
+                       const std::string& slot, int idx, bool open) {
+        uint16_t rid = next_rid++;
+        if (next_rid == 0) next_rid = 1;
+        Pending p;
+        p.wire_rid = rid; p.ws_fd = ws_fd; p.browser_rid = brid;
+        p.slot = slot; p.kind = 'G'; p.mod_idx = idx;
+        p.top = open ? '1' : '0';
+        p.sent_ms = now_ms(); p.tries = 1;
+        pend[rid] = p;
+        if (!enqueue_down(pend[rid], build_line(gate_prefix(p)), true, false)) pend.erase(rid);
+    }
     static std::string sim_prefix(const Pending& p) {
         char buf[32];
         snprintf(buf, sizeof(buf), "M,%u,", p.wire_rid);
@@ -2699,7 +2773,8 @@ struct Server {
             p.sent_ms = t;
             char buf[64];
             std::string line;
-            if (p.kind == 'M') line = sim_prefix(p);       // 재전송이 두 걸음이 되면 안 된다(§12B.4)
+            if (p.kind == 'G') line = gate_prefix(p);      // 🔑 같은 rid → 장치가 멱등 캐시로 같은 답을 준다
+            else if (p.kind == 'M') line = sim_prefix(p);  // 재전송이 두 걸음이 되면 안 된다(§12B.4)
             else if (p.kind == 'T') line = test_prefix(p); // 테스트도 같은 wire_rid 로 재전송
             else if (p.kind == 'R') {
                 snprintf(buf, sizeof(buf), "R,%u,%s,%s,", p.wire_rid, p.slot.c_str(), p.user_id.c_str());
@@ -2896,6 +2971,10 @@ struct Server {
             int  occ_bits  = decode_mod_bits(f[2], mod_state);
             bool occ_known = (occ_bits > 0);
             for (int i = 0; i < 10; i++) occ[i] = mod_state[i];
+            // 🔑 **자리 열 개를 넘는 비트를 보관한다** — 조작 완료 판정이 이것을 읽는다.
+            //   ⚠ 못 읽었으면 `mod_bits_n = 0` 으로 남긴다. **모른다와 0 은 다르다.**
+            mod_bits_n = occ_bits;
+            if (occ_bits > 0) for (int i = 0; i < REG_MODS_MAX; i++) mod_bits[i] = mod_state[i];
             if (!occ_known) {
                 // 🔴 미등록 + hex 로 보이는 폭 → **해독하지 않는다.** 등록 뒤 다음 `S` 부터 읽는다
                 if (!occ_undecoded_warned) {
@@ -3102,6 +3181,16 @@ struct Server {
             }
             // 테스트 결과는 여기서 상태에 반영하지 않는다 — 무장/오버라이드의 진실은
             // 다음 S 프레임의 tmask 다(§12A.4). ACK 는 "명령이 처리됐다"까지만 말한다.
+            // 🔴 **`result=3` 은 `ack_timeout` 과 다른 칸에 센다.**
+            //   `3` = *"장치가 못 한다"* → **재시도해도 같다.**
+            //   `ack_timeout` = *"안 갔다"* → **재시도에 뜻이 있다.**
+            //   ⚠ 합쳐 두면 `실패 N` 을 보고 재시도를 늘리는데, 절반은 늘려도 소용이 없다.
+            //   (§8.16 의 `error` 한 칸 · §8.23-(38) 과 같은 형태다.)
+            if (result == 3) {
+                dev_reject++;
+                logf("!", std::string("장치가 거절했다(result=3) — ") + p.kind + " " + slot
+                          + " rid=" + std::to_string(rid) + ". **재시도는 뜻이 없다**");
+            }
             if (p.ws_fd != BAD_SOCK) send_ack(p.ws_fd, p.browser_rid, slot, result, p.kind);
             // 이음매 1: 직접 호출 → 이벤트. **같은 틱의 drain 이 같은 일을 한다**(2481행).
             // 한 틱에 ACK 가 여러 건 겹치면 기록·화면이 건별 → 1회로 접힌다 — 이미 옮긴
@@ -3223,13 +3312,27 @@ struct Server {
             const std::string blk = zone_block_reason(*z);
             if (!blk.empty()) { send_err(fd, rid, blk.c_str(), "지금은 조작할 수 없습니다"); return; }
 
-            // 🔴 **여기까지 오면 자리도 모듈도 멀쩡한데 *전선에 보낼 명령이 없다*.**
-            //   지금 전선 명령은 `R`·`C`·`T`·`M` 뿐이고 **차단봉 프레임이 없다**(arduino 축).
-            //   ⚠ **조용히 성공으로 답하지 않는다** — 그러면 화면이 "열렸다"로 그리고
-            //     **아무 일도 안 일어난 것을 사람이 모른다.** 그게 우리가 `거짓 완료` 라고 부른 것이다.
-            logf("!", "조작 " + type + " 요청 — 자리 " + slot
-                      + " 은 준비됐는데 **전선 명령이 아직 없다**(arduino 축). 거절한다");
-            send_err(fd, rid, "not_supported", "이 조작은 아직 장치가 지원하지 않습니다");
+            // 🔑 **자리 → 모듈 라우팅은 `gate_index_of()` 한 곳에만 있다.** 화면은 자리만 지목한다.
+            const int gidx = gate_index_of(*z);
+            if (gidx < 0) {
+                // 🔴 **자리와 노드는 멀쩡한데 *명령 가능한 모듈*이 없다.**
+                //   ⚠ **조용히 성공으로 답하지 않는다** — 그러면 화면이 "열렸다"로 그리고
+                //     **아무 일도 안 일어난 것을 사람이 모른다**(그게 `거짓 완료` 다).
+                logf("!", "조작 " + type + " 요청 — 자리 " + slot
+                          + " 에 명령 가능한 모듈이 없다(kind 가 `O*` 인 것). 거절한다");
+                send_err(fd, rid, "not_supported", "이 조작을 맡을 모듈이 이 자리에 없습니다");
+                return;
+            }
+            // 🔴 **장치가 `idx >= SLOT_N` 만 받는다**(arduino 파서). 자리 센서 인덱스를 보내면
+            //   장치가 `result=3` 으로 거절한다 — **여기서 먼저 막아 전선을 낭비하지 않는다.**
+            //   ⚠ 그래도 장치의 검사를 없애지 않는다. **양쪽이 각자 확인하는 것이 낫다.**
+            if (gidx < 10) {
+                logf("!", "조작 거절 — 모듈 인덱스 " + std::to_string(gidx)
+                          + " 가 자리 구간(0~9)이다. **명령 가능 모듈은 자리 뒤에 온다**");
+                send_err(fd, rid, "not_supported", "이 자리의 모듈은 조작 대상이 아닙니다");
+                return;
+            }
+            dispatch_gate(fd, rid, slot, gidx, type == "open_gate");
             return;
         }
 
@@ -5035,6 +5138,95 @@ static int selftest() {
                 t.ard = BAD_SOCK;
                 if (ms[0] != BAD_SOCK) closesock(ms[0]);
                 if (ms[1] != BAD_SOCK) closesock(ms[1]);
+            }
+
+            // ㉚ 🔴🔴 **자리 조작 `G` — 전선까지 간다** (REQ-0228 · arduino 파서에서 형식을 읽어 맞췄다)
+            //    ⚠ **이 시험은 실기가 아직 못 만드는 상태를 만든다** — `명령가능 0개` 인 지금은
+            //      `dispatch_gate` 가 실기에서 한 번도 안 돈다. **가상 모듈이 구워지면 그때 돈다.**
+            //      🔑 그래서 **등록 순서를 실기와 똑같이** 세운다(자리 10 뒤에 차단봉 2) —
+            //      순서를 다르게 세우면 `idx` 가 실기와 달라져 **시험만 통과하는 코드**가 된다.
+            {
+                sock_t gs[2];
+                if (socketpair(AF_UNIX, SOCK_STREAM, 0, gs) == 0) {
+                    Server t; t.build_default_zones(); t.init_srv_id();
+                    t.ard = gs[0]; t.ard_seen = true; t.ard_last_ms = now_ms();
+                    // n=12 : 자리 10(IP) + E1·X1 (OBV = 차단봉 · 가상)
+                    t.on_ard_line(t_line("D,*,7,12,"));
+                    for (int i = 0; i < 10; i++)
+                        t.on_ard_line(t_line(std::string("D,") + SLOT_ID[i] + ",IP,"));
+                    t.on_ard_line(t_line("D,E1,OBV,"));
+                    t.on_ard_line(t_line("D,X1,OBV,"));
+
+                    bool okG0 = (t.park.reg_done && t.park.reg_n == 12 && t.reg_cmdable() == 2);
+                    std::cout << (okG0 ? "  ✓ " : "  ✗ ") << "OBV 2개가 명령가능으로 세어진다 ("
+                              << t.reg_cmdable() << " · 기대 2 · `V` 접미는 종류를 안 바꾼다)\n";
+                    if (!okG0) bad++;
+
+                    // 창을 열고(첫 S) 큐를 비운 뒤 조작을 건다
+                    t.on_ard_line(t_line("S,1,000,000,5,P1,"));
+                    char gb[512];
+                    while (recv(gs[1], gb, sizeof(gb), MSG_DONTWAIT) > 0) {}   // 전선 비우기
+
+                    t.on_ws_message(BAD_SOCK, "{\"type\":\"open_gate\",\"slot\":\"E1\",\"rid\":\"g1\"}");
+                    t.on_ard_line(t_line("S,2,000,000,6,P1,"));                // 다음 창에 나간다
+                    std::string gw;
+                    for (;;) { int r = (int)recv(gs[1], gb, sizeof(gb), MSG_DONTWAIT);
+                               if (r <= 0) break; gw.append(gb, (size_t)r); }
+                    // 🔴 **`idx` 는 10 이어야 한다** — E1 은 자리 10개 **뒤**에 등록된 첫 모듈이다.
+                    //    장치는 `idx >= SLOT_N` 만 받으므로 여기가 어긋나면 전부 `result=3` 이 된다.
+                    bool okG1 = (gw.find("G,") != std::string::npos
+                                 && gw.find(",10,1,") != std::string::npos);
+                    std::cout << (okG1 ? "  ✓ " : "  ✗ ") << "open_gate(E1) → 전선에 `G,<rid>,10,1,`"
+                              << (okG1 ? "" : std::string(" · 실제: ") + gw) << "\n";
+                    if (!okG1) bad++;
+
+                    // 닫기는 op=0
+                    t.on_ws_message(BAD_SOCK, "{\"type\":\"close_gate\",\"slot\":\"X1\",\"rid\":\"g2\"}");
+                    t.on_ard_line(t_line("S,3,000,000,7,P1,"));
+                    gw.clear();
+                    for (;;) { int r = (int)recv(gs[1], gb, sizeof(gb), MSG_DONTWAIT);
+                               if (r <= 0) break; gw.append(gb, (size_t)r); }
+                    bool okG2 = (gw.find(",11,0,") != std::string::npos);
+                    std::cout << (okG2 ? "  ✓ " : "  ✗ ") << "close_gate(X1) → `,11,0,`"
+                              << (okG2 ? "" : std::string(" · 실제: ") + gw) << "\n";
+                    if (!okG2) bad++;
+
+                    // 🔴 **완료는 ACK 이 아니라 다음 `S` 의 에코 비트다**
+                    //    🔑 **자리 `i` 는 비트 `(n−1−i)`** 다(§5). `n=12` 이므로 **모듈 10 = 비트 1** →
+                    //    hex `0x002` = `002`. ⚠ 처음에 `080`(비트 7)을 적었다가 시험이 잡았다 —
+                    //    비트 7 은 모듈 4(A5)라 **자리 점유로 들어간다.** 값이 그럴듯해서 안 보인다.
+                    t.on_ard_line(t_line("S,4,002,000,8,P1,"));
+                    std::string js = t.state_json();
+                    bool okG3 = (js.find("\"name\":\"E1\",\"idx\":10,\"value\":true,\"known\":true")
+                                 != std::string::npos);
+                    std::cout << (okG3 ? "  ✓ " : "  ✗ ") << "에코 비트 10 → E1 모듈 value=true·known=true"
+                              << " (**ACK 이 아니라 `S` 가 답한다**)\n";
+                    if (!okG3) bad++;
+
+                    bool okG4 = (js.find("\"name\":\"X1\",\"idx\":11,\"value\":false,\"known\":true")
+                                 != std::string::npos);
+                    std::cout << (okG4 ? "  ✓ " : "  ✗ ") << "비트 11 이 0 → X1 value=false"
+                              << "(비트 순서가 뒤집히면 여기서 갈린다)\n";
+                    if (!okG4) bad++;
+
+                    // 🔴 `result=3` 은 **`ack_timeout` 과 다른 칸**이다
+                    long long d0 = t.dev_reject;
+                    uint16_t rid3 = 0;
+                    for (std::map<uint16_t, Pending>::iterator it = t.pend.begin();
+                         it != t.pend.end(); ++it) if (it->second.kind == 'G') rid3 = it->first;
+                    if (rid3) {
+                        char ab[64];
+                        snprintf(ab, sizeof(ab), "A,%u,G0,3,", rid3);
+                        t.on_ard_line(t_line(ab));
+                    }
+                    bool okG5 = (t.dev_reject == d0 + 1);
+                    std::cout << (okG5 ? "  ✓ " : "  ✗ ") << "result=3 → 장치거절 계수 "
+                              << (t.dev_reject - d0) << " (기대 1 · ACK실패와 다른 칸)\n";
+                    if (!okG5) bad++;
+
+                    t.ard = BAD_SOCK;
+                    closesock(gs[0]); closesock(gs[1]);
+                }
             }
 
             s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
