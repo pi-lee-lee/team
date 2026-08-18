@@ -365,6 +365,10 @@ int main() {
   feedDown("R,201,A1,u1,");
   feedDown("R,202,A2,u1,");
   ok(ackqCount == 2,            "ACK 2건이 큐에 있다");
+  // ⚠ **등록이 밀려 있으면 그 슬롯은 `D` 가 나간다**(명세: 첫 S → 둘째 D).
+  //   이 시험은 정상 운항 중의 배치를 보는 것이므로 등록을 먼저 끝낸다.
+  //   🔑 등록 자체는 [32] 가 따로 본다 — **여기서 섞으면 둘 다 흐려진다.**
+  regPending = false; regAfterS = false;
   {
     char sendok[] = "SEND OK";
     handleLine(sendok);                     // 게이트를 연다
@@ -1098,9 +1102,26 @@ int main() {
     cachePut(77, 'A', '1', 1);
     ackqPush(77);
     ok(ackqCount == 1,      "준비: ACK 1건이 큐에 있다");
+    ok(!regPending && regAfterS,
+                            "★★ 접속 직후엔 D 가 아니라 S 가 먼저다 (승격이 먼저다)");
 
-    uint8_t  a1 = 0; uint16_t b1 = 0;
+    // ── 슬롯 1: 🔴 **S 가 나간다.** D 에는 devid 가 없어 승격을 못 만든다 ──
+    uint8_t  a0 = 0; uint16_t b0 = 0;
     const size_t before = wifi.sentLines.size();
+    ok(sendSlotBatch(&a0, &b0), "★ 첫 슬롯이 나갔다");
+    ok(!wifi.sentLines.empty() && wifi.sentLines.back()[0] == 'S',
+                            "★★ 첫 슬롯은 **S** 다 (D 가 아니다)");
+    ok(regPending,          "★★ S 가 나간 뒤에야 D 가 예약된다");
+    ok(a0 == 1,             "★★ 첫 S 에는 ACK 가 같이 실린다 (정상 배치다)");
+    { char sk1[] = "SEND OK"; handleLine(sk1); }
+
+    // 🔴 **이제 등록 슬롯에 ACK 이 도착한 상황을 만든다** — 이것이 밀림 시험의 본체다
+    cachePut(78, 'B', '2', 1);
+    ackqPush(78);
+    ok(ackqCount == 1,      "준비: 등록 슬롯 직전에 ACK 가 하나 더 들어왔다");
+
+    // ── 슬롯 2: D ────────────────────────────────────────────────────────
+    uint8_t  a1 = 0; uint16_t b1 = 0;
     bool sent1 = sendSlotBatch(&a1, &b1);
     ok(sent1,               "★ 등록 배치가 나갔다");
     ok(a1 == 0,             "★★ 이 슬롯에 ACK 는 안 실린다 (D 전용)");
@@ -1131,8 +1152,8 @@ int main() {
     uint8_t a2 = 0; uint16_t b2 = 0;
     bool sent2 = sendSlotBatch(&a2, &b2);
     ok(sent2 && a2 == 1,    "★★ 다음 슬롯에서 밀렸던 ACK 가 나간다");
-    ok(wifi.sentLines.size() == before + 2,
-                            "★ 거래는 슬롯당 하나씩 두 번이다");
+    ok(wifi.sentLines.size() == before + 3,
+                            "★ 거래는 슬롯당 하나씩 세 번이다 (S · D · S+ACK)");
     { char sok[] = "SEND OK"; handleLine(sok); }
   }
 

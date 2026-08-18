@@ -2101,9 +2101,32 @@ static const uint8_t DRAIN_DECL = 6;
 
 // 등록 상태 — ⚠ **온라인 전이가 두 곳이라 반드시 함수로 모은다.**
 //   한 곳만 고치면 어긋나고, 그건 오늘 여러 번 밟은 형태다.
+// 🔴 **첫 슬롯은 `S`, 둘째 슬롯부터 `D`** (socket 명세 확정 2026-08-18 · 커밋 9ffe8e5)
+//
+//   왜 `D` 가 먼저가 아닌가 — **`D` 에는 devid 가 없다.**
+//   서버의 소켓→노드 **승격**은 devid 를 가진 유효 프레임으로 일어나는데,
+//   `D,*,<drain>` 도 `D,<name>,<kind>` 도 devid 를 안 싣는다.
+//   → 🔴 **첫 슬롯에 `D` 를 보내면 승격 전 버퍼에서 11줄이 통째로 죽는다.**
+//
+//   ⚠ 대안이었던 `D,*,<devid>,<drain>`(내 제안)은 socket 이 물렸다:
+//     **`D,*` 가 반드시 맨 앞이어야 승격이 되므로 순서 의존이 파싱에서 승격으로 옮겨 갈 뿐**이다.
+//     🔑 **"신원 없는 프레임이 승격 전에 도착하는 상황" 자체를 없애는 쪽**이 낫다 —
+//        예외를 만드는 것보다 상황을 없애는 것이 낫다.
+//
+//   🔑 그리고 `S` 는 원래 **반송파·생존 신호·슬롯 시작 통보** 셋을 겸한다 —
+//      첫 프레임이어야 할 이유가 이미 있었다.
 static bool     regPending  = false;   // 다음 송신 창에 `D` 를 보내야 한다
+static bool     regAfterS   = false;   // ★ 첫 `S` 가 나가면 그때 `D` 를 예약한다
 static uint16_t regSends    = 0;       // 보낸 횟수(재전송 포함) — 진단용
-static void markNeedsRegistration(void) { regPending = true; }
+
+// 새 소켓이 섰다. **바로 `D` 를 예약하지 않는다** — 승격이 먼저다.
+static void markNeedsRegistration(void) { regPending = false; regAfterS = true; }
+
+// 🔴 `Q` 를 받았다 — **이건 다르다. 바로 `D` 를 예약한다.**
+//   `Q` 가 왔다는 것은 **서버가 이 소켓을 이미 노드로 승격했다**는 뜻이다
+//   (승격 안 됐으면 어디로 보낼지 모른다). **그래서 `S` 를 한 번 더 보낼 이유가 없다.**
+//   ⚠ 두 경우에 같은 함수를 쓰면 `Q` 응답이 한 슬롯 늦어지고, 서버의 3회 상한을 앞당긴다.
+static void requestRegistrationNow(void) { regPending = true; regAfterS = false; }
 
 // ─────────────────────────────────────────────────────────────────────────
 // 🔴 **모듈 표 — 자리 유동화의 단일 원천** (2026-08-18 · 축 3)
@@ -2330,6 +2353,8 @@ static bool sendSlotBatch(uint8_t* ackOut, uint16_t* bytesOut) {
   char buf[BATCH_CAP + 1];
 
   // ── 0) 🔴 등록이 밀려 있으면 **이 슬롯은 `D` 만 보낸다** (socket 명세 §5) ──
+  //   ⚠ **`regPending` 은 첫 `S` 가 나간 뒤에야 선다**(`regAfterS` → 아래 성공 처리부).
+  //     그래서 이 갈래는 **둘째 슬롯부터** 걸린다. 첫 슬롯은 아래 `S` 경로로 간다.
   //   왜 `S` 와 같이 안 보내나: `D` 여러 줄 + `S` 는 상행 배치 상한을 넘는다.
   //   **슬롯을 가르는 것이 명세의 답이고, 그래서 순서가 구조적으로 보장된다**
   //   (접속 → 첫 슬롯 `D` → 둘째 슬롯부터 `S`).
@@ -2411,6 +2436,11 @@ static bool sendSlotBatch(uint8_t* ackOut, uint16_t* bytesOut) {
     ackqHead = (uint8_t)((ackqHead + take) % ACKQ_N);
     ackqCount = (uint8_t)(ackqCount - take);
   }
+  // 🔴 **`S` 가 실제로 나갔으면 그때 등록을 예약한다.**
+  //   이 `S` 가 서버에서 **승격**(소켓 → 노드)을 만든다. 그 뒤라야 `D` 가 처리된다.
+  //   ⚠ **성공했을 때만** 세운다 — ACK 큐를 성공 시에만 소비하는 것과 같은 규율이다.
+  //     실패했으면 승격이 안 됐을 수 있고, 그러면 다음 슬롯의 `S` 가 다시 시도한다.
+  if (ok && regAfterS) { regAfterS = false; regPending = true; }
   if (ackOut)   *ackOut   = take;
   if (bytesOut) *bytesOut = used;
   return ok;
@@ -2704,7 +2734,7 @@ static void handleFrameLine(char* cand) {
   //     `node_unregistered` 로 굳힌다). 장치가 자체 상한을 두면 **교착**이 된다 —
   //     장치는 안 보내고 서버는 계속 묻는다. 여기서는 단순히 응답하고 `regSends` 로 진단만 남긴다.
   if (cand[0] == 'Q') {
-    markNeedsRegistration();
+    requestRegistrationNow();      // ★ 이미 승격됐다 — S 를 다시 보낼 이유가 없다
 #if DEBUG
     Serial.println(F("[REG] Q 수신 — 다음 송신 창에 등록을 다시 보낸다"));
 #endif
