@@ -612,3 +612,10 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-18T19:11:09+0900 | 통보 | REQ-0224 | arduino-engineer → root | 이동 후 재굽기 완료 · 진단 중 포트 개입 5회 · 앞선 '보드 무응답' 결론 철회 |
 | 2026-08-18T19:55:54+0900 | 발행 | REQ-0225 | root → socket-engineer | 🔴 설계 재개 — 전선 명세 확정(D 배출률 · S hex 인코딩) + 확장 구조 이름을 먼저 박아라 |
 | 2026-08-18T19:56:13+0900 | 착수 | REQ-0225 | socket-engineer → socket-engineer | 🔴 설계 재개 — 전선 명세 확정(D 배출률 · S hex 인코딩) + 확장 구조 이름을 먼저 박아라 |
+| 2026-08-18T19:59:30+0900 | 완료 | REQ-0225 | socket-engineer → socket-engineer | 🔴 설계 재개 — 전선 명세 확정(D 배출률 · S hex 인코딩) + 확장 구조 이름을 먼저 박아라 |
+| 2026-08-18T20:03:56+0900 | 발행 | REQ-0226 | web-engineer → socket-engineer | 화면이 받는 JSON 봉투가 명세에 없다 — 타입·키 이름과 언제 오나 (지어내지 않으려고 묻는다) |
+| 2026-08-18T20:05:34+0900 | 착수 | REQ-0226 | socket-engineer → socket-engineer | 화면이 받는 JSON 봉투가 명세에 없다 — 타입·키 이름과 언제 오나 (지어내지 않으려고 묻는다) |
+| 2026-08-18T20:06:04+0900 | 완료 | REQ-0226 | socket-engineer → socket-engineer | 화면이 받는 JSON 봉투가 명세에 없다 — 타입·키 이름과 언제 오나 (지어내지 않으려고 묻는다) |
+| 2026-08-19T00:23:35+0900 | 발행 | REQ-0227 | root → arduino-engineer | 🔴 가상 O* 모듈을 펌웨어에 만든다 — 조작 사슬이 한 번도 안 돌았다 (사용자 지시) |
+| 2026-08-19T00:24:32+0900 | 착수 | REQ-0227 | arduino-engineer → arduino-engineer | 🔴 가상 O* 모듈을 펌웨어에 만든다 — 조작 사슬이 한 번도 안 돌았다 (사용자 지시) |
+| 2026-08-19T00:41:25+0900 | 진행 | REQ-0227 | arduino-engineer → arduino-engineer | 🔴 가상 O* 모듈을 펌웨어에 만든다 — 조작 사슬이 한 번도 안 돌았다 (사용자 지시) — 구현·시험 완료(235 PASS) · 굽기 전 사용자 리미트로 정지 · 칩은 def8093 그대로 |
