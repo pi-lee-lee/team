@@ -706,15 +706,14 @@ state : {"type":"state", "epoch":N, …}     🔴 **자기가 계산될 때 쓴 
 {"type":"state","epoch":7,"ts_ms":1755500000123,
  "zones":[{"id":"A1",
            "occupied":true,"reserved":false,
-           "actions":{"reserve":{"ok":true,"reason":null},
-                      "cancel":{"ok":false,"reason":"not_reserved"}},
+           "actions":{"reserve":{"ok":true,"reason":null}},
            "completion":"complete",
            "modules":[{"devid":"P1","name":"sensor","value":1,"known":true}]}]}
 
 {"type":"state","epoch":7,"ts_ms":1755500000123,
  "zones":[{"id":"E1","kind":"entrance",
-           "actions":{"open_gate":{"ok":false,"reason":"node_offline"},
-                      "set_sign":{"ok":true,"reason":null}},
+           "actions":{"open_gate" :{"ok":false,"reason":"node_offline"},
+                      "close_gate":{"ok":true, "reason":null}},
            "completion":"partial",
            "modules":[…]}]}
 ```
@@ -780,6 +779,35 @@ state : {"type":"state", "epoch":N, …}     🔴 **자기가 계산될 때 쓴 
 자료 구조를 단일 `bool` 로 요구했고 내가 잡았다. **이번엔 반대다.**
 ⚠ **`parking` 만 보면 둘이 같아 보여서 놓치기 쉽다** — **갈리는 것은 입출구다.**
 그래서 **예제에 `entrance` 를 같이 넣었다.** 예제가 하나면 다음 사람이 또 `bool` 로 줄인다.
+
+### 🔴 **`actions` 에는 *지금 뜻이 있는 조작만* 넣는다** `[socket 확정 · web 이 빈 곳을 드러냈다]`
+
+내 예제가 `"cancel":{"ok":false,"reason":"not_reserved"}` 였는데 **`not_reserved` 는 코드 다섯에 없다.**
+그것을 코드로 추가하려다 **두 부류가 섞여 있다는 것**이 드러났다:
+```
+(가) 뜻은 있는데 **지금 못 한다** : node_offline · node_unregistered · module_absent · pending · queue_full
+(나) 애초에 **뜻이 없다**         : 예약이 없는 자리의 `cancel`
+```
+> ### **(나)를 `ok:false` 로 보내면 화면이 "막힌 버튼"을 그리고, 사용자는 *풀리면 눌리겠지* 로 읽는다.**
+> **그건 영영 안 풀린다.** `⏱`/`⚠` 계열을 붙일 자리도 아니다 — **이상이 아니라 해당 없음**이다.
+
+**규칙**: **`actions` 에 그 조작이 *없으면* "지금 이 자리에 그 조작은 없다"** 이고,
+**있는데 `ok:false` 면 "뜻은 있는데 막혔다"** 이다. → **`not_reserved` 같은 코드는 만들지 않는다.**
+🔑 **이미 있는 규약과 맞는다**: *"모르는 조작 키는 화면이 조용히 무시한다"* · *"조작이 없는 모듈은 표시만 한다"*.
+**키의 존재/부재가 이미 한 비트를 나르고 있었고, 그것을 쓰면 된다.**
+
+### 🔴🔴 **세 번째 자기 회귀 — 결정은 산문에 있고 위반은 예제에 있었다**
+
+한 문서에서 오늘 **세 번** 같은 형태가 나왔고 **셋 다 예제였다**:
+```
+① actionable:bool  ← §6.5 에서 버린 것을 §6.8 예제가 되살렸다
+② set_sign          ← 닫힌 집합 넷에 없다. **`light_on` 을 뺀 그 결정을 내가 예제에서 어겼다**
+③ not_reserved      ← 코드 다섯에 없다
+```
+> ### **산문은 검토를 받고 예제는 안 받는다. 그런데 구현하는 쪽은 예제를 본다.**
+🔑 **규칙**: **닫힌 집합이 있으면 예제는 그 집합에서만 뽑는다.** 새 이름이 예제에 필요하면
+**그 순간 집합을 고치는 것이지 예제에서 먼저 쓰는 것이 아니다.**
+⚠ **셋 다 web 이 잡았다** — **받는 쪽이 밟아 봐야 드러나는 형태**이고, 그래서 **예제가 계약이다.**
 
 ### 🔑 판정/설명 분리가 두 도메인에서 같은 모양으로 나왔다 (web 확인)
 
