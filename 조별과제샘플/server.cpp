@@ -250,7 +250,11 @@ static const int  DOWN_PROBE_N = 1;
 // 이 값은 **다른 IP 일 때만** 쓰이므로 우리 재접속을 막지 않는다. 그래서 크게 잡는 쪽이 안전하다.
 //   하한: 정상 주기(1슬롯)보다 충분히 커야 한다
 //   상한: 장치의 자체 재접속(T2 약 8초)보다 작아야 한다 — 안 그러면 자리를 못 비켜 준다
-static const int  TAKEOVER_GRACE_MS = 5 * DOWN_SLOT_MS;   // = 6000ms · 연속 5슬롯 무프레임
+// 🔴🔴 **이 값은 `IP 가 다를 때만` 쓰인다. 그 종속을 빼고 읽으면 반드시 틀린다.**
+//   *"정상 재접속 문턱"* 으로 읽으면 **`0초` 재접속을 막는 값**이 된다(위 실측).
+//   같은 IP 의 재접속은 이 상수를 **지나지 않는다** — 공백을 아예 묻지 않는다.
+//   ⚠ 그래서 계약 줄에도 `(IP 다를 때만)` 을 붙여 찍는다. 값만 옮겨 적히는 것을 막으려는 것이다.
+static const int  TAKEOVER_GRACE_MS = 5 * DOWN_SLOT_MS;   // = 6000ms · 다른 IP 가 조용한 자리를 가져갈 때만
 
 
 // ── ACK 마감 — 🔴 **값이 아니라 유도식이다** (창 C~E 실측이 입력을 확정했다)
@@ -3024,7 +3028,7 @@ struct Server {
             snprintf(cb, sizeof(cb),
                      "계약값 — ACK_TIMEOUT %dms(=2x슬롯) · ACK_MAX_TRIES %d · "
                      "ack_budget_ms %lld · 큐대기마감 %dms · cap %dB/%d건 · "
-                     "사용자큐상한 %d건 · 인수유예 %dms(=5x슬롯) · 노드잠금 %s · W_srv %lldms",
+                     "사용자큐상한 %d건 · 인수유예 %dms(=5x슬롯 · **IP 다를 때만**) · 노드잠금 %s · W_srv %lldms",
                      ACK_TIMEOUT_MS, ACK_MAX_TRIES, ack_budget_ms(),
                      DOWNQ_WAIT_CAP_MS, DOWN_BATCH_CAP_B, DOWN_BATCH_MAX_N,
                      DOWN_BATCH_MAX_N * (DOWNQ_WAIT_CAP_MS / DOWN_SLOT_MS),
