@@ -2097,7 +2097,17 @@ static uint8_t moduleCount(void);   // ★ 표가 원천이다 — 정의는 MOD
 //   🔑 이 값이 장치 쪽에 있는 이유: 서버가 `(BATCH_CAP − S_worst − 1) ÷ (ACK_worst + 1)` 을
 //     들고 있으면 **`BATCH_CAP` 을 우리가 바꿀 때 두 곳이 갈린다.**
 //     **파생값은 원본을 가진 쪽이 계산한다.**
-static const uint8_t DRAIN_DECL = 6;
+// 🔴 2026-08-18 **hex 전환으로 6 → 7 로 올린다.** `S` 가 짧아진 만큼 배치에 ACK 이 더 들어간다.
+//   계산(최악값 기준):
+//     S_worst = "S," + seq5 + occ4 + res4 + up10 + devid8 + tmask4 + 구분자6 + ck2 ≈ **45B**
+//              (hex 폭 4 = n<=16 · 10진이었으면 폭 10~16 이라 S_worst 가 60B 대였다)
+//     ACK_worst = "A," + rid5 + slot2 + result1 + 구분자3 + ck2 ≈ **15B**
+//     D = (BATCH_CAP − S_worst − 1) ÷ (ACK_worst + 1) = (160 − 45 − 1) ÷ 16 = 7.1 → **7**
+//   ⚠ **이건 계산이지 실측이 아니다.** socket 에 검산을 요청했다.
+//   ⚠ 그리고 **보장 하한**이므로 실측이 더 크게 나와도 올리지 않는다 —
+//     2026-08-18 실측 `8` 은 `S` 가 짧고 rid 3자리일 때만인 **조건부**였다.
+//     **조건부 실측을 보장으로 승격시키지 않는다.**
+static const uint8_t DRAIN_DECL = 7;
 
 // 등록 상태 — ⚠ **온라인 전이가 두 곳이라 반드시 함수로 모은다.**
 //   한 곳만 고치면 어긋나고, 그건 오늘 여러 번 밟은 형태다.
@@ -2161,6 +2171,16 @@ static_assert(MODULE_N <= 16,
 static_assert(MODULE_N == SLOT_N,
               "이행 중이다 — 표와 SLOT_N 이 갈리면 SLOT_PIN·SLOT_SRC_DEFAULT 가 안 맞는다");
 
+// 🔴 **등록 배치가 한 슬롯에 들어가야 한다.** `buildRegistration` 은 넘치면 **통째로 0 을 돌려주고**,
+//   그러면 **등록이 영영 안 된다**(잘린 등록을 내보내지 않는 것이 옳지만, 대안이 없으면 굶는다).
+//   실측 계산: 머리 `D,*,<drain>,<n>,<ck>` ≈ 11B · 모듈 줄 `D,A1,IP,<ck>` + LF = 11B
+//     n=13 → 154B (OK)   ·   🔴 n=14 → 165B (BATCH_CAP 160 초과)
+//   ⚠ **`MODULE_N <= 16`(마스크 폭)보다 이쪽이 먼저 걸린다.** 둘 다 필요하다.
+//   🔮 `n > 13` 이 필요해지면 **등록을 두 슬롯에 나눠 보내는 구현**이 먼저다. 지금은 안 만든다 —
+//      쓰이지 않는 일반화는 검증되지 않은 코드다.
+static_assert(11 * MODULE_N + 11 <= 160,
+              "등록이 한 배치(BATCH_CAP)에 안 들어간다 — n<=13 이거나 두 슬롯 분할이 먼저다");
+
 // ★ **표 하나가 `n` 의 원천이다.** 폭·뒤집기 축·등록 줄 수가 전부 이 값을 따라간다.
 static uint8_t moduleCount(void) { return MODULE_N; }
 
@@ -2190,7 +2210,14 @@ static uint16_t buildRegistration(char* buf, uint16_t cap) {
   uint16_t used = 0;
 
   // ① 배출률 선언 — **맨 앞.** 서버가 `n` 개를 다 받기 전에 유도식을 세울 수 있다
-  int w = snprintf(buf, cap, "D,*,%u,", (unsigned int)DRAIN_DECL);
+  // 🔴 `n`(모듈 수)을 같이 싣는다 — **명세가 `n` 으로 완료를 판정하는데 전선에 없었다.**
+  //   ⚠ `S` 의 hex 폭에서 유도할 수 없다: 폭 `w` 는 **`n ∈ [4w−3, 4w]`** 만 준다(ceil 때문).
+  //   ⚠ "다음 `S` 가 오면 완료"도 안 된다: `n` 이 크면 `D` 가 두 슬롯에 걸릴 수 있어
+  //     **첫 슬롯에서 거짓 완료**가 된다.
+  //   🔑 그리고 `n` 이 있으면 **①선언값 ②실제 D 줄 수 ③hex 폭** 셋이 서로를 *정확히* 못 박는다.
+  //     ③만으로는 ±3 여유가 있어 ②를 못 잡는다. **다중 표현의 일치**가
+  //     "오류 신호 없이 값만 틀리는" 부류에 가장 잘 듣는 방어다.
+  int w = snprintf(buf, cap, "D,*,%u,%u,", (unsigned int)DRAIN_DECL, (unsigned int)mn);
   if (w <= 0 || (uint16_t)w + 3 > cap) return 0;
   appendChecksum(buf, (uint8_t)w);
   used = (uint16_t)strlen(buf);

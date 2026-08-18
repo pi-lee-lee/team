@@ -1236,9 +1236,28 @@ int main() {
     char rbuf[BATCH_CAP + 1];
     uint16_t rn = buildRegistration(rbuf, sizeof rbuf);
     printf("      등록 %uB\n", (unsigned)rn);
-    ok(rn == 118,           "★★ 등록이 118B — 표 도입 전과 같다");
-    ok(strncmp(rbuf, "D,*,6,", 6) == 0,
-                            "★★ 배출률 선언이 맨 앞이고 값이 6 이다");
+    // ✏️ 118B → 121B · drain 6 → 7 : **둘 다 의도한 변경이다**
+    //   +3B = `n`(모듈 수) 필드. drain 은 hex 전환으로 S_worst 가 줄어 재계산했다.
+    //   🔑 **시험이 이 둘을 잡은 것이 맞다** — 값이 바뀌면 시험이 반응해야 한다.
+    ok(rn == 121,           "★★ 등록이 121B — n 필드가 들어가 3B 늘었다");
+    ok(strncmp(rbuf, "D,*,7,10,", 9) == 0,
+                            "★★ 머리가 D,*,<drain>,<n>, 이다 (drain=7 · n=10)");
+    // 🔴 **①선언 n · ②실제 D 줄 수 · ③hex 폭 — 셋이 서로를 정확히 못 박는다**
+    {
+      unsigned declaredN = 0;
+      const char* p3 = strchr(rbuf, ',');            // D 뒤
+      p3 = strchr(p3 + 1, ',');                      // * 뒤
+      p3 = strchr(p3 + 1, ',');                      // drain 뒤
+      declaredN = (unsigned)atoi(p3 + 1);
+      size_t lines = 0;
+      for (uint16_t k = 0; k + 1 < rn; k++) if (rbuf[k] == '\n') lines++;
+      ok(declaredN == lines,
+                            "★★ 선언한 n 과 실제 D 줄 수가 같다 (①==②)");
+      ok(declaredN == moduleCount(),
+                            "★★ 그리고 둘 다 moduleCount() 다 (원천이 하나다)");
+      ok(hexWidthFor((uint8_t)declaredN) == 3,
+                            "★ hex 폭도 그 n 에서 나온다 (③)");
+    }
     occMask = 0;
   }
 
