@@ -1216,6 +1216,21 @@ const SEND_COOLDOWN_MS = 1000;
 let lastSentAt = 0;
 let cooldownTimer = 0;
 
+/**
+ * 🔴 **아이들에서 면제되는 상행 프레임** — 즉 **읽기 질의**다.
+ *
+ * 아이들이 막는 것은 *"사람이 하행 명령을 연달아 두들기는 것"* 이다(위 문단). 읽기 질의는
+ * 장치로 내려가지 않고 서버가 자기 사본으로 답하므로 **전선을 물지 않는다.**
+ * `get_map` 을 여기 안 넣었을 때 실제로 난 일: 지도를 한 번 청하면 **그 뒤 1초 동안 예약이
+ * 조용히 거부**됐다(원장 §5.51, 실측 5/5).
+ *
+ * ⚠ **여기에 하행 명령을 넣지 마라.** 넣으면 그 명령만 연타가 그대로 나간다.
+ *    판별자: **장치까지 내려가는가.** 내려가면 하행이고, 서버가 즉답하면 질의다.
+ * 🔑 `get_map` 자체의 과다 요청은 이것과 별개로 `MAP_ASK_MIN_MS` 가 막는다 —
+ *    **막는 주체를 갈라 둔다**(아이들은 사람의 연타, 그쪽은 화면의 자동 재청).
+ */
+const QUERY_TYPES = { get_map: 1 };
+
 /** 남은 아이들 시간(ms). 0 이면 지금 보낼 수 있다. */
 function cooldownLeftMs() {
   if (!lastSentAt) return 0;
@@ -2392,6 +2407,18 @@ function renderZoneGrid() {
   }
   const st = zoneStateById();
 
+  /* 🔴 **포커스를 보존한다.** 이 함수는 격자를 **통째로 다시 만든다**(바로 아래 `textContent = ''`).
+     그래서 다시 그릴 때마다 **포커스가 사용자 발밑에서 사라진다** — `state` 가 초당 한 장 오므로
+     **이미 초당 한 번** 그랬고(있던 결함), 아이들 표시를 넣으면서 150ms 티커가 도는 1초 동안
+     **일곱 번** 그렇게 된다.
+     🔑 이걸 안 고치면 `aria-disabled` 를 쓴 이유가 무너진다 — 진짜 `disabled` 대신 그것을 쓴 것은
+     **키보드·스크린리더가 버튼에 닿아 "왜 못 누르는지"를 듣게** 하려는 것인데(§3.2),
+     버튼이 파괴되면 읽던 중에 초점이 몸통으로 떨어진다. **누른 직후가 정확히 그 순간이다.**
+     ⚠ 격자 안에 포커스가 있었을 때만 되돌린다 — 아니면 남의 포커스를 훔친다. */
+  const af = document.activeElement;
+  const keep = (af && af.classList && af.classList.contains('zbtn') && el.zoneGrid.contains(af))
+    ? { zone: af.dataset.zone, act: af.dataset.act } : null;
+
   el.zoneGrid.textContent = '';
   for (let r = 0; r < m.rows; r++) {
     for (let c = 0; c < m.cols; c++) {
@@ -2406,6 +2433,15 @@ function renderZoneGrid() {
         continue;
       }
       el.zoneGrid.appendChild(renderZone(li, z, st.get(z.id) || null));
+    }
+  }
+  /* 같은 자리·같은 조작의 버튼이 다시 있으면 거기로 되돌린다. 없어졌으면(조작이 사라졌으면)
+     아무것도 하지 않는다 — 엉뚱한 버튼으로 옮기면 **다음 엔터가 다른 것을 누른다.**
+     ⚠ `querySelector` 에 자리 id 를 문자열로 끼우지 않는다(id 에 따옴표·괄호가 오면 깨진다).
+        dataset 을 직접 비교하는 것이 형식에 안 흔들린다. */
+  if (keep) {
+    for (const b of el.zoneGrid.querySelectorAll('.zbtn')) {
+      if (b.dataset.zone === keep.zone && b.dataset.act === keep.act) { b.focus(); break; }
     }
   }
   renderZoneBanner(m, st);
@@ -2499,15 +2535,36 @@ function renderZone(li, z, zs) {
     /* ✅ **넷 다 보낼 수 있게 됐다**(socket 명세 §6.8): 요청 `type` 이 `actions` 키와 같은 이름이고
        대상은 `slot` 하나다. ~~요청 형식이 없어 막던 분기~~ 는 사라졌다.
        🔑 **키를 그대로 `type` 에 쓰므로 조작이 늘어도 이 코드가 안 바뀐다.** */
-    const okAct = a.ok === true;
+    /* 🔴 **판정자를 하나로 둔다**(루트 2026-08-19 · 원장 §5.52).
+       전에는 버튼을 여는 근거가 **서버 `actions.ok`** 뿐이었고, 보내기를 막는 근거는
+       `requestReserve` 의 확인-후 재검증(**`canAct()`**)이었다. **판정자가 둘이면 그 차이만큼
+       "열려 보이는데 거부되는" 창이 반드시 생긴다** — 실측으로 아이들 1초 동안 그랬다(5/5).
+       🔑 그래서 격자는 `canAct()` 를 **읽기만 한다.** 두 번째 판정자를 만들지 않는다.
+       ⚠ 이유 문구도 그쪽(`actionBlockedReason()`)에서 가져온다 — 문구를 여기서 새로 쓰면
+          그게 곧 두 번째 판정자가 된다(같은 상태를 두 곳이 다르게 설명한다). */
+    const srvOk = a.ok === true;
+    const localOk = canAct();
+    const okAct = srvOk && localOk;
     /* 🔑 `aria-disabled` 를 쓴다 — 진짜 `disabled` 면 키보드·스크린리더가 그 버튼에 닿지 못해
        **왜 못 누르는지를 들을 수 없다**(원장 §3.2, 의도된 설계). */
     b.setAttribute('aria-disabled', okAct ? 'false' : 'true');
-    if (!okAct && a.reason) {
+    /* 🔴 **서버의 이유가 먼저다.** 둘이 겹칠 때 아이들(1초 뒤 스스로 풀림)을 앞세우면
+       *"기다리면 되는 것"* 으로 읽혀서 **장치가 없다는 사실이 가려진다.** 스스로 안 풀리는 것을
+       먼저 말한다(§5.33 강조축: 조작을 막는 원인 중 **오래 남는 것**이 앞이다). */
+    if (!srvOk && a.reason) {
       const fam = familyOf(a.reason);
       b.textContent = ACTION_LABEL[key] + ' ' + (FAMILY_MARK[fam] || '');
       b.title = REASON_TEXT[a.reason] || ('지금 할 수 없습니다 (' + a.reason + ')');
       b.setAttribute('aria-label', ACTION_LABEL[key] + ' — 지금 할 수 없습니다: ' + b.title);
+    } else if (!localOk) {
+      /* 🔑 아이들은 **곧 풀린다** — `busy` 기호를 쓰고 남은 시간을 그대로 보인다.
+         150ms 티커가 `render()` 를 돌리므로 이 문구의 숫자가 **줄어드는 것이 보인다**
+         (`index.html` 아이들 티커의 설계 의도: 안 먹힌 줄 알고 더 세게 누르는 것을 막는다).
+         ⚠ 이 상태는 **미상 집계에 안 든다** — `a.reason` 을 건드리지 않으므로 배너는 그대로다.
+         (서버가 모른다는 것과 내 화면이 잠시 쉬는 것은 다른 사실이다.) */
+      b.textContent = ACTION_LABEL[key] + ' ' + (FAMILY_MARK.busy || '');
+      b.title = actionBlockedReason();
+      b.setAttribute('aria-label', ACTION_LABEL[key] + ' — 지금은 할 수 없습니다: ' + b.title);
     }
     acts.appendChild(b);
   }
@@ -2974,11 +3031,23 @@ const transport = {
   },
 
   send(payload) {
-    /* 🔴 아이들 시작점은 **여기 하나**다. 하행 세 경로(reserve·cancel·sendCommand)가 전부
-       이 함수를 지나므로, 여기서 찍으면 새 경로가 생겨도 저절로 걸린다.
+    /* 🔴 아이들 시작점은 **여기 하나**다. 하행 경로가 전부 이 함수를 지나므로, 여기서 찍으면
+       새 경로가 생겨도 저절로 걸린다.
        ⚠ **실제로 나간 경우에만** 찍는다 — 전송 경로가 없어 실패한 것까지 아이들로 세면
-       연결이 끊긴 동안 누른 것 때문에 복구 직후 1초를 못 누르게 된다. */
-    const stamp = () => { lastSentAt = Date.now(); startCooldownTicker(); render(); };
+       연결이 끊긴 동안 누른 것 때문에 복구 직후 1초를 못 누르게 된다.
+
+       🔴 **2026-08-19 정정.** 여기 원래 주석은 *"하행 **세** 경로(reserve·cancel·sendCommand)가
+       전부 이 함수를 지난다"* 였다. 그 뒤 내가 **`get_map` 이라는 네 번째 경로**를 넣으면서
+       **그 전제를 깼다** — 읽기 질의가 하행 아이들 1초를 켜서, 예약을 눌러도 확인 뒤에
+       `canAct()===false` 로 거부됐다(실측 5/5, 원장 §5.51).
+       🔑 **주석에 적힌 전제는 코드가 지켜 주지 않는다.** 그래서 세는 것을 그만두고
+       **`payload.type` 에서 유도**한다 — 부르는 쪽이 잊을 수 있는 인자를 만들지 않는다.
+       ⚠ **기본값은 "켠다"** 다. 새 하행이 생겼을 때 **조용히 안 켜지는 것**이
+       "잘못 켜지는 것"보다 위험하다(연타가 그대로 전선에 나간다). 면제는 아래 한 줄로만 늘어난다. */
+    const stamp = () => {
+      if (QUERY_TYPES[payload && payload.type]) return;   // 읽기 질의는 전선을 물지 않는다
+      lastSentAt = Date.now(); startCooldownTicker(); render();
+    };
     if (state.link === 'demo' && this.demo) { stamp(); this.demo.send(payload); return; }
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       stamp();

@@ -222,13 +222,21 @@ try {
   for (let attempt = 0; attempt < 3; attempt++) {
     const wire = rx.filter(x => x && x.type === 'state').slice(-1)[0] || null;
     const byId = new Map((wire ? wire.zones || [] : []).map(z => [z.id, z.actions || {}]));
-    const acts = attempt === 0 ? dom.allActs
-      : await evaluate(client, `[...document.querySelectorAll('#zone-grid .zbtn')].map(b => ({ zone: b.dataset.zone, act: b.dataset.act, off: b.getAttribute('aria-disabled') === 'true' }))`);
+    /* 🔴 **2026-08-19 갱신.** 판정자를 하나로 모으면서(§5.52 수정) 아이들도 버튼을 잠그게 됐다.
+       불변식에 그것을 넣지 않으면 **옳은 동작이 빨강**이 된다 — 검사가 제품을 따라가야 하는 자리다.
+       🔑 잠김 == `서버가 ok 라 하지 않았다` **또는** `아이들이 남았다`. 아이들을 **같은 순간에** 읽어야
+       한다(따로 읽으면 그 사이에 풀려서 거짓 빨강이 난다). */
+    const snap = await evaluate(client, `(() => ({
+      cooldown: (function () { try { return cooldownLeftMs(); } catch (e) { return -1; } })(),
+      acts: [...document.querySelectorAll('#zone-grid .zbtn')].map(b => ({ zone: b.dataset.zone, act: b.dataset.act, off: b.getAttribute('aria-disabled') === 'true' }))
+    }))()`);
+    const acts = snap ? snap.acts : [];
+    const cool = snap ? snap.cooldown : -1;
     const bad = (acts || []).filter(b => {
       const a = (byId.get(b.zone) || {})[b.act];
-      return b.off !== !(a && a.ok === true);
+      return b.off !== !(a && a.ok === true && cool === 0);
     });
-    actCmp = { buttons: (acts || []).length, mismatch: bad.length, sample: bad.slice(0, 3) };
+    actCmp = { buttons: (acts || []).length, mismatch: bad.length, sample: bad.slice(0, 3), cooldownLeftMs: cool };
     if (!wire || bad.length === 0) break;
   }
   ok('🔑 버튼 잠김이 서버의 actions.ok 와 일치한다', !!(actCmp && actCmp.buttons > 0 && actCmp.mismatch === 0),
@@ -326,6 +334,33 @@ try {
       mapEpoch: state.map && state.map.epoch, zsEpoch: state.zoneState && state.zoneState.epoch,
       mapStale: state.mapStale, olderRun: state.olderRun, heldState: !!state.heldState }; } catch (e) { return { err: e.message }; } })()`).catch(e => ({ err: String(e) }));
     console.log('  🔑 클릭 직전 → ' + JSON.stringify(beforeClick));
+    /* ⓐ 수정 ①의 확인 — 읽기 질의는 아이들을 켜지 않는다.
+       ⚠ **`get_map` 이 실제로 나갔을 때만** 이 검사가 무엇을 잰다. 안 나갔으면 통과가 공짜다
+          → 분모 밖으로 내보낸다(오늘 반복해서 배운 것: 통과 수는 밟은 것의 수다). */
+    const sentQuery = tx.some(m => m && m.type === 'get_map');
+    if (!sentQuery) skip('읽기 질의가 아이들을 켜지 않는다', 'get_map 이 이번 실행에서 안 나갔다 — 밟을 것이 없었다');
+    else ok('🔑 읽기 질의(get_map)가 아이들을 켜지 않는다', beforeClick && beforeClick.cooldown === 0,
+            JSON.stringify(beforeClick) + ' — 979~987 이면 §5.51 재발이다');
+
+    /* ⓒ 다시 그려도 포커스가 남는가. 격자는 매 렌더 통째로 다시 만들어지므로(textContent='')
+       `state` 한 장만 와도 포커스가 날아갔다. 누른 직후가 정확히 그 순간이라 이게 없으면
+       스크린리더 사용자는 이유를 듣는 중에 초점을 잃는다. */
+    const focusKeep = await evaluate(client, `(async () => {
+      const b = [...document.querySelectorAll('#zone-grid .zbtn')][0];
+      if (!b) return { skip: 'zbtn 이 없다' };
+      const want = b.dataset.zone + '/' + b.dataset.act;
+      b.focus();
+      const before = document.activeElement === b;
+      await new Promise(r => setTimeout(r, 1700));   // state 한 장 이상 지나가게 둔다
+      const a = document.activeElement;
+      return { want: want, before: before, sameNode: a === b,
+               after: a && a.dataset ? (a.dataset.zone || '') + '/' + (a.dataset.act || '') : (a ? a.tagName : 'null') };
+    })()`).catch(e => ({ err: String(e) }));   /* evaluate 는 awaitPromise:true 다(cdp.mjs:148) */
+    console.log('  🔑 다시 그린 뒤 포커스 → ' + JSON.stringify(focusKeep));
+    if (focusKeep && focusKeep.skip) skip('다시 그려도 포커스가 남는다', focusKeep.skip);
+    else ok('🔑 다시 그려도 포커스가 남는다',
+            !!(focusKeep && focusKeep.before === true && focusKeep.after === focusKeep.want),
+            JSON.stringify(focusKeep) + ' — 격자는 매 렌더 통째로 다시 만들어진다');
     actLog('예약 클릭 — 자리 ' + target);
     await evaluate(client, `document.querySelector('#zone-grid .zbtn[data-act="reserve"][data-zone=' + ${JSON.stringify(JSON.stringify(target))} + ']').click()`);
     let d = false;
@@ -353,6 +388,15 @@ try {
     console.log('  🔑 여태 보낸 것 → ' + JSON.stringify(tx.map(m => m && m.type)));
     actLog('확인 누름 — 예약 요청 전송');
     await evaluate(client, `document.querySelector('#confirm-dialog button[value="ok"]').click()`);
+    /* 🔴 아이들은 1초다. 아래 sleep(2500) 뒤에 재면 **항상 지나 있다** — 그러면 검사가
+       영원히 "미측정"으로 통과해 버린다. **보낸 직후**에 표본을 떠 둔다.
+       🔑 시간에 걸린 것은 "나중에 확인"이 안 된다. 표본을 그 순간에 떠야 한다. */
+    const cdShot = await evaluate(client, `(() => {
+      let left = -1; try { left = cooldownLeftMs(); } catch (e) {}
+      const locked = [...document.querySelectorAll('#zone-grid .zbtn')].filter(b => b.getAttribute('aria-disabled') === 'true');
+      return { left: left, locked: locked.length, titles: locked.slice(0, 2).map(b => b.title),
+               counting: locked.some(b => /초 뒤에 다시 누를 수 있습니다/.test(b.title || '')) };
+    })()`).catch(e => ({ err: String(e) }));
     await sleep(2500);
     const sentRv = tx.filter(m => m && m.type === 'reserve').slice(-1)[0] || null;
     const resp = rx.filter(m => m && (m.type === 'queued' || m.type === 'ack' || m.type === 'error'))
@@ -390,6 +434,17 @@ try {
     ok('⑤ 예약이 전선 형식으로 나갔다 (type·slot·rid)',
        !!(sentRv && sentRv.type === 'reserve' && sentRv.slot === target && sentRv.rid), JSON.stringify(sentRv));
     ok('⑤ 서버가 응답했다 (queued/ack/error)', resp.length > 0, JSON.stringify(resp) + ' — 무응답이면 화면 자체 타임아웃이 돈다');
+
+    /* ⓑ 수정 ②의 확인 — **하행을 보낸 뒤에는** 아이들이 화면에 보여야 한다.
+       🔴 전에는 아이들 동안 버튼이 그냥 정상으로 보였다. 설계 의도는 반대다:
+       *"안 먹혔다고 생각해 더 세게 누르고, 그러면 막으려던 것을 우리가 만든다"* →
+       **남은 시간이 줄어드는 것이 보여야 한다.** 그래서 문구 안의 숫자까지 확인한다.
+       ⚠ 아이들은 1초라 이 검사는 **보낸 직후 창**에서만 성립한다. 이미 지났으면 미측정이다. */
+    if (sentRv) {
+      console.log('  🔑 보낸 직후 아이들 표시 → ' + JSON.stringify(cdShot));
+      if (!cdShot || cdShot.left <= 0) skip('아이들이 화면에 보인다', '보낸 직후에도 아이들이 0 이었다 — 잴 창이 없었다');
+      else ok('🔑 아이들 동안 버튼이 잠기고 남은 시간이 보인다', cdShot.locked > 0 && cdShot.counting === true, JSON.stringify(cdShot));
+    }
 
     /* 🔴 **반드시 되돌린다.** 시험이 상태를 남기면 사용자가 실제 예약으로 읽는다. */
     const canCancel = await evaluate(client, `!!document.querySelector('#zone-grid .zbtn[data-act="cancel"][data-zone=' + ${JSON.stringify(JSON.stringify(target))} + ']')`);
