@@ -614,6 +614,27 @@ static std::string exe_path() {
 #endif
 }
 
+// 🔴 경계 줄의 `cwd=` 필드 (2026-08-19 · 루트 결정 · web REQ-0243 이 계기)
+//
+// **`serve_file()`(`index.html`)과 `data_log.json` 쓰기가 둘 다 cwd 상대다.**
+// 그래서 **같은 바이너리라도 어디서 떴느냐에 따라 다른 실체를 읽고 쓴다** —
+// 오늘 `data_log.json` 이 세 디렉터리에 있었고(`learn` · `조별과제샘플` · `parking-bin`),
+// `:9900` 이 이틀 된 화면을 내주고 있었다(REQ-0240/0243).
+//
+// 🔴 **그때 cwd 를 사후에 복원할 방법이 없었다.** 프로세스가 죽으면 `lsof` 로도 못 본다.
+//   web 이 `data_log.json` 의 mtime 으로 역추적을 시도했는데 **그 디렉터리를 쓰는 프로세스가
+//   여럿이라 성립하지 않았다.** 🔑 **cwd 는 사후에 파일로 복원할 값이 아니라 기동 때 찍을 값이다.**
+//
+// ⚠ 실패해도 기동을 막지 않는다 — 모르면 "?" 를 적는다(`bin=` 과 같은 규율).
+static std::string cur_cwd() {
+    char b[1024];
+#ifdef _WIN32
+    return _getcwd(b, (int)sizeof(b)) ? std::string(b) : std::string("?");
+#else
+    return getcwd(b, sizeof(b)) ? std::string(b) : std::string("?");
+#endif
+}
+
 static std::string iso8601(long long ep_ms) {
     time_t tt = (time_t)(ep_ms / 1000);
     char b[40];
@@ -4107,6 +4128,7 @@ struct Server {
                       << ","      << (PORT_HTTP    + g_port_offset)
                       << ","      << (PORT_PHONE   + g_port_offset)
                       << " offset=" << g_port_offset
+                      << " cwd=" << cur_cwd()
                       << " log=" << (g_log_path.empty() ? std::string("(화면만)") : g_log_path)
                       << " ===" << std::endl;
             std::cout << "=== INSTANCE-END"
@@ -4132,6 +4154,7 @@ struct Server {
                   << ","      << (PORT_HTTP    + g_port_offset)
                   << ","      << (PORT_PHONE   + g_port_offset)
                   << " offset=" << g_port_offset
+                  << " cwd=" << cur_cwd()
                   << " log=" << (g_log_path.empty() ? std::string("(화면만)") : g_log_path)
                   << " ===" << std::endl;
 
