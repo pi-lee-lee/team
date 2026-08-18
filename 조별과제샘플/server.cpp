@@ -1350,6 +1350,17 @@ struct Server {
         //   🔑 §"조건을 적었으면 그것을 보는 감시를 같은 자리에 만들어라" 의 **한 걸음 뒤 판본**이다:
         //   감시는 만들었는데 **그 결과를 볼 자리를 안 만들었다.** 세는 것과 보이는 것은 다른 일이다.
         s += " · 순서변경 " + std::to_string(mod_order_changed);
+        // 🔴 **화면 수를 찍는다** (2026-08-19). `S` 처리 안에서 `push_snapshot`·`state` 방송이 돌고
+        //   그 비용은 **붙어 있는 화면 수에 비례**한다. 창 M 에서 하행 송신 지연이
+        //   `≥2ms 9.4% → 40.9%` 로 늘었는데 **그 축이 아무 데도 안 남아서 원인을 못 갈랐다.**
+        //   ⚠ **없는 축은 사후에 복원할 수 없다.** 지금부터 남긴다.
+        //   🔑 최대값을 같이 낸다 — 평균만 내면 **한 창에 몰린 접속이 안 보인다.**
+        {
+            int ws_n = 0;
+            for (std::map<sock_t, Conn>::const_iterator it = conns.begin(); it != conns.end(); ++it)
+                if (it->second.kind == Conn::WS) ws_n++;
+            s += " · 화면 " + std::to_string(ws_n) + "(최대 " + std::to_string(ws_peak) + ")";
+        }
         s += " · 치유 " + std::to_string(heal_fires) + "/" + std::to_string(heal_checks)
            + (heal_checks == 0 ? " 🔴검사0" : "")
            + " · 예약미해독 " + std::to_string(res_undecoded);
@@ -2241,6 +2252,9 @@ struct Server {
     // 🔑 **선언 자리에서 초기화한다**(C++11 NSDMI). 생성자 목록에 넣으면 선언 순서에
     //   묶여(`-Wreorder`) 다음 사람이 이 멤버를 옮길 때마다 경고가 난다.
     bool map_empty_warned = false;
+    // 🔑 `mutable` 을 쓰지 않는다 — **요약을 만드는 함수가 상태를 바꾸면 안 된다.**
+    //   갱신은 `ws_upgrade` 에서 하고 여기서는 읽기만 한다.
+    int  ws_peak = 0;      // 이 인스턴스에서 동시에 붙었던 화면 수의 최대
     void push_map() {
         if (zones.empty()) {
             if (!map_empty_warned) {
@@ -3601,6 +3615,15 @@ struct Server {
                             "Connection: Upgrade\r\nSec-WebSocket-Accept: " + acc + "\r\n\r\n";
             send_raw(fd, r.data(), r.size(), "WS 업그레이드");
             c.kind = Conn::WS;
+            // 🔑 최대치는 **승격되는 자리**에서 갱신한다. 요약을 만드는 함수는 `const` 이고
+            //   **읽는 함수가 상태를 바꾸면 안 된다**(그래서 `mutable` 을 안 썼다).
+            {
+                int ws_n = 0;
+                for (std::map<sock_t, Conn>::const_iterator it2 = conns.begin();
+                     it2 != conns.end(); ++it2)
+                    if (it2->second.kind == Conn::WS) ws_n++;
+                if (ws_n > ws_peak) ws_peak = ws_n;
+            }
             logf("+WS", "업그레이드 완료");
             ws_send(fd, snapshot_json());          // 접속 즉시 현재 상태(옛 봉투)
             // 🔴 **접속 즉시 새 봉투도 보낸다**(REQ-0203 4b/4c · web 실기 대조가 이 구멍을 찾았다).
