@@ -2755,6 +2755,21 @@ struct Server {
         soak_start_ms = now_ms();
         last_report_ms = soak_start_ms;
         link_down_since = soak_start_ms;
+        // 🔑 **서버가 자기 계약값을 기동 시 찍는다** (web 지적 2026-08-18)
+        // web: *"서버 값 변화를 잡을 수 있는 검사가 팀에 없다"* — 하니스가 값을 주입하고
+        // 같은 값으로 단언하므로 **서버가 바뀌어도 빨간불이 안 된다.** 그렇다고 특정 값을 박으면
+        // **고친 쪽이 벌을 받는 검사**가 된다.
+        // → **검사로 막지 말고 관측 가능하게 만든다.** 그러면 "지금 서버가 보내는 값"이
+        //   남의 원장 사본이 아니라 **로그에 남는 사실**이 된다.
+        {
+            char cb[192];
+            snprintf(cb, sizeof(cb),
+                     "계약값 — ACK_TIMEOUT %dms(=2x슬롯) · ACK_MAX_TRIES %d · "
+                     "ack_budget_ms %lld · 큐대기마감 %dms · cap %dB · W_srv %lldms",
+                     ACK_TIMEOUT_MS, ACK_MAX_TRIES, ack_budget_ms(),
+                     DOWNQ_WAIT_CAP_MS, DOWN_BATCH_CAP_B, w_srv());
+            logf("=", cb);
+        }
         logf("⏱", "소크 관측 시작 — " + std::to_string(SOAK_REPORT_MS / 1000) + "초마다 요약, 종료(Ctrl-C) 시 한 줄 총평");
 
         while (!g_stop) {
