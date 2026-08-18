@@ -3902,3 +3902,36 @@ monitor  146  = `AT+CIPSEND=<n>` — tx + 1
 ```
 > ### **세 수가 다 맞고 세는 자리만 달랐다.** §"숫자 둘을 비교하기 전에 정의를 맞춰라" 의 교과서 사례다.
 🔑 **분모에는 `CIPSEND` 의 `<n>` 을 쓴다**(monitor 의 `SPEC-분모정의`). **다른 두 수를 그 표에 섞지 마라.**
+
+### (73) 🔴🔴 **사유 코드가 두 이름공간인데 같은 개념에 다른 이름이 붙어 있다** (2026-08-19 · §(71) 직후 같은 부류)
+
+**§(71) 을 적자마자 "같은 검사를 다른 데도 해 보자" 로 세었더니 나왔다.**
+
+```
+err.reason      (요청 거절) : bad_request · device_offline · not_supported · module_absent
+                              rate_limited · queue_full · already_pending · ack_timeout   (8)
+actions[].reason (막힌 이유) : module_absent · node_offline · node_unregistered · pending   (4)
+```
+
+#### 🔴 같은 개념 · 다른 이름
+```
+device_offline   (err)  ↔  node_offline        (actions)
+already_pending  (err)  ↔  pending             (actions)
+```
+> ### **화면이 사유 코드를 한 표로 다루면 같은 상태가 두 칸에 들어간다.**
+**web 의 `familyOf` 기본값이 `fault` 라 위험하진 않지만, `device_offline`(일시)이 ⚠(사람이 봐야 함)로
+과경고된다.** 🔑 **틀린 방향은 아니고 거친 방향이다 — 그래서 안 드러난다.**
+
+#### ⚠ 그리고 **내가 web 에 알린 닫힌 집합이 틀렸다**
+**내가 말한 것**: `actions` 의 사유는 `node_offline`·`node_unregistered`·`module_absent`·`pending`·`queue_full`·`not_supported` **여섯**.
+**코드가 내는 것**: **넷.** `queue_full`·`not_supported` 는 **`err` 전용이고 `actions` 에는 안 실린다.**
+🔑 **명세에 여섯이라 적어 놓고 넷을 보냈다** — §(71)(*"적혀 있다를 있다로 읽는다"*)의 세 번째 판본.
+
+#### 🔑 세는 방법도 한 번 틀렸다 — **여기서도 도구 출력을 안 봤다**
+```
+1차 : grep 'send_err([^,]*, *rid, *"' → 6개
+      🔴 `send_err(p.ws_fd, p.browser_rid, …)` 를 **패턴이 못 잡았다** → queue_full·ack_timeout 누락
+2차 : 패턴을 넓히니 8개
+```
+**`CLAUDE.md` 의 *"세기 전에 `-c` 없이 한 번 돌려라"* 그대로다.** ⚠ **6 도 그럴듯한 수였다.**
+🔑 **이번엔 잡혔는데, 잡힌 이유는 "숫자가 이상해서"가 아니라 *다른 각도로 한 번 더 세었기* 때문이다.**
