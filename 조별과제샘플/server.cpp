@@ -852,6 +852,14 @@ struct Server {
     //   ⚠ 새 칸을 만들면 같은 값이 두 곳에 생기고 **갈리는 순간 어느 쪽이 맞는지 알 방법이 없다.**
     //   🔑 그래서 칸을 안 늘리고 **이미 오는 값을 제대로 읽는 쪽**을 골랐다(전선 예산 증가 0).
     int  mod_bits[REG_MODS_MAX];
+    // 🔴 **마지막으로 요청한 값**(모듈 인덱스 → 0/1). **완료 판정은 대조이지 존재 확인이 아니다.**
+    //   ⚠ 처음엔 "그 모듈의 에코가 있으면 settled" 로 짰는데 **그건 "무엇이 됐는가"를 안 본다** —
+    //     열라고 했는데 닫혀 있어도 `settled` 가 됐다. **거짓 완료를 막으려던 값이 거짓 완료를 만든다.**
+    //   🔑 그리고 `pend` 는 ACK 에 지워지므로 **거기서는 대조할 수 없다.** 별도로 들고 있어야 한다.
+    std::map<int,int> gate_want;
+    // 재등록 직전의 모듈 목록. `D,*` 에서 찍고 등록 완료에서 대조한 뒤 비운다.
+    std::vector<std::pair<std::string,std::string> > prev_mods_snapshot;
+    long long mod_order_changed;   // 🔴 약속이 깨진 횟수. **0 이 정상이고 1 이상은 조사 대상이다**
     int  mod_bits_n;             // 해독한 비트 수. **0 = 안 읽었다**(모른다이지 0 이 아니다)
     long long dev_reject;        // 🔴 `result=3`(장치가 거절) — `ack_fail_count`(안 갔다)와 **다른 칸**이다
     long long heal_checks;       // §7.6 예약 불일치 **검사**가 실제로 돈 횟수 (분모)
@@ -1065,7 +1073,7 @@ struct Server {
                lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK),
                reg_ok(0), reg_bad(0), reg_qsent(0), reg_giveups(0), reg_widthbad(0),
                occ_undecoded(0), occ_undecoded_warned(false),
-               mod_bits_n(0), dev_reject(0),
+               mod_order_changed(0), mod_bits_n(0), dev_reject(0),
                heal_checks(0), heal_fires(0), res_undecoded(0), res_undecoded_warned(false),
                dup_devid_reject(0), takeover_grace(0),  // 선언 순서와 일치시킨다(-Wreorder)
                aux_conflicts(0), admit_rejects(0),
@@ -1368,6 +1376,12 @@ struct Server {
         if (!link_down_since) link_down_since = now_ms();
         // 설계 §2 — **세션이 끝나면 하행 큐를 비운다.** 옛 큐를 새 세션에 쏘면 장치가 모르는
         // 상태에 명령이 떨어진다. 비운 항목은 `device_offline` 로 **반드시 답한다**(§4-B 보장).
+        // 🔴 **장치가 사라지면 모듈 상태를 모른다.** 안 지우면 `state` 가 끊긴 뒤에도
+        //   `known:true` 로 낡은 값을 **사실로 주장한다** — 차단봉이 열려 있다고 그려 놓고
+        //   실제로는 볼 수 없는 상태다. **모르면 덜 주장한다**(같은 블록에 적어 둔 규칙이다).
+        //   ⚠ `z.modules` 는 남는다(지형은 유지) — **없어지는 것은 값이지 구조가 아니다.**
+        mod_bits_n = 0;
+        gate_want.clear();          // 대조할 기준도 이 세션 것이다. 다음 세션으로 넘기지 않는다
         clear_downq("세션 종료");
     }
 
@@ -2291,9 +2305,17 @@ struct Server {
                 for (std::map<uint16_t, Pending>::iterator it = pend.begin(); it != pend.end(); ++it)
                     if (it->second.kind == 'G' && it->second.slot == z.id) any_pending = true;
                 const int gi = gate_index_of(z);
+                // **닫힌 집합 넷**: `pending` · `settled` · `mismatch` · `unknown`
+                //   pending  — 내가 건 명령이 아직 떠 있다
+                //   settled  — 마지막으로 **요청한 값과 에코가 같다**
+                //   🔴 mismatch — 요청과 에코가 **다르다.** 장치가 못 했거나 되돌아갔다.
+                //                **이 값이 없으면 거짓 완료가 `settled` 로 보인다.**
+                //   unknown  — 이 세션에 명령한 적이 없거나 비트를 못 읽었다
                 const char* comp = "unknown";
-                if (any_pending)                       comp = "pending";
-                else if (gi >= 0 && gi < mod_bits_n)   comp = "settled";
+                std::map<int,int>::const_iterator wi = gate_want.find(gi);
+                if (any_pending)                                  comp = "pending";
+                else if (gi >= 0 && gi < mod_bits_n && wi != gate_want.end())
+                    comp = (mod_bits[gi] == wi->second) ? "settled" : "mismatch";
                 o << ",\"completion\":\"" << comp << "\",\"modules\":[";
             }
             for (size_t m = 0; m < z.modules.size(); m++) {
@@ -2475,14 +2497,21 @@ struct Server {
         if (q.ws_fd != BAD_SOCK && conns.count(q.ws_fd)) ws_send(q.ws_fd, o.str());
     }
     void send_ack(sock_t fd, const std::string& rid, const std::string& slot, int result,
-                  char kind = 'R') {
+                  char kind = 'R', char top = 0) {
         const char* m = "예약되었습니다";
         if (kind == 'T')      m = "테스트 값을 적용했습니다";
         else if (kind == 'C') m = "예약을 취소했습니다";
         else if (kind == 'M') m = "시뮬레이션 한 걸음 진행했습니다";
+        // 🔴 **`G` 가 없어서 차단봉 조작 ACK 이 "예약되었습니다" 로 나갔다**(2026-08-19 발견).
+        //   ⚠ 시험이 전부 `ws_fd = BAD_SOCK` 이라 **이 줄이 한 번도 안 돌았다** —
+        //     `send_ack` 자체를 건너뛰는 경로였다. **시험이 실기와 다르게 밟은 것**이다.
+        else if (kind == 'G') m = (top == '1') ? "차단봉을 열었습니다" : "차단봉을 닫았습니다";
         if (result == 1) m = "이미 주차된 자리입니다";
         else if (result == 2) m = "이미 예약된 자리입니다";
-        else if (result == 3) m = "잘못된 요청입니다";
+        // 🔴 `result=3` 의 뜻이 종류마다 다르다. `G` 에서는 **"장치가 수행할 수 없다"** 이지
+        //   "잘못된 요청"이 아니다 — 사용자가 할 일이 다르다(다시 눌러도 같다 vs 요청을 고쳐라).
+        else if (result == 3) m = (kind == 'G') ? "장치가 이 조작을 수행할 수 없습니다"
+                                                : "잘못된 요청입니다";
         else if (result == 4) m = "테스트 모드가 꺼져 있습니다";
         // result=5 는 **성공이 아니다.** 버튼을 눌렀는데 아무 일도 안 난 것을
         // 화면이 성공으로 표시하면 안 되므로 값과 문구를 따로 둔다(§12B.4).
@@ -2691,6 +2720,7 @@ struct Server {
         p.top = open ? '1' : '0';
         p.sent_ms = now_ms(); p.tries = 1;
         pend[rid] = p;
+        gate_want[idx] = open ? 1 : 0;      // 🔑 **대조할 값을 여기서 남긴다**(ACK 이 지우기 전에)
         if (!enqueue_down(pend[rid], build_line(gate_prefix(p)), true, false)) pend.erase(rid);
     }
     static std::string sim_prefix(const Pending& p) {
@@ -3103,6 +3133,11 @@ struct Server {
                     logf("!", "D,* 형식 위반 — 버림 (name 이 '*' 인 모듈이거나 숫자가 아니다)");
                     return;
                 }
+                // 🔴 **명세 §7.4 가 약속한 검사다 — 적어 놓고 안 만들면 지켜지는 것처럼 보인다.**
+                //   약속: *"새 모듈은 목록 끝에만 붙인다. 중간에 끼우지 않는다."*
+                //   깨지면 **`idx` 가 밀려 전선에 나가 있던 `G` 가 다른 모듈을 친다** — 조용히.
+                //   ⚠ 이 검사는 *"약속을 어겼나"* 만 잡는다. *"왜 어겼나"* 는 arduino 만 안다.
+                prev_mods_snapshot = park.mods;   // 🔑 `D,*` 와 등록 완료는 **다른 프레임**이다 — 멤버로 잇는다
                 park.reg_reset();
                 park.reg_drain = atoi(f[2].c_str());
                 park.reg_n     = atoi(f[3].c_str());
@@ -3131,6 +3166,34 @@ struct Server {
                 reg_ok++;
                 bind_modules(park);          // 🔑 등록이 지형을 바꾼다 → epoch 이 여기서 오른다
                 // 🔴 **삼중 검산 ①②** — 선언 `n` 과 실제 줄 수. ③(hex 폭)은 `S` 에서 본다.
+                // 🔴 **앞부분 대조** — 겹치는 구간이 그대로인가. 하나라도 다르면 `idx` 가 밀린 것이다.
+                if (!prev_mods_snapshot.empty()) {
+                    size_t n_ov = prev_mods_snapshot.size() < park.mods.size()
+                                ? prev_mods_snapshot.size() : park.mods.size();
+                    for (size_t i = 0; i < n_ov; i++)
+                        if (prev_mods_snapshot[i] != park.mods[i]) {
+                            mod_order_changed++;
+                            logf("!", "🔴 재등록에서 모듈 순서가 바뀌었다 — idx " + std::to_string(i)
+                                      + " 가 `" + prev_mods_snapshot[i].first + "` → `"
+                                      + park.mods[i].first + "`. **끝에만 붙인다는 약속이 깨졌다** "
+                                      "(명세 §7.4). 떠 있는 조작 명령을 버린다");
+                            // ⚠ **떠 있는 `G` 를 버린다.** 그 `idx` 는 이제 다른 모듈을 가리킨다 —
+                            //   보내 놓고 결과를 기다리는 것보다 **실패로 끝내는 것이 정직하다.**
+                            for (std::map<uint16_t, Pending>::iterator it = pend.begin();
+                                 it != pend.end(); ) {
+                                if (it->second.kind == 'G') {
+                                    if (it->second.ws_fd != BAD_SOCK)
+                                        send_err(it->second.ws_fd, it->second.browser_rid,
+                                                 "node_unregistered",
+                                                 "장치 구성이 바뀌어 조작을 취소했습니다");
+                                    pend.erase(it++);
+                                } else ++it;
+                            }
+                            gate_want.clear();
+                            break;
+                        }
+                }
+                prev_mods_snapshot.clear();
                 char b[192];
                 snprintf(b, sizeof(b),
                          "등록 완료 — n=%d · drain=%d · 명령가능 %d개 (device=%s)",
@@ -3191,7 +3254,7 @@ struct Server {
                 logf("!", std::string("장치가 거절했다(result=3) — ") + p.kind + " " + slot
                           + " rid=" + std::to_string(rid) + ". **재시도는 뜻이 없다**");
             }
-            if (p.ws_fd != BAD_SOCK) send_ack(p.ws_fd, p.browser_rid, slot, result, p.kind);
+            if (p.ws_fd != BAD_SOCK) send_ack(p.ws_fd, p.browser_rid, slot, result, p.kind, p.top);
             // 이음매 1: 직접 호출 → 이벤트. **같은 틱의 drain 이 같은 일을 한다**(2481행).
             // 한 틱에 ACK 가 여러 건 겹치면 기록·화면이 건별 → 1회로 접힌다 — 이미 옮긴
             // 3종과 같은 성질이고, 브라우저가 보는 최종 상태는 같다.
@@ -5224,8 +5287,134 @@ static int selftest() {
                               << (t.dev_reject - d0) << " (기대 1 · ACK실패와 다른 칸)\n";
                     if (!okG5) bad++;
 
+                    // ㉚-마 🔴 **화면 소켓을 실제로 물린다** — 위 검사들은 전부 `ws_fd = BAD_SOCK` 이라
+                    //   **`send_ack` 자체를 건너뛰었다.** 그래서 `kind=='G'` 문구가 한 번도 안 돌았고
+                    //   **차단봉을 열었는데 "예약되었습니다" 가 나가는 것을 아무도 못 봤다.**
+                    //   ⚠ 그리고 `enqueue_down` 이 `ws_fd == BAD_SOCK` 을 **중요(거절 금지)** 로 분류하므로
+                    //     실기(화면 조작 = 사용자 계열)와 **다른 갈래를 밟고 있었다.**
+                    {
+                        sock_t ws[2];
+                        if (socketpair(AF_UNIX, SOCK_STREAM, 0, ws) == 0) {
+                            t.conns[ws[0]].kind = Conn::WS;
+                            // 🔴 **먼저 떠 있는 `G` 를 닫는다.** 안 그러면 `zone_block_reason` 이
+                            //   `pending` 으로 새 요청을 거절한다 — **그게 옳은 거동이고**,
+                            //   시험이 그것을 모르고 짜여 있었다(처음에 여기서 실패했다).
+                            //   🔑 **같은 자리에 조작을 겹치지 않는 것**이 설계다. 시험이 설계를 따라야 한다.
+                            for (std::map<uint16_t, Pending>::iterator it = t.pend.begin();
+                                 it != t.pend.end(); ) {
+                                if (it->second.kind == 'G') { char ab0[64];
+                                    snprintf(ab0, sizeof(ab0), "A,%u,G0,0,", it->first);
+                                    uint16_t rr = it->first; ++it; t.on_ard_line(t_line(ab0)); (void)rr; }
+                                else ++it;
+                            }
+                            t.on_ws_message(ws[0], "{\"type\":\"open_gate\",\"slot\":\"E1\",\"rid\":\"g9\"}");
+                            t.on_ard_line(t_line("S,5,002,000,9,P1,"));
+                            uint16_t rg = 0;
+                            for (std::map<uint16_t, Pending>::iterator it = t.pend.begin();
+                                 it != t.pend.end(); ++it)
+                                if (it->second.kind == 'G') rg = it->first;
+                            char wsb[1024]; while (recv(ws[1], wsb, sizeof(wsb), MSG_DONTWAIT) > 0) {}
+                            if (rg) { char ab[64]; snprintf(ab, sizeof(ab), "A,%u,G0,0,", rg);
+                                      t.on_ard_line(t_line(ab)); }
+                            std::string wsout;
+                            for (;;) { int r = (int)recv(ws[1], wsb, sizeof(wsb), MSG_DONTWAIT);
+                                       if (r <= 0) break; wsout.append(wsb, (size_t)r); }
+                            bool okG6 = (wsout.find("차단봉을 열었습니다") != std::string::npos);
+                            std::cout << (okG6 ? "  ✓ " : "  ✗ ") << "화면 ACK 문구가 `차단봉을 열었습니다`"
+                                      << " (**예전엔 `예약되었습니다` 가 나갔다**)\n";
+                            if (!okG6) bad++;
+                            t.conns.clear();
+                            closesock(ws[0]); closesock(ws[1]);
+                        }
+                    }
+
+                    // ㉚-바 🔴 **완료 판정은 대조다** — "에코가 있다"가 아니라 "요청한 값과 같다"
+                    //   E1 은 열라고 했고 비트 10 이 1 이다 → settled
+                    //   X1 은 닫으라고 했고 비트 11 이 **1 이면** → 🔴 mismatch (장치가 안 했다)
+                    t.on_ard_line(t_line("S,6,003,000,10,P1,"));   // 비트 1·0 = 모듈 10·11 둘 다 1
+                    {
+                        std::string js2 = t.state_json();
+                        size_t px = js2.find("\"id\":\"X1\"");
+                        std::string xseg = (px == std::string::npos) ? "" : js2.substr(px, 400);
+                        bool okG7 = (xseg.find("\"completion\":\"mismatch\"") != std::string::npos);
+                        std::cout << (okG7 ? "  ✓ " : "  ✗ ") << "닫으라 했는데 열려 있다 → "
+                                  << "**completion=mismatch** (`settled` 로 답하면 그게 거짓 완료다)\n";
+                        if (!okG7) bad++;
+
+                        size_t pe = js2.find("\"id\":\"E1\"");
+                        std::string eseg = (pe == std::string::npos) ? "" : js2.substr(pe, 400);
+                        bool okG8 = (eseg.find("\"completion\":\"settled\"") != std::string::npos);
+                        std::cout << (okG8 ? "  ✓ " : "  ✗ ") << "열라 했고 열려 있다 → completion=settled\n";
+                        if (!okG8) bad++;
+                    }
+
+                    // ㉚-사 🔴 **세션이 끊기면 모듈 값을 모른다** — 낡은 값을 사실로 주장하지 않는다
+                    t.end_ard_session("selftest 세션종료");
+                    {
+                        std::string js3 = t.state_json();
+                        bool okG9 = (js3.find("\"name\":\"E1\",\"idx\":10,\"value\":null,\"known\":false")
+                                     != std::string::npos);
+                        std::cout << (okG9 ? "  ✓ " : "  ✗ ") << "세션 종료 뒤 모듈 값이 known=false"
+                                  << " (**낡은 값을 known=true 로 주장하지 않는다**)\n";
+                        if (!okG9) bad++;
+                    }
+
                     t.ard = BAD_SOCK;
                     closesock(gs[0]); closesock(gs[1]);
+                }
+            }
+
+            // ㉛ 🔴 **명세 §7.4 가 약속한 "재등록 앞부분 대조"가 실제로 도는가**
+            //    ⚠ 적어 놓고 안 만들면 **지켜지는 것처럼 보인다.** 그래서 시험이 이 자리에 있다.
+            {
+                sock_t os_[2];
+                if (socketpair(AF_UNIX, SOCK_STREAM, 0, os_) == 0) {
+                    Server t; t.build_default_zones(); t.init_srv_id();
+                    t.ard = os_[0]; t.ard_seen = true; t.ard_last_ms = now_ms();
+                    t.on_ard_line(t_line("D,*,7,12,"));
+                    for (int i = 0; i < 10; i++)
+                        t.on_ard_line(t_line(std::string("D,") + SLOT_ID[i] + ",IP,"));
+                    t.on_ard_line(t_line("D,E1,OBV,"));
+                    t.on_ard_line(t_line("D,X1,OBV,"));
+                    t.on_ard_line(t_line("S,1,000,000,5,P1,"));
+                    t.on_ws_message(BAD_SOCK, "{\"type\":\"open_gate\",\"slot\":\"E1\",\"rid\":\"z1\"}");
+                    size_t pend0 = t.pend.size();
+
+                    // 🔴 **중간에 끼워 넣은 재등록** — A1 앞에 새 모듈이 들어와 전부 밀린다
+                    long long c0 = t.mod_order_changed;
+                    t.on_ard_line(t_line("D,*,7,13,"));
+                    t.on_ard_line(t_line("D,Z9,IP,"));                 // ← 끼어든 것
+                    for (int i = 0; i < 10; i++)
+                        t.on_ard_line(t_line(std::string("D,") + SLOT_ID[i] + ",IP,"));
+                    t.on_ard_line(t_line("D,E1,OBV,"));
+                    t.on_ard_line(t_line("D,X1,OBV,"));
+
+                    bool okZ1 = (t.mod_order_changed == c0 + 1);
+                    std::cout << (okZ1 ? "  ✓ " : "  ✗ ") << "중간 삽입 재등록을 잡는다 (순서변경 "
+                              << (t.mod_order_changed - c0) << " · 기대 1)\n";
+                    if (!okZ1) bad++;
+
+                    bool okZ2 = (pend0 > 0 && t.pend.empty());
+                    std::cout << (okZ2 ? "  ✓ " : "  ✗ ") << "떠 있던 `G` 를 버린다 (전 "
+                              << pend0 << " → 후 " << t.pend.size()
+                              << " · **그 idx 는 이제 다른 모듈이다**)\n";
+                    if (!okZ2) bad++;
+
+                    // 끝에만 붙이는 재등록은 **안 걸려야 한다** — 안 그러면 정상 확장을 막는다
+                    long long c1 = t.mod_order_changed;
+                    t.on_ard_line(t_line("D,*,7,13,"));
+                    t.on_ard_line(t_line("D,Z9,IP,"));
+                    for (int i = 0; i < 10; i++)
+                        t.on_ard_line(t_line(std::string("D,") + SLOT_ID[i] + ",IP,"));
+                    t.on_ard_line(t_line("D,E1,OBV,"));
+                    t.on_ard_line(t_line("D,X1,OBV,"));
+                    bool okZ3 = (t.mod_order_changed == c1);
+                    std::cout << (okZ3 ? "  ✓ " : "  ✗ ") << "같은 순서 재등록은 안 걸린다 (거짓 경보 "
+                              << (t.mod_order_changed - c1) << " · 기대 0)\n";
+                    if (!okZ3) bad++;
+
+                    t.ard = BAD_SOCK;
+                    closesock(os_[0]); closesock(os_[1]);
                 }
             }
 
