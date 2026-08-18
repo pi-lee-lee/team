@@ -864,7 +864,17 @@ struct Server {
     // 🔴 **분모를 같이 만든다.** `장치거절 0` 만 찍으면 **`0` 이 혼자 서서 건강처럼 보인다** —
     //   `치유 0/386` 은 분모가 보여서 `0` 이 건강임을 말할 수 있는데, 이건 말할 수 없다.
     //   ⚠ **`0/0` 은 최소한 `0/0` 이라고 말해 준다. 분모 칸이 없는 것이 더 나쁘다**(monitor 지적).
-    long long gate_tries;        // `G` 를 전선에 **띄운** 수 = 장치거절의 분모
+    // 🔴 **자리가 아니라 이름으로 모은다**(monitor·루트 합의 · 2026-08-19).
+    //   `1/2/3` 처럼 순서로 기억하는 숫자가 오늘 우리를 여러 번 넘어뜨렸다
+    //   (`등록 145/133/146` 이 셋 다 맞았는데 어느 자리를 세는지가 안 붙어 있었다).
+    //   🔑 **이름을 붙이면 순서를 기억할 필요가 없다.**
+    //
+    //   띄움 M ─(전선에 나갔나)→ 도달 D ─(답이 왔나)→ 응답 K ─(무엇이라 했나)→ 거절 N
+    //   ⚠ **각 화살표가 다른 고장이다**: 큐에서 죽음 · 나갔는데 무응답 · 갔고 거절당함.
+    //     두 수만 두면 **무응답이 성공에 섞여 좋아 보이는 쪽으로 틀린다** — 가장 나쁜 방향이다.
+    long long gate_q;            // 띄움 — 큐에 들어간 수
+    long long gate_sent;         // 도달 — 실제로 전선에 나간 수
+    long long gate_ans;          // 응답 — ACK 이 온 수 (result 무관)
     long long dev_reject;        // 🔴 `result=3`(장치가 거절) — `ack_fail_count`(안 갔다)와 **다른 칸**이다
     long long heal_checks;       // §7.6 예약 불일치 **검사**가 실제로 돈 횟수 (분모)
     long long heal_fires;        // 그중 불일치를 찾아 `C` 를 재하달한 횟수 (분자)
@@ -1077,7 +1087,8 @@ struct Server {
                lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK),
                reg_ok(0), reg_bad(0), reg_qsent(0), reg_giveups(0), reg_widthbad(0),
                occ_undecoded(0), occ_undecoded_warned(false),
-               mod_order_changed(0), mod_bits_n(0), gate_tries(0), dev_reject(0),
+               mod_order_changed(0), mod_bits_n(0),
+               gate_q(0), gate_sent(0), gate_ans(0), dev_reject(0),
                heal_checks(0), heal_fires(0), res_undecoded(0), res_undecoded_warned(false),
                dup_devid_reject(0), takeover_grace(0),  // 선언 순서와 일치시킨다(-Wreorder)
                aux_conflicts(0), admit_rejects(0),
@@ -1329,7 +1340,11 @@ struct Server {
         // 🔴 **분모를 찍는다** — `치유 0/0` 과 `치유 0/1200` 은 완전히 다른 문장이다.
         //   앞은 **검사가 안 돈 것**(2026-08-19 에 7시간 그랬다)이고 뒤는 **건강한 것**이다.
         //   ⚠ 분자만 찍으면 둘이 똑같이 `0` 으로 보인다. 그래서 검사 수를 같이 낸다.
-        s += " · 장치거절 " + std::to_string(dev_reject) + "/" + std::to_string(gate_tries);
+        // 🔑 **이름을 붙여 낸다.** `M − N` 은 성공이 아니다 — 무응답이 그 안에 섞인다.
+        s += " · G 띄움 " + std::to_string(gate_q)
+           + "·도달 " + std::to_string(gate_sent)
+           + "·응답 " + std::to_string(gate_ans)
+           + "·거절 " + std::to_string(dev_reject);
         // 🔴 **계수를 만들고 요약에 안 내보냈다**(2026-08-19 발견). monitor 에게 *"`순서변경` 을 봐라"* 라고
         //   알려 둔 상태였다 — **없는 칸을 보라고 한 것이다.** 그쪽 파서는 표지 기준이라 조용히 못 찾는다.
         //   🔑 §"조건을 적었으면 그것을 보는 감시를 같은 자리에 만들어라" 의 **한 걸음 뒤 판본**이다:
@@ -2101,6 +2116,11 @@ struct Server {
             if (it != pend.end()) {
                 it->second.queued = false;
                 it->second.sent_ms = t;                       // ACK 시계는 **여기서** 시작한다
+                // 🔑 **도달**은 여기서 센다 — 큐에 든 것(`띄움`)과 다르다.
+                //   세션이 끊기면 큐의 것은 버려지므로 **띄움 > 도달** 인 구간이 생긴다.
+                //   ⚠ 그 차이가 "큐에서 죽었다"이고, `도달 − 응답` 이 "나갔는데 답이 없다"다.
+                //     **둘은 다른 고장이라 한 칸에 못 넣는다.**
+                if (it->second.kind == 'G') gate_sent++;
                 if (it->second.tries < 1) it->second.tries = 1;
             }
             char ph[64];
@@ -2733,7 +2753,7 @@ struct Server {
         // 🔑 **큐에 들어간 것만 센다.** 거절되면 전선에 안 나갔으므로 장치거절의 분모가 아니다 —
         //   분모에 넣으면 "장치가 멀쩡한데 거절률이 낮아 보이는" 착시가 생긴다.
         if (!enqueue_down(pend[rid], build_line(gate_prefix(p)), true, false)) pend.erase(rid);
-        else gate_tries++;
+        else gate_q++;
     }
     static std::string sim_prefix(const Pending& p) {
         char buf[32];
@@ -3261,6 +3281,7 @@ struct Server {
             //   `ack_timeout` = *"안 갔다"* → **재시도에 뜻이 있다.**
             //   ⚠ 합쳐 두면 `실패 N` 을 보고 재시도를 늘리는데, 절반은 늘려도 소용이 없다.
             //   (§8.16 의 `error` 한 칸 · §8.23-(38) 과 같은 형태다.)
+            if (p.kind == 'G') gate_ans++;       // 🔑 **응답** — result 와 무관하게 답이 온 것
             if (result == 3) {
                 dev_reject++;
                 logf("!", std::string("장치가 거절했다(result=3) — ") + p.kind + " " + slot
@@ -5370,6 +5391,20 @@ static int selftest() {
                                   << " (**낡은 값을 known=true 로 주장하지 않는다**)\n";
                         if (!okG9) bad++;
                     }
+
+                    // ㉚-아 🔴 **계수 넷의 불변식** — 하나가 안 오르면 여기서 걸린다
+                    //   띄움 ≥ 도달 ≥ 응답 ≥ 거절.  각 화살표가 **다른 고장**이다:
+                    //     띄움−도달 = 큐에서 죽음 · 도달−응답 = 나갔는데 무응답 · 응답−거절 = 성공
+                    //   ⚠ **선언만 하고 안 올리는 계수**를 이 불변식이 잡는다 —
+                    //     오늘 `mod_order_changed` 를 요약에 안 내보내 monitor 에게 없는 칸을 보라고 했고,
+                    //     `gate_sent` 도 선언만 하고 안 올릴 뻔했다. **같은 결함을 두 번 하지 않으려고 넣는다.**
+                    bool okC = (t.gate_q >= t.gate_sent && t.gate_sent >= t.gate_ans
+                                && t.gate_ans >= t.dev_reject
+                                && t.gate_q > 0 && t.gate_sent > 0 && t.gate_ans > 0);
+                    std::cout << (okC ? "  ✓ " : "  ✗ ") << "G 계수 불변식 — 띄움 " << t.gate_q
+                              << " ≥ 도달 " << t.gate_sent << " ≥ 응답 " << t.gate_ans
+                              << " ≥ 거절 " << t.dev_reject << " (전부 >0)\n";
+                    if (!okC) bad++;
 
                     t.ard = BAD_SOCK;
                     closesock(gs[0]); closesock(gs[1]);
