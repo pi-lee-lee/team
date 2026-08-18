@@ -2640,7 +2640,10 @@ static void handleFrameLine(char* cand) {
   if (len == 0 || len > 63) return;                    // §2.1 한 줄 최대 64바이트(LF 포함)
 
   // 타입 문자. 모르는 타입은 조용히 버린다(§2.1-7)
-  if (cand[0] != 'R' && cand[0] != 'C' && cand[0] != 'T' && cand[0] != 'M') return;
+  //   🔴 2026-08-18 `Q` 추가 — 서버가 "등록을 다시 보내라"고 묻는 프레임(명세 §5 ③).
+  //     ⚠ **없으면 등록이 한 번 실패했을 때 복구 경로가 아예 없다.** 서버는 미완료로 두고
+  //       장치는 자기가 실패한 줄 모른다(등록에 ACK 이 없다) → 그 노드는 영영 미등록이다.
+  if (cand[0] != 'R' && cand[0] != 'C' && cand[0] != 'T' && cand[0] != 'M' && cand[0] != 'Q') return;
 
   // 체크섬. AT 잡음이 우연히 R 로 시작해도 여기서 걸린다
   if (!checksumOk(cand, len)) {
@@ -2653,6 +2656,22 @@ static void handleFrameLine(char* cand) {
 #endif
     return;
   }
+
+  // ── 🔴 `Q` — 서버가 등록 재전송을 요구한다 (명세 §5 ③) ────────────────────
+  //   ⚠ **`processCommand` 를 태우지 않는다.** 그쪽은 `rid` 를 요구하는데 `Q` 에는 없다
+  //     (재전송 요구이지 명령이 아니다). 태우면 `rid` 파싱에서 조용히 버려진다.
+  //   ⚠ **ACK 를 보내지 않는다.** 응답은 **다음 자기 송신 창의 `D`** 그 자체다.
+  //   🔑 무한 반복 방지는 **서버 몫**이다(슬롯당 1회 · 3회 무응답이면 포기하고
+  //     `node_unregistered` 로 굳힌다). 장치가 자체 상한을 두면 **교착**이 된다 —
+  //     장치는 안 보내고 서버는 계속 묻는다. 여기서는 단순히 응답하고 `regSends` 로 진단만 남긴다.
+  if (cand[0] == 'Q') {
+    markNeedsRegistration();
+#if DEBUG
+    Serial.println(F("[REG] Q 수신 — 다음 송신 창에 등록을 다시 보낸다"));
+#endif
+    return;
+  }
+
   processCommand(cand);
 }
 

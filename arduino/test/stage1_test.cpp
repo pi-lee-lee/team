@@ -1136,6 +1136,42 @@ int main() {
     { char sok[] = "SEND OK"; handleLine(sok); }
   }
 
+  // ── [33] 🔴 `Q` 를 받으면 등록을 다시 보낸다 (명세 §5 ③) ──────────────────
+  //   ⚠ 없으면 등록이 한 번 실패했을 때 **복구 경로가 아예 없다** — 등록에 ACK 이 없어서
+  //     장치는 자기가 실패한 줄 모르고, 서버는 그 노드를 영영 미등록으로 둔다.
+  printf("\n[33] Q 를 받으면 다음 송신 창에 등록을 다시 보낸다\n");
+  {
+    wifi.refusePrompt = false;
+    regPending = false;
+    awaitingSendOk = false; inSend = false; netOnline = true;
+
+    // 체크섬이 맞는 Q 를 만든다 — 다른 프레임과 같은 구조다
+    char q[16] = "Q,";
+    appendChecksum(q, 2);
+    char qline[32];
+    snprintf(qline, sizeof qline, "+IPD,%u:%s", (unsigned)strlen(q), q);
+    for (const char* p2 = qline; *p2; ++p2) feedRxChar(*p2);
+    feedRxChar('\n');
+    ok(regPending,          "★★ Q 를 받으면 등록 대기가 다시 선다");
+
+    // 그리고 다음 배치가 실제로 D 다
+    const size_t before = wifi.sentLines.size();
+    uint8_t a = 0; uint16_t b = 0;
+    ok(sendSlotBatch(&a, &b), "★ 재등록 배치가 나갔다");
+    ok(wifi.sentLines.size() == before + 1 &&
+       wifi.sentLines.back().compare(0, 4, "D,*,") == 0,
+                            "★★ 다음 슬롯에 D 가 나간다 (ACK 가 아니라)");
+    ok(regSends >= 1,       "★ 전송 횟수가 세어진다 (진단)");
+
+    // 🔴 체크섬이 틀린 Q 는 무시한다 — 잡음이 재등록을 유발하면 안 된다
+    { char sok[] = "SEND OK"; handleLine(sok); }
+    regPending = false;
+    char bad[] = "Q,FF";
+    for (const char* p2 = bad; *p2; ++p2) feedRxChar(*p2);
+    feedRxChar('\n');
+    ok(!regPending,         "★★ 체크섬이 틀린 Q 는 무시한다 (잡음 방어)");
+  }
+
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }
