@@ -42,7 +42,11 @@ function ok(name, cond, detail) {
  *
  * 🔑 **그래서 "조용히 0건"을 막는다.** 완전한 이중 지원은 나중이고, **조용한 실패는 그 사이에
  * 결론을 오염시킨다.** 못 밟는 것을 초록으로 넘기지 않는 것이 먼저다.
- * (개정 격자 자체는 `web/tools/map-epoch.mjs` 가 잰다.)
+ * (개정 격자 자체는 `web/tools/map-epoch.mjs` 가 잰다.) *
+ * ⚠ **이 가드에 힘이 있는지는 여기서 재지 않는다.** 발화 조건(`zoneOn`)이 참이 되는 것은
+ *   `web/tools/map-epoch.mjs` **사례 [7]** 이 단언한다(*"새 격자가 보이고 옛 격자가 숨는다"*).
+ *   🔴 **그 사례가 바뀌면 이 가드의 검증이 조용히 사라진다** — 중복 측정을 안 만든 대가이므로
+ *   의존을 여기 적어 둔다(루트 지적).
  */
 async function assertOldGrid(client, ok) {
   const mode = await evaluate(client, `(() => {
