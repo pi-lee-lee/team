@@ -196,11 +196,19 @@ static uint16_t simOcc = 0;
 // 참고: D10~D12 는 SPI(SS/MOSI/MISO)다. 지금은 안 쓰지만 SD 카드·이더넷 실드를 붙이려면
 //       그 세 칸을 다른 핀으로 옮겨야 한다. 옮길 때는 아래 표 한 줄씩만 고치면 된다.
 // ─────────────────────────────────────────────────────────────────────────
+#define PIN_NONE 0xFF              // 핀 없음(가상 모듈)
 static const uint8_t SLOT_PIN[SLOT_N] PROGMEM = {
   2,  3,  4,  5,  6,      // 인덱스 0..4 = A1 A2 A3 A4 A5
   9, 10, 11, 12, A0       // 인덱스 5..9 = B1 B2 B3 B4 B5   (B5 만 아날로그 핀)
 };
-static inline uint8_t slotPin(uint8_t i) { return pgm_read_byte(&SLOT_PIN[i]); }
+// 🔴 **범위 가드** (2026-08-19) — `SLOT_PIN[]` 은 크기가 `SLOT_N`(실물 자리) 인데
+//   `moduleCount()` 는 가상 모듈까지 세므로 **그 값으로 루프를 돌면 배열 밖을 읽는다.**
+//   ⚠ 지금 모든 호출부가 `SLOT_N` 까지만 돌지만 **방어가 없으면 다음 사람이 밟는다** —
+//     PROGMEM 범위 밖 읽기는 **오류 없이 쓰레기를 돌려준다.**
+static inline uint8_t slotPin(uint8_t i) {
+  if (i >= SLOT_N) return PIN_NONE;          // 가상 모듈에는 핀이 없다
+  return pgm_read_byte(&SLOT_PIN[i]);
+}
 
 // 센서 극성. INPUT_PULLUP 을 쓰므로 "차량 감지 시 접점이 GND 로 당기는" 형식을 기본으로 본다.
 // 반대 극성 센서(감지 시 HIGH)면 이 값만 0 으로 바꾸면 된다.
@@ -421,6 +429,33 @@ static uint16_t sendOkByStream = 0;
 // ★ monitor 요청 — `inSend` 중 `pendLine` 이 가득 차 **버린 줄 수.**
 //   **버린 줄은 로그에 안 나오므로 시리얼로는 (가)/(나)를 못 가른다.** 이 칸이 그것을 가른다.
 static uint16_t pendDrops = 0;
+
+// 🔴 2026-08-18 — **`penddrop=0` 을 읽을 수 있게 만드는 분모와 대역.**
+//
+// 창 I 에서 `>=64B` 1,067 거래에 `penddrop=0` 이 나왔다. **그 0 이 두 가지로 읽힌다:**
+//   (A) `pendLine` 이 안 넘쳤다 (수정이 먹었다)
+//   (B) `inSend` 중에 줄이 **아예 안 왔다** (셀 일이 없었다)
+// ⚠ **분모가 없으면 둘을 못 가른다.** 우리 원장 §1.1 이 그 얘기다 —
+//   **`0` 은 "안 일어났다"와 "못 셌다"를 구별하지 않는다.**
+// → `pendFills` 가 그 분모다: `penddrop / (pendFills + pendDrops)` = 넘침률.
+//   **`pendFills == 0` 이면 (B) 이고, 그때 `penddrop=0` 은 아무 뜻도 없다.**
+static uint16_t pendFills = 0;
+
+// ⚠ monitor 요청 — **대역(`<64` / `>=64`)과 함께 찍는다.**
+//   `_SS_MAX_RX_BUFF = 64` 가 기전 경계이고 창 G 에서 그 위아래로 T2 율이 갈렸다
+//   (`48~63` 0/43 · `>=64` 9/34). **누적 총계로는 그 갈림을 못 본다.**
+// 🔑 `curTxLen` 은 **지금 보내는 중인 배치 길이**다. 수신 계수는 `inSend` 중에 일어나므로
+//   이 값으로 "그때 어느 대역이었나"를 귀속할 수 있다.
+static uint8_t  curTxLen     = 0;
+static uint16_t pendFillsBig = 0;   // curTxLen >= 64 인 동안 담은 수
+static uint16_t pendDropsBig = 0;   // curTxLen >= 64 인 동안 버린 수
+static uint16_t okStreamBig  = 0;   // curTxLen >= 64 인 동안 바이트매칭이 구한 수
+// 🔴 **대책 ②(바이트 매칭)의 진짜 분자.** `okstream` 이 아니다 — 위 주석 참고.
+//   `oklost > 0` 이면 **줄 경로만 있었을 때 실제로 잃었을 SEND OK 가 있었다**는 뜻이고,
+//   그것이 곧 T2 였다. **이 칸이 0 이면 대책 ②는 이 창에서 한 일이 없다.**
+static uint16_t okLostByLine = 0;
+static uint16_t okLostBig    = 0;
+static const uint8_t RXBUF_THRESHOLD = 64;   // = _SS_MAX_RX_BUFF. 기전 경계이지 표본 기준이 아니다
 
 // 🔴 2026-08-17 (REQ-0174 ①) — **줄의 첫 바이트가 도착한 시점의 슬롯 오프셋.**
 //
@@ -972,7 +1007,13 @@ static void feedRxChar(char c) {
     if (inSend) {
       // ★ REQ-0174 — 줄과 **그 줄의 도착 오프셋**을 같이 미룬다. 여기서 오프셋을 안 들고 가면
       //   나중에 처리 시각으로 계산돼 위험 구간이 통째로 보이지 않는다(위 `rxLineOff` 주석).
-      if (!pendReady) { memcpy(pendLine, rxLine, (size_t)n + 1); pendLineOff = rxLineOff; pendReady = true; }
+      if (!pendReady) {
+        memcpy(pendLine, rxLine, (size_t)n + 1); pendLineOff = rxLineOff; pendReady = true;
+        // ★ **`penddrop` 의 분모다.** 이것이 0 이면 `penddrop=0` 은 "안 넘쳤다"가 아니라
+        //   "셀 일이 없었다"이고, 그 둘은 완전히 다른 결론으로 이어진다.
+        if (pendFills < 65535) pendFills++;
+        if (curTxLen >= RXBUF_THRESHOLD && pendFillsBig < 65535) pendFillsBig++;
+      }
       else {
         // 🔴 2026-08-18 (monitor 요청) — **버린 줄을 센다.**
         //   monitor 는 (가)"우리가 페이로드를 먼저 보냈다" 와 (나)"pendLine 이 첫 줄을 미뤄
@@ -988,7 +1029,21 @@ static void feedRxChar(char c) {
         //
         // ⚠ 옛 주석 *"서버가 재전송하므로 잃지 않는다"* 는 **데이터 줄에만 참이다.**
         //   `SEND OK` 는 ESP 가 한 번만 보내는 제어 응답이라 **재전송이 없다.**
+        // 🔴 2026-08-18 정정 — **`okstream` 은 "구조"를 못 센다.**
+        //   바이트 매처는 7번째 글자에서 발화한다 — **줄이 완성되기 전이다.**
+        //   즉 줄 경로와의 경주에서 **항상 이긴다.** 그래서 `okstream` 은
+        //   "줄 경로가 놓쳤을 것"이 아니라 **탐지된 SEND OK 총수**다.
+        //   ⚠ 그 결과 아래 판정표의 `okstream > 0 → (나)` 는 **뭐든 성공하면 참**이라 쓸 수 없다.
+        //
+        // ★ **진짜 분자는 이것이다: 버려진 줄 안에 `SEND OK` 가 있었나.**
+        //   여기서만 "줄 경로였으면 영영 잃었을 SEND OK" 를 셀 수 있다 —
+        //   `rxLine` 에 완성된 줄이 아직 그대로 있다.
+        if (strstr(rxLine, "SEND OK") != NULL) {
+          if (okLostByLine < 65535) okLostByLine++;
+          if (curTxLen >= RXBUF_THRESHOLD && okLostBig < 65535) okLostBig++;
+        }
         if (pendDrops < 65535) pendDrops++;
+        if (curTxLen >= RXBUF_THRESHOLD && pendDropsBig < 65535) pendDropsBig++;
       }
     } else {
       memcpy(workLine, rxLine, (size_t)n + 1);
@@ -1017,6 +1072,7 @@ static void feedRxChar(char c) {
         sendOkMatch = 0;
         awaitingSendOk = false; sendOkT1Passed = false;
         if (sendOkByStream < 65535) sendOkByStream++;
+        if (curTxLen >= RXBUF_THRESHOLD && okStreamBig < 65535) okStreamBig++;
       }
     } else {
       sendOkMatch = (c == SENDOK[0]) ? 1 : 0;      // 겹침 재시작(`SSEND OK` 같은 경우)
@@ -1032,7 +1088,7 @@ static void feedRxChar(char c) {
   rxLine[rxLen++] = c;
 }
 
-static void pumpSerialRaw(void) {
+static void espRead(void) {
   while (wifi.available()) feedRxChar((char)wifi.read());
   // ─────────────────────────────────────────────────────────────────────────
   // 🔴 2026-08-17 (REQ-0167) — **SoftwareSerial 링버퍼가 넘쳤는가.** 계측기가 이미 있었다.
@@ -1044,7 +1100,7 @@ static void pumpSerialRaw(void) {
   //   → **하한이다.** `0 이 아니다`는 강한 신호지만 `0` 은 "그 지점들 사이엔 안 넘쳤다"까지만 말한다.
   //
   // ★ 위치를 여기로 고른 이유: **읽기 루프 직후**라 "우리가 다 빼낸 뒤에도 넘쳐 있었나"를 본다.
-  //   그리고 `pumpSerialRaw` 는 `loop()`·`waitForPrompt()` 양쪽에서 자주 불려 확인 간격이 짧다 —
+  //   그리고 `espRead` 는 `loop()`·`waitForPrompt()` 양쪽에서 자주 불려 확인 간격이 짧다 —
   //   플래그가 지워지는 계측기라 **자주 볼수록 뭉침이 줄어든다.**
   //
   // ⚠⚠ **이름을 `rxOverflow` 와 헷갈리지 마라 — 다른 계층이다.**
@@ -1202,7 +1258,7 @@ static void applyRung(void) {
 // ── 실패 사건이 들어오는 유일한 문 ──
 // why: 무엇이 실패했는가. 계측 한 줄을 정확히 쓰기 위해서만 쓰인다(단 선택에는 3번만 관여).
 //
-// ⚠ **netTick() 의 switch 안에서 이 함수를 부를 때 주의할 것** — 새 호출 지점을 추가할 사람에게.
+// ⚠ **espReset() 의 switch 안에서 이 함수를 부를 때 주의할 것** — 새 호출 지점을 추가할 사람에게.
 //   그 시점에는 이미 `netSendStep(sent)` 로 명령이 나간 뒤다. 그런데 1단 조치는 `drainSerial()`
 //   이라 **방금 보낸 명령의 응답을 그 자리에서 버린다.** 지금 있는 두 호출 지점은 둘 다 안전하다:
 //     · NET_CIFSR  — 버려도 되는 응답이다(cifsrTries 를 이미 소진해 쓸모없음이 확정됐다)
@@ -1288,7 +1344,7 @@ static void ladderFail(uint8_t why) {
 // 그 값을 버리고 있었을 뿐이다.**
 //
 // 구조적 원인: `netOnline = false` 가 되는 곳이 파일 전체에 `CLOSED` 하나뿐이었다.
-// 그 통보가 안 오면 netTick() 이 첫 줄에서 빠져 **재접속을 아예 시도하지 않는다.**
+// 그 통보가 안 오면 espReset() 이 첫 줄에서 빠져 **재접속을 아예 시도하지 않는다.**
 //
 // ── N(연속 실패 한계)을 3 으로 정한 근거 ──
 // 명세 §3.4: **서버는 3.5초 무프레임이면 device.online=false 로 본다.**
@@ -1549,7 +1605,7 @@ static void cntTick(uint32_t now) {
   //     창 B 5건 · 창 C 4건(위상 `:56` 고정) · 창 D 2건 — **셋 다 정합.**
   //
   // 기전: `[CNT]` 는 약 142B 인데 하드웨어 UART TX 링버퍼는 **64B**(`SERIAL_TX_BUFFER_SIZE`)다.
-  //   → 넘치는 78B 만큼 **블로킹**하고, 그동안 `pumpSerialRaw()` 가 안 돌아
+  //   → 넘치는 78B 만큼 **블로킹**하고, 그동안 `espRead()` 가 안 돌아
   //     **도착 중인 하행 바이트가 SoftwareSerial 64B 링버퍼에서 사라진다.**
   //
   // ★ **UART 를 쓰는 모든 것이 슬롯 규율의 대상이다** — 프레임 송신만이 아니라 진단 출력도.
@@ -1595,9 +1651,43 @@ static void cntTick(uint32_t now) {
   // ★ REQ-0174 — 체크섬 불일치(하행 프레임 파괴). 서버 계수로는 안 보이는 손실이다.
   Serial.print(F(" cksumng="));      Serial.print(cksumNg);
   // ★ REQ-0218 — 바이트 흐름으로 잡은 `SEND OK` 수. **줄 경로가 놓치던 양**이다.
-  Serial.print(F(" okstream="));     Serial.print(sendOkByStream);
+  // 🔴 2026-08-18 — **okstream 계열은 스냅샷으로 찍는다.**
+  //   이 줄을 찍는 도중 `espRead()` 가 돈다. `cntTick` 중에 `inSend` 는 false 지만
+  //   **`awaitingSendOk` 는 흔히 true 다**(CIPSEND 직후의 정상 상태).
+  //   그 pump 가 `SEND OK` 를 매칭하면 `okstream`/`bigokst` 가 **출력 도중에 늘어나서**
+  //   먼저 찍힌 `okstream` 은 옛 값, 나중 찍힌 `bigokst` 는 새 값이 된다.
+  //   → **`bigokst > okstream` 이라는 불가능한 출력**이 나오고, 읽는 쪽은 펌웨어 결함으로 읽는다.
+  //   ⚠ `pendfill`/`bigfill`/`bigdrop` 은 `inSend` 가 필요해서 이 문제가 없다.
+  //     **이 계열만 해당한다** — 그래서 여기만 스냅샷한다.
+  // 🔴 **출력 도중에는 `espRead()` 를 부르지 않는다.** 한 번 넣었다가 뺐다.
+  //   이유: pump 가 `[AT] "..."` 를 찍어 **`[CNT]` 줄 한가운데로 끼어든다.**
+  //   시험에서 실제로 그렇게 나왔다: `… pendfill=0[AT] "SEND OK" (7)\n bigfill=0 …`
+  //   **monitor 의 파서가 그 줄을 못 읽는다.** 계측기를 고치려다 계측기를 깬 꼴이다.
+  //   ⚠ 그러면 블로킹은 어떻게 되나 — **계산으로 안전하다:**
+  //     `[CNT]` 약 220B @115200 ≈ 19ms · TX 링버퍼 64B 를 넘는 156B 만큼 ≈ 13.5ms 블로킹.
+  //     그동안 들어올 하행은 9600bps 에서 **약 13B** 이고, SoftwareSerial 링버퍼 64B 에 여유가 있다.
+  //   🔑 그리고 `cntTick` 은 **송신 창 안에서만** 나간다(§11.2-2) — 하행이 오는 시간대가 아니다.
+  //   ⚠ 줄이 이보다 크게 길어지면 이 계산을 다시 해라. **300B 시험이 그 경보다**(시험 [28]).
+  const uint16_t okStreamSnap = sendOkByStream;
+  const uint16_t okLostSnap   = okLostByLine;
+  const uint16_t okStreamBigSnap = okStreamBig;
+  const uint16_t okLostBigSnap   = okLostBig;
+  Serial.print(F(" okstream="));     Serial.print(okStreamSnap);
   // ★ monitor 요청 — `okstream` 과 **짝으로 읽는다**(위 feedRxChar 주석의 판정표).
   Serial.print(F(" penddrop="));     Serial.print(pendDrops);
+  // 🔴 2026-08-18 — **`penddrop` 의 분모.** 이것이 0 이면 위 `penddrop=0` 은
+  //   "안 넘쳤다"가 아니라 **"셀 일이 없었다"** 이고, 그 둘은 다른 결론으로 이어진다.
+  Serial.print(F(" pendfill="));     Serial.print(pendFills);
+  // ⚠ monitor 요청 — **대역(`>=64B`)별.** 누적 총계로는 창 G 의 갈림(`48~63` 0/43 · `>=64` 9/34)이 안 보인다.
+  //   🔑 `64` 는 `_SS_MAX_RX_BUFF` = **기전 경계**다. monitor 의 `48` 은 표본 추출 기준이라 **다른 축이다.**
+  Serial.print(F(" bigfill="));      Serial.print(pendFillsBig);
+  Serial.print(F(" bigdrop="));      Serial.print(pendDropsBig);
+  Serial.print(F(" bigokst="));      Serial.print(okStreamBigSnap);
+  // ★ **대책 ②의 진짜 분자.** `okstream` 이 아니다 — 바이트 매처는 줄 완성 **전**에 발화해
+  //   항상 줄 경로를 이기므로, `okstream` 은 그냥 탐지 총수다.
+  //   **`oklost` 는 "줄 경로였으면 영영 잃었을 SEND OK"** 이고 그것이 곧 T2 였다.
+  Serial.print(F(" oklost="));       Serial.print(okLostSnap);
+  Serial.print(F(" bigoklost="));    Serial.print(okLostBigSnap);
   Serial.print(F(" skip="));         Serial.print(sendSkips);
   Serial.print(F(" online="));       Serial.println(netOnline ? 1 : 0);
 }
@@ -1721,7 +1811,7 @@ static uint8_t waitForPrompt(void) {
 
 // line 은 LF 없는 문자열. LF 는 여기서 붙인다(전선 종단은 LF 하나 — §2.1)
 // ─────────────────────────────────────────────────────────────────────────
-// 🔴 2026-08-17 — 몸통을 `sendPayload()` 로 뺐다. **한 거래에 여러 줄**을 담기 위해서다.
+// 🔴 2026-08-17 — 몸통을 `espWrite()` 로 뺐다. **한 거래에 여러 줄**을 담기 위해서다.
 //
 // 왜 나눴나: 슬롯 구조는 **슬롯당 정확히 1거래**다. 3건을 보내려면 묶는 것 말고 방법이 없다
 //   (안 묶으면 3건에 3.6초가 걸린다). **배치는 최적화가 아니라 구조적 필수다.**
@@ -1732,8 +1822,8 @@ static uint8_t waitForPrompt(void) {
 // ⚠⚠ **길이를 먼저 확정하고 그 길이만큼 정확히 쓴다.** `AT+CIPSEND=N` 을 선언한 뒤 N 과 다르게
 //   쓰면 스트림이 어긋나고, 그것이 원장 §1.4 가 설명하는 (a)/(b) 갈래를 우리 손으로 만드는 것이다.
 //   → 그래서 배치는 **호출 전에 버퍼에 완성**되어 있어야 한다. `waitForPrompt()` 안에서
-//     `pumpSerialRaw()` 가 돌아 **캐시가 바뀔 수 있으므로** 길이를 나중에 다시 계산하면 안 된다.
-static bool sendPayload(const char* line, uint16_t len) {
+//     `espRead()` 가 돌아 **캐시가 바뀔 수 있으므로** 길이를 나중에 다시 계산하면 안 된다.
+static bool espWrite(const char* line, uint16_t len) {
   // ★ `ramProbe()` 는 **조기 반환보다 앞**에 있어야 한다. 뒤에 두면 오프라인 동안 한 번도 안 불려
   //   `[RAM]` 이 초기값 65535 를 찍고, 소크 로그를 나중에 읽는 사람이 계측 고장으로 오해한다.
   //   (실제로 그렇게 찍혔다 — REQ-0064 관측 중 발견.)
@@ -1779,11 +1869,15 @@ static bool sendPayload(const char* line, uint16_t len) {
   }
 
   inSend = true;
+  // ★ 2026-08-18 — **지금 보내는 배치 길이를 남긴다.** 수신 계수(`penddrop`/`okstream`)가
+  //   `inSend` 중에 일어나므로 이 값으로 **"그때 어느 대역이었나"** 를 귀속할 수 있다.
+  //   ⚠ `inSend` 와 **같은 자리에서** 갱신한다. 떨어뜨리면 두 값이 어긋난 순간이 생긴다.
+  curTxLen = (uint8_t)(len > 255 ? 255 : len);
   // ★ `SEND_GAP_MS` 는 **없애지 않는다. 하한으로 남긴다.**
   //   `SEND OK` 가 즉시 와도 연속 CIPSEND 를 너무 촘촘히 쏘면 `busy p...`(앞 **명령** 처리 중)가
   //   난다 — 이 값은 원래 그걸 막으려고 있던 것이고 2단계가 겨냥하는 `busy s...`(앞 **전송**
   //   처리 중)와 **다른 사건**이다. 둘을 같은 것으로 보고 지우면 옛 결함이 되살아난다.
-  while (millis() - lastSendEndAt < SEND_GAP_MS) pumpSerialRaw();   // 연속 CIPSEND 간격
+  while (millis() - lastSendEndAt < SEND_GAP_MS) espRead();   // 연속 CIPSEND 간격
 
   wifi.print(F("AT+CIPSEND="));
   wifi.print((unsigned int)(len + 1));                     // +1 = LF 도 전선에 나간다
@@ -1807,10 +1901,10 @@ static bool sendPayload(const char* line, uint16_t len) {
     //   더 촘촘히 하면 오버헤드만 늘고, 더 성기면 여유가 준다.
     for (uint16_t i = 0; i < len; i++) {
       wifi.write((uint8_t)line[i]);
-      if ((i & 0x0F) == 0x0F) pumpSerialRaw();     // 16B 마다 꺼낸다
+      if ((i & 0x0F) == 0x0F) espRead();     // 16B 마다 꺼낸다
     }
     wifi.write('\n');
-    pumpSerialRaw();                                // 마지막 조각도 비운다
+    espRead();                                // 마지막 조각도 비운다
     // ★ 2단계: 여기서부터 ESP 가 **실제로 WiFi 로 보내는 중**이다. 그 끝을 알려주는 것이
     //   `SEND OK` 다. 추측(80ms) 대신 그 신호를 기다린다 — 단, 비블로킹으로.
     awaitingSendOk = true;
@@ -1881,7 +1975,7 @@ static bool sendPayload(const char* line, uint16_t len) {
     //   여기 남은 것은 **정말로 아무 답이 없었던 경우**뿐이고, 그때는 ESP 가 데이터 모드일
     //   수 있으므로 채우는 쪽이 여전히 안전하다.
     // ─────────────────────────────────────────────────────────────────────
-    // 🔴 2026-08-18 — **여기에도 pumpSerialRaw 가 필요하다.** 정상 경로(위)에만 넣고
+    // 🔴 2026-08-18 — **여기에도 espRead 가 필요하다.** 정상 경로(위)에만 넣고
     //   이 갈래를 빠뜨렸었다. 더미도 페이로드와 똑같이 UART 로 나가고, 쓰는 동안
     //   SoftwareSerial 은 cli() 로 수신 인터럽트를 끈다 — **하행 바이트가 64B 링버퍼에서 사라진다.**
     //   `len` 이 90B 면 더미도 90B 다. 크기 조건이 정상 경로와 같다.
@@ -1892,10 +1986,10 @@ static bool sendPayload(const char* line, uint16_t len) {
     //     창 G 에서 `resync=3 / up=540` 이었다 — 창 H 에서 비슷하면 이 경로는 판정을 못 움직인다.
     for (uint16_t i = 0; i < len; i++) {
       wifi.write('#');
-      if ((i & 0x0F) == 0x0F) pumpSerialRaw();            // 16B 마다 꺼낸다 (정상 경로와 같은 주기)
+      if ((i & 0x0F) == 0x0F) espRead();            // 16B 마다 꺼낸다 (정상 경로와 같은 주기)
     }
     wifi.write('\n');                                      // 합계 len+1 = 약속한 길이와 정확히 같다
-    pumpSerialRaw();
+    espRead();
     if (promptResyncs < 65535) promptResyncs++;
 #if DEBUG
     Serial.print(F("[TX-RESYNC] 프롬프트 놓침 → 더미 "));
@@ -1934,19 +2028,346 @@ static bool sendPayload(const char* line, uint16_t len) {
 }
 
 // ★ 한 줄 래퍼 — **기존 규약을 그대로 유지한다**(§2.1 한 줄 최대 64바이트, LF 포함).
-//   호출부(`sendAck` 등)는 이 함수를 그대로 쓴다. 배치는 `sendPayload` 를 직접 쓴다.
+//   호출부(`sendAck` 등)는 이 함수를 그대로 쓴다. 배치는 `espWrite` 를 직접 쓴다.
 static bool sendLine(const char* line) {
   const size_t n = strlen(line);
   if (n == 0 || n > 63) return false;
-  return sendPayload(line, (uint16_t)n);
+  return espWrite(line, (uint16_t)n);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
 // S — 상태 프레임 (§2.4)
 // ─────────────────────────────────────────────────────────────────────────
-static void bitsToStr(uint16_t mask, char* out11) {
-  for (uint8_t i = 0; i < SLOT_N; i++) out11[i] = ((mask >> i) & 1) ? '1' : '0';
-  out11[SLOT_N] = '\0';
+// ✏️ 2026-08-18 — `bitsToStr`(10진 1칸=1비트)를 **지웠다.** `bitsToHex` 로 전부 옮겼고
+//   호출부가 하나도 안 남았다. 🔴 남겨 두면 위험하다: 그 함수는 `SLOT_N`(컴파일 상수)을 돌고
+//   새 함수는 `n`(모듈 수)을 받는다 — **나중에 누가 옆에 있는 쪽을 부르면 유동화한 날 조용히 틀린다.**
+
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴 자리 비트열의 **hex 인코딩** (socket 명세 §5 · 2026-08-18 확정)
+//
+// 왜: 10진 1칸=1비트라 폭이 `n` 에 비례한다. hex 면 `n=10` 에서 60B → 39B 로 줄고
+//     배출률 `D` 가 6 → 7 이 된다. `n=15` 에서도 `D=7` 이 유지된다.
+//
+// 🔴 **비트 순서가 우리 `mask` 와 반대다. 이것이 이 함수의 존재 이유다:**
+//     `occMask` 안 : 슬롯 i = **비트 i** (LSB 쪽이 슬롯 0)
+//     전선 hex     : 슬롯 i = **비트 (n−1−i)** (= 10진 문자열을 그대로 이진수로 읽은 값)
+//   ⚠ **뒤집지 않으면 길이도 체크섬도 통과하고 자리만 뒤집힌다.** 명세가 ③으로 못 박은 함정이다.
+//   검산: 슬롯 {1,2,6,8,9} → mask 0x346 → 뒤집으면 0x18B → 문자열 "0110001011" 과 일치 ✅
+//
+// ⚠ **`0000…`·`1111…` 로 시험하지 마라** — 뒤집혀도 같아서 순서를 검증하지 못한다.
+//   **비대칭 패턴만이 검증자다.**
+//
+// ⚠ **`n` 은 `SLOT_N` 이 아니다.** 자리 유동화 뒤에는 **등록된 모듈 수**다.
+//   지금은 값이 같지만 **이름을 갈라 둔다** — 안 그러면 유동화하는 날 조용히 틀린다.
+//   폭도 뒤집기 축도 둘 다 `n` 을 쓴다. `SLOT_N` 을 여기 쓰면 오늘은 맞고 내일 틀린다.
+// 🔴 **`n` 의 단일 원천.** 자리 유동화의 축이 여기 하나로 모인다.
+//
+// 지금은 `SLOT_N` 을 돌려준다 — **거동 변화 0 이 이 단계의 기대다**(축 3).
+// 🔮 유동화하면 **등록된 모듈 수**를 돌려주게 되고, 그때 `S` 폭·hex 폭·뒤집기 축이
+//    **전부 이 함수 하나를 따라 움직인다.** 그것이 이 함수를 지금 만드는 이유다.
+// ⚠ **`SLOT_N` 을 인코더에 직접 쓰면 오늘은 맞고 유동화하는 날 조용히 틀린다** —
+//   길이도 체크섬도 통과하고 자리만 어긋나는 그 부류다.
+// ⚠ 그리고 **`n` 은 입력+출력 합이다**(명세 위험 다섯째) — 차단봉·안내등도 비트열에 들어간다.
+//   ACK 은 "받았다"이지 "됐다"가 아니므로, **도달 확인은 다음 `S` 의 마스크 변화로 한다.**
+static uint8_t moduleCount(void);   // ★ 표가 원천이다 — 정의는 MODULE_TABLE 뒤에 있다
+
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴 등록(`D`) — 접속하면 자기가 무엇을 가졌는지 먼저 알린다 (socket 명세 §5)
+//
+//   D,*,<drain>          ← **묶음의 맨 앞.** 자기 완결적이라 언제 와도 같은 뜻이다
+//   D,<name>,<kind>      ← 이후 모듈들. 전부 같은 필드 수
+//
+// 🔑 **`*` 를 맨 앞에 둔 이유는 비용이 아니라 확장이다.** "마지막 줄에 붙이기"·"첫 줄에
+//   붙이기"는 **파서가 몇 번째 줄인지 알아야 해서**, 모듈이 동적으로 추가돼 `D` 를 다시
+//   보낼 때 *"이것도 첫 줄인가"* 가 애매해진다. 비용 차이는 6B·접속당 1회로 무시할 수준이었다.
+//
+// ⚠ **`kind` 전선 코드는 명세에 없어서 내가 붙였다**(2026-08-18). `docs/net/`·`docs/web/`·
+//   당일 REQ 를 grep 해 **기존 이름이 없음을 확인한 뒤**에 만들었다. socket 합의 대기 중이고,
+//   🔑 **다르면 이 표 하나만 고치면 된다** — 그래서 한 곳에 모아 둔다.
+//
+// 🔴 **첫 글자의 뜻** (socket 정정 2026-08-18 — 내가 "입력/출력"이라 했던 것을 고친다):
+//   ~~입력 대 출력~~ ← **분할이 아니다.** 출력 모듈도 상태를 비트열로 보고한다(명세 위험 다섯째).
+//   ✅ **`O` = 하행 명령을 받는다 · `I` = 관측 전용. 둘 다 비트열에는 들어간다.**
+//   🔑 서버가 이 글자로 실제로 정하는 것은 **"이 모듈에 명령을 보내도 되는가"** 하나다.
+//   ⚠ 실패 방향: **첫 글자가 `O` 가 아니면 명령을 안 보낸다.** 모르는 글자도 금지 쪽으로 떨어진다 —
+//     **모르는 장치에 명령을 보내는 것이 안 보내는 것보다 위험하다.**
+//   ⚠ 그래도 **모르는 `kind` 를 거절하지는 않는다** — 거절하면 새 모듈 하나가 옛 서버에서
+//     **노드 전체를 미등록으로** 만든다.
+#define KIND_PARK_SENSOR  "IP"   // 관측 전용 · 주차확인센서
+#define KIND_GATE_SENSOR  "IX"   // 관측 전용 · 입출차센서
+#define KIND_GUIDE_LIGHT  "OG"   // 명령 받음 · 안내등
+#define KIND_LEAD_LIGHT   "OL"   // 명령 받음 · 유도등
+#define KIND_BARRIER      "OB"   // 명령 받음 · 차단봉
+// 🔴 **`V` 는 종류가 아니라 접미다** (socket 정의 2026-08-19):
+//   `kind[0]` = 명령 가능 여부 · `kind[0..1]` = 종류 · **길이 3 이고 끝이 `V` 면 가상**
+//   ⚠ "3글자 종류"로 정의하면 `OBV`·`OGV`·`OLV`·`IPV`… 로 **표가 두 배**가 된다.
+//     **접미로 두면 표는 다섯 그대로이고 `V` 는 직교하는 한 비트다.**
+//   ⚠ `tmask` 를 못 쓴 이유: 그건 **조건부 존재**(무장 중에만)이고 가상성은 **영구 속성**이다.
+//     **영구 속성을 사라지는 필드에 실을 수 없다.**
+#define KIND_BARRIER_V    "OBV"  // 명령 받음 · 차단봉 · **가상**
+
+// 🔴 **배출률 선언값.** 이 노드가 한 주기에 배출할 수 있는 ACK 개수의 **보장 하한**이다.
+//   ⚠ **관측 최대가 아니다.** 2026-08-18 실측 `8` 은 `S` 가 짧고 rid 3자리일 때만 성립하는
+//     조건부였고 보장은 `6` 이었다. **조건부 실측을 보장으로 승격시키지 않는다.**
+//   🔑 이 값이 장치 쪽에 있는 이유: 서버가 `(BATCH_CAP − S_worst − 1) ÷ (ACK_worst + 1)` 을
+//     들고 있으면 **`BATCH_CAP` 을 우리가 바꿀 때 두 곳이 갈린다.**
+//     **파생값은 원본을 가진 쪽이 계산한다.**
+// 🔴 2026-08-18 **hex 전환으로 6 → 7 로 올린다.** `S` 가 짧아진 만큼 배치에 ACK 이 더 들어간다.
+//   계산(최악값 기준):
+//     S_worst = "S," + seq5 + occ4 + res4 + up10 + devid8 + tmask4 + 구분자6 + ck2 ≈ **45B**
+//              (hex 폭 4 = n<=16 · 10진이었으면 폭 10~16 이라 S_worst 가 60B 대였다)
+//     ACK_worst = "A," + rid5 + slot2 + result1 + 구분자3 + ck2 ≈ **15B**
+//     D = (BATCH_CAP − S_worst − 1) ÷ (ACK_worst + 1) = (160 − 45 − 1) ÷ 16 = 7.1 → **7**
+//   ⚠ **이건 계산이지 실측이 아니다.** socket 에 검산을 요청했다.
+//   ⚠ 그리고 **보장 하한**이므로 실측이 더 크게 나와도 올리지 않는다 —
+//     2026-08-18 실측 `8` 은 `S` 가 짧고 rid 3자리일 때만인 **조건부**였다.
+//     **조건부 실측을 보장으로 승격시키지 않는다.**
+static const uint8_t DRAIN_DECL = 7;
+
+// 등록 상태 — ⚠ **온라인 전이가 두 곳이라 반드시 함수로 모은다.**
+//   한 곳만 고치면 어긋나고, 그건 오늘 여러 번 밟은 형태다.
+// 🔴 **첫 슬롯은 `S`, 둘째 슬롯부터 `D`** (socket 명세 확정 2026-08-18 · 커밋 9ffe8e5)
+//
+//   왜 `D` 가 먼저가 아닌가 — **`D` 에는 devid 가 없다.**
+//   서버의 소켓→노드 **승격**은 devid 를 가진 유효 프레임으로 일어나는데,
+//   `D,*,<drain>` 도 `D,<name>,<kind>` 도 devid 를 안 싣는다.
+//   → 🔴 **첫 슬롯에 `D` 를 보내면 승격 전 버퍼에서 11줄이 통째로 죽는다.**
+//
+//   ⚠ 대안이었던 `D,*,<devid>,<drain>`(내 제안)은 socket 이 물렸다:
+//     **`D,*` 가 반드시 맨 앞이어야 승격이 되므로 순서 의존이 파싱에서 승격으로 옮겨 갈 뿐**이다.
+//     🔑 **"신원 없는 프레임이 승격 전에 도착하는 상황" 자체를 없애는 쪽**이 낫다 —
+//        예외를 만드는 것보다 상황을 없애는 것이 낫다.
+//
+//   🔑 그리고 `S` 는 원래 **반송파·생존 신호·슬롯 시작 통보** 셋을 겸한다 —
+//      첫 프레임이어야 할 이유가 이미 있었다.
+static bool     regPending  = false;   // 다음 송신 창에 `D` 를 보내야 한다
+static bool     regAfterS   = false;   // ★ 첫 `S` 가 나가면 그때 `D` 를 예약한다
+static uint16_t regSends    = 0;       // 보낸 횟수(재전송 포함) — 진단용
+
+// 새 소켓이 섰다. **바로 `D` 를 예약하지 않는다** — 승격이 먼저다.
+static void markNeedsRegistration(void) { regPending = false; regAfterS = true; }
+
+// 🔴 `Q` 를 받았다 — **이건 다르다. 바로 `D` 를 예약한다.**
+//   `Q` 가 왔다는 것은 **서버가 이 소켓을 이미 노드로 승격했다**는 뜻이다
+//   (승격 안 됐으면 어디로 보낼지 모른다). **그래서 `S` 를 한 번 더 보낼 이유가 없다.**
+//   ⚠ 두 경우에 같은 함수를 쓰면 `Q` 응답이 한 슬롯 늦어지고, 서버의 3회 상한을 앞당긴다.
+static void requestRegistrationNow(void) { regPending = true; regAfterS = false; }
+
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴 **모듈 표 — 자리 유동화의 단일 원천** (2026-08-18 · 축 3)
+//
+// 왜: 이름·종류·핀이 **세 곳에 흩어져** 있었다. 모듈을 하나 더 달려면 세 곳을 맞춰 고쳐야 하고
+//     **하나만 어긋나도 길이·체크섬은 통과하고 자리만 틀린다** — 오늘 `occMask` 에서 잡은 그 부류다.
+//     표로 모으면 **한 줄만 고친다.**
+//
+// ⚠ **이 단계의 기대는 "거동 변화 0"** 이다(PLAN-axes 축 3). 값이 하나라도 달라지면 그것이 결함이다.
+// ⚠ **표를 런타임에 바꾸지 않는다.** N:1 도 지금 안 만든다 —
+//    🔑 **쓰이지 않는 일반화는 검증되지 않은 코드다**(socket 의 `cells` 규율과 같다).
+// 🔴🔴 **`name` 을 바꾸지 마라 — 서버의 자리 결속이 여기에 걸려 있다** (socket 통보 2026-08-18)
+//
+//   서버가 모듈을 자리에 붙이는 규칙이 **지금은 이것뿐이다:**
+//   ```
+//   D,<name>,<kind> 의 name 이 **자리 id 와 같으면** 그 자리에 붙는다
+//   ```
+//   우리가 `A1`~`A5`·`B1`~`B5` 를 그대로 쓰기 때문에 성립한다.
+//
+// 🔴 **바꾸면 조용히 끊긴다: 등록은 성공하고(`등록 완료` 오름) 자리에는 아무것도 안 붙는다.**
+//   **화면에 모듈이 안 보이고, 모듈 기반 조작이 생기면 "조작 불가"가 된다. ⚠ 오류로 안 뜬다.**
+//   ⚠ **장치 쪽에서는 이걸 볼 수 없다** — 결속은 서버에서 일어난다.
+//     그래서 **시험 [34] 가 이름 열 개를 리터럴로 못 박는다.** 바꾸면 시험이 깨진다.
+//
+// ⚠ 명세는 *"`name` 은 고유값이 아니라 명칭"* 이라 했는데 **지금 구현은 그보다 강하게 쓴다** —
+//   설정 파일이 없어서 **이름을 결속으로 쓰는 부트스트랩**이다. socket 이 그 간극을 밝혔다.
+// 🔮 **설정 적재가 들어오면 이 종속이 사라진다.** 그 전에 이름을 바꿀 계획이 생기면
+//   **socket 에 먼저 말해라** — 설정을 먼저 넣으면 안전해진다.
+struct ModuleDef {
+  char    name[3];      // "A1" + NUL — 명칭이자 **지금은 자리 결속 키다**(위 경고)
+  char    kind[4];      // KIND_* 2글자 + 선택적 `V` 접미(가상) + NUL
+  uint8_t pin;
+};
+// 🔴 **가상 모듈 스위치** (REQ-0227 · 2026-08-19)
+//   실기에 `O*`(명령 가능) 모듈이 하나도 없어 **조작 사슬이 한 번도 안 돌았다.**
+//   ⚠ **실물 모듈이 생기면 반드시 0 으로 꺼라** — 켜 둔 채 실물을 붙이면 **같은 자리에 둘이 붙는다.**
+#ifndef VIRTUAL_MODULES
+#define VIRTUAL_MODULES 1
+#endif
+
+static const ModuleDef MODULE_TABLE[] PROGMEM = {
+  {"A1", KIND_PARK_SENSOR,  2}, {"A2", KIND_PARK_SENSOR,  3}, {"A3", KIND_PARK_SENSOR,  4},
+  {"A4", KIND_PARK_SENSOR,  5}, {"A5", KIND_PARK_SENSOR,  6},
+  {"B1", KIND_PARK_SENSOR,  9}, {"B2", KIND_PARK_SENSOR, 10}, {"B3", KIND_PARK_SENSOR, 11},
+  {"B4", KIND_PARK_SENSOR, 12}, {"B5", KIND_PARK_SENSOR, A0},
+#if VIRTUAL_MODULES
+  // 🔴 **끝에만 붙인다. 중간 삽입 금지.**
+  //   `idx` 는 **등록 순서**이고 **서버의 자리 결속과 `G,<rid>,<idx>,<op>` 가 둘 다 그것을 쓴다.**
+  //   중간에 넣으면 **기존 자리의 idx 가 전부 밀려 지금 되는 결속이 조용히 깨진다.**
+  // ⚠ 이름은 **자리 id 와 같아야 한다**(원장 §20) — `E1`·`X1` 말고 다른 이름을 쓰면
+  //   등록은 성공하고 자리에는 아무것도 안 붙는다. **오류가 안 뜬다.**
+  {"E1", KIND_BARRIER_V, PIN_NONE},   // 입구 차단봉 (가상)
+  {"X1", KIND_BARRIER_V, PIN_NONE},   // 출구 차단봉 (가상)
+#endif
+};
+static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_TABLE[0]));
+
+// 🔴 **상한을 컴파일 시점에 박는다.** `occMask`·`resMask`·`ovrActive` 가 전부 `uint16_t` 다.
+//   표에 17번째가 들어오는 순간 `1u << 16` 이 **아무 일도 안 하고** 그 자리가 조용히 사라진다 —
+//   **길이도 체크섬도 통과한다.** 표를 만든 이득("한 줄만 고치면 된다")이
+//   그대로 결함의 배달 경로가 되는 자리라, 여기서 빌드를 깨는 것이 유일한 방어다.
+static_assert(MODULE_N <= 16,
+              "마스크가 uint16_t 다 — 17번째 모듈은 조용히 사라진다. 마스크 폭을 먼저 늘려라");
+// ⚠ 유동화 이행 중에는 둘이 같아야 한다. 달라지면 핀 표·초기값이 어긋난 것이다.
+// ✏️ 2026-08-19 — `MODULE_N == SLOT_N` 이었다. **가상 모듈이 들어와 깨졌고, 그게 가드가 작동한 것이다.**
+//   지키던 것: `SLOT_PIN[]`·`SLOT_SRC_DEFAULT` 가 `SLOT_N` 크기라 표가 그보다 크면 배열 밖을 읽는다.
+//   ✅ 해결: **실물은 앞 `SLOT_N` 개로 고정**하고 `slotPin()` 에 범위 가드를 넣었다.
+//   🔴 **가상 모듈은 반드시 표의 뒤쪽에만** 온다 — 앞에 끼면 실물 인덱스가 밀려
+//     `SLOT_PIN`·`occMask` 비트·서버 자리 결속이 **한꺼번에 어긋난다.**
+static_assert(MODULE_N >= SLOT_N,
+              "표는 실물 자리 SLOT_N 개를 **앞쪽에** 전부 포함해야 한다");
+
+// 🔴 **등록 배치가 한 슬롯에 들어가야 한다.** `buildRegistration` 은 넘치면 **통째로 0 을 돌려주고**,
+//   그러면 **등록이 영영 안 된다**(잘린 등록을 내보내지 않는 것이 옳지만, 대안이 없으면 굶는다).
+//   실측 계산: 머리 `D,*,<drain>,<n>,<ck>` ≈ 11B · 모듈 줄 `D,A1,IP,<ck>` + LF = 11B
+//     n=13 → 154B (OK)   ·   🔴 n=14 → 165B (BATCH_CAP 160 초과)
+//   ⚠ **`MODULE_N <= 16`(마스크 폭)보다 이쪽이 먼저 걸린다.** 둘 다 필요하다.
+//   🔮 `n > 13` 이 필요해지면 **등록을 두 슬롯에 나눠 보내는 구현**이 먼저다. 지금은 안 만든다 —
+//      쓰이지 않는 일반화는 검증되지 않은 코드다.
+static_assert(11 * MODULE_N + 11 <= 160,
+              "등록이 한 배치(BATCH_CAP)에 안 들어간다 — n<=13 이거나 두 슬롯 분할이 먼저다");
+
+// ★ **표 하나가 `n` 의 원천이다.** 폭·뒤집기 축·등록 줄 수가 전부 이 값을 따라간다.
+static uint8_t moduleCount(void) { return MODULE_N; }
+
+#if VIRTUAL_MODULES
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴 가상 차단봉의 상태와 값 패턴 (REQ-0227 · 설계문서 §3)
+//
+// **자율 모드** : 명령을 한 번도 안 받았으면 **슬롯 번호로 토글**한다
+// **수동 모드** : 🔴 **첫 명령을 받으면 자율을 영구 정지**하고 명령대로만
+//   ⚠ 자율이 남아 있으면 **명령 효과가 나중에 되돌려져 "안 먹었다"로 보인다.**
+//     명령 반응이 주(主)이고 자율은 그것이 오기 전까지의 대용이다.
+//
+// ⚠ **무작위를 쓰지 않는다** — 재현이 안 되면 어긋났을 때 원인을 못 찾는다.
+// 🔑 주기를 **서로 소**로 잡았다(20 과 14):
+//     lcm = 140슬롯 ≈ 168초 안에 **네 조합(00·01·10·11)이 전부 나타난다.**
+//     같은 주기면 둘이 항상 같이 움직여 **"하나만 도는지"를 못 가른다.**
+static bool     vGateManual = false;      // 첫 명령을 받았나 (받으면 자율 정지)
+static uint16_t vGateState  = 0;          // 비트 i = MODULE_TABLE 의 SLOT_N+i 번째가 열렸나
+
+// 자율 패턴 — `slotNo` 는 부팅부터 세므로 리셋하면 위상이 처음으로 돌아간다(재현 가능)
+static bool vGateAuto(uint8_t k) {
+  return (k == 0) ? ((slotNo % 20) < 10)     // E1 : 24.1초 주기
+                  : ((slotNo % 14) <  7);    // X1 : 16.9초 주기
+}
+
+// 지금 열려 있나 — `S` 의 비트열에 실릴 값
+static bool vGateOpen(uint8_t k) {
+  return vGateManual ? ((vGateState >> k) & 1) : vGateAuto(k);
+}
+#endif
+
+static void moduleNameOf(uint8_t i, char* out4) {
+  out4[0] = (char)pgm_read_byte(&MODULE_TABLE[i].name[0]);
+  out4[1] = (char)pgm_read_byte(&MODULE_TABLE[i].name[1]);
+  out4[2] = '\0';
+}
+
+// 슬롯 i 의 종류. 지금은 전부 주차확인센서다.
+//   ⚠ **출력 모듈도 이 비트열에 들어가야 한다**(명세 위험 다섯째) — 차단봉·안내등이 생기면
+//     여기서 종류를 돌려주고 `moduleCount()` 가 그만큼 커진다. **`n` 은 입력+출력 합이다.**
+//   🔑 이유: ACK 은 "받았다"이지 "됐다"가 아니다. **도달 확인은 다음 `S` 의 마스크 변화로 한다.**
+// ⚠ `out4` 는 **4바이트**여야 한다 — 가상 접미(`OBV`)가 3글자다.
+static void moduleKindOf(uint8_t i, char* out4) {
+  for (uint8_t k = 0; k < 3; k++) {
+    const char c = (char)pgm_read_byte(&MODULE_TABLE[i].kind[k]);
+    out4[k] = c;
+    if (c == '\0') return;
+  }
+  out4[3] = '\0';
+}
+
+// 등록 배치를 만든다. 성공하면 길이, 실패하면 0.
+//   ⚠ **`D` 여러 줄 + `S` 는 상한을 넘는다.** 그래서 명세가 *"첫 슬롯은 `D` 만"* 으로 정했다.
+//     여기서도 `BATCH_CAP` 을 넘으면 **만들다 말고 0 을 돌려준다** — 잘린 등록을 내보내지 않는다.
+//   🔴 잘린 등록은 **서버가 `n` 개를 못 채워 미완료로 두고**, 그 상태는 `Q` 로 복구된다.
+//     하지만 **잘린 줄이 유효 프레임처럼 보이면** 그 복구조차 안 걸린다. 그래서 통째로 버린다.
+static uint16_t buildRegistration(char* buf, uint16_t cap) {
+  const uint8_t mn = moduleCount();
+  uint16_t used = 0;
+
+  // ① 배출률 선언 — **맨 앞.** 서버가 `n` 개를 다 받기 전에 유도식을 세울 수 있다
+  // 🔴 `n`(모듈 수)을 같이 싣는다 — **명세가 `n` 으로 완료를 판정하는데 전선에 없었다.**
+  //   ⚠ `S` 의 hex 폭에서 유도할 수 없다: 폭 `w` 는 **`n ∈ [4w−3, 4w]`** 만 준다(ceil 때문).
+  //   ⚠ "다음 `S` 가 오면 완료"도 안 된다: `n` 이 크면 `D` 가 두 슬롯에 걸릴 수 있어
+  //     **첫 슬롯에서 거짓 완료**가 된다.
+  //   🔑 그리고 `n` 이 있으면 **①선언값 ②실제 D 줄 수 ③hex 폭** 셋이 서로를 *정확히* 못 박는다.
+  //     ③만으로는 ±3 여유가 있어 ②를 못 잡는다. **다중 표현의 일치**가
+  //     "오류 신호 없이 값만 틀리는" 부류에 가장 잘 듣는 방어다.
+  int w = snprintf(buf, cap, "D,*,%u,%u,", (unsigned int)DRAIN_DECL, (unsigned int)mn);
+  if (w <= 0 || (uint16_t)w + 3 > cap) return 0;
+  appendChecksum(buf, (uint8_t)w);
+  used = (uint16_t)strlen(buf);
+
+  // ② 모듈들 — 전부 같은 필드 수
+  for (uint8_t i = 0; i < mn; i++) {
+    char nm[4];
+    moduleNameOf(i, nm);
+    char line[24];
+    char kd[4];
+    moduleKindOf(i, kd);
+    int lw = snprintf(line, sizeof line, "D,%s,%s,", nm, kd);
+    if (lw <= 0 || (unsigned)lw + 3 > sizeof line) return 0;
+    appendChecksum(line, (uint8_t)lw);
+    const uint16_t ll = (uint16_t)strlen(line);
+    // ⚠ `+1` 은 줄 사이 LF. **넘치면 통째로 버린다 — 잘린 등록을 내보내지 않는다.**
+    if (used + 1 + ll + 1 > cap || used + 1 + ll > BATCH_CAP) return 0;
+    buf[used++] = '\n';
+    memcpy(buf + used, line, ll + 1);
+    used += ll;
+  }
+  return used;
+}
+
+// 🔑 폭 = ceil(n/4). 왼쪽 0 채움 고정폭 — **가변이면 길이로 n 을 검증할 수 없다.**
+static uint8_t hexWidthFor(uint8_t n) { return (uint8_t)((n + 3) / 4); }
+// mask 가 uint16_t 라 n ≤ 16 이고, 그때 폭은 4다. **버퍼를 이 값으로 잡는다.**
+static const uint8_t HEX_W_MAX = 4;
+static_assert(HEX_W_MAX >= (16 + 3) / 4,
+              "HEX_W_MAX 는 n=16 의 폭 이상이어야 한다 — mask 가 uint16_t 이므로 n 의 상한이 16 이다");
+
+// mask(슬롯 i = 비트 i) → 대문자 hex 고정폭. out 은 최소 hexWidthFor(n)+1 바이트.
+static void bitsToHex(uint16_t mask, uint8_t n, char* out) {
+  uint16_t v = 0;
+  for (uint8_t i = 0; i < n; i++)
+    if (mask & (uint16_t)(1u << i)) v |= (uint16_t)(1u << (n - 1 - i));   // ★ 뒤집기
+  const uint8_t w = hexWidthFor(n);
+  static const char HEXD[] = "0123456789ABCDEF";                          // ① 대문자만
+  for (uint8_t k = 0; k < w; k++)
+    out[w - 1 - k] = HEXD[(v >> (4 * k)) & 0x0F];
+  out[w] = '\0';
+}
+
+// 전선 hex → mask. 실패하면 false — **받는 쪽도 검사한다**(명세 ④: 한쪽만 검사하면 그쪽 버그만 잡힌다).
+//   ⚠ 거부 사유 셋: 폭이 다르다 · hex 가 아니다 · **상위 패딩 비트가 0 이 아니다.**
+//   셋째가 특히 중요하다 — **길이도 체크섬도 통과하는데 값만 틀리는 경로**다.
+static bool hexToBits(const char* in, uint8_t n, uint16_t* out) {
+  const uint8_t w = hexWidthFor(n);
+  uint16_t v = 0;
+  for (uint8_t k = 0; k < w; k++) {
+    const char c = in[k];
+    uint8_t d;
+    if      (c >= '0' && c <= '9') d = (uint8_t)(c - '0');
+    else if (c >= 'A' && c <= 'F') d = (uint8_t)(c - 'A' + 10);
+    else return false;                       // ① 소문자도 거부한다 — 정본은 대문자 하나다
+    v = (uint16_t)((v << 4) | d);
+  }
+  if (in[w] != '\0' && in[w] != ',') return false;   // ② 폭이 더 길다
+  // ④ 남는 상위 비트는 반드시 0
+  if (n < 16 && (v >> n) != 0) return false;
+  uint16_t m = 0;
+  for (uint8_t i = 0; i < n; i++)
+    if (v & (uint16_t)(1u << (n - 1 - i))) m |= (uint16_t)(1u << i);      // ★ 되뒤집기
+  *out = m;
+  return true;
 }
 
 // buf[64] 인 근거 (§2.1-6 · §2.5):
@@ -1957,16 +2378,31 @@ static void bitsToStr(uint16_t mask, char* out11) {
 // S 프레임 **본문만** 만든다(체크섬 포함, LF 없음). 배치가 이것을 첫 줄로 쓴다.
 //   길이를 돌려준다. 0 이면 만들지 못한 것이다.
 static uint8_t buildStatus(char* buf, uint8_t cap) {
-  char occ[SLOT_N + 1], res[SLOT_N + 1];
-  bitsToStr(occMask, occ);
-  bitsToStr(resMask, res);
+  // 🔴 2026-08-18 — **hex 로 바꿨다** (socket 명세 §5 확정). `n=10` 에서 폭 10 → 3.
+  //   ⚠ **셋을 같이 바꾼다.** `occ`·`res`·`tm` 중 하나만 바꾸면 **같은 슬롯을 두고 두 필드가
+  //     어긋나고**, 길이도 체크섬도 통과한다 — 명세가 경고한 바로 그 부류다.
+  //   ⚠ 버퍼는 `HEX_W_MAX + 1`. `n ≤ 16` 이므로 폭은 최대 4다.
+  const uint8_t mn = moduleCount();                 // ★ 여기 하나가 n 의 원천이다
+  char occ[HEX_W_MAX + 1], res[HEX_W_MAX + 1];
+  // 🔴 **출력 모듈도 비트열에 들어간다**(명세 위험 다섯째 · 설계문서 §6).
+  //   `occ` 비트 0~9 = 자리 점유 · 비트 10·11 = 차단봉이 **열려 있다**.
+  //   ⚠ **같은 비트열인데 의미가 다르다** — 앞은 "차가 있다", 뒤는 "열려 있다". `kind` 로 구분한다.
+  //   🔑 **완료 판정이 이 에코로 이뤄진다.** `ACK` 은 "받았다"이지 "됐다"가 아니다 —
+  //     서버는 다음 `S` 에서 그 비트가 바뀌는 것으로 조작 성공을 안다.
+  uint16_t occOut = occMask;
+#if VIRTUAL_MODULES
+  for (uint8_t k = 0; k + SLOT_N < mn; k++)
+    if (vGateOpen(k)) occOut |= (uint16_t)(1u << (SLOT_N + k));
+#endif
+  bitsToHex(occOut, mn, occ);
+  bitsToHex(resMask, mn, res);
 
   int n;
   if (testArmed) {
     // §2.4 tmask — 무장 중에만 붙는 선택 필드. 각 비트 = 그 칸의 occupied 가 주입된 값인가.
     // occupied 에는 주입값이 이미 반영돼 있고, tmask 는 "그게 진짜인가"만 알려준다.
-    char tm[SLOT_N + 1];
-    bitsToStr(ovrActive, tm);
+    char tm[HEX_W_MAX + 1];
+    bitsToHex(ovrActive, mn, tm);                   // ★ 셋째도 같은 변환 — 빠뜨리면 어긋난다
     n = snprintf(buf, cap, "S,%u,%s,%s,%lu,%s,%s,",
                  (unsigned int)seqNo, occ, res,
                  (unsigned long)(millis() / 1000UL), DEVICE_ID, tm);
@@ -1985,7 +2421,7 @@ static bool sendStatus(void) {
   char buf[64];
   const uint8_t n = buildStatus(buf, sizeof(buf));
   if (n == 0) return false;
-  return sendPayload(buf, n);
+  return espWrite(buf, n);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -2031,12 +2467,49 @@ static bool sendAck(uint16_t rid, char s0, char s1, uint8_t result) {
 // ⚠ **ACK 는 캐시에서 재생성한다 — 재생(replay)이 아니다.** 큐에는 `rid` 만 있고
 //   내용은 멱등 캐시가 갖고 있다. 옛 바이트를 그대로 다시 보내는 것이 아니라 지금 다시 만든다.
 //
-// 🔑 **성공했을 때만 큐에서 소비한다.** 만들 때는 `peek` 만 하고, `sendPayload` 가 참을
+// 🔑 **성공했을 때만 큐에서 소비한다.** 만들 때는 `peek` 만 하고, `espWrite` 가 참을
 //   돌려준 뒤에 그만큼 뺀다. **실패하면 ACK 가 큐에 그대로 남아 다음 슬롯에 다시 나간다.**
 //   (옛 `ackqDrain` 은 먼저 빼고 실패 시 되넣는 방식이었다 — 배치에서는 순서가 뒤집힐 수 있어
 //    쓸 수 없다. 이쪽이 손실 경로가 아예 없다.)
 static bool sendSlotBatch(uint8_t* ackOut, uint16_t* bytesOut) {
   char buf[BATCH_CAP + 1];
+
+  // ── 0) 🔴 등록이 밀려 있으면 **이 슬롯은 `D` 만 보낸다** (socket 명세 §5) ──
+  //   ⚠ **`regPending` 은 첫 `S` 가 나간 뒤에야 선다**(`regAfterS` → 아래 성공 처리부).
+  //     그래서 이 갈래는 **둘째 슬롯부터** 걸린다. 첫 슬롯은 아래 `S` 경로로 간다.
+  //   왜 `S` 와 같이 안 보내나: `D` 여러 줄 + `S` 는 상행 배치 상한을 넘는다.
+  //   **슬롯을 가르는 것이 명세의 답이고, 그래서 순서가 구조적으로 보장된다**
+  //   (접속 → 첫 슬롯 `D` → 둘째 슬롯부터 `S`).
+  //
+  //   ⚠ **이 슬롯의 `S` 는 안 나간다.** 서버 입장에서 "첫 프레임까지의 시간"이 한 슬롯
+  //     (1.2초) 늘어난다 — **고장이 아니라 등록 축의 예상된 값이다**(PLAN-axes 축 2).
+  //
+  //   ⚠ **등록 성공을 장치는 모른다**(ACK 이 없다). 그래도 그대로 간다 —
+  //     **알아도 할 일이 없기 때문**이다. 서버가 `Q` 를 보내면 다시 보내고, 그것이 유일한 행동이다.
+  //     🔑 사람은 정확히 안다(`node_unregistered` · 화면 `⏱`). **모르는 것은 장치뿐이고
+  //     장치가 그걸 알아서 바꿀 동작이 없다** → 공백이 아니라 **명시된 비대칭**이다.
+  if (regPending) {
+    const uint16_t rn = buildRegistration(buf, sizeof buf);
+    if (rn == 0) {
+#if DEBUG
+      Serial.println(F("[REG] 등록 배치를 만들지 못했다 — 잘린 등록을 내보내지 않는다"));
+#endif
+      return false;                       // ⚠ 다음 슬롯에 다시 시도한다(regPending 유지)
+    }
+    const bool okReg = espWrite(buf, rn);
+    if (okReg) {
+      regPending = false;                 // ★ 성공했을 때만 내린다 — ACK 큐와 같은 규율이다
+      if (regSends < 65535) regSends++;
+    }
+    if (ackOut)   *ackOut = 0;
+    if (bytesOut) *bytesOut = rn;
+#if DEBUG
+    Serial.print(F("[REG] 등록 "));
+    Serial.print(okReg ? F("전송 ") : F("실패 "));
+    Serial.print(rn); Serial.println(F("B"));
+#endif
+    return okReg;
+  }
 
   // ── 1) 반송파: S 프레임은 **보낼 게 없어도 나간다** ─────────────────────
   //   이 한 프레임이 셋을 겸한다: 반송파 · 생존 신호 · **슬롯 시작 통보**(서버의 t0).
@@ -2078,13 +2551,18 @@ static bool sendSlotBatch(uint8_t* ackOut, uint16_t* bytesOut) {
     take++;
   }
 
-  const bool ok = sendPayload(buf, used);
+  const bool ok = espWrite(buf, used);
 
   // ── 4) **성공했을 때만** 소비한다 ────────────────────────────────────────
   if (ok && take) {
     ackqHead = (uint8_t)((ackqHead + take) % ACKQ_N);
     ackqCount = (uint8_t)(ackqCount - take);
   }
+  // 🔴 **`S` 가 실제로 나갔으면 그때 등록을 예약한다.**
+  //   이 `S` 가 서버에서 **승격**(소켓 → 노드)을 만든다. 그 뒤라야 `D` 가 처리된다.
+  //   ⚠ **성공했을 때만** 세운다 — ACK 큐를 성공 시에만 소비하는 것과 같은 규율이다.
+  //     실패했으면 승격이 안 됐을 수 있고, 그러면 다음 슬롯의 `S` 가 다시 시도한다.
+  if (ok && regAfterS) { regAfterS = false; regPending = true; }
   if (ackOut)   *ackOut   = take;
   if (bytesOut) *bytesOut = used;
   return ok;
@@ -2353,7 +2831,10 @@ static void handleFrameLine(char* cand) {
   if (len == 0 || len > 63) return;                    // §2.1 한 줄 최대 64바이트(LF 포함)
 
   // 타입 문자. 모르는 타입은 조용히 버린다(§2.1-7)
-  if (cand[0] != 'R' && cand[0] != 'C' && cand[0] != 'T' && cand[0] != 'M') return;
+  //   🔴 2026-08-18 `Q` 추가 — 서버가 "등록을 다시 보내라"고 묻는 프레임(명세 §5 ③).
+  //     ⚠ **없으면 등록이 한 번 실패했을 때 복구 경로가 아예 없다.** 서버는 미완료로 두고
+  //       장치는 자기가 실패한 줄 모른다(등록에 ACK 이 없다) → 그 노드는 영영 미등록이다.
+  if (cand[0] != 'R' && cand[0] != 'C' && cand[0] != 'T' && cand[0] != 'M' && cand[0] != 'Q' && cand[0] != 'G') return;
 
   // 체크섬. AT 잡음이 우연히 R 로 시작해도 여기서 걸린다
   if (!checksumOk(cand, len)) {
@@ -2366,6 +2847,70 @@ static void handleFrameLine(char* cand) {
 #endif
     return;
   }
+
+  // ── 🔴 `G` — 조작 명령 `G,<rid>,<idx>,<op>,<ck>` (socket 확정 2026-08-19) ──
+  //   `idx` = 등록 순서(= 비트열 자리) · `op` = 1(열다) / 0(닫다)
+  //   🔑 **`name` 이 아니라 `idx` 인 이유**: 이미 합의된 순서이고(등록 순서가 비트 자리를 정한다),
+  //     삼중 검산으로 지켜지며, 우리 쪽은 **배열 인덱스라 조회가 없다.**
+  //   ⚠ **조용히 버리지 않는다** — 거절도 ACK 을 보낸다. 안 그러면 서버가 `ack_timeout` 을 내고
+  //     **"안 갔다"와 "갔는데 거절됐다"가 같은 칸에 섞인다.**
+  if (cand[0] == 'G') {
+    char*   gf[6];
+    uint8_t gn = splitFields(cand, gf, 6);
+    uint16_t grid = 0;
+    if (gn == 0xFF || gn < 4 || !parseU16(gf[1], &grid)) return;   // rid 를 모르면 ACK 를 못 만든다
+    uint16_t gidx = 0, gop = 0;
+    const bool okIdx = parseU16(gf[2], &gidx) && parseU16(gf[3], &gop);
+
+    // §4.2 멱등 — 이미 본 rid 면 같은 ACK 를 다시 보낸다
+    int8_t ghit = cacheFind(grid);
+    if (ghit >= 0) {
+      sendAck(cache[ghit].rid, cache[ghit].slot[0], cache[ghit].slot[1], cache[ghit].result);
+      return;
+    }
+
+    uint8_t gres = 3;                       // 기본 = 수행할 수 없다(§2.4 result=3)
+#if VIRTUAL_MODULES
+    if (okIdx && gidx >= SLOT_N && gidx < moduleCount()) {
+      const uint8_t k = (uint8_t)(gidx - SLOT_N);
+      // 🔴 **첫 명령이 자율 토글을 영구 정지시킨다.**
+      //   안 그러면 명령 효과가 다음 주기에 되돌려져 "안 먹었다"로 보인다.
+      if (!vGateManual) {
+        vGateManual = true;
+        for (uint8_t j = 0; j + SLOT_N < moduleCount(); j++)   // 지금 상태를 그대로 굳힌다
+          if (vGateAuto(j)) vGateState |= (uint16_t)(1u << j);
+      }
+      if (gop) vGateState |=  (uint16_t)(1u << k);
+      else     vGateState &= (uint16_t)~(1u << k);
+      gres = 0;
+    }
+#endif
+#if DEBUG
+    if (gres != 0) { Serial.print(F("[G] 거절 idx=")); Serial.println(gidx); }
+    else           { Serial.print(F("[G] idx=")); Serial.print(gidx);
+                     Serial.print(F(" op=")); Serial.println(gop); }
+#endif
+    // ⚠ 캐시에 넣어야 재전송(같은 rid)이 같은 답을 받는다 — 멱등이 여기서도 성립해야 한다
+    cachePut(grid, 'G', (char)('0' + (gidx % 10)), gres);
+    sendAck(grid, 'G', (char)('0' + (gidx % 10)), gres);
+    return;
+  }
+
+  // ── 🔴 `Q` — 서버가 등록 재전송을 요구한다 (명세 §5 ③) ────────────────────
+  //   ⚠ **`processCommand` 를 태우지 않는다.** 그쪽은 `rid` 를 요구하는데 `Q` 에는 없다
+  //     (재전송 요구이지 명령이 아니다). 태우면 `rid` 파싱에서 조용히 버려진다.
+  //   ⚠ **ACK 를 보내지 않는다.** 응답은 **다음 자기 송신 창의 `D`** 그 자체다.
+  //   🔑 무한 반복 방지는 **서버 몫**이다(슬롯당 1회 · 3회 무응답이면 포기하고
+  //     `node_unregistered` 로 굳힌다). 장치가 자체 상한을 두면 **교착**이 된다 —
+  //     장치는 안 보내고 서버는 계속 묻는다. 여기서는 단순히 응답하고 `regSends` 로 진단만 남긴다.
+  if (cand[0] == 'Q') {
+    requestRegistrationNow();      // ★ 이미 승격됐다 — S 를 다시 보낼 이유가 없다
+#if DEBUG
+    Serial.println(F("[REG] Q 수신 — 다음 송신 창에 등록을 다시 보낸다"));
+#endif
+    return;
+  }
+
   processCommand(cand);
 }
 
@@ -2644,7 +3189,7 @@ static void handleLine(char* s) {
   // **성공으로 보인다** — 오류도 타임아웃도 안 난다(REQ-0032).
   //
   // 왜 CLOSED 가 주 방어선인가:
-  //   재접속은 netOnline==false 를 요구하고(netTick 첫 줄), netOnline 이 런타임에 false 가 되는
+  //   재접속은 netOnline==false 를 요구하고(espReset 첫 줄), netOnline 이 런타임에 false 가 되는
   //   곳은 아래 CLOSED 분기 하나뿐이다. 즉 **재접속이 실제로 일어났다면 CLOSED 는 반드시
   //   탐지된 것이다.** CLOSED 문구가 틀리면 재접속 자체가 안 되므로(= 눈에 보이는 고장)
   //   스테일 캐시가 생길 조건이 애초에 만들어지지 않는다.
@@ -2655,7 +3200,7 @@ static void handleLine(char* s) {
   //   비우는 비용은 정수 두 개를 0 으로 되돌리는 것뿐이라 중복이 손해가 아니다.
   //
   // 왜 ALREADY CONNECTED 에서는 비우면 안 되는가:
-  //   그건 **기존 연결이 그대로 살아 있다**는 응답이다(서버도 그대로다). netTick() 이 CIPSTART 를
+  //   그건 **기존 연결이 그대로 살아 있다**는 응답이다(서버도 그대로다). espReset() 이 CIPSTART 를
   //   5초마다 재시도하므로, 여기서 비우면 살아 있는 연결의 멱등성이 재시도마다 깨진다.
   // ─────────────────────────────────────────────────────────────────────────
   // 여기부터는 **데이터가 아닌 줄**만 도달한다(위 +IPD 조기 처리가 걸러 냈다).
@@ -2679,6 +3224,7 @@ static void handleLine(char* s) {
     onlineSince = millis();            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
     lastTxOkAt  = millis();            // ★ 살아있음 불변식의 출발점 — 붙자마자 발동하지 않게 한다
     sendFailStreak = 0;
+    markNeedsRegistration();           // ★ 새 소켓 = 서버가 우리를 모른다. **세 곳 전부**에서 예약한다(아래)
     awaitingSendOk = false; sendOkT1Passed = false;            // ★ 2단계: 새 소켓이다 — 앞 소켓의 SEND OK 를 기다리지 않는다
     closeAttempts = 0;
 #if DEBUG
@@ -2691,6 +3237,7 @@ static void handleLine(char* s) {
     onlineSince = millis();            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
     lastTxOkAt  = millis();            // ★ 살아있음 불변식의 출발점 — 붙자마자 발동하지 않게 한다
     sendFailStreak = 0;
+    markNeedsRegistration();           // ★ 새 소켓 = 서버가 우리를 모른다. **세 곳 전부**에서 예약한다(아래)
     awaitingSendOk = false; sendOkT1Passed = false;            // ★ 2단계: 새 소켓이다 — 앞 소켓의 SEND OK 를 기다리지 않는다
     staleSocket = false;               // 진짜로 새로 붙었다 — 낡은 소켓이 아니다
     closeAttempts = 0;
@@ -2708,6 +3255,16 @@ static void handleLine(char* s) {
   if (isClosedLine(s)) {
     netOnline = false;
     sendFailStreak = 0;
+    // 🔴 **이 호출은 세 곳에 있다. 세다 틀리기 쉬워 여기 적어 둔다** (2026-08-18 정정):
+    //   ① `isConnectLine`      정상 접속 (CONNECT / Linked)
+    //   ② `isAlreadyConnectLine` 초기 경합 (ALREADY / **ALREAY** CONNECT — 구형 펌웨어 오타)
+    //   ③ 여기                 소켓 닫힘 (CLOSED / Unlink)
+    //   ⚠ 옛 주석이 *"두 전이 모두에서"* 였다. **거동은 맞았고 주석만 틀렸는데**,
+    //     그 문구가 "두 곳만 보면 된다"로 읽혀 **다음 사람이 셋째를 빠뜨린다** —
+    //     실제로 내가 셀 때도 처음에 두 곳으로 알았다.
+    //   🔑 빠뜨리면 **조용히 안 된다**: 재접속 후 등록이 안 되고 시리얼에는 아무것도 안 나온다.
+    //     서버만 `Q` 3회 뒤 `node_unregistered` 로 굳힌다. → 시험 [35] 가 세 경로를 전부 밟는다.
+    markNeedsRegistration();
     awaitingSendOk = false; sendOkT1Passed = false;            // ★ 2단계: 소켓이 닫혔다 — 그 SEND OK 는 영영 오지 않는다
     // 닫혔다는 통보다 — 낡은 소켓 의심이 해소됐다. 사다리도 내려온다.
     staleSocket = false;
@@ -2725,7 +3282,7 @@ static void handleLine(char* s) {
 
   // ── REQ-0049 ② 송신 오류 응답 (보조 경로) ────────────────────────────────
   // 온라인 중에 우리가 보내는 AT 명령은 **`AT+CIPSEND=` 하나뿐**이다
-  // (netTick() 이 `if (netOnline) return;` 으로 시작하므로 온라인 중엔 다른 명령이 안 나간다).
+  // (espReset() 이 `if (netOnline) return;` 으로 시작하므로 온라인 중엔 다른 명령이 안 나간다).
   // 따라서 **온라인 중에 오는 오류 응답은 반드시 CIPSEND 에 대한 것**이다 — 그래서 여기서
   // 판정해도 "관계없는 AT 실패를 연결 문제로 오인"하는 사고가 구조적으로 생기지 않는다.
   //
@@ -2801,7 +3358,46 @@ static void drainPending(void) {
 //              → 그래도 ALREADY CONNECTED 만 오면 다시 CIPCLOSE
 //              → CIPCLOSE 3회가 안 먹으면 **AT+RST 로 올라가 전체 초기화**
 // 마지막 층이 없으면 또 무한 루프가 된다.
-static void netTick(unsigned long now) {
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴 `espInit()` — **UART 를 열고 부팅 사다리를 시작만 한다** (설계문서 §1.2 · 축 4)
+//
+// ⚠ **반환값을 두지 않는다.** `init` 이 진짜로 아는 것은 **"UART 를 열었다"** 뿐이다:
+//   · 사다리는 약 12초 걸리고 **실패할 수 있다.** 여기서 막으면 WiFi 없는 자리에서
+//     **영영 `setup` 을 못 나온다.**
+//   · 🔴 **모듈이 여러 장치에 흩어지므로** 한 대가 WiFi 를 못 잡아도 나머지가 돌아야 하고,
+//     **그 한 대도 로컬 센서는 계속 읽어야 한다. 링크가 없다고 물리 세계가 멈추지 않는다.**
+//   · 1단(`AT+RST`)의 응답은 **비동기**라 `setup` 에서는 아직 안 왔다.
+//     **그 이상을 반환값에 담으면 거짓이 된다.**
+// 🔮 반환값을 둔다면 **"모듈 기동 실패(하드웨어)"와 "아직 링크 없음(정상)"을 갈라라.**
+//   합치면 호출부가 정상 상태를 오류로 읽는다.
+// 🔴🔴 **이것은 거동 변경이다. 다음 굽기 항목이고 자기 축을 갖는다** (2026-08-18)
+//
+// ⚠ **`espRead`/`espWrite`/`espReset` 과 성격이 다르다:**
+//   ```
+//   espRead·espWrite·espReset : 이름만 바꿈 → hex 차이 **0**   (이미 한 함수였다)
+//   🔴 espInit               : 둘을 합침   → hex **15줄 상이** (원래 한 함수가 아니었다)
+//   ```
+// **무엇이 바뀌나** — `millis()` 호출 시점이 **29줄만큼 앞당겨진다:**
+//   ```
+//   원래 : wifi.begin(9600)  … 29줄(randomSeed·applySlotPinMode×10·simOcc·pinMode) …  netStepAt = millis()
+//   지금 : 셋을 한자리에서
+//   ```
+// ⚠ **무해하다**(`netStepWait = 500` 이라 여유가 크다). **그러나 변화가 없는 것은 아니다.**
+//   🔑 **무해를 근거로 "변화 0"이라고 적으면 다음 사람이 그 축을 안 센다.**
+// ⚠ `always_inline` 을 강제해도 그대로였다 — **원인이 인라인이 아니라 순서**임을 배제로 확인했다.
+// 🔴 **어느 쪽으로 옮겨도 순서는 바뀐다** — 원래 코드가 **두 곳에 흩어져 있었기 때문**이다.
+//   `netStep` 자리로 옮기면 이번엔 `wifi.begin` 이 29줄 늦어진다.
+//
+// > **흩어진 것을 모으면 그것이 곧 거동 변경이다.**
+// > **경계가 있다는 것과 한 함수였다는 것은 다르다.**
+static void espInit(void) {
+  wifi.begin(9600);                 // §3.3 AT+UART_DEF 로 보율을 바꾸지 않는다
+  netStep     = 0;
+  netStepAt   = millis();
+  netStepWait = 500;
+}
+
+static void espReset(unsigned long now) {
   if (netOnline) {
     // ★ REQ-0071 — 사다리는 **연속 30초 온라인**이라야 0단으로 내려온다.
     //   붙는 즉시 내리면 "붙었다가 12초 뒤 끊김"이 반복될 때 영원히 0~1단만 오간다.
@@ -3008,7 +3604,7 @@ static void statusTick(unsigned long now) {
   //   ⚠ 아래 조기 반환(`return`)보다 **앞**에 있어야 한다. 뒤에 두면 하트비트가 뜨지 않는
   //     순간에는 검사가 건너뛰어져, 정작 아무것도 못 보내는 상황에서 발동하지 못한다.
   // ⚠ `changeAt`(위)과 **같은 함정이고 같은 관용구로 막는다.** 2026-08-17 실기에서 터졌다:
-  //   `now` 는 loop() 맨 위에서 한 번만 뜨는데, 그 뒤 `pumpSerialRaw()`/`drainPending()` 이
+  //   `now` 는 loop() 맨 위에서 한 번만 뜨는데, 그 뒤 `espRead()`/`drainPending()` 이
   //   `lastTxOkAt` 을 **더 나중 시각**으로 갱신한다(하행 ACK 송신 약 64ms · CONNECT 처리).
   //   그러면 `now - lastTxOkAt` 이 음수가 되고 unsigned 로 읽으면 `2^32-64`(=49.7일)이 되어
   //   **어떤 임계값도 즉시 넘어 멀쩡한 링크를 끊는다.** 실제 로그: `정지 감지: 4294967232ms`.
@@ -3097,7 +3693,7 @@ static void statusTick(unsigned long now) {
 // ─────────────────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
-  wifi.begin(9600);                 // §3.3 AT+UART_DEF 로 보율을 바꾸지 않는다
+  espInit();                        // ★ UART 를 열고 사다리를 시작만 한다 (설계문서 §1.2)
 
   // ★ 슬롯 위상의 원점. **반드시 여기서 잡는다** — 0 으로 두면 첫 `statusTick` 에서
   //   `now - 0` 만큼의 슬롯을 한꺼번에 소진하느라 while 이 헛돈다(부팅 몇 초면 수 회).
@@ -3126,9 +3722,8 @@ void setup() {
   pinMode(PIN_ESP_RST, INPUT);
 #endif
 
-  netStep = 0;
-  netStepAt = millis();
-  netStepWait = 500;
+  // ✏️ 사다리 초기화는 `espInit()` 안으로 옮겼다 — **UART 열기와 같이 있어야 하는 것**이다.
+  //   떨어져 있으면 한쪽만 고치는 실수가 난다.
 
 #if DEBUG
   Serial.println(F("\n[PARKING NODE] proto v1 / 10 slots / dev=" DEVICE_ID));
@@ -3200,8 +3795,8 @@ void loop() {
   wdt_reset();                      // 6단 — 여기 못 오면(=행) 8초 뒤 AVR 이 리셋된다
 #endif
   unsigned long now = millis();
-  netTick(now);
-  pumpSerialRaw();
+  espReset(now);
+  espRead();
   drainPending();
   // ⚠ 2026-08-17 — `ackqDrain()` 을 뺐다. **보류 ACK 는 이제 슬롯 배치에 실려 나간다**
   //   (`sendSlotBatch`). 여기서 따로 내보내면 슬롯당 1거래 규칙이 깨지고 수신 창을 침범한다.

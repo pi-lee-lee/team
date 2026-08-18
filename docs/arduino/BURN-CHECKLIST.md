@@ -101,9 +101,20 @@ arduino-cli board list
 ```bash
 mkdir -p arduino/.burn/client
 cp 조별과제샘플/client.ino arduino/.burn/client/client.ino
+cmp arduino/.burn/client/client.ino 조별과제샘플/client.ino   # 🔴 0 이 아니면 멈춰라
+git log -1 --format='굽는 판본 %h %s' -- 조별과제샘플/client.ino
+git status --short -- 조별과제샘플/client.ino                 # 비어야 한다. 아니면 미커밋 채로 굽는 것이다
 arduino-cli compile --fqbn arduino:avr:uno --output-dir arduino/.burn/out arduino/.burn/client
 arduino-cli upload -p "$PORT" --fqbn arduino:avr:uno --input-dir arduino/.burn/out
 ```
+
+> ### 🔴 **`cmp` 를 빼지 마라 — `cp` 를 건너뛰면 낡은 스테이징이 조용히 컴파일된다.**
+> **`.burn/client/` 는 2026-08-19 부로 git 추적에서 뺐다**(원장 §24). 저장소에 사본이 없으므로
+> **`git status` 가 그 낡음을 더는 안 알려 준다.** 그 자리를 이 `cmp` 가 대신한다.
+>
+> ⚠ **`git status` 가 비어 있지 않으면 "굽는 판본"은 그 커밋이 아니다.** 커밋하고 굽든지,
+> **미커밋 채로 구웠다는 사실을 `INTERVENTIONS` 에 적든지 — 둘 중 하나를 반드시 해라.**
+> 안 적으면 이후 관측을 **어느 소스에도 귀속할 수 없다.**
 
 > `--input-dir` 로 **방금 빌드한 그것**을 올린다. 다시 빌드시키지 않는다 —
 > 5단계에서 **대조할 대상과 올린 것이 같아야** 하기 때문이다.
