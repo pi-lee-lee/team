@@ -2409,7 +2409,22 @@ function isVirtualKind(kind) {
 const REASON_FAMILY = {
   node_offline: 'unknown', node_unregistered: 'unknown',
   module_absent: 'fault',
-  pending: 'busy'
+  pending: 'busy',
+  /* 🔴 **`occupied` 는 계열이 `normal` 이다** (socket REQ-0235 로 계약에 추가 · 2026-08-19).
+     ⚠ **socket 의 제안은 `unknown`(⏱ 기다리면 풀린다)이었다. 안 받았다.** 근거:
+     ```
+     ① 우리는 이유를 **안다** — 차가 있다. `unknown` 은 *"조작 판정을 할 수 없다"* 이고 거짓이 된다
+     ② 🔴 배너가 `unknown` 을 센다 → **정상 운영에서 계속 뜬다.** 배너의 규칙은
+        **"정상에서 침묵한다"**(설계서 §6)인데, 주차장에 차가 있는 것은 정상이다
+     ③ `busy`(⏳ 곧 풀린다)도 아니다 — 주차는 몇 시간일 수 있다
+     ```
+     🔑 **이건 이상이 아니라 정상 상태다.** 그래서 **표식을 안 붙이고 집계에도 안 넣는다** —
+     칸이 이미 *"사용 중"* 이라 말하고 있고, 버튼이 닫힌 이유가 그 자체로 설명된다.
+     🔑 §5.59 기준(*"붙어 있을 때를 기준으로"*)을 적용하면 오히려 **`unknown` 이 가장 나쁘다** —
+     오래 붙어 있는 상태를 ⏱ 로 그리면 **⏱ 의 뜻이 닳는다**(진짜 미상이 묻힌다).
+     ⚠ 계약상 키는 **남아 있다**(`ok:false` + 사유). 차가 나가면 예약이 가능해지므로
+     socket 이 키를 빼지 않은 것이 맞다 — **일시 상태를 영구로 답하지 않는다.** */
+  occupied: 'normal'
   /* ~~`queue_full: 'busy'`~~ — **err 이름공간의 코드다.** `actions` 에는 안 실린다.
      지우지 않고 남기는 이유: 내가 한 표로 다뤘다는 사실이 다음 사람에게 근거가 된다. */
 };
@@ -2418,10 +2433,18 @@ const REASON_TEXT = {
   node_unregistered: '그 장치가 아직 모듈 목록을 알려 주지 않았습니다',
   module_absent:     '이 자리에 필요한 모듈이 없습니다',
   pending:           '이 자리의 앞선 요청이 아직 처리 중입니다',
-  queue_full:        '지금 전송 대기가 가득 차 접수하지 못했습니다'
+  queue_full:        '지금 전송 대기가 가득 차 접수하지 못했습니다',
+  /* 🔑 **고장처럼 읽히지 않게 쓴다.** 이건 정상 상태이고, 사용자가 할 일은 **기다리는 것**이지
+     확인하거나 다시 누르는 것이 아니다. 그리고 **왜 풀리는지**를 같이 말한다. */
+  occupied:          '이 자리에는 지금 차가 있습니다 — 나가면 예약할 수 있습니다'
 };
 /** 계열 → 기호. 🔑 기호는 **원인**이고 강조는 **영향**이다(두 축 · 원장 §5.33). */
-const FAMILY_MARK = { unknown: '⏱', fault: '⚠', busy: '⏳' };
+const FAMILY_MARK = {
+  unknown: '⏱', fault: '⚠', busy: '⏳',
+  /* 🔴 `normal` 은 **기호가 없다.** 정상 상태에 표식을 붙이면 **표식의 뜻이 닳는다** —
+     화면 어디에나 기호가 있으면 사용자가 그것을 배경으로 읽고, 진짜 이상을 못 본다. */
+  normal: ''
+};
 
 function familyOf(code) { return REASON_FAMILY[code] || (code ? 'fault' : null); }
 
@@ -2615,7 +2638,10 @@ function renderZone(li, z, zs) {
        먼저 말한다(§5.33 강조축: 조작을 막는 원인 중 **오래 남는 것**이 앞이다). */
     if (!srvOk && a.reason) {
       const fam = familyOf(a.reason);
-      b.textContent = ACTION_LABEL[key] + ' ' + (FAMILY_MARK[fam] || '');
+      /* 🔑 기호가 **없는 계열**(`normal`)도 있으므로 붙일 때만 공백을 넣는다 —
+         안 그러면 `"예약 "` 처럼 꼬리 공백이 남고, 접근 이름을 읽을 때도 그 공백이 들린다. */
+      const mk = FAMILY_MARK[fam] || '';
+      b.textContent = ACTION_LABEL[key] + (mk ? ' ' + mk : '');
       b.title = REASON_TEXT[a.reason] || ('지금 할 수 없습니다 (' + a.reason + ')');
       b.setAttribute('aria-label', ACTION_LABEL[key] + ' — 지금 할 수 없습니다: ' + b.title);
     } else if (!localOk) {
@@ -2864,15 +2890,22 @@ function handleServerMessage(msg) {
          쓴다(§"파생 값은 원본을 가진 쪽이 계산한다"). 표를 둘 다 두면 판정자가 둘이 된다.
          ⚠ 테스트 모드·시뮬은 그대로 둔다 — 그쪽 `result` 는 뜻이 다르고 그 표가 정본이다. */
       const isGate = tp.kind === 'open_gate' || tp.kind === 'close_gate';
+      /* 🔑 **서버 문구는 조작 이름을 이미 담고 있다**(`"차단봉을 닫았습니다"`). 그 앞에 내 라벨을
+         또 붙이면 `"차단봉 닫기 — 차단봉을 닫았습니다"` 가 된다.
+         → **서버 문구를 쓸 때는 라벨을 뺀다.** 내 대비 문구를 쓸 때는 이름이 없으니 **붙인다.**
+         ⚠ 줄이는 쪽을 **내 라벨로 고른 이유**: socket 의 문구는 로그·다른 화면에서도 쓰인다.
+         **이 한 줄에서만 쓰이는 쪽을 줄이는 것이 싸다.** */
+      const gateFromServer = isGate && typeof msg.message === 'string' && !!msg.message;
       const text = isGate
-        ? ((typeof msg.message === 'string' && msg.message)
+        ? (gateFromServer
             ? msg.message
             : (GATE_RESULT_TEXT[r] || ('알 수 없는 응답입니다 (result=' + r + ')')))
         : (Object.prototype.hasOwnProperty.call(TEST_RESULT_TEXT, r)
             ? TEST_RESULT_TEXT[r]
             : (typeof msg.message === 'string' ? msg.message : '알 수 없는 응답입니다'));
       clearCmdPending(tp.rid, false);
-      showMessage((tp.slot ? tp.slot + ' · ' : '') + (CMD_LABEL[tp.kind] || '테스트 요청') + ' — ' + text
+      showMessage((tp.slot ? tp.slot + ' · ' : '')
+        + (gateFromServer ? '' : (CMD_LABEL[tp.kind] || '테스트 요청') + ' — ') + text
         + (r === 0 ? ' (실제 반영 여부는 다음 스냅샷으로 확인합니다)' : ''), r === 0 ? 'ok' : 'err');
       return;
     }

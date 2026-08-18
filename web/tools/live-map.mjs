@@ -320,9 +320,32 @@ try {
 
   /* ══ ⑤ 조작이 전선까지 나가는가 — 🔴 **최소 횟수**. 예약 한 번 + 반드시 취소 ═══ */
   console.log('\n[⑤] 조작이 실제로 나가는가 (최소 1회 · 반드시 취소까지)');
+  /* 🔴 **한 검사가 두 주장을 덮고 있었다.** ⑤가 재려는 것은 *"예약이 전선까지 나가는가"* 인데,
+     그냥 첫 열린 버튼을 고르니 **점유된 자리**(A3)에 닿아서 REQ-0235 결함으로 빨강이 됐다.
+     그러면 **예약 왕복 자체는 측정되지 않는다** — 결함 하나가 다른 항목의 측정을 먹는다.
+     → ⑤는 **전선이 비었다고 말하는 자리**로 잰다. 모순은 아래에서 **따로** 단언한다.
+     🔑 **한 검사에 한 주장.** 그러면 어느 것이 깨졌는지 결과가 바로 말해 준다. */
+  const occNow = (() => {
+    const w = rx.filter(x => x && x.type === 'state').slice(-1)[0] || null;
+    const s = new Set();
+    for (const z of (w ? w.zones || [] : [])) if (z.occupied) s.add(z.id);
+    return s;
+  })();
+  /* 🔴 REQ-0235 — 점유된 자리에 예약이 열려 있으면 화면에 "눌리는데 거부되는" 버튼이 생긴다.
+     socket 이 ⓐ(서버 결함)로 확정하고 고쳤다. **배포 전까지 이 검사는 빨강이고 그게 맞다** —
+     배포되면 저절로 초록이 된다. ⚠ 규칙으로 쓴다(자리 이름을 박지 않는다). */
+  const badResv = (() => {
+    const w = rx.filter(x => x && x.type === 'state').slice(-1)[0] || null;
+    return (w ? w.zones || [] : []).filter(z => z.occupied && z.actions && z.actions.reserve
+                                                && z.actions.reserve.ok === true).map(z => z.id);
+  })();
+  ok('🔴 점유된 자리에는 예약이 열려 있지 않다 (REQ-0235)', badResv.length === 0,
+     JSON.stringify(badResv) + ' — socket 이 ⓐ 로 확정하고 고쳤다. 배포 전이면 이 빨강이 정상이다');
+
   const target = await evaluate(client, `(() => {
+    const occ = ${JSON.stringify([...occNow])};
     const b = [...document.querySelectorAll('#zone-grid .zbtn[data-act="reserve"]')]
-      .find(x => x.getAttribute('aria-disabled') === 'false');
+      .find(x => x.getAttribute('aria-disabled') === 'false' && occ.indexOf(x.dataset.zone) < 0);
     return b ? b.dataset.zone : null;
   })()`);
   if (!target) {
