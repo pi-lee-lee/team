@@ -9929,3 +9929,436 @@ A,59,A5,0,09H
 [AT] "AT+CIPSEND=40" (13)
 [AT] " S,1728,0100001001,0000010000,2191,P1,35" (40)
 [AT] "SEND OK" (7)
+[TX] S,1729,0100001001,0000010000,2192,P1,37
+[SLOT] n=1827 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1729,0100001001,0000010000,2192,P1,37" (40)
+[AT] "SEND OK" (7)
+[TX] S,1730,0100001001,0000010000,2193,P1,3E
+[SLOT] n=1828 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1730,0100001001,0000010000,2193,P1,3E" (40)
+[AT] "SEND OK" (7)
+[TX] S,1731,0100001001,0000010000,2194,P1,38
+[SLOT] n=1829 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1731,0100001001,0000010000,2194,P1,38" (40)
+[AT] "SEND OK" (7)
+[TX] S,1732,0100001001,0000010000,2196,P1,39
+[SLOT] n=1830 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1732,0100001001,0000010000,2196,P1,39" (40)
+[AT] "SEND OK" (7)
+[TX] S,1733,0100001001,0000010000,2197,P1,39
+[SLOT] n=1831 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1733,0100001001,0000010000,2197,P1,39" (40)
+[AT] "SEND OK" (7)
+[AT] "ERROR" (5)
+[NET] 송신 오류 응답(로그만, 카운터는 sendLine 이 센다): ERROR
+[AT] "Unlink" (6)
+[DIAG] offline step=3 사다리=1/0 rx=119317 lines=5628 up=2198s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[NET] ★ ESP 가 IP 를 잃었다 — 모듈 리셋으로 본다. 누적 사건 7
+[AT] "OK" (2)
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[AT] "OK" (2)
+[DIAG] offline step=3 사다리=1/0 rx=119369 lines=5634 up=2201s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 24s · 연속 0회 · 결합유지 19s · 현재 1단(0회 누적)
+[LADDER] 1단 조치: 시리얼 드레인 26바이트 버림 + 줄 조립 초기화
+[DIAG] offline step=2 사다리=1/1 rx=119369 lines=5634 up=2204s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 사다리=1/1 rx=119404 lines=5635 up=2207s
+[AT] "OK" (2)
+[NET] CWJAP OK — 결합됐다. IP 를 실제로 받았는지 CIFSR 로 확인한다
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.0.214" (13)
+[NET] ★ IP 확보: 192.168.0.214
+[AT] "OK" (2)
+[DIAG] offline step=4 사다리=1/1 rx=119442 lines=5639 up=2210s
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 적용됨 → CIPSTART
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.0.29",9991" (37)
+[AT] "OK" (2)
+[AT] "Linked" (6)
+[NET] online (CONNECT) + 캐시 비움
+[TX] S,1734,0100001001,0000010000,2210,P1,32
+[SLOT] n=1842 tx=39 ack=0 due=139 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1734,0100001001,0000010000,2210,P1,32" (40)
+[AT] "SEND OK" (7)
+[AT] "+IPD,21:R,111,B1,u55w5vw2,14" (28)
+[SLOT-OOW] +306ms
+[AT] "OK" (2)
+[TX] S,1735,0100001001,0000010000,2211,P1,32
+A,111,B1,2,31A,60,B5,0,00
+A,61,B2,0,06
+A,62,B4,0,03
+A,75,B5,0,04
+A,76,A4,0,05
+A,77,B5,0,06
+A,78,B3,0,0F
+A,59,A5,0,09H
+[SLOT] n=1843 tx=53 ack=1 due=0 r=1
+[AT] " S,1735,0100001001,0000010000,2211,P1,32A,111,B1,2,31" (53)
+[AT] "AT+CIPSEND=54" (13)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=1844 tx=39 ack=0 due=0 r=0
+[TX-WAIT] ★ T1 초과 — 그래도 계속 기다린다(두들기지 않는다)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=1845 tx=39 ack=0 due=0 r=0
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=1846 tx=39 ack=0 due=0 r=0
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=1847 tx=39 ack=0 due=0 r=0
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=1848 tx=39 ack=0 due=0 r=0
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=1849 tx=39 ack=0 due=0 r=0
+[TX-WAIT] ★★ T2 초과 — SEND OK 가 끝내 안 온다 → 링크를 다시 세운다
+[SLOT] n=1850 tx=39 ack=0 due=0 r=0
+[CNT] up=2220 drop=5 esprst=7 resync=0 sendfail=0 okto=6 stuck=5 ackq=0 ackdrop=97 ackstale=4 slot=1850 oow=34 smiss=7 ssovf=28 cksumng=7 skip=35 online=0
+[DIAG] offline step=6 사다리=1/1 rx=119699 lines=5651 up=2220s
+[RAM] 최저 여유 640 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[NET] 6 CIPCLOSE (낡은 소켓 닫기)
+[AT] "SEND OKAT+CIPCLOSE" (18)
+[AT] "OK" (2)
+[AT] "Unlink" (6)
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.0.214" (13)
+[NET] ★ IP 확보: 192.168.0.214
+[AT] "OK" (2)
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 적용됨 → CIPSTART
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.0.29",9991" (37)
+[AT] "OK" (2)
+[AT] "Linked" (6)
+[NET] online (CONNECT) + 캐시 비움
+[TX] S,1736,0100001001,0000010000,2221,P1,32
+[SLOT] n=1851 tx=39 ack=0 due=25 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1736,0100001001,0000010000,2221,P1,32" (40)
+[AT] "SEND OK" (7)
+[AT] "+IPD,21:R,112,B1,u55w5vw2,17" (28)
+[SLOT-OOW] +171ms
+[AT] "OK" (2)
+[TX] S,1737,0100001001,0000010000,2222,P1,30
+A,112,B1,2,32A,60,B5,0,00
+A,61,B2,0,06
+A,62,B4,0,03
+A,75,B5,0,04
+A,76,A4,0,05
+A,77,B5,0,06
+A,78,B3,0,0F
+A,59,A5,0,09H
+[SLOT] n=1852 tx=53 ack=1 due=0 r=1
+[AT] "AT+CIPSEND=54" (13)
+[AT] " S,1737,0100001001,0000010000,2222,P1,30A,112,B1,2,32" (53)
+[AT] "SEND OK" (7)
+[TX] S,1738,0100001001,0000010000,2223,P1,3E
+[SLOT] n=1853 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1738,0100001001,0000010000,2223,P1,3E" (40)
+[AT] "SEND OK" (7)
+[TX] S,1739,0100001001,0000010000,2224,P1,38
+[SLOT] n=1854 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1739,0100001001,0000010000,2224,P1,38" (40)
+[AT] "SEND OK" (7)
+[TX] S,1740,0100001001,0000010000,2226,P1,34
+[SLOT] n=1855 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1740,0100001001,0000010000,2226,P1,34" (40)
+[AT] "SEND OK" (7)
+[TX] S,1741,0100001001,0000010000,2227,P1,34
+[SLOT] n=1856 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1741,0100001001,0000010000,2227,P1,34" (40)
+[AT] "SEND OK" (7)
+[TX] S,1742,0100001001,0000010000,2228,P1,38
+[SLOT] n=1857 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1742,0100001001,0000010000,2228,P1,38" (40)
+[AT] "SEND OK" (7)
+[TX] S,1743,0100001001,0000010000,2229,P1,38
+[SLOT] n=1858 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1743,0100001001,0000010000,2229,P1,38" (40)
+[AT] "SEND OK" (7)
+[TX] S,1744,0100001001,0000010000,2230,P1,37
+[SLOT] n=1859 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1744,0100001001,0000010000,2230,P1,37" (40)
+[AT] "SEND OK" (7)
+[TX] S,1745,0100001001,0000010000,2232,P1,34
+[SLOT] n=1860 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1745,0100001001,0000010000,2232,P1,34" (40)
+[AT] "SEND OK" (7)
+[TX] S,1746,0100001001,0000010000,2233,P1,36
+[SLOT] n=1861 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1746,0100001001,0000010000,2233,P1,36" (40)
+[AT] "SEND OK" (7)
+[TX] S,1747,0100001001,0000010000,2234,P1,30
+[SLOT] n=1862 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1747,0100001001,0000010000,2234,P1,30" (40)
+[AT] "SEND OK" (7)
+[TX] S,1748,0100001001,0000010000,2235,P1,3E
+[SLOT] n=1863 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1748,0100001001,0000010000,2235,P1,3E" (40)
+[AT] "SEND OK" (7)
+[TX] S,1749,0100001001,0000010000,2236,P1,3C
+[SLOT] n=1864 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1749,0100001001,0000010000,2236,P1,3C" (40)
+[AT] "SEND OK" (7)
+[TX] S,1750,0100001001,0000010000,2238,P1,3A
+[SLOT] n=1865 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1750,0100001001,0000010000,2238,P1,3A" (40)
+[AT] "SEND OK" (7)
+[TX] S,1751,0100001001,0000010000,2239,P1,3A
+[SLOT] n=1866 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1751,0100001001,0000010000,2239,P1,3A" (40)
+[AT] "SEND OK" (7)
+[TX] S,1752,0100001001,0000010000,2240,P1,37
+[SLOT] n=1867 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1752,0100001001,0000010000,2240,P1,37" (40)
+[AT] "SEND OK" (7)
+[TX] S,1753,0100001001,0000010000,2241,P1,37
+[SLOT] n=1868 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1753,0100001001,0000010000,2241,P1,37" (40)
+[AT] "SEND OK" (7)
+[TX] S,1754,0100001001,0000010000,2242,P1,33
+[SLOT] n=1869 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1754,0100001001,0000010000,2242,P1,33" (40)
+[AT] "SEND OK" (7)
+[TX] S,1755,0100001001,0000010000,2244,P1,34
+[SLOT] n=1870 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1755,0100001001,0000010000,2244,P1,34" (40)
+[AT] "SEND OK" (7)
+[TX] S,1756,0100001001,0000010000,2245,P1,36
+[SLOT] n=1871 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1756,0100001001,0000010000,2245,P1,36" (40)
+[AT] "SEND OK" (7)
+[TX] S,1757,0100001001,0000010000,2246,P1,34
+[SLOT] n=1872 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1757,0100001001,0000010000,2246,P1,34" (40)
+[AT] "SEND OK" (7)
+[TX] S,1758,0100001001,0000010000,2247,P1,3A
+[SLOT] n=1873 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1758,0100001001,0000010000,2247,P1,3A" (40)
+[AT] "SEND OK" (7)
+[TX] S,1759,0100001001,0000010000,2248,P1,34
+[SLOT] n=1874 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1759,0100001001,0000010000,2248,P1,34" (40)
+[AT] "SEND OK" (7)
+[TX] S,1760,0100001001,0000010000,2250,P1,37
+[SLOT] n=1875 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1760,0100001001,0000010000,2250,P1,37" (40)
+[AT] "SEND OK" (7)
+[TX] S,1761,0100001001,0000010000,2251,P1,37
+[SLOT] n=1876 tx=39 ack=0 due=0 r=1
+[LADDER] ↓ 30초 연속 온라인 — 사다리를 0단으로 내린다 (직전 1단)
+[AT] " S,1761,0100001001,0000010000,2251,P1,37" (40)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=40" (13)
+[TX] S,1762,0100001001,0000010000,2252,P1,37
+[SLOT] n=1877 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1762,0100001001,0000010000,2252,P1,37" (40)
+[AT] "SEND OK" (7)
+[TX] S,1763,0100001001,0000010000,2253,P1,37
+[SLOT] n=1878 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1763,0100001001,0000010000,2253,P1,37" (40)
+[AT] "SEND OK" (7)
+[TX] S,1764,0100001001,0000010000,2254,P1,37
+[SLOT] n=1879 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1764,0100001001,0000010000,2254,P1,37" (40)
+[AT] "SEND OK" (7)
+[AT] "+IPD,27:M,113,7E" (16)
+[SLOT-OOW] +182ms
+[SIM] 한 걸음: B1 → occupied=1
+[AT] "M,114,79" (8)
+[SIM] 한 걸음: B4 → occupied=1
+[AT] "M,115,78" (8)
+[SIM] 한 걸음: A5 → occupied=1
+[AT] "OK" (2)
+[TX] S,1765,0100111011,0000010000,2256,P1,35
+A,113,B1,0,31
+A,114,B4,0,33
+A,115,A5,0,3062,B4,0,03
+A,75,B5,0,04
+A,76,A4,0,05
+A,77,B5,0,06
+A,78,B3,0,0F
+A,59,A5,0,09H
+[SLOT] n=1880 tx=81 ack=3 due=0 r=1
+[AT] " S,1765,0100111011,0000010000,2256,P1,35A,113,B1,0,31A,114,B4,0K" (64)
+[AT] "+IPD,36:M,116,7B" (16)
+[SLOT-OOW] +260ms
+[SIM] 한 걸음: A3 → occupied=1
+[AT] "M,117,7A" (8)
+[SIM] 한 걸음: A2 → occupied=0
+[AT] "M,118,75" (8)
+[SIM] 한 걸음: B5 → occupied=0
+[AT] "M,119,74" (8)
+[SIM] 한 걸음: B5 → occupied=1
+[AT] "OK" (2)
+[AT] "AT+CIPSEND=82" (13)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=1881 tx=95 ack=4 due=0 r=0
+[TX-WAIT] ★ T1 초과 — 그래도 계속 기다린다(두들기지 않는다)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=1882 tx=95 ack=4 due=0 r=0
+[AT] "+IPD,36:M,120,7E" (16)
+[SLOT-OOW] +279ms
+[SIM] 한 걸음: B3 → occupied=1
+[AT] "M,121,7F" (8)
+[SIM] 한 걸음: A3 → occupied=0
+[AT] "M,122,7C" (8)
+[SIM] 한 걸음: B5 → occupied=0
+[AT] "M,123,7D" (8)
+[SIM] 한 걸음: A4 → occupied=1
+[AT] "OK" (2)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=1883 tx=151 ack=8 due=0 r=0
+[AT] "+IPD,36:M,124,7A" (16)
+[SLOT-OOW] +434ms
+[SIM] 한 걸음: A5 → occupied=0
+[AT] "M,125,7B" (8)
+[SIM] 한 걸음: A5 → occupied=1
+[AT] "M,126,78" (8)
+[SIM] 한 걸음: A1 → occupied=1
+[AT] "M,127,79" (8)
+[SIM] 한 걸음: B2 → occupied=0
+[AT] "OK" (2)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=1884 tx=151 ack=8 due=0 r=0
+[AT] "+IPD,36:M,128,76" (16)
+[SLOT-OOW] +536ms
+[SIM] 한 걸음: B1 → occupied=0
+[ACKQ] 가득 참 — 가장 오래된 보류 ACK 를 버린다
+[AT] "M,129,77" (8)
+[SIM] 한 걸음: B1 → occupied=1
+[ACKQ] 가득 참 — 가장 오래된 보류 ACK 를 버린다
+[AT] "M,130,7F" (8)
+[SIM] 한 걸음: A3 → occupied=1
+[ACKQ] 가득 참 — 가장 오래된 보류 ACK 를 버린다
+[AT] "M,131,7E" (8)
+[SIM] 한 걸음: B1 → occupied=0
+[ACKQ] 가득 참 — 가장 오래된 보류 ACK 를 버린다
+[AT] "OK" (2)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=1885 tx=151 ack=8 due=0 r=0
+[AT] "+IPD,36:M,132,7D" (16)
+[SIM] 한 걸음: B1 → occupied=1
+[ACKQ] 가득 참 — 가장 오래된 보류 ACK 를 버린다
+[AT] "M,133,7C" (8)
+[SIM] 한 걸음: A1 → occupied=0
+[ACKQ] 가득 참 — 가장 오래된 보류 ACK 를 버린다
+[AT] "M,134,7B" (8)
+[SIM] 한 걸음: A2 → occupied=1
+[ACKQ] 가득 참 — 가장 오래된 보류 ACK 를 버린다
+[AT] "M,135,7A" (8)
+[SIM] 한 걸음: B1 → occupied=0
+[ACKQ] 가득 참 — 가장 오래된 보류 ACK 를 버린다
+[AT] "OK" (2)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=1886 tx=151 ack=8 due=49 r=0
+[AT] "+IPD,36:M,116,7B" (16)
+[SLOT-OOW] +580ms
+[SIM] 한 걸음: B1 → occupied=1
+[ACKQ] 가득 참 — 가장 오래된 보류 ACK 를 버린다
+[AT] "M,117,7A" (8)
+[SIM] 한 걸음: A4 → occupied=0
+[ACKQ] 가득 참 — 가장 오래된 보류 ACK 를 버린다
+[AT] "M,118,75" (8)
+[SIM] 한 걸음: A5 → occupied=0
+[ACKQ] 가득 참 — 가장 오래된 보류 ACK 를 버린다
+[AT] "M,119,74" (8)
+[SIM] 한 걸음: A5 → occupied=1
+[ACKQ] 가득 참 — 가장 오래된 보류 ACK 를 버린다
+[AT] "OK" (2)
+[TX-WAIT] ★★ T2 초과 — SEND OK 가 끝내 안 온다 → 링크를 다시 세운다
+[SLOT] n=1887 tx=151 ack=8 due=0 r=0
+[DIAG] offline step=6 사다리=0/0 rx=122263 lines=5787 up=2264s
+[NET] 6 CIPCLOSE (낡은 소켓 닫기)
+[AT] "AT+CIPCLOSE" (11)
+[AT] "OK" (2)
+[AT] "Unlink" (6)
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.0.214" (13)
+[NET] ★ IP 확보: 192.168.0.214
+[AT] "OK" (2)
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 적용됨 → CIPSTART
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.0.29",9991" (37)
+[AT] "OK" (2)
+[AT] "Linked" (6)
+[NET] online (CONNECT) + 캐시 비움
+[TX] S,1766,0110110110,0000010000,2265,P1,36
+[SLOT] n=1888 tx=39 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=40" (13)
+[AT] " S,1766,0110110110,0000010000,2265,P1,36" (40)
+[AT] "SEND OK" (7)
+[AT] "+IPD,21:R,146,B1,u55w5vw2,16" (28)
+[SLOT-OOW] +158ms
+[AT] "OK" (2)
+[TX] S,1767,0110110110,0000010000,2266,P1,34
+A,146,B1,1,30
+A,129,B1,0,38
+A,130,A3,0,31
+A,131,B1,0,31
+A,132,B1,0,32
+A,133,A1,0,30
+A,134,A2,0,34
+A,135,B1,0,35,0,09H
+[SLOT] n=1889 tx=53 ack=1 due=0 r=1
+[AT] "AT+CIPSEND=54" (13)
+[AT] " S,1767,0110110110,0000010000,2266,P1,34A,146,B1,1,30" (53)
+[AT] "SEND OK" (7)
+[AT] "+IPD,36:M,116,7B" (16)
+[SLOT-OOW] +220ms
+[SIM] 한 걸음: A1 → occupied=1
+[AT] "M,117,7A" (8)
+[SIM] 한 걸음: B4 → occupied=0
+[AT] "M,118,75" (8)
+[SIM] 한 걸음: B2 → occupied=1
+[AT] "M,119,74" (8)
+[SIM] 한 걸음: A5 → occupied=0
+[AT] "OK" (2)
