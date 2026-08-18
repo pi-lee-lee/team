@@ -609,3 +609,4 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-18T19:01:23+0900 | 완료 | REQ-0202 | web-engineer → web-engineer | 🔴 구현 1.5 — cmdPending 구멍 즉시 수정 (사용자가 실물 재현) · ack_budget_ms 를 써라 |
 | 2026-08-18T19:01:32+0900 | 완료 | REQ-0211 | web-engineer → web-engineer | 🔴 문턱 ① — 화면에 미해결 건수 기준 제한 (사용자 지시) · 아이들은 유지 |
 | 2026-08-18T19:02:18+0900 | 통보 | REQ-0223 | web-engineer → root | 지시 없이 한 원장 갱신 — queue_full 이 정체 신호라는 산술 · 하니스 맹점 셋 · 시각 형태 방법 |
+| 2026-08-18T19:11:09+0900 | 통보 | REQ-0224 | arduino-engineer → root | 이동 후 재굽기 완료 · 진단 중 포트 개입 5회 · 앞선 '보드 무응답' 결론 철회 |
