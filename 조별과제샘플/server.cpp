@@ -306,6 +306,19 @@ static const int  DEV_RID_CACHE_N = 16;    // arduino CACHE_N (그쪽 소스 판
 // ⚠ **이건 가정이지 관측이 아니다** — 장치가 그보다 늦게 ACK 하지 않는다는 것을 잰 적이 없다.
 //   그래서 `ack_unknown_rid` 를 요약에 낸다. **가정이 깨지면 그 칸이 오른다.**
 static const long long RID_QUARANTINE_MS = (long long)ACK_TIMEOUT_MS * ACK_MAX_TRIES;  // 7200ms
+
+// 🔴 **(B) 재시작을 건너 단조성을 유지한다** (루트 결정 REQ-0246 · 설계 §4)
+//
+// **이건 새 위험이 아니라 이미 일어난 고장이다** — arduino §25.3 에 실측 기록이 있다:
+//   *서버 재시작으로 `wire_rid` 가 1부터 다시 시작했고, 장치는 재부팅을 안 해서 옛 rid 가
+//    캐시에 남아 명령이 삼켜졌다.* 🔴 **그때 서버는 ACK 을 받아 성공으로 기록한다.**
+//
+// **블록 예약 방식**: 한 번에 `RID_PERSIST_BLOCK` 만큼 앞을 예약해 디스크에 적고, 그 안에서는
+// 디스크를 안 만진다. 🔑 **적는 값이 실제 사용보다 항상 *앞서* 있다** — 그래서 갑자기 죽어도
+// 재시작이 **방금 쓴 값을 다시 내주지 않는다**(건너뛸 뿐이고 건너뛰는 것은 무해하다).
+// ⚠ 반대로 "쓴 뒤에 적는" 방식이면 크래시 때 **가장 최근에 쓴 값들**을 재발행하게 되어
+//   장치 캐시와 겹칠 확률이 가장 높은 구간을 정확히 다시 밟는다.
+static const long long RID_PERSIST_BLOCK = 256;
 static const int  SOAK_REPORT_MS = 60000;   // 소크 관측 주기 보고(REQ-0065)
 static const int  LOG_KEEP       = 2;       // §9.1 최신 2건
 static const uint64_t WS_MAX_FRAME = 64 * 1024;  // 클라이언트가 선언한 길이의 상한
@@ -535,6 +548,26 @@ static std::string default_log_path() {
     // 실제로 그 의심이 잘못된 발표로 이어졌다. 규칙으로 부탁하지 않고 경로를 갈라 버린다.
     if (g_port_offset != 0) base += ".test+" + std::to_string(g_port_offset);
     return base + ".log";
+}
+
+// 🔴 A[1](B) — `rid` 커서 영속 파일. **반드시 절대경로다.**
+//
+// **cwd 상대경로로 두면 다른 디렉터리에서 기동하는 순간 커서가 조용히 사라지고,
+//   그때 나오는 거동이 정확히 "보호가 없는 상태"다 — 막으려던 것으로 조용히 되돌아간다.**
+// 루트가 오늘 그 함정을 실측했다: `data_log.json`·`index.html` 이 cwd 상대라
+// 인스턴스마다 다른 파일을 열고 있었다(REQ-0240 · 이틀 전 화면이 서빙되던 건).
+//
+// 🔑 **로그와 같은 규칙으로 오프셋에 따라 경로를 가른다.** 안 그러면 시험 인스턴스가
+//   운영의 커서를 덮어써서 **운영 재시작이 시험이 쓴 자리로 되돌아간다.**
+static std::string rid_cursor_path() {
+    const char* home = getenv("HOME");
+#ifdef _WIN32
+    if (!home || !*home) home = getenv("USERPROFILE");
+#endif
+    if (!home || !*home) return std::string();   // 빈 값 = 영속 불가. 호출자가 크게 남긴다
+    std::string base = std::string(home) + "/parking-logs/parking-rid-cursor";
+    if (g_port_offset != 0) base += ".test+" + std::to_string(g_port_offset);
+    return base + ".txt";
 }
 
 // 부모 디렉터리를 **한 단계씩 전부** 만든다.
@@ -1015,7 +1048,13 @@ struct Server {
 
     std::map<sock_t, Conn> conns;      // HTTP/WS 클라이언트
     std::map<uint16_t, Pending> pend;
-    uint16_t next_rid;                 // 🔴 이제 **커서**다. [0,RID_SPACE) 를 순환한다
+    // 🔴 발행 커서. **단조 증가**하고 전선에 나가는 값은 `rid_cursor % RID_SPACE` 다.
+    //   단조로 두는 이유: 디스크에 적을 때 "몇 바퀴째인지"가 필요 없어지고, 재시작 이어받기가
+    //   **더하기 하나**가 된다. 순환값만 들면 "앞"과 "뒤"가 모호해진다.
+    long long rid_cursor;
+    long long rid_reserved_to;         // 디스크에 **미리 적어 둔** 상한. 넘으면 새 블록을 예약한다
+    bool      rid_persist_on;          // 🔴 기본 false — `rid_cursor_load()` 를 부른 실기 경로에서만 켠다
+    std::string rid_cursor_file;       // 절대경로. 빈 값이면 영속 불가
     // 격리표 — rid → (재사용 가능 시각, **해제 순번**). `pend` 를 떠날 때 여기 들어간다.
     //
     // 🔴 **순번을 시각과 따로 든다.** 처음엔 시각 하나만 들고 "가장 이른 시각"을 가장 오래 묵은
@@ -1149,7 +1188,7 @@ struct Server {
                xs_uptime(-1), xs_last_ms(0), xs_dev(""),
                xs_reconnect_reboot(0), xs_reconnect_link(0),
                xs_reconnect_unknown(0),
-               next_rid(1),
+               rid_cursor(1), rid_reserved_to(0), rid_persist_on(false),
                rid_rel_seq(0),
                rid_alloc_n(0), rid_skips(0), rid_forced(0), rid_exhausted(0),
                ack_unknown_rid(0), ack_slot_mismatch(0),
@@ -1417,8 +1456,9 @@ struct Server {
         //   🔑 **분모를 같이 낸다** — `발행` 이 없으면 `건너뜀 0` 은 건강이 아니라 **표본 0** 이다.
         //   각 칸이 낮아지는 *다른* 이유는 `docs/net/DESIGN-rid-width-and-quarantine.md` §5 표에 있다.
         s += " · rid 발행 " + std::to_string(rid_alloc_n)
-           + "(다음 " + std::to_string((unsigned)(next_rid % RID_SPACE))
-           + "/" + std::to_string((unsigned)RID_SPACE) + ")"
+           + "(다음 " + std::to_string((unsigned)(rid_cursor % RID_SPACE))
+           + "/" + std::to_string((unsigned)RID_SPACE)
+           + (rid_persist_on ? " 영속" : " 🔴영속꺼짐") + ")"
            + " 격리 " + std::to_string((long long)rid_quar.size())
            + " 건너뜀 " + std::to_string(rid_skips)
            + " 강제 " + std::to_string(rid_forced)
@@ -2751,6 +2791,68 @@ struct Server {
 #endif
     }
 
+    // ── 🔴 A[1](B) 커서 영속 — **재시작을 건너 단조성을 유지한다**
+    //
+    // ⚠ **기본은 꺼져 있다**(`rid_persist_on = false`). 자가검증이 만드는 수십 개의 `Server` 가
+    //   실기 커서 파일을 덮어쓰는 것을 **구조적으로** 막는다 — 시험이 운영 상태를 건드리면
+    //   그건 시험이 아니라 사고다. **실기 기동 경로만 `rid_cursor_load()` 를 부른다.**
+    void rid_reserve_block() {
+        rid_reserved_to = rid_cursor + RID_PERSIST_BLOCK;
+        if (!rid_persist_on || rid_cursor_file.empty() || no_disk) return;
+        ensure_parent_dir(rid_cursor_file);
+        std::ofstream o(rid_cursor_file.c_str(), std::ios::out | std::ios::trunc);
+        if (!o) {
+            rid_persist_on = false;    // 🔴 한 번 실패하면 끈다. 매 발행마다 실패 로그를 쏟지 않는다
+            logf("!", "🔴 rid 커서를 못 쓴다 — " + rid_cursor_file
+                      + " · **재시작 보호가 꺼졌다.** 다음 재시작이 장치 멱등 캐시와 겹칠 수 있다");
+            return;
+        }
+        o << rid_reserved_to << "\n";
+    }
+
+    // 기동 때 한 번. 🔴 **읽은 값을 로그에 찍는다** — 못 읽은 것은 사고인데
+    //   값이 안 찍히면 정상 기동과 구별이 안 된다(루트 지시 REQ-0246 ②·③).
+    void rid_cursor_load() {
+        rid_cursor_file = rid_cursor_path();
+        if (rid_cursor_file.empty()) {
+            rid_persist_on = false;
+            rid_cursor = (long long)(epoch_ms() % RID_SPACE);      // 🔴 1 에서 시작하지 않는다
+            rid_reserved_to = rid_cursor;
+            logf("!", "🔴 rid 커서를 영속할 수 없다 — HOME 이 없다. 임의 지점 "
+                      + std::to_string(rid_cursor % RID_SPACE)
+                      + " 에서 시작한다. **이 기동은 장치 멱등 캐시와 겹칠 수 있다**");
+            return;
+        }
+        rid_persist_on = true;
+        std::ifstream f(rid_cursor_file.c_str());
+        long long v = -1;
+        if (f && (f >> v) && v >= 0) {
+            rid_cursor = v;
+            rid_reserved_to = v;
+            // 🔴 **기동 때 곧바로 한 블록을 예약해 적는다.** 첫 발행까지 미루면
+            //   **하행이 한 건도 없던 기동에서는 파일이 안 생기고**, 다음 재시작이
+            //   "못 읽었다" 갈래로 빠져 **거짓 경보**가 된다. 그리고 그 경보가 반복되면
+            //   진짜 사고가 났을 때 아무도 안 본다.
+            rid_reserve_block();
+            logf("=", "rid 커서 이어받음 — " + std::to_string(v)
+                      + " (전선값 " + std::to_string(v % RID_SPACE) + ") · 예약 "
+                      + std::to_string(rid_reserved_to) + " · " + rid_cursor_file);
+            return;
+        }
+        // 🔴 없거나 깨졌다. **1부터 시작하지 않는다**(루트 지시 ④).
+        //   임의 지점이 겹칠 확률과 1에서 시작할 때 겹칠 확률은 다르다 —
+        //   1은 **직전 인스턴스가 방금 지나온 자리**일 수 있고 임의 지점은 그 편향이 없다.
+        //   ⚠ 그래도 **보장이 아니다.** 그래서 이 줄을 크게 남긴다.
+        rid_cursor = (long long)(epoch_ms() % RID_SPACE);
+        rid_reserved_to = rid_cursor;
+        rid_reserve_block();              // 곧바로 파일을 만든다 — 다음 기동은 이 갈래로 안 온다
+        logf("!", "🔴 rid 커서 파일을 못 읽었다(" + rid_cursor_file
+                  + ") — 임의 지점 " + std::to_string(rid_cursor % RID_SPACE)
+                  + " 에서 시작한다. ⚠ **이 기동만 장치 멱등 캐시와 겹칠 수 있다(약 "
+                  + std::to_string(DEV_RID_CACHE_N) + "/" + std::to_string((int)RID_SPACE)
+                  + "). 정상 기동과 구별해서 읽어라**");
+    }
+
     // ── 🔴 A[1] `rid` 발행 — 정본 `docs/net/DESIGN-rid-width-and-quarantine.md`
     //
     // **하드 규칙 ①**: `pend` 에 있는 rid 는 **절대** 발행하지 않는다. 어기면 ACK 이 엉뚱한
@@ -2763,8 +2865,11 @@ struct Server {
         const long long t = now_ms();
         // 1차 — 커서에서 한 바퀴. `pend` 도 아니고 격리도 안 걸린 첫 값.
         for (uint16_t i = 0; i < RID_SPACE; i++) {
-            uint16_t cand = (uint16_t)(next_rid % RID_SPACE);
-            next_rid = (uint16_t)((cand + 1) % RID_SPACE);
+            uint16_t cand = (uint16_t)(rid_cursor % RID_SPACE);
+            rid_cursor++;
+            // 🔴 **커서가 예약 범위를 넘으면 디스크에 다음 블록을 적는다.**
+            //   건너뛴 칸도 커서를 먹는다 — 그래야 크래시 뒤에 그 칸들도 안 되밟는다.
+            if (rid_cursor >= rid_reserved_to) rid_reserve_block();
             if (pend.count(cand)) { rid_skips++; continue; }
             std::map<uint16_t, RidQ>::iterator q = rid_quar.find(cand);
             if (q != rid_quar.end()) {
@@ -4076,6 +4181,11 @@ struct Server {
                          RID_QUARANTINE_MS, DEV_RID_CACHE_N);
                 logf("=", rb);
             }
+            // 🔴 **여기서 부르지 않으면 커서가 안 이어진다.** 생성자에 두지 않은 것은 일부러다 —
+            //   자가검증이 만드는 `Server` 들이 실기 커서 파일을 덮어쓰지 못하게 하려는 것이다.
+            //   ⚠ 이 한 줄이 빠지면 **아무 경고 없이** 매 기동이 1에서 시작한다(=옛 거동).
+            //   그래서 기동 로그에 값을 찍는다 — 빠진 것이 로그의 *부재*로 보이게.
+            rid_cursor_load();
             // 🔴 **조건을 적었으면 그것을 보는 감시를 같은 자리에 만든다.**
             //   재사용 주기가 장치 멱등창(16)에 가까워지면 명령이 **조용히 삼켜진다.**
             //   ⚠ 여유 4배는 임의로 고른 문턱이다 — **관측용이지 증명이 아니다.**
@@ -5797,6 +5907,21 @@ static int selftest() {
                 std::cout << (okF ? "  ✓ " : "  ✗ ") << "dispatch_sim 이 alloc_rid 를 탄다 (발행 "
                           << (t.rid_alloc_n - n0) << " · 기대 1)\n";
                 if (!okF) bad++;
+            }
+            {
+                // (g) 🔴 **커서 영속은 기본이 꺼져 있다 — 시험이 실기 커서를 덮어쓰지 못하게.**
+                //     ⚠ 이 검사가 지키는 것은 서버의 성질이 아니라 **자가검증의 안전**이다.
+                //     여기가 켜져 있으면 위 (a)의 2000회 발행이 운영 커서를 앞으로 밀어 버린다.
+                //     🔑 그리고 **예약값은 커서보다 항상 앞서 있어야 한다** — 그게 (B)의 전부다.
+                //        뒤에 있으면 크래시 뒤에 **방금 쓴 값을 다시 내준다.**
+                Server t;
+                bool offByDefault = (t.rid_persist_on == false);
+                for (int i = 0; i < 700; i++) t.alloc_rid();
+                bool ahead = (t.rid_reserved_to >= t.rid_cursor);
+                bool okG = offByDefault && ahead;
+                std::cout << (okG ? "  ✓ " : "  ✗ ") << "커서 영속 기본 꺼짐(" << (offByDefault ? "예" : "🔴아니오")
+                          << ") · 예약 " << t.rid_reserved_to << " ≥ 커서 " << t.rid_cursor << "\n";
+                if (!okG) bad++;
             }
 
             s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
