@@ -2150,14 +2150,34 @@ const ACTION_LABEL = {
 };
 
 /**
- * ⚠ **모듈 `kind` 코드 어휘가 아직 확정이 아니다.** 명세 예제에 `parking_sensor` 하나만 있다.
- * 🔴 **그래서 나머지를 지어내지 않았다.** 모르는 `kind` 는:
- *   · 표시 순서 → **도착 순서 그대로**(뒤에 붙는다)
- *   · 액추에이터 표식(`*`) → **붙이지 않는다**. 근거 없이 "장치가 보고한 값"이라 말할 수 없다(§5.34.2)
- * 확정되면 이 표만 채우면 된다 — 렌더링 코드는 안 바뀐다.
+ * ✅ 모듈 `kind` — **전선 코드를 JSON 에도 그대로 쓴다**(socket 확정 · 커밋 `17eac86`).
+ * 🔑 **서버가 번역하지 않는다.** 한글은 **표시 이름**이고 그 사상은 **여기 한 곳에만** 있다 —
+ * 두 홉이 아니라 한 홉이다. (번역이 서버에도 있으면 사상이 두 벌이 되고 한쪽만 고치는 날이 온다.)
  */
-const MOD_KIND_ORDER = ['parking_sensor'];
-const MOD_KIND_ACTUATOR = [];      // 확정되면 채운다(안내등·유도등·차단봉)
+const MOD_KIND_LABEL = {
+  IP: '주차확인센서', IX: '입출차센서',
+  OG: '안내등', OL: '유도등', OB: '차단봉'
+};
+
+/**
+ * 표시 순서 — **표시는 내 몫이고 방향은 계약이다**(socket).
+ * 🔑 **관측(`I…`) 먼저, 출력(`O…`) 나중**으로 뒀다. 근거: **관측은 자리의 상태를 정하고
+ * 출력은 그 결과를 되비춘 것**이라, 위에서 아래로 읽으면 원인 → 결과가 된다.
+ * ⚠ `idx` 를 쓰지 않는다 — 그건 **배선 순서**라 배선을 바꾸면 화면이 조용히 재배열된다(socket ④).
+ * 모르는 `kind` 는 **도착 순서 그대로 뒤에 붙는다**(안정 정렬).
+ */
+const MOD_KIND_ORDER = ['IP', 'IX', 'OB', 'OG', 'OL'];
+
+/**
+ * 🔴 **출력 모듈 판정은 표가 아니라 규칙이다**(socket): **`kind[0] === 'O'`.**
+ * → **어긋날 표가 없다.** 그리고 **모르는 `kind` 는 자동으로 `*` 가 안 붙는다**(`O` 가 아니므로) —
+ *   내가 고른 보수적 처리와 같은 결론이고 **이제 관용이 아니라 계약이다.**
+ * ⚠ **`O` 를 "사용자가 누를 수 있다"로 읽지 않는다.** 안내등(`OG`)은 명령을 받지만 그 명령은
+ *   서버가 예약 상태에서 파생시킨다. **누를 수 있는가는 `actions` 가 답한다 — 다른 축이다.**
+ */
+function isOutputKind(kind) {
+  return typeof kind === 'string' && kind.charAt(0) === 'O';
+}
 
 /** `blocked_reason` 코드 → 계열. 🔴 계열은 **서버가 코드에 실어 준 것**이고 화면이 짐작하지 않는다. */
 const REASON_FAMILY = {
@@ -2256,11 +2276,16 @@ function renderZone(li, z, zs) {
 
   const ul = document.createElement('ul');
   ul.className = 'zone__mods';
-  for (const mod of orderedModules(z.modules)) {
+  const mods = orderedModules(z.modules);
+  const kindCount = new Map();
+  for (const mm of mods) kindCount.set(mm.kind, (kindCount.get(mm.kind) || 0) + 1);
+  for (const mod of mods) {
+    /* 🔴 모듈 조회는 **`(devid, name)` 복합 키**로 한다. `name` 단독 조회 금지 —
+       같은 `name` 이 다른 노드에 또 있을 수 있고 그게 정상이다(§5.42). */
     const smod = zs && Array.isArray(zs.modules)
       ? zs.modules.find(function (x) { return x && x.devid === mod.devid && x.name === mod.name; })
       : null;
-    ul.appendChild(renderModuleRow(mod, smod, zs));
+    ul.appendChild(renderModuleRow(mod, smod, zs, (kindCount.get(mod.kind) || 0) > 1));
   }
   li.appendChild(ul);
 
@@ -2310,14 +2335,20 @@ function zoneSummary(z, zs) {
        : zs.completion === 'unknown' ? '상태 미상' : (z.kind === 'exit' ? '출구' : '입구');
 }
 
-function renderModuleRow(mod, smod, zs) {
+function renderModuleRow(mod, smod, zs, dupKind) {
   const li = document.createElement('li');
   li.className = 'zmod';
   const nameEl = document.createElement('span');
-  /* `*` = 장치가 보고한 값. ⚠ `kind` 어휘가 확정되기 전에는 **붙이지 않는다** —
-     근거 없이 "보고값"이라 말할 수 없다(§5.34.2). */
-  const isAct = MOD_KIND_ACTUATOR.indexOf(mod.kind) >= 0;
-  nameEl.textContent = (mod.name || '(이름 없음)') + (isAct ? '*' : '');
+  /* 🔑 `*` = **장치가 보고한 값**(명령의 결과를 되비춘 것). 층 규칙상 화면은 `"켜졌습니다"` 가
+     아니라 `"장치가 켰다고 보고합니다"` 까지만 말할 수 있다(§5.34.2) — 그 구분을 이 한 글자가 나른다.
+     ⚠ 접근 이름에는 기호가 아니라 **문장**으로 적는다(§7.2: 좁은 곳은 기호, 넓은 곳은 문장). */
+  const isAct = isOutputKind(mod.kind);
+  const label = MOD_KIND_LABEL[mod.kind] || mod.kind || mod.name || '(이름 없음)';
+  /* 같은 `kind` 가 그 자리에 둘 이상이면 `name` 으로 가른다. `name` 은 **노드 안에서만 유효한
+     명칭**이라 그 자체로는 고유하지 않다(§5.42) — 그래서 기본 표시는 `kind` 라벨이다. */
+  nameEl.textContent = label + (dupKind ? ' (' + (mod.name || '?') + ')' : '') + (isAct ? '*' : '');
+  nameEl.title = isAct ? (label + ' — 장치가 보고한 값입니다 (실제 점등·개방은 확인할 수 없습니다)')
+                       : (label + ' — 장치가 측정한 값입니다');
   const valEl = document.createElement('span');
 
   let mark = '·', loud = '0';

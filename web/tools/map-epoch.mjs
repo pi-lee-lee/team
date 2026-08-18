@@ -31,7 +31,7 @@ const peek = `(() => ({
 
 const MAP7 = { type: 'map', epoch: 7, grid: { rows: 5, cols: 5 },
   zones: [{ id: 'A1', kind: 'parking', cells: [[0, 0]],
-            modules: [{ devid: 'P1', name: 'sensor', kind: 'parking_sensor', idx: 0 }] }] };
+            modules: [{ devid: 'P1', name: 'sensor', kind: 'IP', idx: 0 }] }] };
 const ST = (ep) => ({ type: 'state', epoch: ep, ts_ms: 1755500000123,
   zones: [{ id: 'A1', occupied: true, reserved: false, actionable: true, blocked_reason: null,
             completion: 'complete', modules: [{ devid: 'P1', name: 'sensor', value: 1, known: true }] }] });
@@ -123,10 +123,10 @@ try {
   const MAP3 = { type: 'map', epoch: 20, grid: { rows: 3, cols: 3 },
     zones: [
       { id: 'A1', kind: 'parking', cells: [[0, 0]],
-        modules: [{ devid: 'P1', name: 'sensor', kind: 'parking_sensor', idx: 0 },
-                  { devid: 'P2', name: 'sign', kind: 'sign_light', idx: 1 }] },
+        modules: [{ devid: 'P1', name: 'sensor', kind: 'IP', idx: 0 },
+                  { devid: 'P2', name: 'sign', kind: 'OG', idx: 1 }] },
       { id: 'E1', kind: 'entrance', cells: [[2, 2]],
-        modules: [{ devid: 'P3', name: 'gate', kind: 'gate_bar', idx: 0 }] }
+        modules: [{ devid: 'P3', name: 'gate', kind: 'OB', idx: 0 }] }
     ] };
   const ST20 = { type: 'state', epoch: 20, ts_ms: 1,
     zones: [{ id: 'A1', occupied: false, reserved: false, completion: 'complete',
@@ -173,7 +173,12 @@ try {
   ok('entrance 요약에 예약 어휘가 없다', e1 && !/예약/.test(e1.sum), e1 && e1.sum);
 
   ok('모듈 행이 다 보인다 (표시량 A · 2개)', a1 && a1.mods.length === 2, JSON.stringify(a1 && a1.mods));
-  ok('아는 값은 채움/빔 기호로', !!(a1 && a1.mods.some(t => /sensor○/.test(t.replace(/\s/g, '')))), JSON.stringify(a1.mods));
+  /* ✅ 확정 코드(IP·OG·OB)를 한글 표시 이름으로 **화면이 한 번만** 사상한다(서버는 번역 안 한다). */
+  ok('kind 를 한글 표시 이름으로 사상한다', !!(a1 && a1.mods.some(t => /주차확인센서/.test(t))), JSON.stringify(a1.mods));
+  /* 🔴 출력 모듈 판정이 **표가 아니라 `kind[0]==='O'` 규칙**이다 → OG 에 `*` 가 붙는다. */
+  ok('출력 모듈(OG)에 * 가 붙는다', !!(a1 && a1.mods.some(t => /안내등\*/.test(t))), JSON.stringify(a1.mods));
+  ok('🔴 관측 모듈(IP)에는 * 가 없다', !!(a1 && a1.mods.some(t => /주차확인센서[^*]/.test(t))), JSON.stringify(a1.mods));
+  ok('아는 값은 채움/빔 기호로', !!(a1 && a1.mods.some(t => /주차확인센서○/.test(t.replace(/\s/g, '')))), JSON.stringify(a1.mods));
   ok('모르는 값은 ⏱ 로', !!(a1 && a1.mods.some(t => /⏱/.test(t))), JSON.stringify(a1.mods));
   /* 🔑 강조축: 이 자리의 `cancel` 이 `node_offline`(미상 계열)로 막혔으므로 미상 모듈이 **진하다.** */
   ok('막는 미상은 진하다(강조축이 파생으로 나온다)', !!(a1 && a1.mods.some(t => /⏱.*loud=1/.test(t))), JSON.stringify(a1.mods));
