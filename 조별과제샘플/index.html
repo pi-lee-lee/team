@@ -1932,6 +1932,11 @@ function sendCommand(kind, slot, occupied) {
     rid: rid, kind: kind, slot: slot || null,
     // ACK 가 안 와도 안내 문구가 영원히 남지 않게 한다. 화면 상태는 어차피 안 바꿨으므로
     // 되돌릴 것이 없다 — 지우는 것은 "보내는 중" 표시뿐이다.
+    /* 🔴 이 상수는 **"서버가 아무 말도 안 할 때"의 그물**이고 큐 대기를 재는 값이 아니다(REQ-0202).
+       서버는 큐에 담는 즉시 `queued` 를 보내고(`server.cpp` 의 `send_queued` 는 명령 종류와
+       무관하다), **그 프레임이 오면 위 핸들러가 `expires_ms + ack_budget_ms` 로 다시 건다.**
+       → 그러므로 이 6초가 덮는 것은 **서버-로컬 왕복(ms 단위)** 뿐이다.
+       ⚠ 여기에 큐 예산을 박으면 **화면이 서버 값을 짐작하는 것**이 된다(§5.14). 안 박는다. */
     timer: window.setTimeout(function () { clearCmdPending(rid, true); }, ACK_TIMEOUT)
   });
   transport.send(payload);
@@ -2041,6 +2046,40 @@ function handleServerMessage(msg) {
    * 아니다. 서버가 `deadline − now` 로 만들어 보내므로 반복 수신 시 단조 비증가다.
    */
   if (msg.type === 'queued') {
+    /* 🔴 **두 맵을 다 본다** (REQ-0202). ~~예전에는 `state.pending`(예약)만 봤다~~ —
+       그래서 **테스트·시뮬 명령(`state.cmdPending`)의 `queued` 를 조용히 버렸다.**
+       그 경로는 6초 고정 타이머로 돌고 있었고, 서버 계약은 **큐 대기만 최대 4800ms** 라
+       **구조적으로 못 견딘다** → `"응답이 없습니다 (자체 타임아웃)"` 라는 **거짓 실패**가 났다.
+       🔴 **사용자가 실물로 재현했다**: 20개 이상 연타 → 그 문구 → *"이게 리셋 아닌가"* 로 읽혔고
+       **없는 장치 리셋을 쫓았다**(시리얼에 리셋 표지 0건). **거짓 실패가 오진을 만든 것이다.**
+       그리고 그 문구가 **재클릭을 부른다** — REQ-0166 에서 예약 경로에 닫은 증폭 고리가
+       이 경로엔 열려 있었다. */
+    const cmdp = state.cmdPending.get(msg.rid);
+    if (cmdp) {
+      /* 명령 경로는 **되돌릴 화면 상태가 없다**(§12A.4: 화면 상태를 안 바꾼다).
+         그래서 예약 경로처럼 상태 전이를 걸지 않고 **타이머만 다시 걸고 보이게 한다.** */
+      if (cmdp.timer) window.clearTimeout(cmdp.timer);
+      const cexp = Number(msg.expires_ms), cbud = Number(msg.ack_budget_ms);
+      if (Number.isFinite(cexp) && cexp >= 0 && Number.isFinite(cbud) && cbud >= 0) {
+        cmdp.timer = window.setTimeout(function () { clearCmdPending(msg.rid, true); }, cexp + cbud);
+      } else {
+        /* 🔑 **`ACK_TIMEOUT` 으로 메우지 않는다** — 예약 경로와 같은 이유다.
+           그 값을 계산해 보내는 서버는 항상 싣고, 안 싣는 서버는 큐가 없어 `queued` 를 안 보낸다.
+           즉 없으면 **모르는 판본**이고, 짐작한 상수를 쓰는 것이 방금 고친 그 실수다. */
+        cmdp.timer = 0;
+      }
+      /* 🔴 **보이게 한다.** 안 보이면 *"그냥 빨라졌나"* 와 구분이 안 되고, 큐가 흡수하는 것을
+         화면이 읽는다는 이 계약의 목적이 확인되지 않는다(REQ-0202 완료 조건 2). */
+      const clabel = CMD_LABEL[cmdp.kind] || '요청';
+      const cahead = (typeof msg.ahead === 'number' && msg.ahead >= 0) ? msg.ahead : null;
+      const ctext = '서버가 받았습니다 — '
+        + (cahead === null ? '전송 차례 대기 중' : cahead === 0 ? '다음 차례입니다' : '앞에 ' + cahead + '건');
+      if (cmdp.kind === 'sim_step') state.simOutcome = { level: 'none', text: ctext };
+      showMessage(clabel + ' — ' + ctext, 'info');
+      render();
+      return;
+    }
+
     const p = state.pending.get(msg.rid);
     if (!p) return;                 // 내 것이 아니거나 이미 끝난 요청 — 조용히 버린다
     p.status = 'queued';
