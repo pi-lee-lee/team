@@ -531,3 +531,7 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-18T11:24:40+0900 | 착수 | REQ-0191 | monitor-engineer → monitor-engineer | 기록 공백을 메우고 측정 종료를 선언하라 — 창 D 판정 · 창 E 경과 · 종료 절에 유보 다섯 |
 | 2026-08-18T11:25:07+0900 | 통보 | REQ-0193 | monitor-engineer → root | 기록 공백 메우기 — 창 D 판정(파괴 3건 · CNT 정합 3 대 3) · 창 E 개방 · 주입 두 회차 시각표 · 모르는 칸은 모른다로 표시 |
 | 2026-08-18T11:25:38+0900 | 착수 | REQ-0192 | arduino-engineer → arduino-engineer | 기록 공백 — cntTick 굽기 경과를 원장에 올리고 소스를 커밋하라 (착수 금지·정리만) |
+| 2026-08-18T11:26:30+0900 | 통보 | REQ-0194 | arduino-engineer → root | cntTick 굽기(slot6) 경과 · REQ-0187 번호 오기 정정 · 실물 복구는 09:16:08 사용자 전원 리셋 · 미커밋 5판 커밋 · 포트 하드코딩 정리 |
+| 2026-08-18T11:26:38+0900 | 통보 | REQ-0195 | socket-engineer → root | 주입 회차 원장 정리(inj7·inj8pre·inj8) + 예측 셋 채점 · 판별자 오탐 · 어긋나는 수 하나 |
+| 2026-08-18T11:26:39+0900 | 완료 | REQ-0191 | monitor-engineer → monitor-engineer | 기록 공백을 메우고 측정 종료를 선언하라 — 창 D 판정 · 창 E 경과 · 종료 절에 유보 다섯 |
+| 2026-08-18T11:28:23+0900 | 완료 | REQ-0192 | arduino-engineer → arduino-engineer | 기록 공백 — cntTick 굽기 경과를 원장에 올리고 소스를 커밋하라 (착수 금지·정리만) |

@@ -1,13 +1,13 @@
 # Claude Code — resume checkpoint
 
-Session: be4985b4-b88a-4e4d-a085-6fafe02b7f56
-Written: 2026-08-16T09:25:18.181Z
+Session: d976f7b0-9f33-4852-8910-d5fb4d464bd5
+Written: 2026-08-17T16:39:43.991Z
 Trigger: near-limit
-Ref with your in-progress files: refs/claude/checkpoint-be4985b4
+Ref with your in-progress files: refs/claude/checkpoint-d976f7b0
 
 ## To resume
 
-    claude --resume be4985b4-b88a-4e4d-a085-6fafe02b7f56
+    claude --resume d976f7b0-9f33-4852-8910-d5fb4d464bd5
 
 (or open Claude Code in this directory and run /resume)
 
@@ -19,5 +19,5 @@ No task list was active; see transcript via the resume command above.
 
 Don't want these changes? Resume this session (above), then run
 `/rewind` to roll back the turn's tool edits (bash-made changes
-excluded). refs/claude/checkpoint-be4985b4 holds a full snapshot until this session's
+excluded). refs/claude/checkpoint-d976f7b0 holds a full snapshot until this session's
 next checkpoint, or for up to ~2 weeks.
