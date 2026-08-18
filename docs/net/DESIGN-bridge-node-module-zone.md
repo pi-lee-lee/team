@@ -1428,7 +1428,7 @@ MODULE_TABLE 은 PROGMEM **컴파일 상수** → 런타임에 순서가 안 바
 | | 어디에 실리나 | 뜻 | 값 |
 |---|---|---|---|
 | `error.code` 🔴 | 요청에 대한 **거절 응답**(`{"type":"error","rid":…,"code":…,"message":…}`) | *"이번 요청을 못 받았다"* | `bad_request` · `device_offline` · `not_supported` · `module_absent` · `rate_limited` · `queue_full` · `already_pending` · `ack_timeout` |
-| `actions[].reason` | `state` 의 **자리별 조작 가능성** | *"지금 이 조작이 막혀 있다"* | `module_absent` · `node_offline` · `node_unregistered` · `pending` |
+| `actions[].reason` | `state` 의 **자리별 조작 가능성** | *"지금 이 조작이 막혀 있다"* | `module_absent` · `node_offline` · `node_unregistered` · `pending` · **`occupied`** |
 
 ## 🔴 같은 개념에 **다른 이름**이 붙어 있다
 ```
@@ -1456,3 +1456,44 @@ already_pending  (error.code)  ↔  pending        (actions[].reason)
 ② 모르는 코드는 **⚠(사람이 봐야 함) + 원문 코드** 로 떨어뜨린다
    🔴 중립 라벨로 그리면 계약이 늘어날 때마다 화면이 조용히 거짓말을 한다 (web §5.6x)
 ```
+
+
+---
+
+# §9. 🔴 `occupied` — 차가 있는 자리는 예약할 수 없다 (REQ-0235 · 2026-08-19)
+
+**web 이 찾았다**: 점유된 자리에 서버가 `reserve: {ok:true}` 를 주고 있었고,
+**누르면 장치가 `result=1` 로 거절**했다. 사용자에게는 **"눌렀는데 안 되는 버튼"** 이다.
+
+## 근거는 장치 코드다 — 추정이 아니다
+```c
+client.ino :  if (occMask & bit) result = 1;      // 이미 점유
+```
+**그리고 설계 의도가 그 위 주석에 있다:**
+> **`occupied=1 ∧ reserved=1` 은 "예약하고 나서 주차한" 성공 상태다.**
+🔑 **순서가 정해져 있다. 예약 → 주차이고, 주차 → 예약은 없다.**
+
+## 🔑 규칙 — **여는 근거와 막는 근거가 다르면 반드시 창이 생긴다**
+```
+여는 쪽 : actions.reserve = ok:true      (서버 · 점유를 안 봤다)
+막는 쪽 : 장치의 result=1                (점유를 본다)
+→ 그 사이가 **눌렀는데 안 되는 버튼**이다
+```
+> ### **`actions` 가 있는 이유가 *실패할 것을 안 내놓는 것* 이다.**
+**그 목적을 못 지키면 `actions` 는 장식이다.**
+
+## 표현 — **키를 빼지 않고 `ok:false` 로 준다**
+```json
+"reserve": {"ok": false, "reason": "occupied"}
+```
+⚠ **차가 나가면 예약이 가능해진다** → *"뜻이 없다"*(키 부재) 가 아니라 *"뜻은 있는데 막혔다"* 다(§6.5).
+🔑 **키를 빼면 화면이 버튼을 영영 안 그린다.** 일시 상태를 영구로 답하는 것이고, §"영구와 일시" 규칙 위반이다.
+
+## ⚠ 우선순위
+**자리 수준 차단(`node_offline`·`node_unregistered`·`module_absent`·`pending`)이 먼저다.**
+그것들이 비어 있을 때만 `occupied` 를 본다 — **장치가 없으면 점유값 자체를 못 믿는다.**
+
+## 🔑 이 결함은 **hex 수정 뒤에야 존재할 수 있었다** (web 관찰)
+점유 해독이 틀렸을 때는 **모든 자리가 비어 보였고** 이 모순이 성립하지 않았다.
+> ### **한 결함을 고치면 그 뒤에 가려져 있던 것이 드러난다. 고침이 새 상태 조합을 처음으로 가능하게 한다.**
+⚠ **"고쳤으니 그 부분은 끝났다"가 아니다** — **고친 뒤 다시 재는 것이 새 자료를 만든다.**

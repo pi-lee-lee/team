@@ -2317,8 +2317,24 @@ struct Server {
             bool first = true;
             if (z.kind == "parking" && si >= 0) {
                 // 🔑 **뜻이 있는 것만 넣는다.** 예약이 없는 자리의 `cancel` 은 **키 자체를 안 보낸다**
-                if (!slots[si].reserved) emit_action(o, first, "reserve", blk);
-                else                     emit_action(o, first, "cancel",  blk);
+                if (!slots[si].reserved) {
+                    // 🔴 **차가 있는 자리는 예약할 수 없다** (REQ-0235 · web 이 찾음 · 2026-08-19).
+                    //   장치가 그렇게 판정한다 — `client.ino`: `if (occMask & bit) result = 1;`
+                    //   그리고 설계 의도가 그 위 주석에 있다: **`occupied=1 ∧ reserved=1` 은
+                    //   "예약하고 나서 주차한" 성공 상태**다. **반대 순서는 없다.**
+                    //
+                    //   ⚠ **여는 근거와 막는 근거가 다르면 반드시 창이 생긴다.**
+                    //     여기서 `ok:true` 를 주면 화면이 버튼을 그리고, 누르면 장치가 `result=1` 로
+                    //     거절한다 — **사용자에게는 "눌렀는데 안 되는 버튼"이다.**
+                    //   🔑 `actions` 가 있는 이유가 **실패할 것을 안 내놓는 것**이다.
+                    //
+                    //   ⚠ **키를 빼지 않고 `ok:false` 로 준다**: 차가 나가면 예약이 가능해지므로
+                    //     *"뜻이 없다"* 가 아니라 *"뜻은 있는데 막혔다"* 다(§6.5 의 존재/부재 규칙).
+                    const std::string rr = (blk.empty() && slots[si].occupied) ? "occupied" : blk;
+                    emit_action(o, first, "reserve", rr);
+                } else {
+                    emit_action(o, first, "cancel",  blk);
+                }
             } else if (z.kind == "entrance" || z.kind == "exit") {
                 emit_action(o, first, "open_gate",  blk);
                 emit_action(o, first, "close_gate", blk);
@@ -5049,6 +5065,44 @@ static int selftest() {
                     std::cout << (b1 ? "  ✓ " : "  ✗ ") << "등록 중 → node_unregistered"
                               << "(**곧 붙는다**를 영구 부재로 답하지 않는다)\n";
                     if (!b1) bad++;
+
+                    // (라) 🔴 **차가 있는 자리는 예약을 못 내놓는다** (REQ-0235)
+                    //   ⚠ 이 시험이 없으면 "여는 근거와 막는 근거가 다른" 상태가 다시 생긴다 —
+                    //     화면이 버튼을 그리고 장치가 `result=1` 로 거절하는 **눌렀는데 안 되는 버튼**.
+                    {
+                        // ⚠ **장치가 온라인이어야 이 갈래에 닿는다.** 안 세우면 `node_offline` 이
+                        //   먼저 걸려 **막힌 이유가 달라진 채로 시험이 빨강**이 된다 —
+                        //   처음에 그렇게 실패했고, 그게 "시험이 실기 상태를 안 세운" 것이다.
+                        sock_t ws_[2];
+                        if (socketpair(AF_UNIX, SOCK_STREAM, 0, ws_) != 0) { ws_[0] = ws_[1] = BAD_SOCK; }
+                        Server w; w.build_default_zones(); w.init_srv_id();
+                        w.ard = ws_[0]; w.ard_seen = true; w.ard_last_ms = now_ms();
+                        w.park.devid = "P1"; w.park.reg_done = true;
+                        for (int i = 0; i < 10; i++)
+                            w.park.mods.push_back(std::make_pair(std::string(SLOT_ID[i]),
+                                                                 std::string("IP")));
+                        w.bind_modules(w.park);
+                        w.slots[2].occupied = 1;              // A3 만 점유
+                        std::string jw = w.state_json();
+                        size_t pa = jw.find("\"id\":\"A3\"");
+                        std::string a3 = (pa == std::string::npos) ? "" : jw.substr(pa, 400);
+                        bool d1 = (a3.find("\"reserve\":{\"ok\":false,\"reason\":\"occupied\"}")
+                                   != std::string::npos);
+                        std::cout << (d1 ? "  ✓ " : "  ✗ ") << "점유된 A3 → reserve 가 "
+                                  << "**ok:false/occupied** (키는 남긴다 — 차가 나가면 가능해진다)\n";
+                        if (!d1) bad++;
+
+                        // 🔑 **빈 자리는 그대로 열려 있어야 한다** — 안 그러면 전부 막아 놓고 통과한다
+                        size_t pb = jw.find("\"id\":\"A1\"");
+                        std::string a1 = (pb == std::string::npos) ? "" : jw.substr(pb, 400);
+                        bool d2 = (a1.find("\"reserve\":{\"ok\":true") != std::string::npos);
+                        std::cout << (d2 ? "  ✓ " : "  ✗ ") << "빈 A1 → reserve 는 열려 있다"
+                                  << "(전부 막아 놓고 통과하는 것을 막는다)\n";
+                        if (!d2) bad++;
+                        w.ard = BAD_SOCK;
+                        if (ws_[0] != BAD_SOCK) closesock(ws_[0]);
+                        if (ws_[1] != BAD_SOCK) closesock(ws_[1]);
+                    }
 
                     // (다) — 등록이 **끝났는데** 이 자리엔 안 붙었다 → 그때가 `module_absent` 다
                     u.park.reg_done = true;
