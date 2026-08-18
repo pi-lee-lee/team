@@ -829,7 +829,9 @@ struct Server {
     long long reg_bad;         // 🔴 형식·개수·이름 위반. **조용히 넘어가지 않는다**
     long long reg_qsent;       // 보낸 `Q` 수(누적)
     long long reg_giveups;     // `Q` 3회에도 안 와서 굳힌 수
-    long long reg_widthbad;    // 🔴 삼중 검산 ③ 불일치 — `S` 의 hex 폭이 선언 `n` 과 안 맞는다
+    long long reg_widthbad;
+    // 🔴 등록 전이라 자리 비트열을 못 푼 프레임 수. **0 이 아니면 그 구간 자리 상태가 없다**
+    long long occ_undecoded; bool occ_undecoded_warned;    // 🔴 삼중 검산 ③ 불일치 — `S` 의 hex 폭이 선언 `n` 과 안 맞는다
     long long dup_devid_reject;   // ①에서 거절한 횟수 = **다른 IP 가 산 자리를 노렸다**
     long long takeover_grace;     // 유예를 넘겨 교체한 횟수 = 진짜 죽은 것으로 판단
     std::map<std::string, AuxNode> aux;   // device_id → 보조 노드 (상행 전용)
@@ -1036,6 +1038,7 @@ struct Server {
                getmap_win_ms(0), getmap_in_win(0), getmap_rejects(0),
                lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK),
                reg_ok(0), reg_bad(0), reg_qsent(0), reg_giveups(0), reg_widthbad(0),
+               occ_undecoded(0), occ_undecoded_warned(false),
                dup_devid_reject(0), takeover_grace(0),  // 선언 순서와 일치시킨다(-Wreorder)
                aux_conflicts(0), admit_rejects(0),
                // 🔴 이 여섯(+다섯)은 **선언만 돼 있고 초기화 목록에 없었다.** 쓰기 시작하는 순간
@@ -1263,6 +1266,7 @@ struct Server {
            + "/질의 " + std::to_string(reg_qsent)
            + "/포기 " + std::to_string(reg_giveups)
            + "/폭불일치 " + std::to_string(reg_widthbad)
+           + "/미해독 " + std::to_string(occ_undecoded)
            + (reg_widthbad ? "🔴" : "") + ")"
            + " · devid거절 " + std::to_string(dup_devid_reject)
            + (dup_devid_reject ? "🔴" : "")
@@ -2780,9 +2784,38 @@ struct Server {
             ard_seq = seq; ard_uptime = up; ard_dev = f[5];
             ard_last_ms = now_ms(); ard_last_epoch_ms = epoch_ms(); ard_seen = true;
 
+            // 🔴🔴 **자리 비트열 해독** — 형식이 둘이고 **틀리면 오류 없이 값만 어긋난다**
+            //   옛 펌웨어 : 10진 문자열 `0110000010` — **한 칸에 한 자리**
+            //   새 펌웨어 : hex `182` — 전체를 `n` 비트 정수로 보고 **슬롯 i = 비트 (n−1−i)**
+            // ⚠ **`n` 을 모르면 hex 를 못 푼다.** 그리고 **첫 `S` 는 `D` 보다 먼저 온다**(명세 §5) —
+            //   그때 `n=10` 을 가정해 풀면 **폭 검사도 체크섬도 통과하고 모든 비트가 어긋난다.**
+            //   🔑 **모르는 값으로 해독하느니 안 하는 것이 낫다**(arduino 권고 · 채택).
+            // ⚠ 2026-08-19 에 이 구멍이 **실기에서 열려 있었다** — 장치가 hex 를 보내는데
+            //   서버가 10진으로 읽어 **엉뚱한 자리를 점유로 표시했다.** 폭 검사를 넣어 둔 것이
+            //   **"처리된 것처럼" 보이게 만들었다.**
             int occ[10];
-            for (int i = 0; i < 10; i++)
-                occ[i] = (i < (int)f[2].size() && f[2][i] == '1') ? 1 : 0;
+            bool occ_known = false;
+            if (park.reg_done && park.reg_n > 0) {
+                // 등록됐다 → `n` 을 안다 → hex 로 푼다
+                unsigned long v = strtoul(f[2].c_str(), NULL, 16);
+                const int n = park.reg_n;
+                for (int i = 0; i < 10; i++)
+                    occ[i] = (i < n && ((v >> (n - 1 - i)) & 1UL)) ? 1 : 0;
+                occ_known = true;
+            } else if (f[2].size() == 10) {
+                // 미등록 + 폭 10 → **옛 10진 펌웨어**. 하위호환으로 그대로 읽는다
+                for (int i = 0; i < 10; i++) occ[i] = (f[2][i] == '1') ? 1 : 0;
+                occ_known = true;
+            } else {
+                // 🔴 미등록 + hex 로 보이는 폭 → **해독하지 않는다.** 등록 뒤 다음 `S` 부터 읽는다
+                for (int i = 0; i < 10; i++) occ[i] = 0;
+                if (!occ_undecoded_warned) {
+                    occ_undecoded_warned = true;
+                    logf("!", "자리 비트열을 해독하지 않는다 — 등록 전이라 n 을 모른다(폭 "
+                              + std::to_string(f[2].size()) + "). **등록되면 읽는다**");
+                }
+            }
+            occ_undecoded += occ_known ? 0 : 1;
 
             // §2.4 tmask — **선택 필드다. 없으면 해제로 본다**(§2.1 규칙 8, 옛 펌웨어 수용).
             // f 는 체크섬을 뺀 필드들이므로 7번째(index 6)가 있으면 그것이 tmask 다.
@@ -4710,6 +4743,43 @@ static int selftest() {
                           << "**not_supported**(거짓 완료를 안 만든다)\n";
                 if (!ok30) bad++;
                 t.park.fd = BAD_SOCK; t.conns.clear();
+            }
+
+            // ㉘ 🔴🔴 **자리 비트열 해독** — 이 결함이 2026-08-19 에 **실기에서 살아 있었다**
+            //    장치가 hex 를 보내는데 서버가 10진으로 읽어 **엉뚱한 자리를 점유로 표시했다.**
+            //    폭 검사도 체크섬도 통과했다. **검사가 있어서 처리된 것처럼 보였다.**
+            {
+                Server t; t.ard = sv[0]; t.ard_seen = true; t.ard_last_ms = now_ms();
+                // ① 등록 전 hex 폭 → **해독하지 않는다**(n 을 모른다)
+                t.on_ard_line(t_line("S,1,182,000,5,P1,"));
+                bool okA = (t.occ_undecoded == 1 && t.slots[0].occupied == 0);
+                std::cout << (okA ? "  ✓ " : "  ✗ ") << "등록 전 hex → 해독 안 함(미해독 "
+                          << t.occ_undecoded << " · A1 점유 " << t.slots[0].occupied << ")\n";
+                if (!okA) bad++;
+
+                // ② 등록 뒤 → hex 로 푼다. `182` = 0110000010 → **A2·A3·B4**
+                t.on_ard_line(t_line("D,*,7,10,"));
+                for (int i = 0; i < 10; i++) t.on_ard_line(t_line(std::string("D,") + SLOT_ID[i] + ",IP,"));
+                t.on_ard_line(t_line("S,2,182,000,6,P1,"));
+                bool okB = (t.slots[0].occupied == 0 && t.slots[1].occupied == 1
+                            && t.slots[2].occupied == 1 && t.slots[8].occupied == 1
+                            && t.slots[9].occupied == 0);
+                std::cout << (okB ? "  ✓ " : "  ✗ ") << "등록 뒤 hex `182` → A2·A3·B4 점유"
+                          << " (A1=" << t.slots[0].occupied << " A2=" << t.slots[1].occupied
+                          << " B4=" << t.slots[8].occupied << " · 기대 0·1·1)\n";
+                if (!okB) bad++;
+                t.ard = BAD_SOCK;
+            }
+            {
+                // ③ 🔴 **옛 10진 펌웨어는 등록을 안 해도 그대로 읽힌다** — 회귀를 안 만든다
+                Server t; t.ard = sv[0]; t.ard_seen = true; t.ard_last_ms = now_ms();
+                t.on_ard_line(t_line("S,1,0110000010,0000000000,5,P1,"));
+                bool okC = (t.slots[1].occupied == 1 && t.slots[2].occupied == 1
+                            && t.slots[8].occupied == 1 && t.occ_undecoded == 0);
+                std::cout << (okC ? "  ✓ " : "  ✗ ") << "옛 10진(미등록) → 그대로 읽는다 "
+                          << "(미해독 " << t.occ_undecoded << " · 기대 0)\n";
+                if (!okC) bad++;
+                t.ard = BAD_SOCK;
             }
 
             s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
