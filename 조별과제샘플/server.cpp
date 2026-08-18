@@ -3057,6 +3057,31 @@ struct Server {
             return;
         }
 
+        // ---- REQ-0203 4d: 자리 조작 요청 (설계 §6.8 상행)
+        // 🔑 **화면은 자리 하나만 지목한다**(`slot`). **모듈을 지목하지 않는다** —
+        //   "어느 모듈이 그 조작을 맡는가"가 화면에도 생기면 서버 라우팅과 규칙이 두 곳이 되고,
+        //   갈리면 **엉뚱한 모듈에 명령이 간다.** 자리 → 모듈 라우팅은 여기 있다.
+        if (type == "open_gate" || type == "close_gate") {
+            Zone* z = zone_find(slot);
+            if (!z) { send_err(fd, rid, "module_absent", "그런 자리가 없습니다"); return; }
+            if (z->kind != "entrance" && z->kind != "exit") {
+                // ⚠ **조용히 무시하지 않는다.** 화면이 안 보낼 조작이지만 **보내면 이유를 답한다**
+                send_err(fd, rid, "module_absent", "이 자리에는 차단봉이 없습니다");
+                return;
+            }
+            const std::string blk = zone_block_reason(*z);
+            if (!blk.empty()) { send_err(fd, rid, blk.c_str(), "지금은 조작할 수 없습니다"); return; }
+
+            // 🔴 **여기까지 오면 자리도 모듈도 멀쩡한데 *전선에 보낼 명령이 없다*.**
+            //   지금 전선 명령은 `R`·`C`·`T`·`M` 뿐이고 **차단봉 프레임이 없다**(arduino 축).
+            //   ⚠ **조용히 성공으로 답하지 않는다** — 그러면 화면이 "열렸다"로 그리고
+            //     **아무 일도 안 일어난 것을 사람이 모른다.** 그게 우리가 `거짓 완료` 라고 부른 것이다.
+            logf("!", "조작 " + type + " 요청 — 자리 " + slot
+                      + " 은 준비됐는데 **전선 명령이 아직 없다**(arduino 축). 거절한다");
+            send_err(fd, rid, "not_supported", "이 조작은 아직 장치가 지원하지 않습니다");
+            return;
+        }
+
         // ---- §12B 시뮬레이터 한 걸음 (개정 5)
         // **무장 여부를 확인하지 않는다.** 테스트 모드와 별개라는 것이 이 기능의 요구다(§12B.3).
         if (type == "sim_step") {
@@ -4607,6 +4632,51 @@ static int selftest() {
                            && j2.find("\"epoch\":1") != std::string::npos);
                 std::cout << (a4 ? "  ✓ " : "  ✗ ") << "state 에 srv_id·epoch 가 실린다\n";
                 if (!a4) bad++;
+            }
+
+            // ㉖ 🔴 **조작 요청 라우팅** (REQ-0203 4d) — **거절 사유가 갈려야 한다**
+            {
+                LoopPair lw;                       // 화면 소켓 자리(진짜 fd 가 있어야 응답이 나간다)
+                Server t; t.build_default_zones(); t.init_srv_id();
+                t.conns[lw.a].kind = Conn::WS;     // 🔑 **WS 로 승격해야 응답이 나간다**
+
+                // ① 없는 자리
+                t.on_ws_message(lw.a, "{\"type\":\"open_gate\",\"slot\":\"ZZ\",\"rid\":\"1\"}");
+                // ② 차단봉이 없는 주차 자리 — **조용히 무시하지 않는다**
+                t.on_ws_message(lw.a, "{\"type\":\"open_gate\",\"slot\":\"A1\",\"rid\":\"2\"}");
+                // ③ 입구인데 모듈이 안 붙었다 → module_absent
+                t.on_ws_message(lw.a, "{\"type\":\"open_gate\",\"slot\":\"E1\",\"rid\":\"3\"}");
+                char rb[4096]; int n = (int)recv(lw.b, rb, sizeof(rb), MSG_DONTWAIT);
+                std::string got(rb, n > 0 ? n : 0);
+                bool ok29 = (got.find("module_absent") != std::string::npos);
+                std::cout << (ok29 ? "  ✓ " : "  ✗ ") << "조작 요청: 없는 자리·차단봉 없는 자리·"
+                          << "미결속 입구 → 전부 사유가 간다(응답 " << (n > 0 ? n : 0) << "B)\n";
+                if (!ok29) bad++;
+
+                // 🔴 ④ 모듈이 붙고 노드가 살아 있어도 **전선 명령이 없으면 not_supported**
+                //    ⚠ 조용히 성공으로 답하면 화면이 "열렸다"로 그리고 아무 일도 안 일어난다
+                Zone* e1 = t.zone_find("E1");
+                e1->modules.push_back(std::make_pair(std::string("P1"), std::string("E1")));
+                // 🔑 **자기 소켓쌍을 준다.** 앞 응답 셋이 남은 버퍼에서 읽으면
+                //    **시험이 재려던 것이 아니라 앞 시험의 응답을 재게 된다** — 실제로 그랬다.
+                LoopPair lx; t.conns[lx.a].kind = Conn::WS;
+                t.park.devid = "P1"; t.park.fd = lx.a; t.park.seen = true;
+                t.park.last_ms = now_ms(); t.park.reg_done = true;
+                t.on_ws_message(lx.a, "{\"type\":\"open_gate\",\"slot\":\"E1\",\"rid\":\"4\"}");
+                // ⚠ **루프백 TCP 는 `socketpair` 와 달리 즉시 도착하지 않는다.**
+                //   한 번만 읽고 `-1`(EWOULDBLOCK)을 "안 보냈다"로 읽으면 **없는 결함이 생긴다** —
+                //   실제로 그렇게 나왔다. 짧게 재시도한다.
+                n = -1;
+                for (int tries = 0; tries < 2000 && n <= 0; tries++)
+                    n = (int)recv(lx.b, rb, sizeof(rb), MSG_DONTWAIT);
+                std::string g2(rb, n > 0 ? n : 0);
+                bool ok30 = (g2.find("not_supported") != std::string::npos);
+                if (!ok30) std::cout << "    [진단] lx.a=" << lx.a << " lx.b=" << lx.b
+                                     << " conns=" << t.conns.count(lx.a) << " n=" << n << "\n";
+                std::cout << (ok30 ? "  ✓ " : "  ✗ ") << "준비된 자리인데 전선 명령이 없다 → "
+                          << "**not_supported**(거짓 완료를 안 만든다)\n";
+                if (!ok30) bad++;
+                t.park.fd = BAD_SOCK; t.conns.clear();
             }
 
             s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
