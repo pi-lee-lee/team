@@ -118,6 +118,72 @@ try {
   v = await evaluate(client, peek);
   ok('빠진 격자 크기를 기본값으로 메우지 않는다', v.epoch === before.epoch,
      JSON.stringify([before.epoch, v.epoch]) + ' — epoch 이 11 로 바뀌었으면 짐작한 것이다');
+  /* ══ [7] 격자 렌더링 — 빈 칸 / 미상 자리 / 정상 자리 셋이 갈리는가 ═════════ */
+  console.log('\n[7] 격자 렌더링 (3x3 · 자리 둘 · 하나는 상태 없음)');
+  const MAP3 = { type: 'map', epoch: 20, grid: { rows: 3, cols: 3 },
+    zones: [
+      { id: 'A1', kind: 'parking', cells: [[0, 0]],
+        modules: [{ devid: 'P1', name: 'sensor', kind: 'parking_sensor', idx: 0 },
+                  { devid: 'P2', name: 'sign', kind: 'sign_light', idx: 1 }] },
+      { id: 'E1', kind: 'entrance', cells: [[2, 2]],
+        modules: [{ devid: 'P3', name: 'gate', kind: 'gate_bar', idx: 0 }] }
+    ] };
+  const ST20 = { type: 'state', epoch: 20, ts_ms: 1,
+    zones: [{ id: 'A1', occupied: false, reserved: false, completion: 'complete',
+              actions: { reserve: { ok: true, reason: null },
+                         cancel: { ok: false, reason: 'node_offline' },
+                         set_sign: { ok: true, reason: null } },   // ← 닫힌 집합 밖: 무시돼야 한다
+              modules: [{ devid: 'P1', name: 'sensor', value: 0, known: true },
+                        { devid: 'P2', name: 'sign', value: 1, known: false }] }] };
+  await evaluate(client, inject(MAP3));
+  await evaluate(client, inject(ST20));
+  await sleep(250);
+  const dom = await evaluate(client, `(() => {
+    const g = document.getElementById('zone-grid');
+    const zones = [...g.querySelectorAll('.zone')].map(z => ({
+      id: z.dataset.zone, kind: z.dataset.kind, usable: z.dataset.usable,
+      sum: z.querySelector('.zone__sum').textContent,
+      mods: [...z.querySelectorAll('.zmod')].map(m => m.textContent + '|loud=' + m.dataset.loud),
+      acts: [...z.querySelectorAll('.zbtn')].map(b => b.dataset.act + ':' + b.getAttribute('aria-disabled'))
+    }));
+    return { hidden: g.hidden, oldHidden: document.getElementById('grid').hidden,
+             cols: g.style.getPropertyValue('--zcols'),
+             cells: g.children.length,
+             empties: g.querySelectorAll('.zcell--empty').length,
+             emptyHidden: [...g.querySelectorAll('.zcell--empty')].every(e => e.getAttribute('aria-hidden') === 'true'),
+             focusable: g.querySelectorAll('.zcell--empty button, .zcell--empty [tabindex]').length,
+             zones };
+  })()`);
+  console.log('  · ' + JSON.stringify(dom, null, 0));
+
+  ok('새 격자가 보이고 옛 격자가 숨는다', dom.hidden === false && dom.oldHidden === true);
+  ok('격자 크기를 맵에서 받는다 (cols=3)', dom.cols === '3', dom.cols);
+  ok('칸 수가 rows×cols 다 (9)', dom.cells === 9, String(dom.cells));
+  /* 🔴 3×3 에 자리 둘 → 빈 칸 7. 자리 수가 아니라 **칸 수 − zone 칸 수**다(파생값). */
+  ok('빈 칸이 7개다', dom.empties === 7, String(dom.empties));
+  ok('빈 칸은 보조기술에서 숨는다', dom.emptyHidden === true);
+  ok('🔴 빈 칸에 초점받을 것이 없다', dom.focusable === 0,
+     '있으면 3x3 에서 7번, 5x5 에서 18번 탭해야 자리에 닿는다');
+
+  const a1 = dom.zones.find(z => z.id === 'A1'), e1 = dom.zones.find(z => z.id === 'E1');
+  ok('상태가 온 자리는 정상으로 그린다', a1 && a1.usable === '1');
+  ok('🔴 상태가 안 온 자리는 미상으로 그린다(빈 칸과 다르다)', e1 && e1.usable === '0' && /미상/.test(e1.sum),
+     JSON.stringify(e1));
+  ok('parking 요약이 예약 어휘다', a1 && a1.sum === '빈 자리', a1 && a1.sum);
+  ok('entrance 요약에 예약 어휘가 없다', e1 && !/예약/.test(e1.sum), e1 && e1.sum);
+
+  ok('모듈 행이 다 보인다 (표시량 A · 2개)', a1 && a1.mods.length === 2, JSON.stringify(a1 && a1.mods));
+  ok('아는 값은 채움/빔 기호로', !!(a1 && a1.mods.some(t => /sensor○/.test(t.replace(/\s/g, '')))), JSON.stringify(a1.mods));
+  ok('모르는 값은 ⏱ 로', !!(a1 && a1.mods.some(t => /⏱/.test(t))), JSON.stringify(a1.mods));
+  /* 🔑 강조축: 이 자리의 `cancel` 이 `node_offline`(미상 계열)로 막혔으므로 미상 모듈이 **진하다.** */
+  ok('막는 미상은 진하다(강조축이 파생으로 나온다)', !!(a1 && a1.mods.some(t => /⏱.*loud=1/.test(t))), JSON.stringify(a1.mods));
+
+  ok('닫힌 집합 밖 조작(set_sign)은 안 그린다', !!(a1 && !a1.acts.some(t => /set_sign/.test(t))), JSON.stringify(a1.acts));
+  ok('ok:true 는 누를 수 있다', !!(a1 && a1.acts.includes('reserve:false')), JSON.stringify(a1.acts));
+  /* 🔑 `disabled` 가 아니라 `aria-disabled` 다 — 이유를 들을 수 있어야 한다(§3.2). */
+  ok('ok:false 는 aria-disabled 로 막는다', !!(a1 && a1.acts.includes('cancel:true')), JSON.stringify(a1.acts));
+  ok('🔴 actions 에 없는 조작은 버튼이 없다(E1 은 상태가 없다)', !!(e1 && e1.acts.length === 0), JSON.stringify(e1.acts));
+
 } catch (e) {
   fail++;
   console.log('  💥 예외로 중단: ' + (e && e.message ? e.message : e));

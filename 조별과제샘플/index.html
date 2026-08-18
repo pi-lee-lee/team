@@ -181,6 +181,33 @@
 
   .tile[data-mine="1"] { box-shadow: inset 0 0 0 2px var(--mine); }
   .tile[aria-disabled="true"] { cursor: not-allowed; }
+
+  /* ── 개정 격자 ─────────────────────────────────────────────────────────
+     `--zrows`/`--zcols` 는 **맵 정의에서 온다.** 🔴 CSS 에 5 를 박지 않는다(원장 §5.42). */
+  .zgrid { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px;
+           grid-template-columns: repeat(var(--zcols, 1), minmax(0, 1fr)); }
+  /* 🔴 빈 칸 — **자리가 아니다.** 초점을 받지 않고 보조기술에서 숨는다.
+     `5×5` 에 자리 5 + 입출구면 빈 칸이 18개다 — 전부 탭 정지점이면 접근성 결함이다(설계서 §5.1). */
+  .zcell--empty { border: 1px dashed transparent; background: repeating-linear-gradient(
+                    45deg, transparent 0 6px, rgba(127,127,127,.07) 6px 12px); border-radius: 10px; min-height: 96px; }
+  .zone { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; min-height: 96px;
+          border: 2px solid var(--occ-line); border-radius: 10px;
+          background: var(--occ-bg); color: var(--occ-ink); }
+  .zone[data-usable="0"] { border-style: dotted; color: var(--ink-dim); }   /* 미상 자리 */
+  .zone__head { display: flex; align-items: baseline; gap: 6px; }
+  .zone__id   { font-weight: 800; font-family: ui-monospace, Menlo, monospace; }
+  .zone__sum  { font-size: 13px; font-weight: 700; }
+  .zone__mods { list-style: none; margin: 2px 0 0; padding: 0; font-size: 11.5px; }
+  .zmod { display: flex; justify-content: space-between; gap: 8px; }
+  /* 🔑 강조축 — **조작을 막는 것만 진하다.** 막지 않는 미상은 조용한 배경이다(원장 §5.33).
+     이 규칙 덕에 20~30개가 다 떠 있어도 눈에 걸리는 것은 막는 것뿐이다. */
+  .zmod[data-loud="0"] { opacity: .55; }
+  .zmod[data-loud="1"] { font-weight: 700; }
+  .zone__acts { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+  .zbtn { font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 8px; cursor: pointer;
+          border: 1px solid var(--line); background: var(--panel); color: inherit; }
+  .zbtn[aria-disabled="true"] { cursor: not-allowed; opacity: .6; }
+  .zone__why { font-size: 11px; opacity: .9; }
   .tile:not([aria-disabled="true"]):hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,.12); }
 
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .62; } }
@@ -382,8 +409,12 @@
   <main>
     <section aria-labelledby="grid-title">
       <h2 id="grid-title">자리 현황</h2>
-      <div class="grid-head" aria-hidden="true"><span>열 A</span><span>열 B</span></div>
+      <div class="grid-head" id="grid-head" aria-hidden="true"><span>열 A</span><span>열 B</span></div>
       <ul id="grid" class="grid" role="list"></ul>
+
+      <!-- 개정 격자(맵 정의 기반). 🔴 **옛 격자를 지우지 않는다** — 서버가 `map` 을 보내기 시작할
+           때까지 옛 경로가 화면을 그린다. `map` 이 오면 이쪽이 켜지고 위가 숨는다. -->
+      <ul id="zone-grid" class="zgrid" role="list" hidden></ul>
 
       <ul class="legend" role="list">
         <li><span class="swatch swatch--free" aria-hidden="true"></span>빈 자리 (occupied 0 · reserved 0) — 눌러서 예약</li>
@@ -1038,6 +1069,8 @@ const el = {
   offline:     document.getElementById('offline-banner'),
   staleBanner: document.getElementById('stale-banner'),
   slotsBanner: document.getElementById('slots-banner'),
+  zoneGrid: document.getElementById('zone-grid'),
+  gridHead: document.getElementById('grid-head'),
   demoBanner:  document.getElementById('demo-banner'),
   demoTools:   document.getElementById('demo-tools'),
   devOnline:   document.getElementById('dev-online'),
@@ -1331,6 +1364,9 @@ function render() {
   renderSim();
   renderTestMode();
   renderSlotGap();
+  /* 개정 격자. 🔴 `map` 이 없거나 낡았으면 스스로 물러나고 옛 격자가 그린다 — 그 판단이
+     `renderZoneGrid()` 안에 있으므로 여기서 조건을 또 쓰지 않는다(조건이 두 곳에 생기면 갈린다). */
+  renderZoneGrid();
 
   const armed = isArmed();
   /* 주입 조작을 보낼 곳이 있는가. 무장 표시(§12A.6)와는 **다른 축**이다 —
@@ -2098,6 +2134,216 @@ function applyZoneState(msg) {
   }
   state.zoneState = { epoch: ep, ts_ms: Number(msg.ts_ms) || null, zones: msg.zones.slice() };
   render();
+}
+
+/* ════════════════════════════════════════════════════════════════
+   개정 격자 렌더링 — 맵 정의 기반
+   ════════════════════════════════════════════════════════════════ */
+
+/** 닫힌 집합 넷(socket 명세 §6.8). 🔴 **여기 없는 조작 키는 조용히 무시한다** — 그러면
+    서버가 조작을 추가해도 옛 화면이 안 깨진다(§5.13 성질을 `actions` 안에서도 갖는 것). */
+const ACTION_LABEL = {
+  reserve:    '예약',
+  cancel:     '예약 취소',
+  open_gate:  '차단봉 열기',
+  close_gate: '차단봉 닫기'
+};
+
+/**
+ * ⚠ **모듈 `kind` 코드 어휘가 아직 확정이 아니다.** 명세 예제에 `parking_sensor` 하나만 있다.
+ * 🔴 **그래서 나머지를 지어내지 않았다.** 모르는 `kind` 는:
+ *   · 표시 순서 → **도착 순서 그대로**(뒤에 붙는다)
+ *   · 액추에이터 표식(`*`) → **붙이지 않는다**. 근거 없이 "장치가 보고한 값"이라 말할 수 없다(§5.34.2)
+ * 확정되면 이 표만 채우면 된다 — 렌더링 코드는 안 바뀐다.
+ */
+const MOD_KIND_ORDER = ['parking_sensor'];
+const MOD_KIND_ACTUATOR = [];      // 확정되면 채운다(안내등·유도등·차단봉)
+
+/** `blocked_reason` 코드 → 계열. 🔴 계열은 **서버가 코드에 실어 준 것**이고 화면이 짐작하지 않는다. */
+const REASON_FAMILY = {
+  node_offline: 'unknown', node_unregistered: 'unknown',
+  module_absent: 'fault',
+  pending: 'busy', queue_full: 'busy'
+};
+const REASON_TEXT = {
+  node_offline:      '그 장치에서 프레임이 오지 않습니다',
+  node_unregistered: '그 장치가 아직 모듈 목록을 알려 주지 않았습니다',
+  module_absent:     '이 자리에 필요한 모듈이 없습니다',
+  pending:           '이 자리의 앞선 요청이 아직 처리 중입니다',
+  queue_full:        '지금 전송 대기가 가득 차 접수하지 못했습니다'
+};
+/** 계열 → 기호. 🔑 기호는 **원인**이고 강조는 **영향**이다(두 축 · 원장 §5.33). */
+const FAMILY_MARK = { unknown: '⏱', fault: '⚠', busy: '⏳' };
+
+function familyOf(code) { return REASON_FAMILY[code] || (code ? 'fault' : null); }
+
+/** 모듈 표시 순서 — `idx` 를 쓰지 않는다(그건 비트열 자리이고 **배선 순서**다 · socket ④). */
+function orderedModules(mods) {
+  const list = Array.isArray(mods) ? mods.slice() : [];
+  return list.map(function (m, i) { return { m: m, i: i }; })
+    .sort(function (a, b) {
+      const ka = MOD_KIND_ORDER.indexOf(a.m && a.m.kind), kb = MOD_KIND_ORDER.indexOf(b.m && b.m.kind);
+      const ra = ka < 0 ? MOD_KIND_ORDER.length : ka, rb = kb < 0 ? MOD_KIND_ORDER.length : kb;
+      return ra !== rb ? ra - rb : a.i - b.i;   // 같은 순위면 도착 순서 유지(안정)
+    })
+    .map(function (x) { return x.m; });
+}
+
+function zoneStateById() {
+  const out = new Map();
+  const zs = state.zoneState && state.zoneState.zones;
+  if (Array.isArray(zs)) for (const z of zs) if (z && z.id) out.set(z.id, z);
+  return out;
+}
+
+/**
+ * 격자를 그린다. 🔴 **`map` 이 없거나 낡았으면 그리지 않는다** — 옛 경로가 화면을 맡는다.
+ * 그리고 셋을 다르게 그린다: **빈 칸**(zone 이 없다) · **미상 자리**(zone 은 있고 상태를 모른다) ·
+ * **정상 자리**. 이 구분은 **맵 정의가 상태와 별개로 오기 때문에** 가능하다(§5.32 ①).
+ */
+function renderZoneGrid() {
+  const on = mapUsable();
+  el.zoneGrid.hidden = !on;
+  el.grid.hidden = on;
+  if (el.gridHead) el.gridHead.hidden = on;
+  if (!on) return;
+
+  const m = state.map;
+  el.zoneGrid.style.setProperty('--zcols', String(m.cols));
+  const byCell = new Map();
+  for (const z of m.zones) {
+    const cells = Array.isArray(z.cells) ? z.cells : [];
+    /* 🔑 `cells` 를 **순회한다.** 지금은 길이 1이지만 순회하면 N:1 이 와도 이 코드가 안 바뀐다.
+       `cells[0]` 을 고르면 그때 **말없이 첫 칸만 그린다**(socket ⑤). */
+    for (const c of cells) if (Array.isArray(c) && c.length >= 2) byCell.set(c[0] + ',' + c[1], z);
+  }
+  const st = zoneStateById();
+
+  el.zoneGrid.textContent = '';
+  for (let r = 0; r < m.rows; r++) {
+    for (let c = 0; c < m.cols; c++) {
+      const li = document.createElement('li');
+      const z = byCell.get(r + ',' + c);
+      if (!z) {
+        /* 🔴 빈 칸은 **자리가 아니다.** `"상태 미상"` 을 쓰지 않는다 — 존재하지 않는 것을
+           "모른다"고 말하는 것이고 §6 집계가 빈 칸 수로 튄다(설계서 §5.1). */
+        li.className = 'zcell--empty';
+        li.setAttribute('aria-hidden', 'true');
+        el.zoneGrid.appendChild(li);
+        continue;
+      }
+      el.zoneGrid.appendChild(renderZone(li, z, st.get(z.id) || null));
+    }
+  }
+}
+
+function renderZone(li, z, zs) {
+  li.className = 'zone';
+  li.dataset.zone = z.id;
+  li.dataset.kind = z.kind || '';
+  li.dataset.usable = zs ? '1' : '0';
+
+  const head = document.createElement('div');
+  head.className = 'zone__head';
+  const idEl = document.createElement('span');
+  idEl.className = 'zone__id';
+  idEl.textContent = z.id;
+  const sum = document.createElement('span');
+  sum.className = 'zone__sum';
+  sum.textContent = zoneSummary(z, zs);
+  head.appendChild(idEl); head.appendChild(sum);
+  li.appendChild(head);
+
+  const ul = document.createElement('ul');
+  ul.className = 'zone__mods';
+  for (const mod of orderedModules(z.modules)) {
+    const smod = zs && Array.isArray(zs.modules)
+      ? zs.modules.find(function (x) { return x && x.devid === mod.devid && x.name === mod.name; })
+      : null;
+    ul.appendChild(renderModuleRow(mod, smod, zs));
+  }
+  li.appendChild(ul);
+
+  const acts = document.createElement('div');
+  acts.className = 'zone__acts';
+  const map = (zs && zs.actions && typeof zs.actions === 'object') ? zs.actions : {};
+  for (const key of Object.keys(map)) {
+    /* 🔴 닫힌 집합에 없는 키는 **조용히 무시한다**(합의). 그리고 **키가 없는 조작은 아예 안 그린다** —
+       socket 확정: *"`actions` 에 없으면 지금 이 자리에 그 조작은 없다."* `ok:false` 와 다른 뜻이다.
+       ⚠ 없는 것을 막힌 버튼으로 그리면 사용자는 *"풀리면 눌리겠지"* 로 읽고 영영 안 풀린다. */
+    if (!ACTION_LABEL[key]) continue;
+    const a = map[key] || {};
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'zbtn';
+    b.dataset.zone = z.id;
+    b.dataset.act = key;
+    b.textContent = ACTION_LABEL[key];
+    const okAct = a.ok === true;
+    /* 🔑 `aria-disabled` 를 쓴다 — 진짜 `disabled` 면 키보드·스크린리더가 그 버튼에 닿지 못해
+       **왜 못 누르는지를 들을 수 없다**(원장 §3.2, 의도된 설계). */
+    b.setAttribute('aria-disabled', okAct ? 'false' : 'true');
+    if (!okAct && a.reason) {
+      const fam = familyOf(a.reason);
+      b.textContent = ACTION_LABEL[key] + ' ' + (FAMILY_MARK[fam] || '');
+      b.title = REASON_TEXT[a.reason] || ('지금 할 수 없습니다 (' + a.reason + ')');
+      b.setAttribute('aria-label', ACTION_LABEL[key] + ' — 지금 할 수 없습니다: ' + b.title);
+    }
+    acts.appendChild(b);
+  }
+  if (acts.childNodes.length) li.appendChild(acts);
+  return li;
+}
+
+/** 1행 요약. 🔴 `kind` 로 먼저 가른다 — **입구에 "예약됨"이 없다**(설계서 §4.1). */
+function zoneSummary(z, zs) {
+  if (!zs) return '상태 미상';
+  if (z.kind === 'parking') {
+    if (zs.occupied && zs.reserved) return '예약한 자리에 입차';
+    if (zs.occupied) return '사용 중';
+    if (zs.reserved) return '예약됨';
+    return '빈 자리';
+  }
+  /* entrance/exit — 예약 어휘를 쓰지 않는다. 차단봉 상태는 모듈 행이 말하고 여기서는
+     완료 판정만 요약한다. ⚠ 어휘가 확정되면 이 자리를 채운다(형태 미측정). */
+  return zs.completion === 'partial' ? '일부만 반영됨'
+       : zs.completion === 'unknown' ? '상태 미상' : (z.kind === 'exit' ? '출구' : '입구');
+}
+
+function renderModuleRow(mod, smod, zs) {
+  const li = document.createElement('li');
+  li.className = 'zmod';
+  const nameEl = document.createElement('span');
+  /* `*` = 장치가 보고한 값. ⚠ `kind` 어휘가 확정되기 전에는 **붙이지 않는다** —
+     근거 없이 "보고값"이라 말할 수 없다(§5.34.2). */
+  const isAct = MOD_KIND_ACTUATOR.indexOf(mod.kind) >= 0;
+  nameEl.textContent = (mod.name || '(이름 없음)') + (isAct ? '*' : '');
+  const valEl = document.createElement('span');
+
+  let mark = '·', loud = '0';
+  if (!smod || smod.known !== true) {
+    mark = FAMILY_MARK.unknown;                     // ⏱ 모른다
+    /* 🔑 **강조축은 화면이 계산하지 않는다** — 이 자리의 조작이 막혔는지에서 파생된다(§5.33). */
+    loud = zoneBlockedByUnknown(zs) ? '1' : '0';
+  } else {
+    mark = smod.value ? '●' : '○';
+  }
+  valEl.textContent = mark;
+  li.dataset.loud = loud;
+  li.appendChild(nameEl); li.appendChild(valEl);
+  return li;
+}
+
+/** 이 자리의 조작 중 하나라도 **미상 계열로** 막혔나. 🔴 화면이 규칙을 만들지 않는다 —
+    서버가 준 `reason` 의 계열만 읽는다. */
+function zoneBlockedByUnknown(zs) {
+  const map = zs && zs.actions;
+  if (!map) return false;
+  for (const k of Object.keys(map)) {
+    const a = map[k];
+    if (a && a.ok !== true && familyOf(a.reason) === 'unknown') return true;
+  }
+  return false;
 }
 
 function handleServerMessage(msg) {
