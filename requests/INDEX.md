@@ -589,3 +589,6 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-18T16:28:22+0900 | 착수 | REQ-0216 | arduino-engineer → arduino-engineer | 🔴 굽기 중지 — devid 충돌로 오늘 증상 인과가 무효. 유효·무효 경계와 devid 대응을 답하라 |
 | 2026-08-18T16:30:07+0900 | 발행 | REQ-0217 | root → socket-engineer | 🔴 원인 확정: 같은 devid 재접속이 살아있는 세션을 끊는다(38건) — 생사 확인 후 거절·IP 로깅·카운터 분리, 배포까지 |
 | 2026-08-18T16:31:26+0900 | 완료 | REQ-0214 | monitor-engineer → monitor-engineer | 🔴 오늘 장치 판정 무효 처리 — 동일 devid 카피 보드가 같은 망에 있었다 (사용자 확정) |
+| 2026-08-18T16:35:51+0900 | 발행 | REQ-0218 | root → arduino-engineer | 🔴 SEND OK 손실을 실측했다 — 바닥 1%, 48B 이상에서 2~4배. pendLine/잘림 대비를 만들어라 |
+| 2026-08-18T16:36:04+0900 | 착수 | REQ-0218 | arduino-engineer → arduino-engineer | 🔴 SEND OK 손실을 실측했다 — 바닥 1%, 48B 이상에서 2~4배. pendLine/잘림 대비를 만들어라 |
+| 2026-08-18T16:38:23+0900 | 완료 | REQ-0217 | socket-engineer → socket-engineer | 🔴 원인 확정: 같은 devid 재접속이 살아있는 세션을 끊는다(38건) — 생사 확인 후 거절·IP 로깅·카운터 분리, 배포까지 |
