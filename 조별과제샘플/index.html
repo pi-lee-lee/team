@@ -2368,10 +2368,23 @@ function isVirtualKind(kind) {
 }
 
 /** `blocked_reason` 코드 → 계열. 🔴 계열은 **서버가 코드에 실어 준 것**이고 화면이 짐작하지 않는다. */
+/* 🔴 **사유 코드는 이름공간이 둘이다** (socket 정정 2026-08-19 · 명세 §8):
+   ```
+   actions[].reason  (state 의 자리별) : node_offline · node_unregistered · module_absent · pending
+   err.reason        (요청 거절 응답)  : bad_request · device_offline · not_supported · module_absent
+                                        rate_limited · queue_full · already_pending · ack_timeout
+   ```
+   ⚠ **같은 개념에 다른 이름이 있다**: `device_offline`(err) ↔ `node_offline`(actions) ·
+   `already_pending`(err) ↔ `pending`(actions). **한 표로 다루면 같은 상태가 두 칸에 들어간다.**
+   🔑 내 코드는 **쓰임으로 이미 갈려 있다** — 이 표는 `actions` 전용(`familyOf` 는 `a.reason` 에만
+   쓰인다)이고 err 는 `ERROR_TEXT` 가 받는다. **그래서 아래 `queue_full` 항목은 죽은 항목이었다.**
+   ⚠ 통일은 다음 개정이다(전선 값을 바꾸면 내 코드가 깨진다 · socket 판단). **지금은 사실만 적어 둔다.** */
 const REASON_FAMILY = {
   node_offline: 'unknown', node_unregistered: 'unknown',
   module_absent: 'fault',
-  pending: 'busy', queue_full: 'busy'
+  pending: 'busy'
+  /* ~~`queue_full: 'busy'`~~ — **err 이름공간의 코드다.** `actions` 에는 안 실린다.
+     지우지 않고 남기는 이유: 내가 한 표로 다뤘다는 사실이 다음 사람에게 근거가 된다. */
 };
 const REASON_TEXT = {
   node_offline:      '그 장치에서 프레임이 오지 않습니다',
@@ -2605,8 +2618,26 @@ function zoneSummary(z, zs) {
   }
   /* entrance/exit — 예약 어휘를 쓰지 않는다. 차단봉 상태는 모듈 행이 말하고 여기서는
      완료 판정만 요약한다. ⚠ 어휘가 확정되면 이 자리를 채운다(형태 미측정). */
-  return zs.completion === 'partial' ? '일부만 반영됨'
-       : zs.completion === 'unknown' ? '상태 미상' : (z.kind === 'exit' ? '출구' : '입구');
+  /* 🔴 **닫힌 집합 넷**(socket §7.2.1 · REQ-0232 로 정본 확인). 계산 주체는 **서버**다 —
+     화면이 `value` 와 마지막 요청을 비교하지 않는다(비교하면 판정자가 둘이 된다).
+     ~~`partial`~~·~~`failed`~~ 는 **§3.5 의 설계 어휘이고 구현이 없다** — 서버가 안 보낸다.
+     내가 `partial` 가지를 두고 있었던 것이 그 오독이었다(원장 §5.66).
+
+     🔴 **그 밖의 값은 "정상"으로 떨어뜨리지 않는다.** 전에는 `mismatch`·`pending` 이 그냥
+     `"출구"` 로 그려졌다 — **사람이 봐야 하는 상태가 아무 표시 없는 평범한 이름으로 나왔다.**
+     🔑 같은 파일의 `familyOf()` 는 모르는 코드를 `fault` 로 떨어뜨린다. **기본값이 두 개였다.**
+
+     ⚠ 문구는 **층을 지킨다**(§5.34.2): `settled` 라도 *"열렸습니다"* 가 아니라
+     *"장치가 요청대로 보고합니다"* 다. 우리가 아는 것은 에코까지다. */
+  const c = zs.completion;
+  if (c === 'pending')  return '명령을 보냈습니다 — 장치 보고를 기다리는 중';
+  if (c === 'settled')  return '장치가 요청대로 보고합니다';
+  if (c === 'mismatch') return '⚠ 장치가 요청과 다르게 보고합니다';
+  /* `unknown` = **이 세션에 명령한 적이 없거나 비트를 못 읽었다** → 아무 주장도 하지 않는다.
+     자리 이름만 보이는 것이 맞다(없는 사실을 만들지 않는다). */
+  if (c === 'unknown' || c === undefined || c === null) return (z.kind === 'exit' ? '출구' : '입구');
+  /* 🔴 모르는 값 — 계약이 늘어난 것이다. **조용히 정상으로 그리지 않고 원문을 보인다.** */
+  return '⚠ 알 수 없는 상태 (' + String(c) + ')';
 }
 
 function renderModuleRow(mod, smod, zs, dupKind) {

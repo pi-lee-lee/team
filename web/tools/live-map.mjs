@@ -473,6 +473,121 @@ try {
       skip('⑤ 취소 왕복', '취소 버튼이 없다 = 예약이 확정되지 않았다 → 남긴 상태도 없다');
     }
   }
+  /* ══ ⑦ 가상 모듈(`V`)과 차단봉 조작 — arduino 굽기 `9edbcca` · socket `3c9e724` 뒤 ═══════ */
+  console.log('\n[⑦] 가상 모듈 표시와 차단봉 조작');
+  {
+    const wire = rx.filter(x => x && x.type === 'map').slice(-1)[0] || null;
+    const vMods = [];
+    for (const z of (wire ? wire.zones || [] : [])) {
+      for (const m of (z.modules || [])) {
+        if (typeof m.kind === 'string' && m.kind.length === 3 && m.kind.endsWith('V')) vMods.push({ zone: z.id, kind: m.kind, name: m.name });
+      }
+    }
+    console.log('  · 전선의 가상 모듈 → ' + JSON.stringify(vMods));
+    if (!vMods.length) skip('⑦ V 접미 실물 표시', '전선에 kind 가 V 로 끝나는 모듈이 없다 — 굽기 전이거나 등록이 안 됐다');
+    else {
+      /* 🔑 **규칙을 단언한다**: 전선에 `V` 모듈이 있는 자리의 화면 행에 `(가상)` 이 있어야 한다.
+         ⚠ `"차단봉 (가상)"` 같은 **문구를 박지 않는다** — 라벨이 바뀌면 제품이 옳은데 빨강이 된다.
+            내가 재는 것은 **"가상이라는 사실이 표시되는가"** 이고 낱말 선택이 아니다. */
+      const rows = await evaluate(client, `[...document.querySelectorAll('#zone-grid .zone')].map(e => ({
+        id: (e.querySelector('.zone__id') || {}).textContent,
+        mods: [...e.querySelectorAll('.zmod')].map(x => x.textContent.slice(0, 60)) }))`);
+      const byZone = new Map((rows || []).map(r => [r.id, r.mods.join(' | ')]));
+      const missing = vMods.filter(v => !(byZone.get(v.zone) || '').includes('가상'));
+      console.log('  · 화면 행 → ' + JSON.stringify((rows || []).filter(r => vMods.some(v => v.zone === r.id))));
+      ok('⑦ 가상 모듈이 화면에 "(가상)"으로 표시된다', missing.length === 0, JSON.stringify(missing));
+      /* 🔴 원문 `kind` 가 그대로 새는지도 본다 — 라벨 표에서 못 찾으면 `"OBV"` 가 그대로 뜬다(§5.58). */
+      const raw = vMods.filter(v => (byZone.get(v.zone) || '').includes(v.kind));
+      ok('⑦ 원문 kind 가 화면에 새지 않는다', raw.length === 0, JSON.stringify(raw.map(v => v.kind)));
+    }
+
+    /* ── 차단봉 조작 — 🔴 완료는 **ACK 이 아니라 다음 S 의 에코**다(socket §7.2) ── */
+    const gate = await evaluate(client, `(() => {
+      const b = [...document.querySelectorAll('#zone-grid .zbtn')]
+        .find(x => (x.dataset.act === 'open_gate' || x.dataset.act === 'close_gate') && x.getAttribute('aria-disabled') === 'false');
+      return b ? { zone: b.dataset.zone, act: b.dataset.act } : null;
+    })()`);
+    if (!gate) {
+      const why = await evaluate(client, `[...document.querySelectorAll('#zone-grid .zbtn')].filter(x => x.dataset.act && x.dataset.act.indexOf('gate') >= 0).map(x => x.dataset.zone + '/' + x.dataset.act + ':' + x.title.slice(0, 40))`).catch(() => null);
+      skip('⑦ 차단봉 조작 왕복', '누를 수 있는 차단봉 버튼이 없다 → ' + JSON.stringify(why));
+    } else {
+      const before = await evaluate(client, `(() => { try { return cooldownLeftMs(); } catch (e) { return -1; } })()`);
+      for (let i = 0; i < 30 && before > 0; i++) await sleep(100);   // 아이들이 남았으면 기다린다
+      actLog('차단봉 클릭 — ' + gate.zone + ' / ' + gate.act);
+      await evaluate(client, `[...document.querySelectorAll('#zone-grid .zbtn')].find(x => x.dataset.zone === ${JSON.stringify(gate.zone)} && x.dataset.act === ${JSON.stringify(gate.act)}).click()`);
+      let dg = false;
+      for (let i = 0; i < 40; i++) { dg = await evaluate(client, `document.getElementById('confirm-dialog').open === true`).catch(() => false); if (dg) break; await sleep(50); }
+      ok('⑦ 차단봉도 확인을 받는다', dg === true);
+      actLog('확인 누름 — ' + gate.act + ' 전송');
+      await evaluate(client, `document.querySelector('#confirm-dialog button[value="ok"]').click()`);
+
+      const rxAt = rx.length;
+      for (let i = 0; i < 60 && !tx.some(m => m && m.type === gate.act); i++) await sleep(50);
+      const sentG = tx.filter(m => m && m.type === gate.act).slice(-1)[0] || null;
+      console.log('  · 보낸 차단봉 명령 → ' + JSON.stringify(sentG));
+      ok('⑦ 조작이 전선 형식으로 나갔다 (type·slot·rid)',
+         !!(sentG && sentG.slot === gate.zone && sentG.rid), JSON.stringify(sentG));
+
+      /* 🔴 **에코를 기다린다.** ACK 만 보고 완료로 읽지 말라는 것이 socket §7.2 의 요점이다.
+         그래서 `completion` 이 지나는 값들과 모듈 `value` 를 **시간순으로** 모은다 —
+         이 자료가 REQ-0232 ②(출력 모듈이 둘 이상인 자리의 규칙)에 실물로 답한다. */
+      const seq = [];
+      for (let i = 0; i < 100; i++) {
+        for (const m of rx.slice(rxAt)) {
+          if (!m || m.type !== 'state') continue;
+          const z = (m.zones || []).find(x => x.id === gate.zone);
+          if (!z) continue;
+          const line = z.completion + ' [' + (z.modules || []).map(x => (x.name || '?') + '=' + JSON.stringify(x.value) + (x.known ? '' : '?')).join(' ') + ']';
+          if (seq[seq.length - 1] !== line) seq.push(line);
+        }
+        if (seq.some(s => s.startsWith('settled') || s.startsWith('mismatch'))) break;
+        await sleep(100);
+      }
+      const acks = rx.slice(rxAt).filter(m => m && sentG && m.rid === sentG.rid);
+      console.log('  · 응답 → ' + JSON.stringify(acks.map(m => m.type + (m.result !== undefined ? '/result=' + m.result : '') + (m.code ? '/' + m.code : ''))));
+      console.log('  🔑 completion 이 지난 값 → ' + JSON.stringify(seq));
+      ok('⑦ 서버가 응답했다', acks.length > 0, JSON.stringify(acks.map(m => m.type)));
+      /* 🔑 **화면 문구**: socket 이 잡은 결함 — 차단봉을 열면 `"예약되었습니다"` 가 나가고 있었다. */
+      const msg = await evaluate(client, `(() => { const a = [...document.querySelectorAll('#messages .msg')]; return a.length ? a[a.length - 1].textContent.slice(0, 120) : null; })()`);
+      console.log('  🔑 화면 문구 → ' + JSON.stringify(msg));
+      /* 🔴 **앞 판본은 "예약 문구가 아니다"를 단언했고 통과했다 — 문구가 *아예 없어서* 통과했다.**
+         `clearCmdPending(rid, false)`(성공)는 문구를 내지 않는다(설계: 피드백은 자리 요약·모듈 값).
+         🔑 **부정형 단언은 대상이 없을 때도 참이다** — 오늘 세 번째 헛통과 형태다.
+         → 문구 경로는 **미측정**으로 내리고, **있어야 하는 것**을 규칙으로 잰다. */
+      if (msg && /예약되었습니다|예약이 취소/.test(msg)) {
+        ok('⑦ 🔴 차단봉 응답이 예약 문구가 아니다', false, JSON.stringify(msg));
+      } else {
+        skip('⑦ 차단봉 성공 문구', '성공 경로는 문구를 내지 않는다(설계) — "예약 문구" 회귀는 이 경로로 못 잰다. 마지막 메시지: ' + JSON.stringify(msg));
+      }
+      /* 🔑 대신 **자리 요약이 `completion` 을 반영하는가**를 잰다 — 이것이 사용자가 실제로 읽는 것이다.
+         값을 박지 않는다: 넷 각각이 **서로 다른 문구**로 나오고 **`unknown` 만 자리 이름**이면 된다. */
+      const sumCmp = await (async () => {
+        for (let i = 0; i < 3; i++) {
+          const w = rx.filter(x => x && x.type === 'state').slice(-1)[0] || null;
+          const z = w ? (w.zones || []).find(x => x.id === gate.zone) : null;
+          if (!z) return { skip: 'state 에 그 자리가 없다' };
+          const dom = await evaluate(client, `(() => { const e = [...document.querySelectorAll('#zone-grid .zone')].find(n => (n.querySelector('.zone__id')||{}).textContent === ${JSON.stringify(gate.zone)}); return e ? (e.querySelector('.zone__sum')||{}).textContent : null; })()`);
+          const neutral = /^(입구|출구)$/.test(dom || '');
+          const r = { completion: z.completion, sum: dom, neutral: neutral };
+          /* 규칙: `unknown` 이면 자리 이름(중립)이고, 그 밖이면 **중립이 아니어야** 한다. */
+          if ((z.completion === 'unknown') === neutral) return r;
+          if (i === 2) return r;
+          await sleep(300);
+        }
+      })();
+      console.log('  🔑 자리 요약 대 completion → ' + JSON.stringify(sumCmp));
+      if (sumCmp && sumCmp.skip) skip('⑦ 자리 요약이 completion 을 반영한다', sumCmp.skip);
+      else ok('⑦ 🔴 자리 요약이 completion 을 반영한다 (unknown 만 중립)',
+              !!(sumCmp && (sumCmp.completion === 'unknown') === sumCmp.neutral), JSON.stringify(sumCmp));
+      if (!seq.length) skip('⑦ 에코로 완료가 판정된다', 'state 가 안 왔다 — 장치 세션을 확인해라');
+      else if (!seq.some(s => s.startsWith('settled'))) {
+        /* ⚠ `settled` 가 안 왔다는 것을 **실패로 단정하지 않는다** — `mismatch`(장치가 못 움직였다)도
+           계약상 정상 응답이고, 그건 **장치 쪽 사실**이지 화면 결함이 아니다. 값을 그대로 보고한다. */
+        skip('⑦ 에코가 요청과 일치했다(settled)', '지난 값: ' + JSON.stringify(seq) + ' — mismatch 면 장치가 못 움직인 것이다(화면 결함 아님)');
+      } else ok('⑦ 🔴 에코가 요청과 일치해 settled 로 갔다', true, JSON.stringify(seq));
+    }
+  }
+
   if (acted.length) console.log('\n  🕐 이번 실행에서 한 조작 ' + acted.length + '건:\n     ' + acted.join('\n     '));
 } catch (e) {
   fail++;
