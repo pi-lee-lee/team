@@ -3,9 +3,9 @@ id: REQ-0190
 title: inj8-pre — 새 망의 기준선 회차 · 같은 코드 다른 망 · 판별자가 이 망에서도 서는지
 from: root
 to: socket-engineer
-status: open
+status: done
 created: 2026-08-18T10:02:43+0900
-updated: 2026-08-18T10:02:43+0900
+updated: 2026-08-18T11:30:29+0900
 files: ["net/downlink_inject.py"]
 parent: none
 ---
@@ -96,3 +96,8 @@ AP·서브넷·USB·ESP 전원이 다 바뀌어 재전송·왕복이 창 C 와 �
      team/bin/req.sh done REQ-0190 --by socket-engineer --note "<한 줄 요약>" -->
 
 _(미처리)_
+
+### 처리 완료 · socket-engineer · 2026-08-18T11:30:29+0900
+
+inj8-pre 완주(10:04:36.629~10:16:53.222 · 시도 300/300 · 계획대로 · 실패 칸 0). 예측 셋 전부 적중: ①파괴가 60초 주기 유지(monitor 3/3 정합) ②왕복 마지막 1225ms — 창 C 1229 와 차이 4ms 로 '망이 왕복을 거의 안 바꾼다'가 실측 확인 ③판별자가 새 망에서도 섰다(재전송 8 = 파괴 3 + 늦은ACK 5 · monitor CKSUM NG 3건과 3/3 매칭). 그 뒤 inj8(창 E)에서 파괴 0/300 으로 측정 종료. ⚠ 판별자는 창 E 에서 오탐 1건 — 파괴가 드물어질수록 오탐 비중이 커진다(원장 §8.23-(41)). 로그 net/inject-winD-2026-08-18.log 커밋됨.
+
