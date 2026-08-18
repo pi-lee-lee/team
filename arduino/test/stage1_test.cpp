@@ -321,6 +321,13 @@ int main() {
   }
   ok(!awaitingSendOk,           "게이트가 열렸다");
   {
+    // 🔴 2026-08-18 — **등록이 밀려 있으면 첫 슬롯은 `D` 만 나간다**(명세 §5).
+    //   이 시험은 그 다음 슬롯을 보는 것이므로 등록을 먼저 끝낸다.
+    //   ⚠ **이 두 줄이 없으면 시험이 깨진다** — 실제로 깨졌고, 그것이 배선이 살아 있다는 증거였다.
+    //   🔑 등록 중에 ACK 가 큐에 그대로 남는다는 것은 아래 [12k] 가 따로 본다.
+    if (regPending) { uint8_t a0 = 0; uint16_t b0 = 0; sendSlotBatch(&a0, &b0); }
+    { char sendok2[] = "SEND OK"; handleLine(sendok2); }   // 등록 전송의 게이트를 연다
+
     uint8_t  acks = 0;
     uint16_t bytes = 0;
     const size_t before = wifi.sentLines.size();
@@ -1069,6 +1076,64 @@ int main() {
                             "★★ occ 와 tmask 가 둘 다 hex 다");
     }
     testArmed = false; ovrActive = 0; occMask = 0;
+  }
+
+  // ── [32] 🔴 등록(`D`) — 첫 슬롯은 D 만, **ACK 는 잃지 않는다** (명세 §5) ────
+  printf("\n[32] 등록 프레임 — 첫 슬롯은 D 만 · ACK 는 다음 슬롯으로 밀린다\n");
+  {
+    // 등록이 밀린 상태를 만든다 (온라인 전이가 하는 일)
+    // ⚠ **앞 시험들이 남긴 상태를 명시적으로 씻는다.** [32] 는 맨 끝이라 전부 물려받는다 —
+    //   특히 `refusePrompt` 가 켜진 채 남아 있으면 프롬프트가 안 와서 전송이 통째로 실패한다.
+    //   🔑 실제로 그래서 처음에 8건이 깨졌다. **"내 코드가 틀렸나"가 아니라 전제가 더러웠다.**
+    wifi.refusePrompt = false;
+    wifi.stickySocket = false;
+    markNeedsRegistration();
+    ackqCount = 0; ackqHead = 0;
+    cacheClear();
+    awaitingSendOk = false; sendOkT1Passed = false; inSend = false;
+    netOnline = true; sendFailStreak = 0;
+    lastSendEndAt = 0;
+
+    // ACK 을 하나 큐에 넣어 둔다 — **재접속이면 이런 상태가 실제로 가능하다**
+    cachePut(77, 'A', '1', 1);
+    ackqPush(77);
+    ok(ackqCount == 1,      "준비: ACK 1건이 큐에 있다");
+
+    uint8_t  a1 = 0; uint16_t b1 = 0;
+    const size_t before = wifi.sentLines.size();
+    bool sent1 = sendSlotBatch(&a1, &b1);
+    ok(sent1,               "★ 등록 배치가 나갔다");
+    ok(a1 == 0,             "★★ 이 슬롯에 ACK 는 안 실린다 (D 전용)");
+    // 🔴 **여기가 이 시험의 본체다.** 밀리는 것은 지연이고 버리는 것은 손실이다
+    ok(ackqCount == 1,      "★★ ACK 가 큐에 그대로 남는다 — 밀린 것이지 버린 게 아니다");
+    ok(!regPending,         "★ 성공했으므로 등록 대기가 내려간다");
+
+    const std::string& line = wifi.sentLines.back();
+    ok(line.compare(0, 4, "D,*,") == 0,
+                            "★★ 맨 앞이 배출률 선언이다 (D,*,...)");
+    ok(line.find("D,A1,IP,") != std::string::npos,
+                            "★★ 모듈 줄이 실린다 (name,kind)");
+    ok(line.find("D,B5,IP,") != std::string::npos,
+                            "★ 마지막 모듈까지 다 실린다");
+    {
+      // 줄 수 = 1(배출률) + moduleCount()
+      size_t cnt = 0;
+      for (size_t k = 0; k + 1 < line.size(); k++) if (line[k] == '\n') cnt++;
+      ok(cnt + 1 == (size_t)moduleCount() + 1,
+                            "★★ 줄 수 = 1 + moduleCount() — n 의 원천이 하나다");
+    }
+    printf("      등록 %uB · %u 줄\n", (unsigned)line.size(), (unsigned)moduleCount() + 1);
+    ok(line.size() <= BATCH_CAP,
+                            "★★ 등록이 상행 배치 상한 안에 든다");
+
+    // 다음 슬롯에서 ACK 가 실제로 나간다 — **밀린 것이 도착하는지 끝까지 본다**
+    { char sok[] = "SEND OK"; handleLine(sok); }
+    uint8_t a2 = 0; uint16_t b2 = 0;
+    bool sent2 = sendSlotBatch(&a2, &b2);
+    ok(sent2 && a2 == 1,    "★★ 다음 슬롯에서 밀렸던 ACK 가 나간다");
+    ok(wifi.sentLines.size() == before + 2,
+                            "★ 거래는 슬롯당 하나씩 두 번이다");
+    { char sok[] = "SEND OK"; handleLine(sok); }
   }
 
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);

@@ -2064,6 +2064,95 @@ static void bitsToStr(uint16_t mask, char* out11) {
 //   ACK 은 "받았다"이지 "됐다"가 아니므로, **도달 확인은 다음 `S` 의 마스크 변화로 한다.**
 static uint8_t moduleCount(void) { return SLOT_N; }
 
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴 등록(`D`) — 접속하면 자기가 무엇을 가졌는지 먼저 알린다 (socket 명세 §5)
+//
+//   D,*,<drain>          ← **묶음의 맨 앞.** 자기 완결적이라 언제 와도 같은 뜻이다
+//   D,<name>,<kind>      ← 이후 모듈들. 전부 같은 필드 수
+//
+// 🔑 **`*` 를 맨 앞에 둔 이유는 비용이 아니라 확장이다.** "마지막 줄에 붙이기"·"첫 줄에
+//   붙이기"는 **파서가 몇 번째 줄인지 알아야 해서**, 모듈이 동적으로 추가돼 `D` 를 다시
+//   보낼 때 *"이것도 첫 줄인가"* 가 애매해진다. 비용 차이는 6B·접속당 1회로 무시할 수준이었다.
+//
+// ⚠ **`kind` 전선 코드는 명세에 없어서 내가 붙였다**(2026-08-18). `docs/net/`·`docs/web/`·
+//   당일 REQ 를 grep 해 **기존 이름이 없음을 확인한 뒤**에 만들었다. socket 합의 대기 중이고,
+//   🔑 **다르면 이 표 하나만 고치면 된다** — 그래서 한 곳에 모아 둔다.
+//
+// 🔴 **첫 글자의 뜻** (socket 정정 2026-08-18 — 내가 "입력/출력"이라 했던 것을 고친다):
+//   ~~입력 대 출력~~ ← **분할이 아니다.** 출력 모듈도 상태를 비트열로 보고한다(명세 위험 다섯째).
+//   ✅ **`O` = 하행 명령을 받는다 · `I` = 관측 전용. 둘 다 비트열에는 들어간다.**
+//   🔑 서버가 이 글자로 실제로 정하는 것은 **"이 모듈에 명령을 보내도 되는가"** 하나다.
+//   ⚠ 실패 방향: **첫 글자가 `O` 가 아니면 명령을 안 보낸다.** 모르는 글자도 금지 쪽으로 떨어진다 —
+//     **모르는 장치에 명령을 보내는 것이 안 보내는 것보다 위험하다.**
+//   ⚠ 그래도 **모르는 `kind` 를 거절하지는 않는다** — 거절하면 새 모듈 하나가 옛 서버에서
+//     **노드 전체를 미등록으로** 만든다.
+#define KIND_PARK_SENSOR  "IP"   // 관측 전용 · 주차확인센서
+#define KIND_GATE_SENSOR  "IX"   // 관측 전용 · 입출차센서
+#define KIND_GUIDE_LIGHT  "OG"   // 명령 받음 · 안내등
+#define KIND_LEAD_LIGHT   "OL"   // 명령 받음 · 유도등
+#define KIND_BARRIER      "OB"   // 명령 받음 · 차단봉
+
+// 🔴 **배출률 선언값.** 이 노드가 한 주기에 배출할 수 있는 ACK 개수의 **보장 하한**이다.
+//   ⚠ **관측 최대가 아니다.** 2026-08-18 실측 `8` 은 `S` 가 짧고 rid 3자리일 때만 성립하는
+//     조건부였고 보장은 `6` 이었다. **조건부 실측을 보장으로 승격시키지 않는다.**
+//   🔑 이 값이 장치 쪽에 있는 이유: 서버가 `(BATCH_CAP − S_worst − 1) ÷ (ACK_worst + 1)` 을
+//     들고 있으면 **`BATCH_CAP` 을 우리가 바꿀 때 두 곳이 갈린다.**
+//     **파생값은 원본을 가진 쪽이 계산한다.**
+static const uint8_t DRAIN_DECL = 6;
+
+// 등록 상태 — ⚠ **온라인 전이가 두 곳이라 반드시 함수로 모은다.**
+//   한 곳만 고치면 어긋나고, 그건 오늘 여러 번 밟은 형태다.
+static bool     regPending  = false;   // 다음 송신 창에 `D` 를 보내야 한다
+static uint16_t regSends    = 0;       // 보낸 횟수(재전송 포함) — 진단용
+static void markNeedsRegistration(void) { regPending = true; }
+
+// 슬롯 i 의 모듈 명칭. 지금은 A1..A5 · B1..B5 로 고정이다.
+//   🔮 유동화하면 이 함수가 등록표를 읽게 된다 — **`moduleCount()` 와 짝이다.**
+static void moduleNameOf(uint8_t i, char* out4) {
+  out4[0] = (i < 5) ? 'A' : 'B';
+  out4[1] = (char)('1' + (i % 5));
+  out4[2] = '\0';
+}
+
+// 슬롯 i 의 종류. 지금은 전부 주차확인센서다.
+//   ⚠ **출력 모듈도 이 비트열에 들어가야 한다**(명세 위험 다섯째) — 차단봉·안내등이 생기면
+//     여기서 종류를 돌려주고 `moduleCount()` 가 그만큼 커진다. **`n` 은 입력+출력 합이다.**
+//   🔑 이유: ACK 은 "받았다"이지 "됐다"가 아니다. **도달 확인은 다음 `S` 의 마스크 변화로 한다.**
+static const char* moduleKindOf(uint8_t i) { (void)i; return KIND_PARK_SENSOR; }
+
+// 등록 배치를 만든다. 성공하면 길이, 실패하면 0.
+//   ⚠ **`D` 여러 줄 + `S` 는 상한을 넘는다.** 그래서 명세가 *"첫 슬롯은 `D` 만"* 으로 정했다.
+//     여기서도 `BATCH_CAP` 을 넘으면 **만들다 말고 0 을 돌려준다** — 잘린 등록을 내보내지 않는다.
+//   🔴 잘린 등록은 **서버가 `n` 개를 못 채워 미완료로 두고**, 그 상태는 `Q` 로 복구된다.
+//     하지만 **잘린 줄이 유효 프레임처럼 보이면** 그 복구조차 안 걸린다. 그래서 통째로 버린다.
+static uint16_t buildRegistration(char* buf, uint16_t cap) {
+  const uint8_t mn = moduleCount();
+  uint16_t used = 0;
+
+  // ① 배출률 선언 — **맨 앞.** 서버가 `n` 개를 다 받기 전에 유도식을 세울 수 있다
+  int w = snprintf(buf, cap, "D,*,%u,", (unsigned int)DRAIN_DECL);
+  if (w <= 0 || (uint16_t)w + 3 > cap) return 0;
+  appendChecksum(buf, (uint8_t)w);
+  used = (uint16_t)strlen(buf);
+
+  // ② 모듈들 — 전부 같은 필드 수
+  for (uint8_t i = 0; i < mn; i++) {
+    char nm[4];
+    moduleNameOf(i, nm);
+    char line[24];
+    int lw = snprintf(line, sizeof line, "D,%s,%s,", nm, moduleKindOf(i));
+    if (lw <= 0 || (unsigned)lw + 3 > sizeof line) return 0;
+    appendChecksum(line, (uint8_t)lw);
+    const uint16_t ll = (uint16_t)strlen(line);
+    // ⚠ `+1` 은 줄 사이 LF. **넘치면 통째로 버린다 — 잘린 등록을 내보내지 않는다.**
+    if (used + 1 + ll + 1 > cap || used + 1 + ll > BATCH_CAP) return 0;
+    buf[used++] = '\n';
+    memcpy(buf + used, line, ll + 1);
+    used += ll;
+  }
+  return used;
+}
+
 // 🔑 폭 = ceil(n/4). 왼쪽 0 채움 고정폭 — **가변이면 길이로 n 을 검증할 수 없다.**
 static uint8_t hexWidthFor(uint8_t n) { return (uint8_t)((n + 3) / 4); }
 // mask 가 uint16_t 라 n ≤ 16 이고, 그때 폭은 4다. **버퍼를 이 값으로 잡는다.**
@@ -2200,6 +2289,41 @@ static bool sendAck(uint16_t rid, char s0, char s1, uint8_t result) {
 //    쓸 수 없다. 이쪽이 손실 경로가 아예 없다.)
 static bool sendSlotBatch(uint8_t* ackOut, uint16_t* bytesOut) {
   char buf[BATCH_CAP + 1];
+
+  // ── 0) 🔴 등록이 밀려 있으면 **이 슬롯은 `D` 만 보낸다** (socket 명세 §5) ──
+  //   왜 `S` 와 같이 안 보내나: `D` 여러 줄 + `S` 는 상행 배치 상한을 넘는다.
+  //   **슬롯을 가르는 것이 명세의 답이고, 그래서 순서가 구조적으로 보장된다**
+  //   (접속 → 첫 슬롯 `D` → 둘째 슬롯부터 `S`).
+  //
+  //   ⚠ **이 슬롯의 `S` 는 안 나간다.** 서버 입장에서 "첫 프레임까지의 시간"이 한 슬롯
+  //     (1.2초) 늘어난다 — **고장이 아니라 등록 축의 예상된 값이다**(PLAN-axes 축 2).
+  //
+  //   ⚠ **등록 성공을 장치는 모른다**(ACK 이 없다). 그래도 그대로 간다 —
+  //     **알아도 할 일이 없기 때문**이다. 서버가 `Q` 를 보내면 다시 보내고, 그것이 유일한 행동이다.
+  //     🔑 사람은 정확히 안다(`node_unregistered` · 화면 `⏱`). **모르는 것은 장치뿐이고
+  //     장치가 그걸 알아서 바꿀 동작이 없다** → 공백이 아니라 **명시된 비대칭**이다.
+  if (regPending) {
+    const uint16_t rn = buildRegistration(buf, sizeof buf);
+    if (rn == 0) {
+#if DEBUG
+      Serial.println(F("[REG] 등록 배치를 만들지 못했다 — 잘린 등록을 내보내지 않는다"));
+#endif
+      return false;                       // ⚠ 다음 슬롯에 다시 시도한다(regPending 유지)
+    }
+    const bool okReg = sendPayload(buf, rn);
+    if (okReg) {
+      regPending = false;                 // ★ 성공했을 때만 내린다 — ACK 큐와 같은 규율이다
+      if (regSends < 65535) regSends++;
+    }
+    if (ackOut)   *ackOut = 0;
+    if (bytesOut) *bytesOut = rn;
+#if DEBUG
+    Serial.print(F("[REG] 등록 "));
+    Serial.print(okReg ? F("전송 ") : F("실패 "));
+    Serial.print(rn); Serial.println(F("B"));
+#endif
+    return okReg;
+  }
 
   // ── 1) 반송파: S 프레임은 **보낼 게 없어도 나간다** ─────────────────────
   //   이 한 프레임이 셋을 겸한다: 반송파 · 생존 신호 · **슬롯 시작 통보**(서버의 t0).
@@ -2842,6 +2966,7 @@ static void handleLine(char* s) {
     onlineSince = millis();            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
     lastTxOkAt  = millis();            // ★ 살아있음 불변식의 출발점 — 붙자마자 발동하지 않게 한다
     sendFailStreak = 0;
+    markNeedsRegistration();           // ★ 새 소켓 = 서버가 우리를 모른다. 두 전이 모두에서 예약한다
     awaitingSendOk = false; sendOkT1Passed = false;            // ★ 2단계: 새 소켓이다 — 앞 소켓의 SEND OK 를 기다리지 않는다
     closeAttempts = 0;
 #if DEBUG
@@ -2854,6 +2979,7 @@ static void handleLine(char* s) {
     onlineSince = millis();            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
     lastTxOkAt  = millis();            // ★ 살아있음 불변식의 출발점 — 붙자마자 발동하지 않게 한다
     sendFailStreak = 0;
+    markNeedsRegistration();           // ★ 새 소켓 = 서버가 우리를 모른다. 두 전이 모두에서 예약한다
     awaitingSendOk = false; sendOkT1Passed = false;            // ★ 2단계: 새 소켓이다 — 앞 소켓의 SEND OK 를 기다리지 않는다
     staleSocket = false;               // 진짜로 새로 붙었다 — 낡은 소켓이 아니다
     closeAttempts = 0;
@@ -2871,6 +2997,7 @@ static void handleLine(char* s) {
   if (isClosedLine(s)) {
     netOnline = false;
     sendFailStreak = 0;
+    markNeedsRegistration();           // ★ 새 소켓 = 서버가 우리를 모른다. 두 전이 모두에서 예약한다
     awaitingSendOk = false; sendOkT1Passed = false;            // ★ 2단계: 소켓이 닫혔다 — 그 SEND OK 는 영영 오지 않는다
     // 닫혔다는 통보다 — 낡은 소켓 의심이 해소됐다. 사다리도 내려온다.
     staleSocket = false;
