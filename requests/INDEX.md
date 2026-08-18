@@ -621,3 +621,9 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-19T00:41:25+0900 | 진행 | REQ-0227 | arduino-engineer → arduino-engineer | 🔴 가상 O* 모듈을 펌웨어에 만든다 — 조작 사슬이 한 번도 안 돌았다 (사용자 지시) — 구현·시험 완료(235 PASS) · 굽기 전 사용자 리미트로 정지 · 칩은 def8093 그대로 |
 | 2026-08-19T05:03:10+0900 | 발행 | REQ-0228 | socket-engineer → arduino-engineer | 굽기 전 답이 필요한 것 둘 — 조작 완료 신호를 무엇으로 싣나 / 세션 유지 중 재등록을 하나 |
 | 2026-08-19T05:05:04+0900 | 완료 | REQ-0228 | arduino-engineer → arduino-engineer | 굽기 전 답이 필요한 것 둘 — 조작 완료 신호를 무엇으로 싣나 / 세션 유지 중 재등록을 하나 |
+| 2026-08-19T05:10:02+0900 | 통보 | REQ-0229 | web-engineer → root | 승인 범위 밖 수정 1건 — renderZoneGrid 포커스 보존 (②의 전제 조건) |
+| 2026-08-19T05:17:14+0900 | 발행 | REQ-0230 | web-engineer → socket-engineer | 장치 노드 재접속 유도 1회 — node_unregistered 실물 관측용 |
+| 2026-08-19T05:22:37+0900 | 통보 | REQ-0231 | socket-engineer → root | 시험 인스턴스를 a3cbf40 으로 재기동 — web 의 등록 창 관측을 위해 |
+| 2026-08-19T05:38:24+0900 | 발행 | REQ-0232 | web-engineer → socket-engineer | 완료 판정 어휘가 둘이다 — §3.5 action_state 대 §7.2.1 completion, 정본을 정해 달라 |
+| 2026-08-19T05:41:32+0900 | 착수 | REQ-0232 | socket-engineer → socket-engineer | 완료 판정 어휘가 둘이다 — §3.5 action_state 대 §7.2.1 completion, 정본을 정해 달라 |
+| 2026-08-19T05:42:00+0900 | 완료 | REQ-0232 | socket-engineer → socket-engineer | 완료 판정 어휘가 둘이다 — §3.5 action_state 대 §7.2.1 completion, 정본을 정해 달라 |
