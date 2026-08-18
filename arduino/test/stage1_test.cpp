@@ -1397,6 +1397,31 @@ int main() {
     ok(vGateOpen(0),        "★★ 같은 rid 는 상태를 다시 안 바꾼다 (열린 채 유지)");
     ok(ackqCount == 1,      "★ 그래도 ACK 는 다시 보낸다");
 
+    // 🔴 **G 의 ACK 가 전선에서 실제로 어떻게 보이나** — socket 이 명세에 적을 값이다.
+    //   ⚠ "코드가 이렇게 생겼다"가 아니라 **나가는 바이트로** 확인한다.
+    {
+      // ⚠ **조건부 ok 를 쓰지 않는다.** 조건이 거짓이면 조용히 아무것도 안 하고
+      //   PASS 수만 그대로여서 **검사된 것처럼 보인다.**
+      wifi.refusePrompt = false;
+      awaitingSendOk = false; sendOkT1Passed = false; inSend = false;
+      netOnline = true; lastSendEndAt = 0;
+      regPending = false; regAfterS = false;
+      ackqCount = 0; ackqHead = 0;
+      cacheClear();
+      cachePut(401, 'G', '1', 0);       // idx 11 → '1' (= 11 % 10)
+      ackqPush(401);
+      size_t before2 = wifi.sentLines.size();
+      uint8_t aa = 0; uint16_t bb = 0;
+      const bool sent2 = sendSlotBatch(&aa, &bb);
+      ok(sent2 && wifi.sentLines.size() == before2 + 1,
+                            "★ G 의 ACK 가 실린 배치가 나갔다");
+      const std::string& ln = wifi.sentLines.back();
+      printf("      G 의 ACK 전선 = %s\n", ln.c_str());
+      ok(ln.find("A,401,G1,0,") != std::string::npos,
+                            "★★ 전선 형식이 A,<rid>,G<d>,<result>, 다 (d = idx %% 10)");
+      { char sk[] = "SEND OK"; handleLine(sk); }
+    }
+
     vGateManual = false; vGateState = 0; occMask = 0;
   }
 
