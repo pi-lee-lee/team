@@ -88,13 +88,13 @@ static const uint8_t PIN_ESP_RX = 8;   // ESP TX → Uno
 static const uint8_t PIN_ESP_TX = 7;   // Uno → ESP RX
 SoftwareSerial wifi(PIN_ESP_RX, PIN_ESP_TX);
 
-#define WIFI_SSID    "3F_302"                 // 2026-08-18 AP 변경(사용자) — 서브넷도 192.168.0.x 로 바뀌었다
-#define WIFI_PASS    "0424719222!!"           // ⚠ 끝의 느낌표 둘까지가 비밀번호다. 셸로 넣지 마라(`!` 는 히스토리 확장)
+#define WIFI_SSID    "SK_WiFiGIGA50DC_2.4G"   // 2026-08-18 18:5x 이동(REQ-0222) — 서브넷 192.168.35.x
+#define WIFI_PASS    "2011050796"             // 2026-08-18 이동. 이번 값엔 `!` 가 없다(히스토리 확장 걱정 없음)
 // ⚠⚠ **앞뒤 공백을 절대 넣지 마라.** 구운 펌웨어에 `" 192.168.35.21"` 로 앞 공백이 들어가 있었고,
 //    그래서 ESP 가 IP 리터럴로 못 읽고 **호스트명으로 해석해 `DNS Fail`** 을 냈다.
 //    (기기 플래시를 읽어 확인한 실물 문자열: AT+CIPSTART="TCP"," 192.168.35.21",9991)
 //    이 매크로는 그대로 AT 명령에 이어붙으므로 공백 하나가 곧 고장이다.
-#define SERVER_IP    "192.168.0.29"   // §11 — 명세는 주소를 가정하지 않는다. 현장에서 바꾼다
+#define SERVER_IP    "192.168.35.21"  // §11 — 명세는 주소를 가정하지 않는다. 현장에서 바꾼다
 #define SERVER_PORT  "9991"
 #define DEVICE_ID    "P1"               // §2.3 devid ::= 1*8자. 옛 "ARD_NODE_01"(11자)은 BNF 위반이었다
 
