@@ -855,6 +855,79 @@ int main() {
   ok(Serial.out.substr(mark).find("[CNT]") == std::string::npos,
                                 "★ 주기 전에는 안 찍는다 (대역 낭비 없음)");
 
+  // ── [27] 🔴 `penddrop` 의 **분모**와 **대역**이 실제로 오른다 (2026-08-18) ──
+  //
+  // 왜 있나: 창 I 에서 `>=64B` 1,067 거래에 `penddrop=0` 이 나왔는데 **그 0 이 두 가지로 읽혔다** —
+  //   (A) 안 넘쳤다   (B) `inSend` 중에 줄이 아예 안 와서 셀 일이 없었다.
+  // **분모(`pendfill`)가 없으면 못 가른다.** 원장 §1.1 의 그 형태다.
+  //
+  // ⚠ **계수기를 넣었다는 것과 그것이 오른다는 것은 다른 진술이다.** 여기서 실제로 밟는다.
+  printf("\n[27] penddrop 의 분모(pendfill)와 대역(big*)이 실제로 오른다\n");
+  {
+    // ⚠ **`feedRxChar` 로 먹인다.** `handleLine` 을 직접 부르면 실기 경로를 건너뛴다 —
+    //   옛 시험 [19] 가 그 실수를 했고, 내 수정이 그것을 깨서야 드러났다.
+    auto feedLine = [](const char* t) {
+      for (const char* q = t; *q; ++q) feedRxChar(*q);
+    };
+    pendFills = pendDrops = pendFillsBig = pendDropsBig = okStreamBig = 0;
+    pendReady = false; inSend = true;
+
+    // ① 작은 대역(<64) — 담김 1 · 버림 1
+    curTxLen = 40;
+    feedLine("+IPD,5:X,1,AA\n");            // 첫 줄 → pendLine 에 담긴다
+    ok(pendFills == 1,     "★★ 담으면 분모(pendfill)가 오른다");
+    ok(pendFillsBig == 0,  "★ 40B 는 작은 대역이라 bigfill 이 안 오른다");
+    feedLine("+IPD,5:X,2,AB\n");            // 둘째 줄 → 버려진다
+    ok(pendDrops == 1,     "★★ 버리면 penddrop 이 오른다");
+    ok(pendDropsBig == 0,  "★ 작은 대역이라 bigdrop 은 안 오른다");
+
+    // ② 경계 검사 — 63 은 작은 쪽, 64 는 큰 쪽. **기전 경계(_SS_MAX_RX_BUFF)다**
+    pendReady = false; curTxLen = 63;
+    feedLine("+IPD,5:X,3,AC\n");
+    ok(pendFillsBig == 0,  "★★ 63B 는 아직 작은 대역이다 (경계 검사)");
+    pendReady = false; curTxLen = 64;
+    feedLine("+IPD,5:X,4,AD\n");
+    ok(pendFillsBig == 1,  "★★ 64B 부터 큰 대역이다 — 기전 경계와 자리가 같다");
+    feedLine("+IPD,5:X,5,AE\n");            // 둘째 줄 → 큰 대역에서 버림
+    ok(pendDropsBig == 1,  "★★ 큰 대역의 버림이 따로 세어진다");
+
+    // ③ 🔴 **불변식: big 은 전체의 부분집합이다.** 이게 깨지면 어느 계수기가 틀린 것이다.
+    ok(pendFills >= pendFillsBig, "★★ 불변식 pendfill >= bigfill (big 은 부분집합)");
+    ok(pendDrops >= pendDropsBig, "★★ 불변식 penddrop >= bigdrop");
+    //   ⚠ 이 불변식이 깨진 출력을 실제로 봤다 — 시험이 big 을 리셋 안 해서였다.
+    //     **읽는 쪽에서는 "펌웨어가 이상하다"로 보인다.** 그래서 검사로 박는다.
+
+    // ④ 🔴 **분모가 0 이면 penddrop=0 이 아무 뜻도 없다** — 그 상태를 재현해 둔다
+    pendFills = pendDrops = pendFillsBig = pendDropsBig = 0;
+    pendReady = false; inSend = false;
+    feedLine("+IPD,5:X,6,AF\n");            // inSend 가 아니면 pendLine 을 안 쓴다
+    ok(pendFills == 0 && pendDrops == 0,
+                           "★★ inSend 가 아니면 둘 다 안 오른다 = 분모 0 상태(=(B))");
+    inSend = false;
+  }
+
+  // ── [28] [CNT] 에 새 칸이 실제로 실린다 ──────────────────────────────────
+  printf("\n[28] [CNT] 에 pendfill/bigfill/bigdrop/bigokst 가 실린다\n");
+  {
+    size_t m2 = Serial.out.size();
+    g_millis += 60001;
+    cntTick(millis());
+    std::string f2 = Serial.out.substr(m2);
+    ok(f2.find("pendfill=") != std::string::npos, "★★ pendfill 칸이 나간다 (분모)");
+    ok(f2.find("bigfill=")  != std::string::npos, "★ bigfill 칸이 나간다");
+    ok(f2.find("bigdrop=")  != std::string::npos, "★ bigdrop 칸이 나간다");
+    ok(f2.find("bigokst=")  != std::string::npos, "★ bigokst 칸이 나간다");
+
+    // ⚠ 줄 길이를 **눈으로 본다.** 이 줄은 하드웨어 Serial 로 나가고, 64B TX 링버퍼를
+    //   넘는 만큼 블로킹한다. 그동안 pumpSerialRaw 가 안 돌면 하행이 사라진다(§11.2 의 그 고장).
+    size_t p1 = f2.find("[CNT]");
+    size_t p2 = f2.find('\n', p1);
+    size_t linelen = (p1 != std::string::npos && p2 != std::string::npos) ? (p2 - p1) : 0;
+    printf("      [CNT] 줄 길이 = %zu B  (115200bps 에서 약 %.1f ms)\n",
+           linelen, (double)linelen / 11.52);
+    ok(linelen < 300,      "★★ [CNT] 줄이 300B 미만이다 (송신 창 여유 안)");
+  }
+
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }

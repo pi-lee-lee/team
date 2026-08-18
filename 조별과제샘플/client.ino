@@ -422,6 +422,28 @@ static uint16_t sendOkByStream = 0;
 //   **버린 줄은 로그에 안 나오므로 시리얼로는 (가)/(나)를 못 가른다.** 이 칸이 그것을 가른다.
 static uint16_t pendDrops = 0;
 
+// 🔴 2026-08-18 — **`penddrop=0` 을 읽을 수 있게 만드는 분모와 대역.**
+//
+// 창 I 에서 `>=64B` 1,067 거래에 `penddrop=0` 이 나왔다. **그 0 이 두 가지로 읽힌다:**
+//   (A) `pendLine` 이 안 넘쳤다 (수정이 먹었다)
+//   (B) `inSend` 중에 줄이 **아예 안 왔다** (셀 일이 없었다)
+// ⚠ **분모가 없으면 둘을 못 가른다.** 우리 원장 §1.1 이 그 얘기다 —
+//   **`0` 은 "안 일어났다"와 "못 셌다"를 구별하지 않는다.**
+// → `pendFills` 가 그 분모다: `penddrop / (pendFills + pendDrops)` = 넘침률.
+//   **`pendFills == 0` 이면 (B) 이고, 그때 `penddrop=0` 은 아무 뜻도 없다.**
+static uint16_t pendFills = 0;
+
+// ⚠ monitor 요청 — **대역(`<64` / `>=64`)과 함께 찍는다.**
+//   `_SS_MAX_RX_BUFF = 64` 가 기전 경계이고 창 G 에서 그 위아래로 T2 율이 갈렸다
+//   (`48~63` 0/43 · `>=64` 9/34). **누적 총계로는 그 갈림을 못 본다.**
+// 🔑 `curTxLen` 은 **지금 보내는 중인 배치 길이**다. 수신 계수는 `inSend` 중에 일어나므로
+//   이 값으로 "그때 어느 대역이었나"를 귀속할 수 있다.
+static uint8_t  curTxLen     = 0;
+static uint16_t pendFillsBig = 0;   // curTxLen >= 64 인 동안 담은 수
+static uint16_t pendDropsBig = 0;   // curTxLen >= 64 인 동안 버린 수
+static uint16_t okStreamBig  = 0;   // curTxLen >= 64 인 동안 바이트매칭이 구한 수
+static const uint8_t RXBUF_THRESHOLD = 64;   // = _SS_MAX_RX_BUFF. 기전 경계이지 표본 기준이 아니다
+
 // 🔴 2026-08-17 (REQ-0174 ①) — **줄의 첫 바이트가 도착한 시점의 슬롯 오프셋.**
 //
 // 왜 필요한가 — **앞 판본은 도착이 아니라 *처리* 시각을 찍고 있었다.**
@@ -972,7 +994,13 @@ static void feedRxChar(char c) {
     if (inSend) {
       // ★ REQ-0174 — 줄과 **그 줄의 도착 오프셋**을 같이 미룬다. 여기서 오프셋을 안 들고 가면
       //   나중에 처리 시각으로 계산돼 위험 구간이 통째로 보이지 않는다(위 `rxLineOff` 주석).
-      if (!pendReady) { memcpy(pendLine, rxLine, (size_t)n + 1); pendLineOff = rxLineOff; pendReady = true; }
+      if (!pendReady) {
+        memcpy(pendLine, rxLine, (size_t)n + 1); pendLineOff = rxLineOff; pendReady = true;
+        // ★ **`penddrop` 의 분모다.** 이것이 0 이면 `penddrop=0` 은 "안 넘쳤다"가 아니라
+        //   "셀 일이 없었다"이고, 그 둘은 완전히 다른 결론으로 이어진다.
+        if (pendFills < 65535) pendFills++;
+        if (curTxLen >= RXBUF_THRESHOLD && pendFillsBig < 65535) pendFillsBig++;
+      }
       else {
         // 🔴 2026-08-18 (monitor 요청) — **버린 줄을 센다.**
         //   monitor 는 (가)"우리가 페이로드를 먼저 보냈다" 와 (나)"pendLine 이 첫 줄을 미뤄
@@ -989,6 +1017,7 @@ static void feedRxChar(char c) {
         // ⚠ 옛 주석 *"서버가 재전송하므로 잃지 않는다"* 는 **데이터 줄에만 참이다.**
         //   `SEND OK` 는 ESP 가 한 번만 보내는 제어 응답이라 **재전송이 없다.**
         if (pendDrops < 65535) pendDrops++;
+        if (curTxLen >= RXBUF_THRESHOLD && pendDropsBig < 65535) pendDropsBig++;
       }
     } else {
       memcpy(workLine, rxLine, (size_t)n + 1);
@@ -1017,6 +1046,7 @@ static void feedRxChar(char c) {
         sendOkMatch = 0;
         awaitingSendOk = false; sendOkT1Passed = false;
         if (sendOkByStream < 65535) sendOkByStream++;
+        if (curTxLen >= RXBUF_THRESHOLD && okStreamBig < 65535) okStreamBig++;
       }
     } else {
       sendOkMatch = (c == SENDOK[0]) ? 1 : 0;      // 겹침 재시작(`SSEND OK` 같은 경우)
@@ -1598,6 +1628,16 @@ static void cntTick(uint32_t now) {
   Serial.print(F(" okstream="));     Serial.print(sendOkByStream);
   // ★ monitor 요청 — `okstream` 과 **짝으로 읽는다**(위 feedRxChar 주석의 판정표).
   Serial.print(F(" penddrop="));     Serial.print(pendDrops);
+  // 🔴 2026-08-18 — **`penddrop` 의 분모.** 이것이 0 이면 위 `penddrop=0` 은
+  //   "안 넘쳤다"가 아니라 **"셀 일이 없었다"** 이고, 그 둘은 다른 결론으로 이어진다.
+  Serial.print(F(" pendfill="));     Serial.print(pendFills);
+  pumpSerialRaw();                   // ⚠ 줄이 길어진 만큼 중간에 ESP 수신을 비운다(아래 주석)
+  // ⚠ monitor 요청 — **대역(`>=64B`)별.** 누적 총계로는 창 G 의 갈림(`48~63` 0/43 · `>=64` 9/34)이 안 보인다.
+  //   🔑 `64` 는 `_SS_MAX_RX_BUFF` = **기전 경계**다. monitor 의 `48` 은 표본 추출 기준이라 **다른 축이다.**
+  Serial.print(F(" bigfill="));      Serial.print(pendFillsBig);
+  Serial.print(F(" bigdrop="));      Serial.print(pendDropsBig);
+  Serial.print(F(" bigokst="));      Serial.print(okStreamBig);
+  pumpSerialRaw();
   Serial.print(F(" skip="));         Serial.print(sendSkips);
   Serial.print(F(" online="));       Serial.println(netOnline ? 1 : 0);
 }
@@ -1779,6 +1819,10 @@ static bool sendPayload(const char* line, uint16_t len) {
   }
 
   inSend = true;
+  // ★ 2026-08-18 — **지금 보내는 배치 길이를 남긴다.** 수신 계수(`penddrop`/`okstream`)가
+  //   `inSend` 중에 일어나므로 이 값으로 **"그때 어느 대역이었나"** 를 귀속할 수 있다.
+  //   ⚠ `inSend` 와 **같은 자리에서** 갱신한다. 떨어뜨리면 두 값이 어긋난 순간이 생긴다.
+  curTxLen = (uint8_t)(len > 255 ? 255 : len);
   // ★ `SEND_GAP_MS` 는 **없애지 않는다. 하한으로 남긴다.**
   //   `SEND OK` 가 즉시 와도 연속 CIPSEND 를 너무 촘촘히 쏘면 `busy p...`(앞 **명령** 처리 중)가
   //   난다 — 이 값은 원래 그걸 막으려고 있던 것이고 2단계가 겨냥하는 `busy s...`(앞 **전송**
