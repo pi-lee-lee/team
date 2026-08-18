@@ -225,6 +225,12 @@ static const int  DOWN_BATCH_MAX_N = (2 * DEV_ACK_DRAIN_PER_SLOT) / 3; // = 4 ·
 //     그것이면 충분하다 — **`S_worst` 가 이 가정을 넘으면 배출 6 의 전제가 깨진 것**이다.
 static const int  DEV_S_WORST_ASSUMED_B = 60;   // n=10 기준 · arduino REQ-0206
 
+// §5 등록 — **상수가 아니라 유도값이다.** 슬롯 주기가 바뀌면 따라 움직인다.
+// 접속 → 자기 송신 창까지 최대 1슬롯 · `S`(승격) 1슬롯 · `D` 1슬롯 = 3슬롯이 최소 경로다.
+static const int  REG_TIMEOUT_MS = 3 * DOWN_SLOT_MS;   // = 3600ms
+static const int  REG_Q_MAX      = 3;                  // `Q` 상한 — **비용이 서버에 있어서 서버가 둔다**
+static const int  REG_MODS_MAX   = 32;                 // 방어적 상한. 전선 예산은 장치가 더 낮게 건다
+
 // 🔴🔴 **송신 시점 문턱 — 증거가 있는 창과 없는 창을 다르게 취급한다** (REQ-0210)
 // `S` 가 도착해서 여는 창에는 **증거가 있다**: 장치가 방금 말했고 지금 수신 구간이다.
 // **창 포기는 증거가 없다** — `S` 가 안 왔다는 것 말고 아는 것이 없다. 그런데 지금까지
@@ -695,7 +701,29 @@ struct Node {
     bool        seen;           // 유효 프레임을 한 번이라도 받았나
     long long   last_ms;        // 마지막 프레임 수신 시각(단조 시계)
     long long   last_epoch_ms;  // 같은 사건의 벽시계 — **로그 대조용이지 계산용이 아니다**
-    Node() : sock(BAD_SOCK), seen(false), last_ms(0), last_epoch_ms(0) {}
+
+    // ── 등록(§5 `D`/`Q`) ────────────────────────────────────────────────────────
+    // 🔴 **이 단계에서 등록은 *관측*이지 제어가 아니다.** 하행 경로를 한 줄도 안 바꾼다 —
+    //    지금 하행(`R`·`C`·`T`·`M`)은 **자리(슬롯 번호)** 로 주소를 정하므로 모듈 구성과 무관하다.
+    //    **모듈 신원 기반 명령이 생길 때** 비로소 이 상태가 제어에 쓰인다(설계 §5).
+    // ⚠ 그래서 옛 펌웨어(등록을 모르는 노드)도 **종전 그대로 동작한다.** 분기를 안 만든다.
+    int         reg_n;          // 선언된 모듈 수. -1 = `D,*` 를 아직 못 받았다
+    int         reg_drain;      // 선언된 슬롯당 ACK 배출 하한. -1 = 미선언
+    bool        reg_done;       // `reg_n` 개를 다 받았다
+    bool        reg_giveup;     // `Q` 3회에도 안 와서 굳혔다(node_unregistered)
+    long long   reg_first_ms;   // 승격(첫 `S`) 시각 — `REG_TIMEOUT` 의 기준
+    int         q_sent;         // 보낸 `Q` 수
+    long long   last_q_ms;      // 마지막 `Q` — 슬롯당 1회로 묶는다
+    std::vector<std::pair<std::string, std::string> > mods;   // (name, kind) · **순서가 곧 idx**
+
+    Node() : sock(BAD_SOCK), seen(false), last_ms(0), last_epoch_ms(0),
+             reg_n(-1), reg_drain(-1), reg_done(false), reg_giveup(false),
+             reg_first_ms(0), q_sent(0), last_q_ms(0) {}
+
+    void reg_reset() {          // 세션이 새로 서면 등록도 처음부터다
+        reg_n = -1; reg_drain = -1; reg_done = false; reg_giveup = false;
+        reg_first_ms = 0; q_sent = 0; last_q_ms = 0; mods.clear();
+    }
 };
 
 struct UnknownSock {
@@ -760,6 +788,11 @@ struct Server {
     std::string& ard_peer = park.peer;   // 현재 주차 노드 소켓의 "IP:포트" (REQ-0215)
     // 🔴 **같은 devid 로 동시에 붙은 것을 센다.** 0 이 아니면 관측 자료가 오염된 것이다 —
     // **어느 보드가 응답했는지 모르는 채로 지표를 읽게 된다.**
+    long long reg_ok;          // 등록 완료 수
+    long long reg_bad;         // 🔴 형식·개수·이름 위반. **조용히 넘어가지 않는다**
+    long long reg_qsent;       // 보낸 `Q` 수(누적)
+    long long reg_giveups;     // `Q` 3회에도 안 와서 굳힌 수
+    long long reg_widthbad;    // 🔴 삼중 검산 ③ 불일치 — `S` 의 hex 폭이 선언 `n` 과 안 맞는다
     long long dup_devid_reject;   // ①에서 거절한 횟수 = **다른 IP 가 산 자리를 노렸다**
     long long takeover_grace;     // 유예를 넘겨 교체한 횟수 = 진짜 죽은 것으로 판단
     std::map<std::string, AuxNode> aux;   // device_id → 보조 노드 (상행 전용)
@@ -955,6 +988,7 @@ struct Server {
     // 🔑 `park` 의 필드들은 **`Node` 의 생성자가 초기화한다.** 여기 목록에 다시 적지 않는다 —
     //   적으면 참조에 임시값을 묶으려는 것이 되어 컴파일이 안 된다(그게 이 설계의 안전장치다).
     Server() : lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK),
+               reg_ok(0), reg_bad(0), reg_qsent(0), reg_giveups(0), reg_widthbad(0),
                dup_devid_reject(0), takeover_grace(0),  // 선언 순서와 일치시킨다(-Wreorder)
                aux_conflicts(0), admit_rejects(0),
                // 🔴 이 여섯(+다섯)은 **선언만 돼 있고 초기화 목록에 없었다.** 쓰기 시작하는 순간
@@ -1174,6 +1208,15 @@ struct Server {
            // 이 칸이 가정을 넘으면 하행 건수 상한의 근거가 이미 깨진 것이다.
            // 🔴 **0 이 아니면 그 창의 장치 지표는 읽지 마라** — 두 보드가 섞였다는 뜻이다.
            // 계측 신뢰도 지표라서 다른 칸보다 앞에 둔다.
+           // 🔑 **등록은 지금 관측 전용이다**(하행 경로를 안 바꾼다). 그래서 계수만 낸다.
+           // `완료 0` 이 "옛 펌웨어라 등록을 안 한다"인지 "새 펌웨어인데 실패한다"인지는
+           // **`질의`·`포기` 가 옆에 있어야 갈린다** — 분모를 같이 찍는 그 규율이다.
+           + " · 등록 완료 " + std::to_string(reg_ok)
+           + "(형식오류 " + std::to_string(reg_bad)
+           + "/질의 " + std::to_string(reg_qsent)
+           + "/포기 " + std::to_string(reg_giveups)
+           + "/폭불일치 " + std::to_string(reg_widthbad)
+           + (reg_widthbad ? "🔴" : "") + ")"
            + " · devid거절 " + std::to_string(dup_devid_reject)
            + (dup_devid_reject ? "🔴" : "")
            + "/유예교체 " + std::to_string(takeover_grace)
@@ -1288,6 +1331,7 @@ struct Server {
         rtt_max_ms = 0; rtt_last_ms = 0; rtt_n = 0;
         if (link_down_since) { link_down_ms += now_ms() - link_down_since; link_down_since = 0; }
         reboot_by_conn++;
+        park.reg_reset();          // 🔑 세션이 새로 서면 등록도 처음부터다
         ard_peer = peer_str(c);
         logf("+ARD", "주차 노드 접속 — 세션#" + std::to_string(ard_sessions)
                      + " · device=" + dev + " · 상대 " + ard_peer);
@@ -1381,6 +1425,26 @@ struct Server {
             closesock(aux[reap[k]].fd);
             aux.erase(reap[k]);
         }
+    }
+
+    // 🔑 **`kind` 첫 글자가 "명령을 받는가"를 답한다**(설계 §5 · `O` = 받는다).
+    // 🔴 **실패 방향을 못 박는다: `O` 가 아니면 명령을 보내지 않는다.**
+    //    알 수 없는 글자도 **명령 금지 쪽으로 떨어진다** — 모르는 장치에 명령을 보내는 것이
+    //    안 보내는 것보다 위험하다. **모르는 `kind` 를 거절하지는 않는다**(거절하면 새 모듈 하나가
+    //    옛 서버에서 노드 전체를 미등록으로 만든다).
+    static bool kind_commandable(const std::string& k) { return !k.empty() && k[0] == 'O'; }
+    // ⚠ `atoi` 는 숫자가 아니면 **조용히 0 을 준다.** `D,*,IP,…`(이름이 `*` 인 모듈)이
+    //   `drain=0` 으로 통과하면 유도식이 0 을 먹는다. **형식 검사를 값 변환 앞에 둔다.**
+    static bool all_digits(const std::string& x) {
+        if (x.empty() || x.size() > 5) return false;
+        for (size_t i = 0; i < x.size(); i++) if (x[i] < '0' || x[i] > '9') return false;
+        return true;
+    }
+    int reg_cmdable() const {
+        int n = 0;
+        for (size_t i = 0; i < park.mods.size(); i++)
+            if (kind_commandable(park.mods[i].second)) n++;
+        return n;
     }
 
     // id 미상 소켓 하나를 승격한다. 반환 false = 자리가 없어 거절했다(소켓은 닫힌다).
@@ -2240,6 +2304,33 @@ struct Server {
         // **그게 맞다.** 승격 직후 재하달은 창 개념이 없고, 보통은 같은 틱의 첫 `S` 처리가
         // 먼저 내보내므로 여기까지 오지 않는다.
         // ⚠ **슬롯당 1회로 묶는다**(위 `last_dmax_ms` 주석). 안 묶으면 200ms 버스트가 된다.
+        // ── §5 등록 질의 `Q` ────────────────────────────────────────────────────
+        // 🔴 **상한은 서버에 둔다 — 비용이 여기 있다.** `Q` 한 번이 **창당 1거래를 독점**하고
+        //    그동안 그 노드의 하행이 못 나간다. 장치가 답하는 비용은 배치 하나이고 내 창을 안 먹는다.
+        //    **비용 없는 쪽에 상한을 두면 복구 경로만 지운다**(설계 §5 · arduino 합의).
+        // ⚠ **`Q` 를 보내는 것 자체가 이 소켓이 승격됐다는 뜻이다** — 승격 전이면 보낼 곳을 모른다.
+        if (ard != BAD_SOCK && ard_seen && !park.reg_done && !park.reg_giveup
+            && park.reg_first_ms && (t - park.reg_first_ms) > REG_TIMEOUT_MS
+            && (t - park.last_q_ms) >= DOWN_SLOT_MS) {
+            if (park.q_sent >= REG_Q_MAX) {
+                park.reg_giveup = true;
+                reg_giveups++;
+                logf("!", "등록 포기 — `Q` " + std::to_string(REG_Q_MAX)
+                          + "회에도 `D` 가 안 왔다. node_unregistered 로 굳힌다 (device="
+                          + park.devid + ")");
+                // 🔑 **끝없이 묻는 것보다 "모른다"를 확정하는 것이 낫다.** 안 그러면 이 노드가
+                //    매 창을 질의로 먹는다. 재무장은 **새 세션**이다(설계 §5 의 열린 자리).
+            } else {
+                park.q_sent++; park.last_q_ms = t; reg_qsent++;
+                // `Q,<ck>` — **인자 없음.** 주소는 소켓이 갖고 있고, 이 시점의 devid 는
+                // 서버가 확신할 수 없는 값이다(미등록이라 묻는 것이다 · 설계 §5).
+                std::string q = build_line("Q,");
+                if (!send_raw(ard, q.data(), q.size(), "아두이노")) ard_send_failed();
+                else logf("→ARD", "Q (등록 질의 " + std::to_string(park.q_sent) + "/"
+                                  + std::to_string(REG_Q_MAX) + ")");
+            }
+        }
+
         // 🔴 `dmax_armed` 가 주 조건이다. 슬롯 문턱은 **그물로 남긴다** —
         //    재무장 논리에 결함이 생겨도(예: 줄이 폭주) 버스트로 돌아가지 않게.
         if (!downq.empty() && ard != BAD_SOCK && (t - ard_last_ms) > DOWN_DMAX_MS
@@ -2390,6 +2481,24 @@ struct Server {
         if (f.empty()) return;
 
         if (f[0] == "S" && f.size() >= 6) {
+            // 🔴 **삼중 검산 ③ — `S` 의 자리 폭이 선언 `n` 과 맞는가**(설계 §5).
+            //    ①선언 n · ②실제 `D` 줄 수 · ③hex 폭 이 **한 함수(`moduleCount()`)에서 나오므로
+            //    갈릴 수 없다. 갈리면 그 자체가 결함 신호다.**
+            // ⚠ **등록이 끝난 노드에만 적용한다** — 옛 펌웨어는 등록을 안 하므로 이 검사를 안 탄다.
+            //    (옛 10진 형식은 폭이 `n` 이고 hex 는 `ceil(n/4)` 라 규칙이 다르다)
+            if (!park.reg_first_ms) park.reg_first_ms = now_ms();   // `REG_TIMEOUT` 의 기준
+            if (park.reg_done && park.reg_n > 0) {
+                const size_t want = (size_t)((park.reg_n + 3) / 4);
+                if (f[2].size() != want) {
+                    reg_widthbad++;
+                    char wb[176];
+                    snprintf(wb, sizeof(wb),
+                             "🔴 자리 폭 불일치 — S 의 폭 %zu, 선언 n=%d 이면 %zu 여야 한다. "
+                             "같은 함수에서 나온 값이 갈렸다 (누적 %lld)",
+                             f[2].size(), park.reg_n, want, reg_widthbad);
+                    logf("!!", wb);
+                }
+            }
             long seq = atol(f[1].c_str());
             long long up = atoll(f[4].c_str());
             // §7.4(개정 8) — 순환을 접은 uptime 전진량 하나로 본다.
@@ -2516,6 +2625,55 @@ struct Server {
             // 아직 옛 세션 값이라 **측정할 수 없고**, 측정 못 하는 순간에 쏘는 것이 §8.15 다.
             flush_downq("S 도착 — 창 시작", false);
         }
+        // ── §5 등록 프레임 `D` ─────────────────────────────────────────────────
+        // 🔴 **관측이지 제어가 아니다**(Node::reg_* 주석). 하행 경로를 안 바꾼다.
+        // ⚠ 이 분기가 없으면 `D` 는 `drop_unknown`("AT 잡음 유입 의심")으로 떨어져
+        //   **세션마다 11씩 오르며 거짓 경보를 만든다.**
+        else if (f[0] == "D" && f.size() >= 3) {
+            if (f[1] == "*") {
+                // `D,*,<drain>,<n>` — 묶음의 맨 앞. **자기 완결적이라 언제 와도 같은 뜻이다.**
+                // 🔴 `*` 는 모듈 `name` 이 될 수 없다(설계 §5). 여기 걸리는 것이 그 방어다 —
+                //    필드 수·숫자 형식 둘 다 안 맞으면 **모듈로도 배출률로도 안 읽힌다.**
+                if (f.size() < 4 || !all_digits(f[2]) || !all_digits(f[3])) {
+                    reg_bad++;
+                    logf("!", "D,* 형식 위반 — 버림 (name 이 '*' 인 모듈이거나 숫자가 아니다)");
+                    return;
+                }
+                park.reg_reset();
+                park.reg_drain = atoi(f[2].c_str());
+                park.reg_n     = atoi(f[3].c_str());
+                if (park.reg_n < 0 || park.reg_n > REG_MODS_MAX) {
+                    reg_bad++;
+                    logf("!", "D,* 의 n=" + f[3] + " 이 범위 밖(0~"
+                              + std::to_string(REG_MODS_MAX) + ") — 등록 무효");
+                    park.reg_n = -1; return;
+                }
+                char b[160];
+                snprintf(b, sizeof(b), "등록 시작 — 선언 drain=%d · n=%d (device=%s)",
+                         park.reg_drain, park.reg_n, park.devid.c_str());
+                logf("=", b);
+                return;
+            }
+            // `D,<name>,<kind>` — 모듈 한 줄. **순서가 곧 `idx` 다**(등록 순서가 비트 자리를 정한다).
+            if (park.reg_n < 0) { reg_bad++; logf("!", "D,* 없이 모듈 줄이 왔다 — 버림"); return; }
+            if ((int)park.mods.size() >= park.reg_n) {
+                reg_bad++;
+                logf("!", "선언 n=" + std::to_string(park.reg_n) + " 보다 모듈 줄이 많다 — 버림");
+                return;
+            }
+            park.mods.push_back(std::make_pair(f[1], f[2]));
+            if ((int)park.mods.size() == park.reg_n) {
+                park.reg_done = true;
+                reg_ok++;
+                // 🔴 **삼중 검산 ①②** — 선언 `n` 과 실제 줄 수. ③(hex 폭)은 `S` 에서 본다.
+                char b[192];
+                snprintf(b, sizeof(b),
+                         "등록 완료 — n=%d · drain=%d · 명령가능 %d개 (device=%s)",
+                         park.reg_n, park.reg_drain, reg_cmdable(), park.devid.c_str());
+                logf("=", b);
+            }
+            return;
+        }
         else if (f[0] == "A" && f.size() >= 4) {
             uint16_t rid = (uint16_t)atoi(f[1].c_str());
             std::string slot = f[2];
@@ -2568,6 +2726,10 @@ struct Server {
         }
         else {
             drop_unknown++;
+            // ⚠ **주석 정정(2026-08-18)**: 예전에는 이 칸이 오르면 **AT 잡음 유입**을 의심했다.
+            // 등록(`D`)이 들어온 뒤로는 **그 해석이 더는 유일하지 않다** — `D` 는 위에서 처리되므로
+            // 여기 안 오지만, **새 프레임 종류가 생기면 옛 서버에서 여기로 떨어진다.**
+            // 🔑 **`모름` 이 오르면 "잡음"이 아니라 "내가 모르는 프레임"부터 의심해라.**
             logf("!", "모르는 타입 — 조용히 버림");
         }
     }
@@ -3451,6 +3613,10 @@ struct Server {
 
 // ---------------------------------------------------------------- 자가검증
 // §7.4 자가검증용 — `S` 한 줄을 만든다. on_ard_line 이 받는 형태(종단자 없음)다.
+// 시험용 — 임의 프레임에 올바른 체크섬을 붙인다. **`cksum` 을 시험이 다시 구현하지 않는다** —
+// 다시 구현하면 둘이 갈리고, 갈린 채로 통과하면 시험이 실기를 안 재는 것이 된다.
+static std::string t_line(const std::string& prefix) { return prefix + cksum(prefix); }
+
 static std::string s_line(long seq, const char* occ, const char* res, long long up) {
     char b[96];
     snprintf(b, sizeof(b), "S,%ld,%s,%s,%lld,P1,", seq, occ, res, up);
@@ -3933,6 +4099,106 @@ static int selftest() {
                 std::cout << (okE ? "  ✓ " : "  ✗ ") << "잠금 없음 → first-S-wins 그대로 (주차 노드 '"
                           << t.park_dev << "' · 기대 P1)\n";
                 if (!okE) bad++;
+                t.ard = BAD_SOCK;
+            }
+
+            // ⑮ 🔴 **등록 `D` — 정상 경로**(설계 §5). 슬롯1 `S` 승격 → 슬롯2 `D`
+            {
+                Server t; t.ard = sv[0]; t.park.devid = "P1"; t.ard_seen = true;
+                t.on_ard_line(t_line("D,*,7,3,"));                  // drain=7 · n=3
+                t.on_ard_line(t_line("D,A1,IP,"));
+                t.on_ard_line(t_line("D,A2,OG,"));
+                bool mid = (!t.park.reg_done && t.park.mods.size() == 2);
+                t.on_ard_line(t_line("D,A3,OB,"));
+                bool ok15 = (mid && t.park.reg_done && t.park.reg_n == 3
+                             && t.park.reg_drain == 7 && t.reg_ok == 1 && t.reg_bad == 0
+                             && t.reg_cmdable() == 2);   // OG·OB 만 명령 가능
+                std::cout << (ok15 ? "  ✓ " : "  ✗ ") << "등록: n=3 다 받아야 완료 · drain "
+                          << t.park.reg_drain << " · 명령가능 " << t.reg_cmdable()
+                          << " (기대 완료 · 7 · 2)\n";
+                if (!ok15) bad++;
+                t.ard = BAD_SOCK;
+            }
+
+            // ⑯ 🔴 **`*` 는 모듈 이름이 될 수 없다** — 안 막으면 배출률 선언으로 파싱된다
+            {
+                Server t; t.ard = sv[0]; t.ard_seen = true;
+                t.on_ard_line(t_line("D,*,IP,"));            // name 이 `*` 인 모듈처럼 생긴 줄
+                bool ok16 = (t.reg_bad == 1 && t.park.reg_n < 0 && t.park.reg_drain < 0);
+                std::cout << (ok16 ? "  ✓ " : "  ✗ ") << "`*` 이름 거부: 형식오류 "
+                          << t.reg_bad << " · drain " << t.park.reg_drain
+                          << " (기대 1 · -1 — atoi 가 0 을 주지 않았다)\n";
+                if (!ok16) bad++;
+                t.ard = BAD_SOCK;
+            }
+
+            // ⑰ 🔴 **삼중 검산 ③ — `S` 의 폭이 선언 `n` 과 갈리면 잡는다**
+            //    ①②만으로는 못 잡는다. 같은 함수에서 나온 값이 갈렸다는 뜻이라 큰 신호다.
+            {
+                Server t; t.ard = sv[0]; t.ard_seen = true;
+                t.on_ard_line(t_line("D,*,7,10,"));
+                for (int i = 0; i < 10; i++) t.on_ard_line(t_line("D,X,IP,"));
+                long long w0 = t.reg_widthbad;
+                t.on_ard_line(t_line("S,1,18B,000,389,P1,"));        // 폭 3 = ceil(10/4) ✅
+                bool okA = (t.reg_widthbad == w0);
+                t.on_ard_line(t_line("S,2,18BC,000,389,P1,"));       // 🔴 폭 4 — 갈렸다
+                bool ok17 = (okA && t.reg_widthbad == w0 + 1);
+                std::cout << (ok17 ? "  ✓ " : "  ✗ ") << "폭 검산: 폭3 통과 · 폭4 잡힘 (불일치 "
+                          << t.reg_widthbad << " · 기대 1)\n";
+                if (!ok17) bad++;
+                t.ard = BAD_SOCK;
+            }
+
+            // ⑱ 🔴 **옛 펌웨어는 이 검사를 안 탄다** — 등록을 안 하므로 `reg_done` 이 false 다.
+            //    이게 없으면 **지금 도는 장치가 매 프레임 폭불일치를 찍는다.**
+            {
+                Server t; t.ard = sv[0]; t.ard_seen = true;
+                t.on_ard_line(t_line("S,1,0110000010,0000000000,389,P1,"));   // 옛 10진 폭 10
+                bool ok18 = (t.reg_widthbad == 0 && t.reg_bad == 0);
+                std::cout << (ok18 ? "  ✓ " : "  ✗ ") << "옛 펌웨어(등록 없음): 폭불일치 "
+                          << t.reg_widthbad << " (기대 0 — 검사를 안 탄다)\n";
+                if (!ok18) bad++;
+                t.ard = BAD_SOCK;
+            }
+
+            // ⑲ 🔴 **`Q` 상한과 포기** — 조건을 적었으면 그것을 보는 검사를 같은 자리에.
+            //    창 A 에서 "정지 조건을 적어 놓고 그것을 보는 코드가 없어" 130건이 더 돌았다.
+            {
+                // 🔴 **자기 소켓쌍을 쓴다. 공용 `sv` 를 쓰면 안 된다** —
+                //   앞 시험(⑬-가)이 `promote_unknown(sv[1], …)` 로 그 fd 를 `ard` 에 넣었고
+                //   그 `Server` 의 **소멸자가 `sv[1]` 을 닫는다.** 그러면 여기 `send_raw` 가 실패하고
+                //   `ard_send_failed()` 가 소켓을 닫아 **질의가 1회에서 멈춘다.**
+                //   ⚠ 처음에 실제로 그렇게 나왔고, **시험이 재려던 것(상한)이 아니라 전송 실패를 쟀다.**
+                LoopPair lq;
+                Server t; t.ard = lq.a; t.ard_seen = true; t.park.devid = "P1";
+                t.ard_last_ms = now_ms();
+                t.park.reg_first_ms = now_ms() - (REG_TIMEOUT_MS + 100);   // 마감 지났다
+                for (int i = 0; i < 6; i++) {          // 상한보다 많이 돌린다
+                    t.park.last_q_ms = 0;              // 슬롯 문턱은 통과시킨다
+                    t.tick();
+                }
+                bool ok19 = (t.reg_qsent == REG_Q_MAX && t.park.reg_giveup
+                             && t.reg_giveups == 1);
+                std::cout << (ok19 ? "  ✓ " : "  ✗ ") << "Q 상한: 6틱에 질의 " << t.reg_qsent
+                          << "회 · 포기 " << t.reg_giveups << " (기대 " << REG_Q_MAX << " · 1)\n";
+                if (!ok19) bad++;
+                t.ard = BAD_SOCK;      // 소멸자가 lq.a 를 닫지 않게 — LoopPair 가 닫는다
+            }
+
+            // ⑳ 🔴 **등록이 끝났으면 `Q` 를 안 보낸다** — 이게 없으면 매 슬롯 질의가 나가고
+            //    **그 노드의 하행이 통째로 굶는다**(질의가 창당 1거래를 독점한다).
+            {
+                LoopPair lr;
+                Server t; t.ard = lr.a; t.ard_seen = true;
+                t.ard_last_ms = now_ms();
+                t.on_ard_line(t_line("D,*,7,1,"));
+                t.on_ard_line(t_line("D,A1,IP,"));
+                t.park.reg_first_ms = now_ms() - (REG_TIMEOUT_MS + 100);
+                for (int i = 0; i < 4; i++) { t.park.last_q_ms = 0; t.tick(); }
+                bool ok20 = (t.park.reg_done && t.reg_qsent == 0 && t.reg_giveups == 0);
+                std::cout << (ok20 ? "  ✓ " : "  ✗ ") << "등록 완료 뒤 질의 " << t.reg_qsent
+                          << "회 (기대 0)\n";
+                if (!ok20) bad++;
                 t.ard = BAD_SOCK;
             }
 
