@@ -29,10 +29,10 @@ const peek = `(() => ({
   sent: (window.__sent || []).map(p => p.type)
 }))()`;
 
-const MAP7 = { type: 'map', epoch: 7, grid: { rows: 5, cols: 5 },
+const MAP7 = { type: 'map', srv_id: 'A-1', epoch: 7, grid: { rows: 5, cols: 5 },
   zones: [{ id: 'A1', kind: 'parking', cells: [[0, 0]],
             modules: [{ devid: 'P1', name: 'sensor', kind: 'IP', idx: 0 }] }] };
-const ST = (ep) => ({ type: 'state', epoch: ep, ts_ms: 1755500000123,
+const ST = (ep) => ({ type: 'state', srv_id: 'A-1', epoch: ep, ts_ms: 1755500000123,
   zones: [{ id: 'A1', occupied: true, reserved: false, actionable: true, blocked_reason: null,
             completion: 'complete', modules: [{ devid: 'P1', name: 'sensor', value: 1, known: true }] }] });
 
@@ -309,6 +309,45 @@ try {
      after10.sent.filter(t => t === 'get_map').length === askBefore,
      '청하면 늦은 프레임마다 서버를 때린다');
   ok('여전히 그릴 수 있다', after10.usable === true);
+
+  /* ══ [11] 🔴🔴 `srv_id` — 재기동으로 판이 되돌아가도 얼지 않는가 (실물 시험 대응) ═══ */
+  console.log('\n[11] 서버 재기동 — srv_id 가 바뀌고 epoch 이 1로 되돌아간다');
+  /* 지금: srv_id A-1 · 판 20. 재기동을 흉내낸다 — 새 id, 판 1. */
+  await evaluate(client, `(() => { window.__sent = []; return true; })()`);
+  await evaluate(client, inject({ type: 'state', srv_id: 'B-2', epoch: 1, ts_ms: 50, zones: [] }));
+  await sleep(200);
+  let v11 = await evaluate(client, peek);
+  console.log('  · 새 서버의 state 먼저 → ' + JSON.stringify(v11));
+  /* 🔴 srv_id 비교가 없으면 판 1 < 20 이라 "옛 프레임"으로 무시되고 화면이 영영 안 갱신된다. */
+  ok('🔴 새 서버의 낮은 판을 옛 프레임으로 취급하지 않는다', v11.stale === true,
+     JSON.stringify(v11) + ' — stale 이 아니면 판 비교가 세계를 안 보고 있다');
+  /* 🔴 **간격 제한을 통과해야 한다** — 세계 변화는 고리가 아니라 한 번 있는 사건이다.
+     하니스가 처음에 이걸 잡았다: 제한에 막혀 재청이 안 나가 최대 2초간 화면이 낡은 채로 남았다. */
+  ok('🔴 세계가 바뀌면 간격 제한을 통과해 즉시 청한다',
+     v11.sent.filter(t => t === 'get_map').length === 1, JSON.stringify(v11.sent));
+
+  await evaluate(client, inject({ type: 'map', srv_id: 'B-2', epoch: 1, grid: { rows: 2, cols: 2 },
+    zones: [{ id: 'A1', kind: 'parking', cells: [[0, 0]], modules: [] }] }));
+  await sleep(200);
+  v11 = await evaluate(client, peek);
+  console.log('  · 새 서버의 map → ' + JSON.stringify(v11));
+  ok('🔑 새 서버의 맵을 판 비교 없이 받아들인다 (epoch 1 < 20 인데도)',
+     v11.hasMap === true && v11.epoch === 1 && v11.stale === false, JSON.stringify(v11));
+  ok('그릴 수 있게 된다', v11.usable === true);
+
+  await evaluate(client, inject({ type: 'state', srv_id: 'B-2', epoch: 1, ts_ms: 51, zones: [
+    { id: 'A1', occupied: false, reserved: false, completion: 'unknown',
+      actions: { reserve: { ok: false, reason: 'not_supported' } }, modules: [] } ] }));
+  await sleep(200);
+  v11 = await evaluate(client, peek);
+  ok('새 세계의 state 를 담는다', v11.hasZoneState === true, JSON.stringify(v11));
+  /* 🔴 서버가 남긴 공백 — 여섯 번째 코드(`not_supported`)를 화면이 모른다. 일반 문구로 떨어져야 한다. */
+  const nb = await evaluate(client, `(() => {
+    const b = document.querySelector('#zone-grid .zbtn[data-act="reserve"]');
+    return b ? { dis: b.getAttribute('aria-disabled'), t: b.title } : null; })()`);
+  console.log('  · 모르는 코드(not_supported) → ' + JSON.stringify(nb));
+  ok('🔴 모르는 거절 코드도 막고, 코드를 그대로 보여 준다',
+     !!(nb && nb.dis === 'true' && /not_supported/.test(nb.t)), JSON.stringify(nb));
 
 } catch (e) {
   fail++;

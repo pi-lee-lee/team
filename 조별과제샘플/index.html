@@ -852,6 +852,10 @@ const state = {
      🔴 그래서 화면은 **지형 사본을 갖는다.** 그 대신 `epoch` 로 **자기 사본이 낡았음을 스스로 안다.**
      🔑 내 §5.38.3 과 다른 점이 정확히 여기다 — 그때(`9900`)는 **낡은 것을 알 방법이 없었다.**
         판을 실으면 **사본은 남되 탐지 가능**해진다. 막을 수 없으면 보이게 만든다. */
+  /** 🔴 **서버 인스턴스 id.** `epoch` 단조는 **이 값 안에서만** 성립한다(socket 확정 · `server.cpp:2079`).
+      기동마다 달라지므로 **이 값이 바뀌면 판 비교를 버린다** — 재기동 뒤 판이 1로 되돌아가도
+      옛 프레임으로 오해하지 않는다. ⚠ 이것 없이는 그 재기동이 **화면을 조용히 얼린다.** */
+  srvId: null,
   map: null,          // { epoch, rows, cols, zones:[…] } — 지형 사본. null = 아직 못 받았다
   zoneState: null,    // { epoch, ts_ms, zones:[…] }      — 마지막으로 받은 상태
   /** epoch 불일치를 본 적이 있나. 🔴 그동안은 **옛 사본으로 그리지 않고 "모른다"로 그린다.** */
@@ -2161,9 +2165,12 @@ function mapUsable() {
  * ⚠ **무한 재요청을 화면 쪽에서도 막는다.** 서버에 상한이 있지만 그건 **서버 보호용**이고,
  *    `epoch` 비교를 내가 잘못 구현하면 매 `state` 마다 청하게 된다 — 그 고리를 여기서 끊는다.
  */
-function requestMap() {
+function requestMap(force) {
   const now = Date.now();
-  if (now - state.mapAskedAt < MAP_ASK_MIN_MS) return false;
+  /* 🔴 **세계가 바뀐 것은 고리가 아니다.** `srv_id` 가 달라진 순간의 재청은 **간격 제한을 통과한다** —
+     막으면 재기동 직후 최대 2초간 화면이 낡은 채로 남는다(하니스가 실제로 그걸 잡았다).
+     ⚠ 그래도 `mapAskedAt` 은 갱신하므로 **뒤따르는 재청은 제한을 받는다.** */
+  if (!force && now - state.mapAskedAt < MAP_ASK_MIN_MS) return false;
   state.mapAskedAt = now;
   transport.send({ type: 'get_map', rid: newRid() });
   return true;
@@ -2183,8 +2190,14 @@ function applyMap(msg) {
     showMessage('맵 정의를 이해하지 못했습니다 (격자 크기·판 번호·자리 목록 중 빠진 것이 있습니다)', 'err');
     return;
   }
+  /* 🔑 `srv_id` 가 다르면 **새 서버다. 판 비교를 하지 않고 무조건 받아들인다**(socket 확정).
+     같으면 그 안에서만 단조가 성립한다. **범위를 값으로 실어 받으므로 화면이 안 잊는다** —
+     *"재접속 때 판을 버려야 한다"* 를 규칙으로 두면 그건 두 곳에 있는 규칙이 된다. */
+  const sid = (typeof msg.srv_id === 'string' && msg.srv_id) ? msg.srv_id : null;
+  state.srvId = sid;
   state.map = { epoch: Number(msg.epoch), rows: rows, cols: cols, zones: msg.zones.slice() };
   state.mapStale = false;
+  state.olderRun = 0;
   render();
 }
 
@@ -2195,6 +2208,19 @@ function applyMap(msg) {
 function applyZoneState(msg) {
   if (!Array.isArray(msg.zones) || !Number.isFinite(Number(msg.epoch))) return;
   const ep = Number(msg.epoch);
+
+  /* 🔴 **먼저 세계를 확인한다.** `srv_id` 가 내 사본과 다르면 **판 번호는 비교 대상이 아니다** —
+     그때 단조 비교를 하면 **새 서버의 판 1을 "옛 프레임"으로 무시해 화면이 영영 안 갱신된다**
+     (socket 이 첫 배포 뒤 잡은 그 모드 · 재기동이 그 경로다). → **내 지형이 딴 세계 것이므로 버린다.** */
+  const sid = (typeof msg.srv_id === 'string' && msg.srv_id) ? msg.srv_id : null;
+  if (state.map && sid !== state.srvId) {
+    state.mapStale = true;
+    state.zoneState = null;
+    state.olderRun = 0;
+    requestMap(true);          // 세계가 바뀌었다 — 즉시 청한다
+    render();
+    return;
+  }
 
   /* 🔑 **`epoch` 은 단조 증가다**(socket 명세 §6.8). 그 성질을 쓰면 불일치를 **두 경우로** 가른다 —
      ~~예전에는 `!==` 하나로 묶었다~~ 가 그건 필요 이상으로 엄격했다.
