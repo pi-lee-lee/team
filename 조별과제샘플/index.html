@@ -856,6 +856,12 @@ const state = {
       기동마다 달라지므로 **이 값이 바뀌면 판 비교를 버린다** — 재기동 뒤 판이 1로 되돌아가도
       옛 프레임으로 오해하지 않는다. ⚠ 이것 없이는 그 재기동이 **화면을 조용히 얼린다.** */
   srvId: null,
+  /** 🔴 **`map` 보다 먼저 온 `state` 를 여기 보관한다.** 실기에서 접속 순서가
+      `state` → `map` 이었고(2026-08-19 측정), 버리면 **다음 `state` 가 올 때까지 격자가
+      영원히 "상태 미상"** 이다 — 장치가 없으면 서버가 밀 것이 없어 그 다음이 안 온다.
+      🔑 **순서에 의존하지 않게 만드는 쪽이 맞다** — 서버에 "map 을 먼저 보내라"를 요구하면
+      그건 **두 곳에서 지켜야 하는 순서 규칙**이 된다. */
+  heldState: null,
   map: null,          // { epoch, rows, cols, zones:[…] } — 지형 사본. null = 아직 못 받았다
   zoneState: null,    // { epoch, ts_ms, zones:[…] }      — 마지막으로 받은 상태
   /** epoch 불일치를 본 적이 있나. 🔴 그동안은 **옛 사본으로 그리지 않고 "모른다"로 그린다.** */
@@ -2198,6 +2204,15 @@ function applyMap(msg) {
   state.map = { epoch: Number(msg.epoch), rows: rows, cols: cols, zones: msg.zones.slice() };
   state.mapStale = false;
   state.olderRun = 0;
+
+  /* 🔑 보관해 둔 `state` 가 **이 지형의 것이면** 지금 적용한다. 그러면 접속 순서가 어떻든
+     첫 화면이 상태를 갖는다 — **순서 의존이 사라진다.** ⚠ 세계(`srv_id`)와 판(`epoch`)이
+     둘 다 맞아야 한다. 하나라도 다르면 **딴 지형의 상태**이므로 버린다(섞으면 두 세대가 된다). */
+  const held = state.heldState;
+  state.heldState = null;
+  if (held && held.srvId === state.srvId && held.epoch === state.map.epoch) {
+    state.zoneState = { epoch: held.epoch, ts_ms: held.ts_ms, zones: held.zones };
+  }
   render();
 }
 
@@ -2217,6 +2232,8 @@ function applyZoneState(msg) {
     state.mapStale = true;
     state.zoneState = null;
     state.olderRun = 0;
+    /* 새 세계의 상태다 — 그 세계의 `map` 이 오면 쓸 수 있으므로 보관한다. */
+    state.heldState = { srvId: sid, epoch: ep, ts_ms: Number(msg.ts_ms) || null, zones: msg.zones.slice() };
     requestMap(true);          // 세계가 바뀌었다 — 즉시 청한다
     render();
     return;
@@ -2261,6 +2278,9 @@ function applyZoneState(msg) {
        나쁘다 — 알고도 숨긴 것이다**(내 §5.34 의 형태 · socket 이 이 규율을 채택했다). */
     state.mapStale = true;
     state.zoneState = null;
+    /* 🔴 **버리지 말고 보관한다.** 실기에서 접속 순서가 `state` → `map` 이었고, 버리면
+       **다음 `state` 를 기다려야 하는데 장치가 없으면 그게 안 온다**(측정 2026-08-19). */
+    state.heldState = { srvId: sid, epoch: ep, ts_ms: Number(msg.ts_ms) || null, zones: msg.zones.slice() };
     requestMap();
     render();
     return;
