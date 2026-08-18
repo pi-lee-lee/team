@@ -1965,7 +1965,11 @@ const CMD_LABEL = {
   test_disarm:  '테스트 모드 끄기',
   test_set:     '센서값 주입',
   test_clear:   '주입 해제',
-  sim_step:     '시뮬레이션 한 걸음'
+  sim_step:     '시뮬레이션 한 걸음',
+  /* 개정 조작(socket 명세 §6.8). 요청 `type` 이 `actions` 키와 **같은 이름**이라
+     이 표에 이름을 더하는 것만으로 문구가 붙는다 — 조작이 늘어도 분기가 안 는다. */
+  open_gate:    '차단봉 열기',
+  close_gate:   '차단봉 닫기'
 };
 
 /** §12B.4 — M 프레임의 result. 5 는 실패가 아니라 "바꿀 대상이 없다"이다. */
@@ -2096,12 +2100,41 @@ el.zoneGrid.addEventListener('click', function (event) {
   if (act === 'reserve') { requestReserve(zoneId); return; }
   if (act === 'cancel')  { requestCancel(zoneId);  return; }
 
-  /* 🔴 **요청 형식이 계약에 없는 조작.** 조용히 아무 일도 안 하지 않는다 —
-     그러면 사용자가 "안 먹혔나" 하고 더 누르고, 그게 내가 §5.16 에서 막으려던 것이다.
-     **못 보낸다는 사실을 말한다.** 형식이 정해지면 이 분기가 사라진다. */
+  if (act === 'open_gate' || act === 'close_gate') { requestZoneAction(zoneId, act); return; }
+
+  /* 🔴 닫힌 집합 밖은 애초에 버튼이 안 그려진다. 여기 오면 **내 표가 어긋난 것**이다 —
+     조용히 넘기지 않고 말한다(다음 사람이 코드에서 원인을 찾지 않게). */
   showMessage(zoneId + ' · ' + (ACTION_LABEL[act] || act)
-    + ' — 이 조작의 요청 형식이 아직 계약에 없어 보내지 못합니다 (화면 문제가 아닙니다)', 'err');
+    + ' — 화면이 이 조작을 보낼 줄 모릅니다 (표가 어긋났습니다)', 'err');
 });
+
+/**
+ * 자리 단위 조작(차단봉). 🔴 **낙관적 UI 를 쓰지 않는다.**
+ *
+ * 예약은 화면을 미리 바꾸고 실패 시 되돌리지만, 차단봉은 **물리 동작**이다.
+ * 미리 "열렸다"로 그리면 그것이 **거짓 완료**다(§5.34.2: 화면은 *"장치가 켰다고 보고합니다"* 까지).
+ * → **진짜 상태는 에코로 온다.** 화면은 "보냈다"만 말하고 기다린다.
+ *
+ * 🔑 그래서 `state.cmdPending` 경로를 쓴다 — 그쪽은 **화면 상태를 안 바꾸고**,
+ * REQ-0202 로 **`queued` 를 받아 `expires_ms + ack_budget_ms` 로 타이머를 다시 건다.**
+ * ⚠ 응답 갈래도 새로 만들지 않는다: `ack`·`queued`·`error` 를 `reserve` 와 같은 처리로 받는다(socket ③).
+ */
+async function requestZoneAction(zoneId, act) {
+  const label = ACTION_LABEL[act] || act;
+  if (!canAct()) { showMessage(label + ' — ' + actionBlockedReason(), 'err'); return; }
+  const yes = await confirmDialog(zoneId + ' · ' + label,
+    label + ' 명령을 장치로 보냅니다. 실제로 움직였는지는 장치가 보고하는 값으로 확인합니다.');
+  if (!yes) return;
+  const rid = newRid();
+  state.cmdPending.set(rid, {
+    rid: rid, kind: act, slot: zoneId,
+    timer: window.setTimeout(function () { clearCmdPending(rid, true); }, ACK_TIMEOUT)
+  });
+  /* 대상은 **자리 하나**다. 🔴 모듈을 지목하지 않는다 — 지목하면 *"어느 모듈이 이 조작을 맡나"* 가
+     화면에도 생기고, 서버 라우팅과 **같은 규칙이 두 곳**이 된다(socket ②). 라우팅은 서버 것이다. */
+  transport.send({ type: act, slot: zoneId, rid: rid });
+  render();
+}
 
 /* ────────────────────────────────────────────────────────────────
    7. 서버 메시지 처리 (§5.3)
@@ -2370,20 +2403,14 @@ function renderZone(li, z, zs) {
     b.dataset.zone = z.id;
     b.dataset.act = key;
     b.textContent = ACTION_LABEL[key];
-    /* 🔴 **서버가 가능하다고 해도 화면이 못 보내면 누를 수 없다.** 요청 형식이 계약에 있는
-       조작만 활성화한다 — `reserve`/`cancel` 은 옛 형식이 있고, `open_gate`/`close_gate` 는 없다.
-       ⚠ **버튼을 감추지 않는다**: 서버가 그 조작을 제공한다는 것은 사실이므로 **보여 주고,
-       왜 못 누르는지 말한다.** 감추면 "왜 차단봉을 못 여나"를 코드에서 찾게 된다. */
-    const sendable = (key === 'reserve' || key === 'cancel');
-    const okAct = a.ok === true && sendable;
+    /* ✅ **넷 다 보낼 수 있게 됐다**(socket 명세 §6.8): 요청 `type` 이 `actions` 키와 같은 이름이고
+       대상은 `slot` 하나다. ~~요청 형식이 없어 막던 분기~~ 는 사라졌다.
+       🔑 **키를 그대로 `type` 에 쓰므로 조작이 늘어도 이 코드가 안 바뀐다.** */
+    const okAct = a.ok === true;
     /* 🔑 `aria-disabled` 를 쓴다 — 진짜 `disabled` 면 키보드·스크린리더가 그 버튼에 닿지 못해
        **왜 못 누르는지를 들을 수 없다**(원장 §3.2, 의도된 설계). */
     b.setAttribute('aria-disabled', okAct ? 'false' : 'true');
-    if (a.ok === true && !sendable) {
-      b.textContent = ACTION_LABEL[key] + ' ⏳';
-      b.title = '이 조작의 요청 형식이 아직 계약에 없습니다 — 서버는 가능하다고 말하지만 화면이 보낼 수 없습니다';
-      b.setAttribute('aria-label', ACTION_LABEL[key] + ' — ' + b.title);
-    } else if (!okAct && a.reason) {
+    if (!okAct && a.reason) {
       const fam = familyOf(a.reason);
       b.textContent = ACTION_LABEL[key] + ' ' + (FAMILY_MARK[fam] || '');
       b.title = REASON_TEXT[a.reason] || ('지금 할 수 없습니다 (' + a.reason + ')');

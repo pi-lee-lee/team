@@ -30,6 +30,32 @@ function ok(name, cond, detail) {
   if (cond) { pass++; console.log('  ✅ ' + name); }
   else { fail++; console.log('  ❌ ' + name + (detail ? '  → ' + detail : '')); }
 }
+/**
+ * 🔴 **어느 격자가 켜져 있나** — 이 하니스는 **옛 선택자**(`.tile[data-slot]` · `data-action`)로 고른다.
+ * 개정 격자(`#zone-grid`)가 켜지면 그 선택자가 **아무것도 못 찾고**, 그러면 뒤의 단언들이
+ * **제품 실패로 위장한다**(원장 §5.30 — 하니스 결함이 제품 판정으로 읽힌 그 형태).
+ *
+ * 🔑 **그래서 "조용히 0건"을 막는다.** 완전한 이중 지원은 나중이고, **조용한 실패는 그 사이에
+ * 결론을 오염시킨다.** 못 밟는 것을 초록으로 넘기지 않는 것이 먼저다.
+ * (개정 격자 자체는 `web/tools/map-epoch.mjs` 가 잰다.)
+ */
+async function assertOldGrid(client, ok) {
+  const mode = await evaluate(client, `(() => {
+    const zg = document.getElementById('zone-grid'), og = document.getElementById('grid');
+    return { zoneOn: !!zg && !zg.hidden, oldOn: !!og && !og.hidden,
+             tiles: document.querySelectorAll('.tile[data-slot]').length };
+  })()`).catch(() => null);
+  if (!mode) { ok('[하니스] 격자 종류를 확인했다', false, 'evaluate 실패'); return false; }
+  if (mode.zoneOn || mode.tiles === 0) {
+    ok('[하니스] 이 하니스가 밟을 수 있는 격자인가', false,
+       JSON.stringify(mode) + ' — 🔴 **개정 격자가 켜져 있다. 이 하니스는 옛 선택자를 쓴다.** '
+       + '뒤의 결과를 제품 판정으로 읽지 마라. map-epoch.mjs 로 재고, 이중 지원을 넣어라');
+    return false;
+  }
+  ok('[하니스] 옛 격자를 밟는다 (타일 ' + mode.tiles + '개)', true);
+  return true;
+}
+
 
 /**
  * 화면이 그린 메시지 중 **그 자리의 것**을 골라 읽는다.
@@ -97,6 +123,8 @@ try {
     await sleep(100);
   }
   ok('데모 화면이 떴다', ready === true);
+  await assertOldGrid(client, ok);
+
   if (ready !== true) throw new Error('화면이 준비되지 않았다 — 이후 측정은 의미가 없다');
   await sleep(400);                    // 데모의 비동기 시작 메시지를 먼저 흘려보낸다
 

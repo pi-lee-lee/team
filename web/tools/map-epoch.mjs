@@ -246,9 +246,32 @@ try {
   console.log('  · ' + JSON.stringify(btns));
   const rv = btns.find(x => x.act === 'reserve'), og = btns.find(x => x.act === 'open_gate');
   ok('보낼 수 있는 조작은 누를 수 있다', !!(rv && rv.dis === 'false'), JSON.stringify(rv));
-  /* 🔴 감추지 않는다. 보여 주고 **왜 못 누르는지 말한다.** */
-  ok('🔴 요청 형식이 없는 조작은 보이지만 막힌다', !!(og && og.dis === 'true'), JSON.stringify(og));
-  ok('그 이유가 "화면이 보낼 수 없다"로 적힌다', !!(og && /형식이 아직 계약에 없습니다/.test(og.t)), JSON.stringify(og));
+  /* ✅ 요청 형식이 확정돼(socket §6.8) 차단봉도 보낼 수 있다 — ~~막아 두던 분기~~ 는 사라졌다. */
+  ok('✅ 차단봉 조작도 누를 수 있다(형식 확정)', !!(og && og.dis === 'false'), JSON.stringify(og));
+
+  /* 🔴 실제로 확정된 형식으로 나가는가 — `type` 은 `actions` 키와 같고 대상은 `slot` 하나다. */
+  await evaluate(client, `(() => { window.__sent = []; return true; })()`);
+  await evaluate(client, `document.querySelector('#zone-grid .zbtn[data-act="open_gate"]').click()`);
+  let d2 = false;
+  for (let i = 0; i < 40; i++) {
+    d2 = await evaluate(client, `document.getElementById('confirm-dialog').open === true`).catch(() => false);
+    if (d2 === true) break;
+    await sleep(50);
+  }
+  ok('차단봉도 확인을 묻는다(물리 동작이다)', d2 === true);
+  await evaluate(client, `document.querySelector('#confirm-dialog button[value="ok"]').click()`);
+  await sleep(200);
+  const gsent = await evaluate(client, `(window.__sent || []).slice(-1)[0] || null`);
+  console.log('  · 나간 요청 → ' + JSON.stringify(gsent));
+  ok('type 이 actions 키와 같다 (open_gate)', !!(gsent && gsent.type === 'open_gate'), JSON.stringify(gsent));
+  ok('🔴 대상이 자리 하나다 (slot) · 모듈을 지목하지 않는다',
+     !!(gsent && gsent.slot === 'E1' && !gsent.devid && !gsent.name), JSON.stringify(gsent));
+  ok('rid 를 실어 보낸다', !!(gsent && typeof gsent.rid === 'string' && gsent.rid.length > 0));
+  /* 🔑 낙관적 UI 를 쓰지 않는다 — 차단봉을 "열렸다"로 미리 그리면 그게 거짓 완료다(§5.34.2). */
+  const zsummary = await evaluate(client, `(() => {
+    const z = document.querySelector('#zone-grid .zone[data-zone="E1"]');
+    return z ? z.querySelector('.zone__sum').textContent : null; })()`);
+  ok('🔴 보냈다고 상태를 미리 바꾸지 않는다', zsummary !== '열림', JSON.stringify(zsummary));
 
   /* 예약 버튼이 **옛 경로를 그대로 다시 쓰는지** — 확인 대화상자가 뜨면 그 증거다. */
   await evaluate(client, `document.querySelector('#zone-grid .zbtn[data-act="reserve"]').click()`);
