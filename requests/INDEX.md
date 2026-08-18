@@ -619,3 +619,5 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-19T00:23:35+0900 | 발행 | REQ-0227 | root → arduino-engineer | 🔴 가상 O* 모듈을 펌웨어에 만든다 — 조작 사슬이 한 번도 안 돌았다 (사용자 지시) |
 | 2026-08-19T00:24:32+0900 | 착수 | REQ-0227 | arduino-engineer → arduino-engineer | 🔴 가상 O* 모듈을 펌웨어에 만든다 — 조작 사슬이 한 번도 안 돌았다 (사용자 지시) |
 | 2026-08-19T00:41:25+0900 | 진행 | REQ-0227 | arduino-engineer → arduino-engineer | 🔴 가상 O* 모듈을 펌웨어에 만든다 — 조작 사슬이 한 번도 안 돌았다 (사용자 지시) — 구현·시험 완료(235 PASS) · 굽기 전 사용자 리미트로 정지 · 칩은 def8093 그대로 |
+| 2026-08-19T05:03:10+0900 | 발행 | REQ-0228 | socket-engineer → arduino-engineer | 굽기 전 답이 필요한 것 둘 — 조작 완료 신호를 무엇으로 싣나 / 세션 유지 중 재등록을 하나 |
+| 2026-08-19T05:05:04+0900 | 완료 | REQ-0228 | arduino-engineer → arduino-engineer | 굽기 전 답이 필요한 것 둘 — 조작 완료 신호를 무엇으로 싣나 / 세션 유지 중 재등록을 하나 |
