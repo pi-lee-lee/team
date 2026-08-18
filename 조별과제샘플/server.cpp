@@ -741,6 +741,19 @@ struct UnknownSock {
 };
 
 // ---------------------------------------------------------------- 상태
+// 🔴🔴 **`Zone` — 주소를 갖는 장소 하나**(설계 §0·§1 · REQ-0203 4a)
+// ⚠ **`Node`(통신 단위)와 다른 것이다.** 자리는 여러 노드에 걸칠 수 있고, 한 노드가 여러 자리를 가질 수 있다.
+// 🔑 **`cells` 를 목록으로 둔다** — 지금은 **항상 길이 1**이고 그것을 코드가 강제한다.
+//   좌표를 필드에 하나 박으면 큰 자리가 생길 때 **자료형이 바뀌어 읽는 모든 곳이 같이 바뀐다.**
+//   목록이면 **길이 제한만 푼다.** ⚠ **목록으로 두는 것과 아무 길이나 받는 것은 다르다** —
+//   후자는 **검증되지 않은 경로를 여는 것**이라 지금 막는다.
+struct Zone {
+    std::string id;                                     // 전역 고유 · **좌표에서 유도하지 않는다**
+    std::string kind;                                   // parking | entrance | exit
+    std::vector<std::pair<int,int> > cells;             // (row, col) · **지금은 길이 1**
+    std::vector<std::pair<std::string,std::string> > modules;  // 🔴 **(devid, name)** — name 만 쓰면 안 된다
+};
+
 struct Slot {
     int occupied;            // 아두이노가 진실값을 준다
     int reserved;            // 서버가 durable owner (§7.4)
@@ -778,6 +791,15 @@ struct Conn {
 
 struct Server {
     Slot slots[10];
+
+    // ── 지형 (REQ-0203 4a) ──────────────────────────────────────────────────────
+    // 🔴 **`5` 를 코드에 박지 않는다.** 기본값이고 설정에서 온다(설계 §0).
+    int grid_rows, grid_cols;
+    std::vector<Zone> zones;
+    // 🔑 **판(`epoch`)은 서버만 올리고, 지형을 바꾸는 함수 안에서 그 줄 옆에서 올린다**(설계 §6.8).
+    //   떨어뜨리면 **"바꿨는데 안 올린 경로"** 가 생기고, 그건 **탐지 장치가 있는데 안 울리는 것**이라
+    //   아예 없는 것보다 나쁘다.
+    long long map_epoch;
     sock_t lsn_ard, lsn_http, lsn_phone;
     std::map<sock_t, std::string> phones;   // 폰 연결 → 수신 버퍼 (연결마다 따로!)
     // ⚠ `ard` 는 이제 "아두이노 연결"이 아니라 **주차 노드의 연결**이다(REQ-0083).
@@ -993,7 +1015,8 @@ struct Server {
 
     // 🔑 `park` 의 필드들은 **`Node` 의 생성자가 초기화한다.** 여기 목록에 다시 적지 않는다 —
     //   적으면 참조에 임시값을 묶으려는 것이 되어 컴파일이 안 된다(그게 이 설계의 안전장치다).
-    Server() : lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK),
+    Server() : grid_rows(5), grid_cols(5), map_epoch(0),   // 선언 순서(-Wreorder)
+               lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK),
                reg_ok(0), reg_bad(0), reg_qsent(0), reg_giveups(0), reg_widthbad(0),
                dup_devid_reject(0), takeover_grace(0),  // 선언 순서와 일치시킨다(-Wreorder)
                aux_conflicts(0), admit_rejects(0),
@@ -1431,6 +1454,58 @@ struct Server {
             closesock(aux[reap[k]].fd);
             aux.erase(reap[k]);
         }
+    }
+
+    // ── REQ-0203 4a: 지형 ───────────────────────────────────────────────────────
+    // 🔴 **`epoch` 를 올리는 곳은 여기 셋뿐이다.** 지형을 바꾸는 줄 바로 옆이다.
+    void bump_epoch(const std::string& why) {
+        map_epoch++;
+        logf("=", "지형 판 " + std::to_string(map_epoch) + " (" + why + ")");
+    }
+
+    // 기본 지형. ⚠ **기본값이지 고정값이 아니다** — 설정 적재가 생기면 이 함수를 대체한다.
+    void build_default_zones() {
+        zones.clear();
+        for (int i = 0; i < 10; i++) {              // 주차 자리 10 — 격자 앞 두 줄
+            Zone z; z.id = SLOT_ID[i]; z.kind = "parking";
+            z.cells.push_back(std::make_pair(i / grid_cols, i % grid_cols));
+            zones.push_back(z);
+        }
+        Zone e; e.id = "E1"; e.kind = "entrance";
+        e.cells.push_back(std::make_pair(grid_rows - 1, 0));
+        zones.push_back(e);
+        Zone x; x.id = "X1"; x.kind = "exit";
+        x.cells.push_back(std::make_pair(grid_rows - 1, grid_cols - 1));
+        zones.push_back(x);
+        // 🔴 **길이 1 을 여기서 강제한다.** 목록이라고 아무 길이나 받는 것이 아니다.
+        for (size_t i = 0; i < zones.size(); i++)
+            if (zones[i].cells.size() != 1) {
+                logf("!", "자리 " + zones[i].id + " 의 칸 수가 1이 아니다 — 지금은 1:1 만 지원한다");
+                zones[i].cells.resize(1);
+            }
+        bump_epoch("기본 지형 구성");
+    }
+
+    Zone* zone_find(const std::string& id) {
+        for (size_t i = 0; i < zones.size(); i++) if (zones[i].id == id) return &zones[i];
+        return NULL;
+    }
+
+    // 등록이 끝난 노드의 모듈을 자리에 붙인다.
+    // ⚠ **결속 규칙은 지금 부트스트랩이다**: 모듈 `name` 이 자리 `id` 와 같으면 그 자리에 붙는다.
+    //   지금 펌웨어가 `D,A1,IP` 처럼 자리 이름을 그대로 쓰기 때문에 성립한다.
+    //   🔴 **설정이 생기면 이 규칙을 설정이 대체한다** — 그때까지 이름이 곧 결속이라는 것을 적어 둔다.
+    void bind_modules(Node& n) {
+        bool changed = false;
+        for (size_t i = 0; i < n.mods.size(); i++) {
+            Zone* z = zone_find(n.mods[i].first);
+            if (!z) continue;
+            std::pair<std::string,std::string> key(n.devid, n.mods[i].first);
+            bool dup = false;
+            for (size_t k = 0; k < z->modules.size(); k++) if (z->modules[k] == key) dup = true;
+            if (!dup) { z->modules.push_back(key); changed = true; }
+        }
+        if (changed) bump_epoch("노드 " + n.devid + " 등록 결속");
     }
 
     // ── REQ-0203 3a: **노드를 하나로 훑는 길** ──────────────────────────────────
@@ -2686,6 +2761,7 @@ struct Server {
             if ((int)park.mods.size() == park.reg_n) {
                 park.reg_done = true;
                 reg_ok++;
+                bind_modules(park);          // 🔑 등록이 지형을 바꾼다 → epoch 이 여기서 오른다
                 // 🔴 **삼중 검산 ①②** — 선언 `n` 과 실제 줄 수. ③(hex 폭)은 `S` 에서 본다.
                 char b[192];
                 snprintf(b, sizeof(b),
@@ -4240,6 +4316,47 @@ static int selftest() {
                           << v.size() << " (기대 3 · 주차가 앞 · **갱신 호출 없이**)\n";
                 if (!ok21) bad++;
                 t.park.fd = BAD_SOCK; t.aux.clear();
+            }
+
+            // ㉒ 🔴 **지형 구성과 판(`epoch`)** (REQ-0203 4a)
+            {
+                Server t;
+                t.build_default_zones();
+                Zone* a1 = t.zone_find("A1"); Zone* e1 = t.zone_find("E1");
+                bool ok22 = (t.zones.size() == 12 && a1 && e1
+                             && a1->kind == "parking" && e1->kind == "entrance"
+                             && a1->cells.size() == 1 && t.map_epoch == 1);
+                std::cout << (ok22 ? "  ✓ " : "  ✗ ") << "지형: 자리 " << t.zones.size()
+                          << " · A1 칸수 " << (a1 ? a1->cells.size() : 0)
+                          << " · 판 " << t.map_epoch << " (기대 12 · 1 · 1)\n";
+                if (!ok22) bad++;
+
+                // 🔴 **등록이 지형을 바꾸면 판이 오른다**
+                t.park.devid = "P1";
+                t.park.mods.push_back(std::make_pair(std::string("A1"), std::string("IP")));
+                t.park.mods.push_back(std::make_pair(std::string("A2"), std::string("OG")));
+                t.bind_modules(t.park);
+                bool ok23 = (t.map_epoch == 2 && a1->modules.size() == 1
+                             && a1->modules[0].first == "P1" && a1->modules[0].second == "A1");
+                std::cout << (ok23 ? "  ✓ " : "  ✗ ") << "결속: A1 모듈 "
+                          << a1->modules.size() << "개 (devid=" << (a1->modules.empty() ? "" : a1->modules[0].first)
+                          << ") · 판 " << t.map_epoch << " (기대 1 · P1 · 2)\n";
+                if (!ok23) bad++;
+
+                // 🔴 **같은 등록을 다시 받아도 판이 안 오른다** — 안 그러면 재접속마다 화면이 맵을 다시 받는다
+                t.bind_modules(t.park);
+                bool ok24 = (t.map_epoch == 2 && a1->modules.size() == 1);
+                std::cout << (ok24 ? "  ✓ " : "  ✗ ") << "같은 결속 반복 → 판 " << t.map_epoch
+                          << " · 모듈 " << a1->modules.size() << " (기대 2 · 1 — 안 오른다)\n";
+                if (!ok24) bad++;
+
+                // 🔴 **상태만 바뀌는 것은 판을 안 올린다** — 올리면 봉투를 가른 이유가 사라진다
+                long long e0 = t.map_epoch;
+                t.slots[0].occupied = 1; t.slots[0].reserved = 1;
+                bool ok25 = (t.map_epoch == e0);
+                std::cout << (ok25 ? "  ✓ " : "  ✗ ") << "점유·예약 변경 → 판 " << t.map_epoch
+                          << " (기대 " << e0 << " — 상태는 판을 안 올린다)\n";
+                if (!ok25) bad++;
             }
 
             s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
