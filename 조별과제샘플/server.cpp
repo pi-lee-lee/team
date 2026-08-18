@@ -4646,7 +4646,12 @@ static int selftest() {
                 t.on_ws_message(lw.a, "{\"type\":\"open_gate\",\"slot\":\"A1\",\"rid\":\"2\"}");
                 // ③ 입구인데 모듈이 안 붙었다 → module_absent
                 t.on_ws_message(lw.a, "{\"type\":\"open_gate\",\"slot\":\"E1\",\"rid\":\"3\"}");
-                char rb[4096]; int n = (int)recv(lw.b, rb, sizeof(rb), MSG_DONTWAIT);
+                // ⚠ **여기도 재시도해야 한다.** 처음엔 한 번만 읽었고 디버그 빌드에서는 우연히
+                //   통과했다 — 🔴 **`-O2` 빌드가 더 빨라서 그 우연이 깨졌다.**
+                //   **배포용 빌드를 돌려 본 것이 이 결함을 드러냈다.**
+                char rb[4096]; int n = -1;
+                for (int tries = 0; tries < 2000 && n <= 0; tries++)
+                    n = (int)recv(lw.b, rb, sizeof(rb), MSG_DONTWAIT);
                 std::string got(rb, n > 0 ? n : 0);
                 bool ok29 = (got.find("module_absent") != std::string::npos);
                 std::cout << (ok29 ? "  ✓ " : "  ✗ ") << "조작 요청: 없는 자리·차단봉 없는 자리·"
