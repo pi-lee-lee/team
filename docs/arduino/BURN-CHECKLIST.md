@@ -76,11 +76,11 @@ SendMessage → monitor-engineer
 
 ```bash
 PORT=$(arduino-cli board list | awk '/arduino:avr:uno/{print $1}')   # ← 이름을 박지 마라
-echo "$PORT"                      # 예: /dev/cu.usbmodem1101
+echo "$PORT"                      # 예: /dev/cu.usbmodem21201 (⚠ 값이 자주 바뀐다 — 예시일 뿐이다)
 lsof "$PORT"                      # 아무것도 안 나와야 한다
 ```
 
-> ### 🔴 **포트 이름은 USB 재연결마다 바뀐다.** 실제로 `usbmodem21201` → `usbmodem1101` 로 바뀌었고
+> ### 🔴 **포트 이름은 USB 재연결마다 바뀐다.** 실제로 `usbmodem21201` → `usbmodem1101` → **`usbmodem21201`(2026-08-18 이동 후)** 로 바뀌었고
 > **monitor 의 탭이 그 때문에 죽었다**(2026-08-18 `07:22:37` · `포트 복구 실패 6회`).
 > **이름을 박아 두면 다음 재연결에서 조용히 막힌다** — 원장 §5.7 이 `SERVER_IP` 로 데인 것과 같은 형태다.
 
