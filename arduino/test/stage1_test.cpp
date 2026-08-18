@@ -1317,6 +1317,89 @@ int main() {
                             "★★ Q 경로는 반대다 — regPending 이 서고 regAfterS 는 내려간다");
   }
 
+  // ── [36] 🔴 가상 O* 모듈과 `G` 조작 명령 (REQ-0227) ───────────────────────
+  //
+  // ⚠ **새 기능을 밟는 시험이 하나도 없었다.** 기존 218 PASS 는 `n=12` 로 반응한 것뿐이고
+  //   `G` 경로·자율 정지·에코는 **아무도 안 보고 있었다.** 오늘 세 번 밟은 그 형태다.
+  printf("\n[36] 가상 차단봉과 G 조작 명령\n");
+  {
+    wifi.refusePrompt = false;
+    vGateManual = false; vGateState = 0;
+    cacheClear(); ackqCount = 0; ackqHead = 0;
+    occMask = 0; resMask = 0; testArmed = false;
+
+    // ① 등록에 가상 모듈이 실린다 — 이름은 자리 id · kind 에 V 접미
+    char rbuf[BATCH_CAP + 1];
+    buildRegistration(rbuf, sizeof rbuf);
+    ok(strstr(rbuf, "D,E1,OBV,") != NULL, "★★ E1 이 OBV(가상 차단봉)로 선언된다");
+    ok(strstr(rbuf, "D,X1,OBV,") != NULL, "★★ X1 도 선언된다");
+    ok(strstr(rbuf, "D,A1,IP,")  != NULL, "★ 실물 모듈은 그대로다 (V 없음)");
+
+    // ② 자율 모드 — slotNo 로 결정적으로 토글한다. **무작위가 아니다**
+    slotNo = 0;  bool e0 = vGateOpen(0), x0 = vGateOpen(1);
+    slotNo = 10; bool e1 = vGateOpen(0);
+    slotNo = 7;  bool x1 = vGateOpen(1);
+    ok(e0 && !e1,           "★★ E1 이 주기 20 으로 토글한다 (0→열림 · 10→닫힘)");
+    ok(x0 && !x1,           "★★ X1 은 주기 14 로 토글한다 — **서로 소라 조합이 다 나온다**");
+    slotNo = 0;
+    ok(vGateOpen(0) == e0,  "★ 같은 slotNo 면 같은 값이다 (결정적 · 재현 가능)");
+
+    // ③ 🔴 `G` 명령 — idx 10 = E1 (SLOT_N=10 이므로)
+    char g[24]; snprintf(g, sizeof g, "G,301,10,0,"); appendChecksum(g, (uint8_t)strlen(g));
+    handleFrameLine(g);
+    ok(vGateManual,         "★★ 첫 명령이 자율 토글을 **영구 정지**시킨다");
+    ok(!vGateOpen(0),       "★★ op=0 이면 닫힌다");
+    slotNo = 0;
+    ok(!vGateOpen(0),       "★★ 자율 주기가 와도 안 열린다 — **명령이 되돌려지지 않는다**");
+
+    snprintf(g, sizeof g, "G,302,10,1,"); appendChecksum(g, (uint8_t)strlen(g));
+    handleFrameLine(g);
+    ok(vGateOpen(0),        "★★ op=1 이면 열린다");
+
+    // ④ 🔴 에코 — occ 비트 10 에 실려 나간다. **완료 판정이 이걸로 이뤄진다**
+    char sbuf[64]; buildStatus(sbuf, sizeof sbuf);
+    printf("      S(E1 열림) = %s\n", sbuf);
+    {
+      // ✏️ 기대가 "002" 였는데 실제는 "003" 이다. **코드가 맞고 시험이 틀렸다:**
+      //   자율을 굳힌 시점이 `slotNo=0` 이라 **X1 도 열린 상태로 굳었다.**
+      //   슬롯10 → 비트 1 · 슬롯11 → 비트 0 → 둘 다 열림 = 0b…011 = "003"
+      ok(strstr(sbuf, ",003,") != NULL,
+                            "★★ E1·X1 이 열린 것이 occ 비트로 나간다 (에코가 완료를 말한다)");
+      // 🔴 X1 만 닫아서 **비트가 따로 움직이는지** 본다 — 하나로 뭉쳐 있으면 못 가른다
+      char g2[24]; snprintf(g2, sizeof g2, "G,305,11,0,"); appendChecksum(g2, (uint8_t)strlen(g2));
+      handleFrameLine(g2);
+      char sb2[64]; buildStatus(sb2, sizeof sb2);
+      printf("      S(E1 열림·X1 닫힘) = %s\n", sb2);
+      ok(strstr(sb2, ",002,") != NULL,
+                            "★★ X1 만 닫으면 002 — 두 비트가 **독립으로** 움직인다");
+    }
+
+    // ⑤ 🔴 모르는 idx — **조용히 안 버린다. 거절도 ACK 이 온다**
+    ackqCount = 0; ackqHead = 0;
+    snprintf(g, sizeof g, "G,303,99,1,"); appendChecksum(g, (uint8_t)strlen(g));
+    handleFrameLine(g);
+    ok(ackqCount == 1,      "★★ 모르는 idx 도 ACK 를 보낸다 (ack_timeout 을 안 만든다)");
+    { int8_t h = cacheFind(303);
+      ok(h >= 0 && cache[h].result == 3,
+                            "★★ result=3 (수행할 수 없다) — 새 코드를 안 만들었다"); }
+
+    // ⑥ 실물 자리를 idx 로 조작하려 하면 거절 — 차단봉이 아니다
+    snprintf(g, sizeof g, "G,304,3,1,"); appendChecksum(g, (uint8_t)strlen(g));
+    handleFrameLine(g);
+    { int8_t h = cacheFind(304);
+      ok(h >= 0 && cache[h].result == 3,
+                            "★★ 실물 센서 자리(idx 3)는 조작 대상이 아니다"); }
+
+    // ⑦ 멱등 — 같은 rid 를 다시 받으면 같은 답
+    ackqCount = 0; ackqHead = 0;
+    snprintf(g, sizeof g, "G,302,10,0,"); appendChecksum(g, (uint8_t)strlen(g));
+    handleFrameLine(g);
+    ok(vGateOpen(0),        "★★ 같은 rid 는 상태를 다시 안 바꾼다 (열린 채 유지)");
+    ok(ackqCount == 1,      "★ 그래도 ACK 는 다시 보낸다");
+
+    vGateManual = false; vGateState = 0; occMask = 0;
+  }
+
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }
