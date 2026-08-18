@@ -1,0 +1,143 @@
+
+[PARKING NODE] proto v1 / 10 slots / dev=P1
+[BOOT] 리셋 원인: 불명 (부트로더가 MCUSR 을 지우고 넘어왔다)
+[BOOT] 사다리 4단(ESP 하드리셋선) 미배선 — A2 를 ESP RST 에 물리고 ESP_RST_WIRED=1 · 6단(워치독) 끔
+[NET] 0 RST
+[NET] 1 CWMODE=1
+[DIAG] offline step=2 사다리=0/0 rx=0 lines=0 up=3s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[DIAG] offline step=2 사다리=0/0 rx=0 lines=0 up=6s
+[DIAG] offline step=2 사다리=0/0 rx=0 lines=0 up=9s
+[DIAG] offline step=2 사다리=0/0 rx=0 lines=0 up=12s
+[DIAG] offline step=2 사다리=0/0 rx=0 lines=0 up=15s
+[DIAG] offline step=2 사다리=0/0 rx=0 lines=0 up=18s
+[DIAG] offline step=2 사다리=0/0 rx=0 lines=0 up=21s
+[DIAG] offline step=2 사다리=0/0 rx=0 lines=0 up=24s
+[DIAG] offline step=2 사다리=0/0 rx=0 lines=0 up=27s
+[DIAG] offline step=2 사다리=0/0 rx=0 lines=0 up=30s
+[DIAG] offline step=2 사다리=0/0 rx=0 lines=0 up=33s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 1회 · 결합유지 없음 · 현재 0단(0회 누적)
+[LADDER] ↑↑ 단 상승 → 1단
+[LADDER] 1단 조치: 시리얼 드레인 0바이트 버림 + 줄 조립 초기화
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[DIAG] offline step=3 사다리=1/0 rx=0 lines=0 up=36s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[DIAG] offline step=3 사다리=1/0 rx=0 lines=0 up=39s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[NET] ★ ESP 가 IP 를 잃었다 — 모듈 리셋으로 본다. 누적 사건 1
+[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 35s · 연속 1회 · 결합유지 없음 · 현재 1단(0회 누적)
+[LADDER] 1단 조치: 시리얼 드레인 0바이트 버림 + 줄 조립 초기화
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[DIAG] offline step=2 사다리=1/1 rx=0 lines=0 up=42s
+[DIAG] offline step=2 사다리=1/1 rx=0 lines=0 up=45s
+[DIAG] offline step=2 사다리=1/1 rx=0 lines=0 up=48s
+[DIAG] offline step=2 사다리=1/1 rx=0 lines=0 up=51s
+[DIAG] offline step=2 사다리=1/1 rx=0 lines=0 up=54s
+[DIAG] offline step=2 사다리=1/1 rx=0 lines=0 up=57s
+[CNT] up=60 drop=0 esprst=1 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 slot=50 oow=0 smiss=0 ssovf=0 cksumng=0 skip=0 online=0
+[DIAG] offline step=2 사다리=1/1 rx=0 lines=0 up=60s
+[RAM] 최저 여유 65535 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=1/1 rx=0 lines=0 up=63s
+[DIAG] offline step=2 사다리=1/1 rx=0 lines=0 up=66s
+[DIAG] offline step=2 사다리=1/1 rx=0 lines=0 up=69s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 2회 · 결합유지 없음 · 현재 1단(1회 누적)
+[LADDER] ↑↑ 단 상승 → 2단
+[NET] 7 GMR (펌웨어 판 — 진단)
+[DIAG] offline step=8 사다리=2/0 rx=0 lines=0 up=72s
+[NET] 8 CWCOUNTRY (채널 12/13 우회 시도 — 진단)
+[NET] 9 CWLAP (주변 AP 목록 — 진단)
+[DIAG] offline step=2 사다리=2/0 rx=0 lines=0 up=75s
+[DIAG] offline step=2 사다리=2/0 rx=0 lines=0 up=78s
+[DIAG] offline step=2 사다리=2/0 rx=0 lines=0 up=81s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[DIAG] offline step=2 사다리=2/0 rx=0 lines=0 up=84s
+[DIAG] offline step=2 사다리=2/0 rx=0 lines=0 up=87s
+[DIAG] offline step=2 사다리=2/0 rx=0 lines=0 up=90s
+[DIAG] offline step=2 사다리=2/0 rx=0 lines=0 up=93s
+[DIAG] offline step=2 사다리=2/0 rx=0 lines=0 up=96s
+[DIAG] offline step=2 사다리=2/0 rx=0 lines=0 up=99s
+[DIAG] offline step=2 사다리=2/0 rx=0 lines=0 up=102s
+[DIAG] offline step=2 사다리=2/0 rx=0 lines=0 up=105s
+[DIAG] offline step=2 사다리=2/0 rx=0 lines=0 up=108s
+[DIAG] offline step=2 사다리=2/0 rx=0 lines=0 up=111s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 3회 · 결합유지 없음 · 현재 2단(0회 누적)
+[LADDER] 2단 조치: 5초 쉬고 AT+CWQAP 로 결합을 명시적으로 끊은 뒤 다시 붙는다
+[DIAG] offline step=10 사다리=2/1 rx=0 lines=0 up=114s
+[DIAG] offline step=10 사다리=2/1 rx=0 lines=0 up=117s
+[NET] 10 CWQAP (결합 해제 — 사다리 2단)
+[CNT] up=120 drop=0 esprst=1 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 slot=100 oow=0 smiss=0 ssovf=0 cksumng=0 skip=0 online=0
+[DIAG] offline step=2 사다리=2/1 rx=0 lines=0 up=120s
+[RAM] 최저 여유 65535 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[DIAG] offline step=2 사다리=2/1 rx=0 lines=0 up=123s
+[DIAG] offline step=2 사다리=2/1 rx=0 lines=0 up=126s
+[DIAG] offline step=2 사다리=2/1 rx=0 lines=0 up=129s
+[DIAG] offline step=2 사다리=2/1 rx=0 lines=0 up=132s
+[DIAG] offline step=2 사다리=2/1 rx=0 lines=0 up=135s
+[DIAG] offline step=2 사다리=2/1 rx=0 lines=0 up=138s
+[DIAG] offline step=2 사다리=2/1 rx=0 lines=0 up=141s
+[DIAG] offline step=2 사다리=2/1 rx=0 lines=0 up=144s
+[DIAG] offline step=2 사다리=2/1 rx=0 lines=0 up=147s
+[DIAG] offline step=2 사다리=2/1 rx=0 lines=0 up=150s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 4회 · 결합유지 없음 · 현재 2단(1회 누적)
+[LADDER] ↑↑ 단 상승 → 3단
+[LADDER] 3단 조치: 15초 쉬고 AT+RST (모듈 소프트 리셋)
+[DIAG] offline step=0 사다리=3/0 rx=0 lines=0 up=153s
+[DIAG] offline step=0 사다리=3/0 rx=0 lines=0 up=156s
+[DIAG] offline step=0 사다리=3/0 rx=0 lines=0 up=159s
+[DIAG] offline step=0 사다리=3/0 rx=0 lines=0 up=162s
+[DIAG] offline step=0 사다리=3/0 rx=0 lines=0 up=165s
+[NET] 0 RST
+[DIAG] offline step=1 사다리=3/0 rx=0 lines=0 up=168s
+[NET] 1 CWMODE=1
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[DIAG] offline step=2 사다리=3/0 rx=0 lines=0 up=171s
+[DIAG] offline step=2 사다리=3/0 rx=0 lines=0 up=174s
+[DIAG] offline step=2 사다리=3/0 rx=0 lines=0 up=177s
+[CNT] up=180 drop=0 esprst=1 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 slot=150 oow=0 smiss=0 ssovf=0 cksumng=0 skip=0 online=0
+[DIAG] offline step=2 사다리=3/0 rx=0 lines=0 up=180s
+[RAM] 최저 여유 65535 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=3/0 rx=0 lines=0 up=183s
+[DIAG] offline step=2 사다리=3/0 rx=0 lines=0 up=186s
+[DIAG] offline step=2 사다리=3/0 rx=0 lines=0 up=189s
+[DIAG] offline step=2 사다리=3/0 rx=0 lines=0 up=192s
+[DIAG] offline step=2 사다리=3/0 rx=0 lines=0 up=195s
+[DIAG] offline step=2 사다리=3/0 rx=0 lines=0 up=198s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 5회 · 결합유지 없음 · 현재 3단(0회 누적)
+[LADDER] 3단 조치: 15초 쉬고 AT+RST (모듈 소프트 리셋)
+[DIAG] offline step=0 사다리=3/1 rx=0 lines=0 up=201s
+[DIAG] offline step=0 사다리=3/1 rx=0 lines=0 up=204s
+[DIAG] offline step=0 사다리=3/1 rx=0 lines=0 up=207s
+[DIAG] offline step=0 사다리=3/1 rx=0 lines=0 up=210s
+[DIAG] offline step=0 사다리=3/1 rx=0 lines=0 up=213s
+[NET] 0 RST
+[DIAG] offline step=1 사다리=3/1 rx=0 lines=0 up=216s
+[NET] 1 CWMODE=1
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[DIAG] offline step=2 사다리=3/1 rx=0 lines=0 up=219s
+[DIAG] offline step=2 사다리=3/1 rx=0 lines=0 up=222s
+[DIAG] offline step=2 사다리=3/1 rx=0 lines=0 up=225s
+[DIAG] offline step=2 사다리=3/1 rx=0 lines=0 up=228s
+[DIAG] offline step=2 사다리=3/1 rx=0 lines=0 up=231s
+[DIAG] offline step=2 사다리=3/1 rx=0 lines=0 up=234s
+[DIAG] offline step=2 사다리=3/1 rx=0 lines=0 up=237s
+[CNT] up=240 drop=0 esprst=1 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 slot=200 oow=0 smiss=0 ssovf=0 cksumng=0 skip=0 online=0
+[DIAG] offline step=2 사다리=3/1 rx=0 lines=0 up=240s
+[RAM] 최저 여유 65535 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=3/1 rx=0 lines=0 up=243s
+[DIAG] offline step=2 사다리=3/1 rx=0 lines=0 up=246s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 6회 · 결합유지 없음 · 현재 3단(1회 누적)
+[LADDER] ↑↑ 단 상승 → 4단
+[LADDER] ⚠4단 미실행: 하드웨어 리셋선이 배선되지 않았다(ESP_RST_WIRED=0)
+[LADDER]   → Uno A2 를 ESP 의 RST 에 물리고 ESP_RST_WIRED 를 1 로 바꿔 다시 구워라
+[LADDER]   지금은 30초 쉬고 AT+RST 만 되풀이한다
+[DIAG] offline step=0 사다리=4/0 rx=0 lines=0 up=249s
+[DIAG] offline step=0 사다리=4/0 rx=0 lines=0 up=252s
+[DIAG] offline step=0 사다리=4/0 rx=0 lines=0 up=255s
+[DIAG] offline step=0 사다리=4/0 rx=0 lines=0 up=258s
+[DIAG] offline step=0 사다리=4/0 rx=0 lines=0 up=261s
+[DIAG] offline step=0 사다리=4/0 rx=0 lines=0 up=264s
+[DIAG] offline step=0 사다리=4/0 rx=0 lines=0 up=267s
+[DIAG] offline step=0 사다리=4/0 rx=0 lines=0 up=270s
+[DIAG] offline step=0 사다리=4/0 rx=0 lines=0 up=273s
