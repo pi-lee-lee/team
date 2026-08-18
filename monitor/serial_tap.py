@@ -121,6 +121,17 @@ def main() -> int:
 
     buf = bytearray()
     retries = 0
+    # ── 심장박동 ────────────────────────────────────────────────────
+    # 🔴 2026-08-18 창 J: 탭이 22:28:55 에 **조용히 멈췄는데** 장치는 계속 살아 있었다
+    #   (서버는 같은 시각 이후로도 프레임을 계속 받고 있었다). 로그만 보면
+    #   **"장치가 조용했다"와 "내가 안 봤다"가 구분되지 않는다** — 원장 1.1 의 계측기 판본이다.
+    #   ⚠ 종료 표지(«tap» 캡처 종료)는 *끝*에서만 찍히므로 **중간에 죽으면 아무 흔적이 없다.**
+    #   → 60초마다 한 줄을 남긴다. **이 줄이 끊긴 시각이 곧 탭이 죽은 시각이다.**
+    #   🔑 `rx=` 가 안 늘면서 심장박동만 이어지면 그건 **장치가 조용한 것**이다. 둘이 갈린다.
+    import time as _time
+    _last_beat = _time.time()
+    _rx_total = 0
+    BEAT_SEC = 60
     while True:
         try:
             with serial.Serial(args.port, args.baud, timeout=1) as ser:
@@ -128,7 +139,13 @@ def main() -> int:
                 retries = 0
                 while True:
                     chunk = ser.read(4096)
+                    _now = _time.time()
+                    if _now - _last_beat >= BEAT_SEC:
+                        note(f"살아있음 — 최근 {BEAT_SEC}초 rx={_rx_total}B (이 줄이 끊기면 탭이 죽은 것이다)")
+                        _last_beat = _now
+                        _rx_total = 0
                     if chunk:
+                        _rx_total += len(chunk)
                         raw.write(chunk)
                         buf.extend(chunk)
                         while True:
