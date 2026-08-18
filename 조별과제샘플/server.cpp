@@ -787,7 +787,14 @@ struct Pending {             // 아두이노에 내려보내고 ACK 를 기다�
 struct Conn {
     enum Kind { HTTP, WS } kind;
     std::string inbuf;
-    Conn() : kind(HTTP) {}
+    // 🔴 **`get_map` 상한을 연결별로 둔다** (2026-08-19).
+    //   전역 창이면 **화면 여섯이 재접속하는 것만으로 상한을 넘긴다** — 각자 한 번씩 물었는데
+    //   누군가는 거절당한다. 서버 재기동 직후가 정확히 그 상황이고, **거절당한 화면은
+    //   지형을 못 받아 빈 채로 남는다.**
+    //   ⚠ 주석은 원래 *"화면 하나가 1초에"* 라고 말하고 있었다 — **구현이 그 말과 달랐다.**
+    //   🔑 고친 것은 상한값이 아니라 **누구를 세는가**다.
+    long long getmap_win_ms; int getmap_in_win;
+    Conn() : kind(HTTP), getmap_win_ms(0), getmap_in_win(0) {}
 };
 
 struct Server {
@@ -832,6 +839,14 @@ struct Server {
     long long reg_widthbad;
     // 🔴 등록 전이라 자리 비트열을 못 푼 프레임 수. **0 이 아니면 그 구간 자리 상태가 없다**
     long long occ_undecoded; bool occ_undecoded_warned;    // 🔴 삼중 검산 ③ 불일치 — `S` 의 hex 폭이 선언 `n` 과 안 맞는다
+    // 🔴 **분모를 찍는다** — 2026-08-19 에 자가 치유(§7.6)가 hex 전환 이후 **한 번도 안 돌았는데
+    //   아무 흔적이 없었다.** 폭 검사가 *닫히는* 쪽으로 실패해서 오독조차 안 남긴 것이다.
+    //   ⚠ **`0` 이 안 남는 결함은 계수로 못 잡는다** — 그래서 "몇 번 고쳤나"(분자)가 아니라
+    //   **"몇 번 검사했나"(분모)** 를 센다. `heal_checks == 0` 이면 그 자체가 빨강이다.
+    long long heal_checks;       // §7.6 예약 불일치 **검사**가 실제로 돈 횟수 (분모)
+    long long heal_fires;        // 그중 불일치를 찾아 `C` 를 재하달한 횟수 (분자)
+    long long res_undecoded;     // `S` 의 예약 마스크를 못 읽은 프레임 수
+    bool      res_undecoded_warned;
     long long dup_devid_reject;   // ①에서 거절한 횟수 = **다른 IP 가 산 자리를 노렸다**
     long long takeover_grace;     // 유예를 넘겨 교체한 횟수 = 진짜 죽은 것으로 판단
     std::map<std::string, AuxNode> aux;   // device_id → 보조 노드 (상행 전용)
@@ -1039,6 +1054,7 @@ struct Server {
                lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK),
                reg_ok(0), reg_bad(0), reg_qsent(0), reg_giveups(0), reg_widthbad(0),
                occ_undecoded(0), occ_undecoded_warned(false),
+               heal_checks(0), heal_fires(0), res_undecoded(0), res_undecoded_warned(false),
                dup_devid_reject(0), takeover_grace(0),  // 선언 순서와 일치시킨다(-Wreorder)
                aux_conflicts(0), admit_rejects(0),
                // 🔴 이 여섯(+다섯)은 **선언만 돼 있고 초기화 목록에 없었다.** 쓰기 시작하는 순간
@@ -1286,6 +1302,12 @@ struct Server {
            + " · 회수 " + std::to_string(zombie_reaps + keepalive_reaps)
            + "(유휴 " + std::to_string(zombie_reaps)
            + "/keepalive " + std::to_string(keepalive_reaps) + ")";
+        // 🔴 **분모를 찍는다** — `치유 0/0` 과 `치유 0/1200` 은 완전히 다른 문장이다.
+        //   앞은 **검사가 안 돈 것**(2026-08-19 에 7시간 그랬다)이고 뒤는 **건강한 것**이다.
+        //   ⚠ 분자만 찍으면 둘이 똑같이 `0` 으로 보인다. 그래서 검사 수를 같이 낸다.
+        s += " · 치유 " + std::to_string(heal_fires) + "/" + std::to_string(heal_checks)
+           + (heal_checks == 0 ? " 🔴검사0" : "")
+           + " · 예약미해독 " + std::to_string(res_undecoded);
         return s;
     }
 
@@ -1554,6 +1576,46 @@ struct Server {
     //    알 수 없는 글자도 **명령 금지 쪽으로 떨어진다** — 모르는 장치에 명령을 보내는 것이
     //    안 보내는 것보다 위험하다. **모르는 `kind` 를 거절하지는 않는다**(거절하면 새 모듈 하나가
     //    옛 서버에서 노드 전체를 미등록으로 만든다).
+    // ── 🔴 `S` 의 비트필드를 **한 정의로** 읽는다 (2026-08-19 · 원장 §8.23-(66))
+    //
+    // **왜 함수인가**: 같은 프레임에 비트필드가 셋 있는데(`occ`·`res`·`ovr`) **각자 해독하고 있었다.**
+    // hex 전환 때 `occ` 만 고쳤고 나머지 둘은 10진 전제로 남았다 —
+    // `res` 는 **조건이 영영 거짓이 되어 자가 치유가 죽었고**, `ovr` 은 잠복이었다.
+    // 🔑 **전선 형식이 바뀌면 그 형식을 읽는 자리를 전부 세야 한다. 정의가 하나면 셀 필요가 없다.**
+    //
+    // ⚠ **폭으로 형식을 가르지 않는다.** `n=10` 이면 hex 폭 3, 10진 폭 10 이라 지금은 갈리지만
+    //   `n=40` 이면 hex 폭도 10 이 되어 **두 형식이 같은 폭을 갖는다.** 그래서 판별자는 폭이 아니라
+    //   **등록 여부**다: 등록됐으면 `n` 을 아니까 hex, 아니면 옛 10진(폭 10)으로만 받는다.
+    //
+    // 반환 true = 해독했다 / false = 못 읽었다(`out` 은 전부 0).
+    // 🔴 **모르면 0 을 채우고 false 를 낸다 — 짐작해서 풀지 않는다.** 짐작한 값은 폭도 체크섬도
+    //   통과하고 자리만 어긋난다(그게 `49c07f6` 이 고친 고장이다).
+    // 🔴 **10 에서 자르지 않는다.** `occ` 의 비트 `>= 10` 은 **액추에이터 상태**다
+    //   (arduino REQ-0228 답변 · 명세 §5 "위험 다섯째"가 이미 그렇게 정했다):
+    //     비트 0..9   = 주차 자리 점유 (`kind` 가 `I*`)
+    //     비트 10..   = "지금 열려 있나" 같은 **출력 모듈의 현재 상태** (`kind` 가 `O*`)
+    //   ⚠ **같은 비트열인데 의미가 다르고, 그 구분은 `kind` 에 있다.**
+    //   🔑 그래서 이 값은 "자리 점유"가 아니라 **"모듈 상태"** 다. 10 에서 자르면
+    //      **조작 완료를 판정할 값이 조용히 버려진다** — 화면은 영영 "진행 중"에 머문다.
+    //
+    // `out` 은 `REG_MODS_MAX` 칸. 반환 = 해독한 비트 수(0 = 못 읽음).
+    int decode_mod_bits(const std::string& fld, int* out) const {
+        for (int i = 0; i < REG_MODS_MAX; i++) out[i] = 0;
+        if (park.reg_done && park.reg_n > 0) {
+            const int n = park.reg_n;
+            // ⚠ `REG_MODS_MAX` 가 32 라 `unsigned long`(32비트 보장)로는 아슬아슬하다.
+            //   `strtoull` 로 받는다 — **폭이 상한에 닿아도 값이 안 잘린다.**
+            unsigned long long v = strtoull(fld.c_str(), NULL, 16);
+            for (int i = 0; i < n && i < REG_MODS_MAX; i++)
+                out[i] = ((v >> (n - 1 - i)) & 1ULL) ? 1 : 0;
+            return n;
+        }
+        if (fld.size() == 10) {                  // 미등록 + 폭 10 → 옛 10진 펌웨어(하위호환)
+            for (int i = 0; i < 10; i++) out[i] = (fld[i] == '1') ? 1 : 0;
+            return 10;
+        }
+        return 0;
+    }
     static bool kind_commandable(const std::string& k) { return !k.empty() && k[0] == 'O'; }
     // ⚠ `atoi` 는 숫자가 아니면 **조용히 0 을 준다.** `D,*,IP,…`(이름이 `*` 인 모듈)이
     //   `drain=0` 으로 통과하면 유도식이 0 을 먹는다. **형식 검사를 값 변환 앞에 둔다.**
@@ -2112,7 +2174,28 @@ struct Server {
         o << "]}";
         return o.str();
     }
-    void push_map() { ws_broadcast(map_json()); }
+    // 🔴 **빈 지형을 `map` 으로 내보내지 않는다** (2026-08-19).
+    //   첫 배포에서 `build_default_zones()` 가 기동 경로에 없어 `zones` 가 빈 채 나갔다.
+    //   그때 화면은 **"자리가 0개인 주차장"** 을 정상 상태로 그렸다 —
+    //   🔑 **빈 지형은 답이 아니라 고장이다. 답인 척하면 아무도 안 본다.**
+    //   ⚠ 그래서 **안 보내고 시끄럽게 남긴다.** 화면은 지형이 없으면 옛 것을 유지하거나
+    //     "아직 못 받았다"로 남는데, **둘 다 "0개"라고 그리는 것보다 낫다.**
+    // 🔑 **선언 자리에서 초기화한다** — 생성자 목록에 넣으면 선언 순서에 묶여
+    //   (`-Wreorder`) 다음 사람이 자리를 옮길 때 조용히 경고가 난다.
+    // 🔑 **선언 자리에서 초기화한다**(C++11 NSDMI). 생성자 목록에 넣으면 선언 순서에
+    //   묶여(`-Wreorder`) 다음 사람이 이 멤버를 옮길 때마다 경고가 난다.
+    bool map_empty_warned = false;
+    void push_map() {
+        if (zones.empty()) {
+            if (!map_empty_warned) {
+                map_empty_warned = true;
+                logf("!", "🔴 지형이 비어 있다 — `map` 을 보내지 않는다. "
+                          "**기동 경로가 build_default_zones() 를 안 불렀을 수 있다**");
+            }
+            return;
+        }
+        ws_broadcast(map_json());
+    }
 
     // ── REQ-0203 4c: `state` 봉투 + `actions` (설계 §6.5·§6.8·§6.9) ──────────────
     // 🔴 **`actions` 는 서버가 계산해 *값으로* 준다.** 화면이 "모듈 목록 + 노드 생사"로 조합하지 않는다 —
@@ -2127,7 +2210,21 @@ struct Server {
     }
     // 자리 하나의 막힌 이유. 빈 문자열 = 안 막혔다. **코드 다섯 중에서만 고른다**(§6.5).
     std::string zone_block_reason(const Zone& z) {
-        if (z.modules.empty()) return "module_absent";
+        // 🔴 **2026-08-19 — "모듈이 없다"와 "아직 등록을 안 받았다"는 다른 상태다.**
+        //   모듈은 등록(`D`)이 끝나야 자리에 붙는다(`bind_modules`). 그래서 **등록 전에는
+        //   모든 자리가 `module_absent` 로 보인다** — 화면은 그것을 *"이 자리엔 장비가 없다"*(영구)
+        //   로 읽는데 실제로는 **곧 붙는다**(일시). 🔑 **영구와 일시를 같은 코드로 답하면
+        //   화면이 영영 안 그리는 자리를 만든다.**
+        //   ⚠ `reg_giveup` 은 "형성 중"이 아니다 — 포기한 뒤에는 `module_absent` 가 정직하다.
+        if (z.modules.empty()) {
+            std::vector<Node*> ns = all_nodes();
+            bool any_unreg = false;
+            for (size_t i = 0; i < ns.size(); i++)
+                if (!ns[i]->reg_done && !ns[i]->reg_giveup) any_unreg = true;
+            if (ns.empty())  return "node_offline";        // 노드가 아예 없다
+            if (any_unreg)   return "node_unregistered";   // 형성 중이다
+            return "module_absent";                        // 등록이 끝났는데 이 자리엔 안 붙었다
+        }
         for (size_t i = 0; i < z.modules.size(); i++) {
             Node* n = node_of(z.modules[i].first);
             if (!n) return "module_absent";
@@ -2794,21 +2891,13 @@ struct Server {
             //   서버가 10진으로 읽어 **엉뚱한 자리를 점유로 표시했다.** 폭 검사를 넣어 둔 것이
             //   **"처리된 것처럼" 보이게 만들었다.**
             int occ[10];
-            bool occ_known = false;
-            if (park.reg_done && park.reg_n > 0) {
-                // 등록됐다 → `n` 을 안다 → hex 로 푼다
-                unsigned long v = strtoul(f[2].c_str(), NULL, 16);
-                const int n = park.reg_n;
-                for (int i = 0; i < 10; i++)
-                    occ[i] = (i < n && ((v >> (n - 1 - i)) & 1UL)) ? 1 : 0;
-                occ_known = true;
-            } else if (f[2].size() == 10) {
-                // 미등록 + 폭 10 → **옛 10진 펌웨어**. 하위호환으로 그대로 읽는다
-                for (int i = 0; i < 10; i++) occ[i] = (f[2][i] == '1') ? 1 : 0;
-                occ_known = true;
-            } else {
+            int mod_state[REG_MODS_MAX];
+            // 🔑 해독 규칙은 `decode_slot_bits()` 한 곳에 있다(원장 §8.23-(66)).
+            int  occ_bits  = decode_mod_bits(f[2], mod_state);
+            bool occ_known = (occ_bits > 0);
+            for (int i = 0; i < 10; i++) occ[i] = mod_state[i];
+            if (!occ_known) {
                 // 🔴 미등록 + hex 로 보이는 폭 → **해독하지 않는다.** 등록 뒤 다음 `S` 부터 읽는다
-                for (int i = 0; i < 10; i++) occ[i] = 0;
                 if (!occ_undecoded_warned) {
                     occ_undecoded_warned = true;
                     logf("!", "자리 비트열을 해독하지 않는다 — 등록 전이라 n 을 모른다(폭 "
@@ -2819,12 +2908,22 @@ struct Server {
 
             // §2.4 tmask — **선택 필드다. 없으면 해제로 본다**(§2.1 규칙 8, 옛 펌웨어 수용).
             // f 는 체크섬을 뺀 필드들이므로 7번째(index 6)가 있으면 그것이 tmask 다.
+            // ⚠ **2026-08-19 — 잠복 결함을 미리 닫는다.** 예전 조건은 `f[6].size() >= 10` 이라
+            //   **10진 폭을 전제**했다. 지금은 장치가 이 칸을 아예 안 보내서(필드 6개) 안 돌지만,
+            //   **tmask 가 hex 로 오는 순간 `res` 와 똑같이 조용히 죽는다.**
+            //   🔑 arduino 가 확인해 줬다 — *"세 필드를 같이 바꿨으므로 읽는 쪽도 셋이다."*
+            //   **잠복은 "나중에 밟는다"는 뜻이고 그때는 또 아무도 안 본다. 지금 닫는다.**
             int ovr[10];
+            int ovr_bits_[REG_MODS_MAX];
             bool armed = false;
             for (int i = 0; i < 10; i++) ovr[i] = 0;
-            if (f.size() >= 7 && f[6] != "-" && f[6].size() >= 10) {
+            if (f.size() >= 7 && f[6] != "-" && !f[6].empty()) {
+                // 🔴 **칸이 있다는 것 자체가 "무장"이다.** 해독 성공 여부와 분리한다 —
+                //   못 읽는다고 `armed=false` 로 답하면 **장치가 시험 모드인데 서버가 정상이라 믿는다.**
+                //   못 읽으면 무장은 알리되 덮어쓰기 목록은 비운다(안전한 방향).
                 armed = true;
-                for (int i = 0; i < 10; i++) ovr[i] = (f[6][i] == '1') ? 1 : 0;
+                if (decode_mod_bits(f[6], ovr_bits_) > 0)
+                    for (int i = 0; i < 10; i++) ovr[i] = ovr_bits_[i];
             }
 
             if (reboot) {
@@ -2867,9 +2966,24 @@ struct Server {
             // reserved 는 서버가 durable owner 다(§7.4). 아두이노 값으로 덮지 않는다.
             // 다만 서버가 0 인데 아두이노가 1 이면 세계관이 갈라진 것이므로 C 를 다시 내려 맞춘다(§7.6).
             // 미결 요청이 있는 자리는 제외 — 아직 ACK 를 못 받았을 뿐인 정상 상태다.
-            if (f.size() >= 4 && f[3].size() >= 10) {
+            // 🔴 **2026-08-19 정정**: 이 조건이 예전에는 `f[3].size() >= 10` 이었다.
+            //   장치가 hex 로 바뀌자(`21:12:09`) 폭이 3 이 되어 **조건이 영영 거짓** —
+            //   자가 치유가 **한 번도 안 돌았는데 로그에 아무 흔적이 없었다.**
+            //   ⚠ 오독이 아니라 **건너뜀**이라 `0` 조차 안 남았다. 그래서 **분모를 센다**(§8.23-(66)).
+            int res_bits_[REG_MODS_MAX];
+            int res_n_ = (f.size() >= 4) ? decode_mod_bits(f[3], res_bits_) : 0;
+            if (res_n_ <= 0) {
+                res_undecoded++;
+                if (f.size() >= 4 && !res_undecoded_warned) {
+                    res_undecoded_warned = true;
+                    logf("!", "예약 마스크를 해독하지 않는다 — 등록 전이라 n 을 모른다(폭 "
+                              + std::to_string(f[3].size()) + "). **등록되면 읽는다**");
+                }
+            } else {
+                heal_checks++;               // 🔑 **분모** — 이 검사가 실제로 돌았다
                 for (int i = 0; i < 10; i++)
-                    if (f[3][i] == '1' && slots[i].reserved == 0 && !has_pending_for(SLOT_ID[i])) {
+                    if (res_bits_[i] && slots[i].reserved == 0 && !has_pending_for(SLOT_ID[i])) {
+                        heal_fires++;
                         logf("⚠", std::string("불일치: 아두이노 ") + SLOT_ID[i]
                                   + " reserved=1, 서버 0 → C 재하달");
                         dispatch('C', BAD_SOCK, "", SLOT_ID[i], "");
@@ -3078,10 +3192,14 @@ struct Server {
             //   `get_map` 은 상태를 안 바꾸니 몇 번 와도 안전하고, **상한은 서버 보호용이지
             //   정합성용이 아니다** — 그래서 거절해도 화면의 정확성은 안 깨진다.
             const long long t = now_ms();
-            if (t - getmap_win_ms >= 1000) { getmap_win_ms = t; getmap_in_win = 0; }
-            if (++getmap_in_win > GETMAP_MAX_PER_SEC) {
+            // 🔑 **이 연결의 창**을 본다. 남의 화면이 물은 것은 이 화면의 몫을 안 먹는다.
+            std::map<sock_t, Conn>::iterator ci = conns.find(fd);
+            long long& win = (ci != conns.end()) ? ci->second.getmap_win_ms : getmap_win_ms;
+            int&       cnt = (ci != conns.end()) ? ci->second.getmap_in_win : getmap_in_win;
+            if (t - win >= 1000) { win = t; cnt = 0; }
+            if (++cnt > GETMAP_MAX_PER_SEC) {
                 getmap_rejects++;
-                logf("!", "get_map 이 1초에 " + std::to_string(getmap_in_win)
+                logf("!", "get_map 이 한 화면에서 1초에 " + std::to_string(cnt)
                           + "회 — 상한 초과로 거절(누적 " + std::to_string(getmap_rejects) + ")");
                 send_err(fd, rid, "rate_limited", "요청이 너무 잦습니다");
                 return;
@@ -4649,17 +4767,98 @@ static int selftest() {
                 if (!ok28) bad++;
             }
 
+            // ㉔-나 🔴 **상한은 화면마다다 — 남의 화면이 내 몫을 먹지 않는다** (2026-08-19)
+            //   주석은 원래 *"화면 하나가 1초에"* 라고 말했는데 **구현은 서버 전역**이었다.
+            //   그러면 **화면 여섯이 재접속하는 것만으로** 정상 요청이 거절되고,
+            //   거절당한 화면은 **지형을 못 받아 빈 채로 남는다.**
+            //   🔑 고친 것은 상한값이 아니라 **누구를 세는가**다. 그래서 시험도 "둘이 각각"이다.
+            {
+                sock_t p1[2], p2[2];
+                bool okpair = (socketpair(AF_UNIX, SOCK_STREAM, 0, p1) == 0
+                               && socketpair(AF_UNIX, SOCK_STREAM, 0, p2) == 0);
+                if (okpair) {
+                    Server t; t.build_default_zones(); t.init_srv_id();
+                    t.conns[p1[0]].kind = Conn::WS;
+                    t.conns[p2[0]].kind = Conn::WS;
+                    long long r0 = t.getmap_rejects;
+                    // 각 화면이 **상한만큼** 묻는다 → 합은 상한의 두 배지만 **거절은 0 이어야 한다**
+                    for (int i = 0; i < GETMAP_MAX_PER_SEC; i++) {
+                        t.on_ws_message(p1[0], "{\"type\":\"get_map\",\"rid\":\"a\"}");
+                        t.on_ws_message(p2[0], "{\"type\":\"get_map\",\"rid\":\"b\"}");
+                    }
+                    bool ok28b = (t.getmap_rejects == r0);
+                    std::cout << (ok28b ? "  ✓ " : "  ✗ ") << "화면 둘이 각각 "
+                              << GETMAP_MAX_PER_SEC << "회 → 거절 " << (t.getmap_rejects - r0)
+                              << " (기대 0 · 전역 상한이면 " << GETMAP_MAX_PER_SEC << ")\n";
+                    if (!ok28b) bad++;
+
+                    // 그리고 **한 화면이 넘기면 그 화면만** 거절된다
+                    for (int i = 0; i < 3; i++)
+                        t.on_ws_message(p1[0], "{\"type\":\"get_map\",\"rid\":\"a\"}");
+                    bool ok28c = (t.getmap_rejects == r0 + 3);
+                    std::cout << (ok28c ? "  ✓ " : "  ✗ ") << "넘긴 화면만 거절된다 (거절 "
+                              << (t.getmap_rejects - r0) << " · 기대 3)\n";
+                    if (!ok28c) bad++;
+                    t.conns.clear();
+                    closesock(p1[0]); closesock(p1[1]); closesock(p2[0]); closesock(p2[1]);
+                }
+            }
+
+            // ㉔-다 🔴 **빈 지형은 `map` 으로 안 나간다** — 첫 배포가 정확히 그 상태였다
+            //   그때 화면은 **"자리 0개인 주차장"** 을 정상으로 그렸다.
+            //   🔑 **빈 지형은 답이 아니라 고장이다. 답인 척하면 아무도 안 본다.**
+            {
+                sock_t p3[2];
+                if (socketpair(AF_UNIX, SOCK_STREAM, 0, p3) == 0) {
+                    Server t; t.init_srv_id();          // 🔑 **`build_default_zones()` 를 일부러 안 부른다**
+                    t.conns[p3[0]].kind = Conn::WS;
+                    t.push_map();
+                    char b2[256];
+                    int r = (int)recv(p3[1], b2, sizeof(b2), MSG_DONTWAIT);
+                    bool ok28d = (t.zones.empty() && r <= 0);
+                    std::cout << (ok28d ? "  ✓ " : "  ✗ ") << "빈 지형 → map 미송신 (전선 "
+                              << (r > 0 ? r : 0) << "B · 기대 0)\n";
+                    if (!ok28d) bad++;
+                    t.conns.clear();
+                    closesock(p3[0]); closesock(p3[1]);
+                }
+            }
+
             // ㉕ 🔴 **`state` 봉투와 `actions`** (REQ-0203 4c)
             {
                 Server t; t.build_default_zones(); t.init_srv_id();
                 std::string j = t.state_json();
-                // 모듈이 없으면 `module_absent` — 그리고 **뜻 없는 조작은 키 자체가 없다**
-                bool a1 = (j.find("\"reserve\":{\"ok\":false,\"reason\":\"module_absent\"}")
+                // 🔴 **2026-08-19 — 이 시험은 예전에 `module_absent` 를 기대했다. 바꿨다.**
+                //   여기는 **노드가 아예 없는** 상태다(`all_nodes()` 가 빈다).
+                //   `module_absent` 는 *"이 자리엔 장비가 없다"* = **영구**이고, 화면은 버튼을
+                //   **안 그린다.** 그런데 진실은 *"아직 아무도 안 붙었다"* = **일시**다.
+                //   🔑 **코드에 맞춰 시험을 고친 것이 아니다** — 어느 답이 화면에 옳은지로 골랐다.
+                //   ⚠ 그리고 **셋을 다 밟는다.** 하나만 보면 나머지 둘이 서로 바뀌어도 통과한다.
+                bool a1 = (j.find("\"reserve\":{\"ok\":false,\"reason\":\"node_offline\"}")
                            != std::string::npos)
                        && (j.find("\"cancel\"") == std::string::npos);
-                std::cout << (a1 ? "  ✓ " : "  ✗ ") << "모듈 없음 → reserve 막힘(module_absent) · "
+                std::cout << (a1 ? "  ✓ " : "  ✗ ") << "노드 없음 → reserve 막힘(node_offline) · "
                           << "예약 없으니 **cancel 키 자체가 없다**\n";
                 if (!a1) bad++;
+
+                // (나) — 노드가 붙었는데 **등록 중**이면 `node_unregistered`
+                {
+                    Server u; u.build_default_zones(); u.init_srv_id();
+                    u.park.devid = "P1"; u.park.reg_done = false; u.park.reg_giveup = false;
+                    bool b1 = (u.state_json().find("\"reason\":\"node_unregistered\"")
+                               != std::string::npos);
+                    std::cout << (b1 ? "  ✓ " : "  ✗ ") << "등록 중 → node_unregistered"
+                              << "(**곧 붙는다**를 영구 부재로 답하지 않는다)\n";
+                    if (!b1) bad++;
+
+                    // (다) — 등록이 **끝났는데** 이 자리엔 안 붙었다 → 그때가 `module_absent` 다
+                    u.park.reg_done = true;
+                    bool c1 = (u.state_json().find("\"reason\":\"module_absent\"")
+                               != std::string::npos);
+                    std::cout << (c1 ? "  ✓ " : "  ✗ ") << "등록 끝 + 미결속 → module_absent"
+                              << "(이때는 영구 부재가 정직하다)\n";
+                    if (!c1) bad++;
+                }
 
                 // 예약되면 `reserve` 가 사라지고 `cancel` 이 나온다 — **존재/부재가 한 비트다**
                 t.slots[0].reserved = 1;
@@ -4780,6 +4979,62 @@ static int selftest() {
                           << "(미해독 " << t.occ_undecoded << " · 기대 0)\n";
                 if (!okC) bad++;
                 t.ard = BAD_SOCK;
+            }
+
+            // ㉙ 🔴🔴 **자가 치유(§7.6)가 실제로 돈다** — 2026-08-19 에 이 분기가 죽어 있었다
+            //    hex 전환 뒤 조건이 `f[3].size() >= 10` 이라 **영영 거짓**이었다.
+            //    ⚠ **오독이 아니라 건너뜀이라 로그에 `0` 조차 안 남았다.** 그래서 **분모를 검사한다** —
+            //    "몇 번 고쳤나"가 아니라 **"몇 번 검사했나"** 가 이 결함을 잡는 유일한 값이다.
+            {
+                // 🔴 **자기 소켓을 쓴다. 공유 `sv` 를 안 쓴다.**
+                //   앞선 시험이 `sv[0]` 을 닫아 두면 이 시험은 **하행이 안 나가는데 계수가 전부 0** 이라
+                //   *"치유가 안 나간다"* 로 오독된다 — 실제로 그렇게 한 번 헤맸다.
+                //   🔑 §8.23 의 "시험끼리 자원을 공유하면 실패 원인이 남의 시험에 있다" 그대로다.
+                sock_t ms[2];
+                if (socketpair(AF_UNIX, SOCK_STREAM, 0, ms) != 0) { ms[0] = ms[1] = BAD_SOCK; }
+                Server t; t.ard = ms[0]; t.ard_seen = true; t.ard_last_ms = now_ms();
+                t.on_ard_line(t_line("D,*,7,10,"));
+                for (int i = 0; i < 10; i++) t.on_ard_line(t_line(std::string("D,") + SLOT_ID[i] + ",IP,"));
+
+                // 장치는 A1 이 예약됐다고 말하는데 서버는 0 이다 → `C` 재하달로 맞춰야 한다.
+                // `res` = hex `200` = 비트 9 = **슬롯 0(A1)**  (n=10 · 슬롯 i = 비트 n-1-i)
+                long long q0 = t.heal_fires, c0 = t.heal_checks;
+                t.on_ard_line(t_line("S,2,000,200,6,P1,"));
+                bool okD = (t.heal_checks > c0);
+                std::cout << (okD ? "  ✓ " : "  ✗ ") << "hex 예약 마스크로 **치유 검사가 돈다**"
+                          << " (검사 " << (t.heal_checks - c0) << " · 기대 >0)\n";
+                if (!okD) bad++;
+
+                bool okE = (t.heal_fires == q0 + 1);
+                std::cout << (okE ? "  ✓ " : "  ✗ ") << "불일치를 찾아 C 를 재하달한다 (재하달 "
+                          << (t.heal_fires - q0) << " · 기대 1)\n";
+                if (!okE) bad++;
+
+                // 🔴 **비트 순서까지 확인한다.** `200` 이 A1 이어야 한다 — 뒤집혀도 건수는 1 이라
+                //    위 두 검사만으로는 **자리가 어긋난 것을 못 잡는다**(§8.23-(58) 과 같은 함정).
+                // 🔑 **내부 상태가 아니라 전선에 나간 바이트를 읽는다** — `pend` 는 ACK 나
+                //    링크 실패로 비워질 수 있어서 **"안 보인다"가 "안 나갔다"를 뜻하지 않는다.**
+                //    오늘 `49c07f6` 을 확인한 방법과 같다: **나가는 값을 본다.**
+                // 🔑 **하행은 이 창에 안 나간다 — 다음 `S` 가 창을 연다**(설계 §3).
+                //   ⚠ 처음에 이걸 빼먹어 전선이 비어 있었고, 하마터면 *"치유가 안 나간다"* 로
+                //     읽을 뻔했다. **큐에 있는 것과 안 나간 것은 다르다.**
+                //   두 번째 `S` 는 `res=000` 으로 보낸다 — 새 불일치를 안 만들어야 위 건수가 1 로 남는다.
+                t.on_ard_line(t_line("S,3,000,000,7,P1,"));
+                char wb[512]; std::string wire;
+                for (;;) {
+                    int r = (int)recv(ms[1], wb, sizeof(wb), MSG_DONTWAIT);
+                    if (r <= 0) break;
+                    wire.append(wb, (size_t)r);
+                }
+                bool okF = (wire.find(",A1,") != std::string::npos);
+                std::cout << (okF ? "  ✓ " : "  ✗ ") << "전선에 나간 `C` 의 대상이 **A1** 이다"
+                          << "(비트 순서가 뒤집혀도 건수는 1 이라 여기서만 갈린다)\n";
+                if (!okF) { bad++; std::cout << "      전선(" << wire.size() << "B): " << wire
+                                             << " · 큐 " << t.downq.size()
+                                             << " · 배치 " << t.batch_count << "\n"; }
+                t.ard = BAD_SOCK;
+                if (ms[0] != BAD_SOCK) closesock(ms[0]);
+                if (ms[1] != BAD_SOCK) closesock(ms[1]);
             }
 
             s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
