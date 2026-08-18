@@ -640,19 +640,6 @@ static bool uptime_says_reboot(long long prev_up, long long up) {
 //   근본 해법은 전선에 역할 필드를 두는 것이고, 그건 v1.4 급 변경이라 명세에 제안으로만 남긴다.
 //
 // 보조 노드는 **상행 전용**이다(수신·계측만). 하행을 받을 방법이 아직 명세에 없다.
-struct AuxNode {
-    sock_t fd;
-    std::string buf;
-    long long connected_ms;      // 접속 시각(now_ms)
-    long long last_ms;           // 마지막 **유효** 프레임(now_ms) — 유휴 마감의 기준
-    long long last_epoch_ms;     // 바깥으로 내보낼 때 쓰는 절대 시각
-    long long frames;            // 누적 유효 프레임
-    long long drops;             // 버린 줄
-    bool online;                 // §3.4 엣지 판정용 직전 상태
-    int  offline_episodes;
-    AuxNode() : fd(BAD_SOCK), connected_ms(0), last_ms(0), last_epoch_ms(0),
-                frames(0), drops(0), online(false), offline_episodes(0) {}
-};
 
 // 아직 `device_id` 를 모르는 소켓. 첫 유효 프레임에서 승격된다.
 // 🔴🔴 **접속 IP·포트를 남긴다** (REQ-0215)
@@ -694,13 +681,25 @@ static std::string peer_host(const std::string& hp) {
 // ⚠ **낱말**: 여기의 `Node` 는 통신 단위(ESP 하나 = 소켓 하나 = 자기 1.2초 주기)다.
 //   **주차 자리가 아니다.** 자리는 `Zone`(§0 낱말표).
 struct Node {
+    // ⚠ **필드 이름을 `AuxNode` 쪽에 맞췄다**(REQ-0203 2단계). 반대로 하면 보조 노드
+    //   호출부 20여 곳을 고쳐야 하는데, 이쪽은 **별칭 7줄만** 바꾸면 된다.
+    //   🔑 **적게 고치는 쪽을 고른 것이 아니라, 고치는 자리가 내가 방금 만든 자리인 쪽**을 골랐다.
     std::string devid;          // 전선의 장치 id. "" = 아직 미정(first-S-wins)
-    sock_t      sock;           // 이 노드의 연결
+    sock_t      fd;             // 이 노드의 연결
     std::string peer;           // "IP:포트" — `devid` 가 고유하지 않을 때 유일한 구분자(REQ-0215)
-    std::string rxbuf;          // 수신 조립 버퍼
+    std::string buf;            // 수신 조립 버퍼
     bool        seen;           // 유효 프레임을 한 번이라도 받았나
-    long long   last_ms;        // 마지막 프레임 수신 시각(단조 시계)
+    long long   last_ms;        // 마지막 **유효** 프레임 수신 시각(단조 시계) — 유휴 마감의 기준
     long long   last_epoch_ms;  // 같은 사건의 벽시계 — **로그 대조용이지 계산용이 아니다**
+
+    // ── `AuxNode` 에서 흡수한 것들 (REQ-0203 2단계) ─────────────────────────────
+    // 🔑 **보조 노드는 처음부터 `Node` 의 부분집합이었다.** 두 구조체를 유지하면
+    //    "노드마다 있는 상태"가 두 곳에 나뉘어 **다음 단계(`map<devid,Node>`)에서 합칠 수 없다.**
+    long long   connected_ms;     // 접속 시각
+    long long   frames;           // 누적 유효 프레임
+    long long   drops;            // 버린 줄
+    bool        online;           // §3.4 엣지 판정용 직전 상태
+    int         offline_episodes;
 
     // ── 등록(§5 `D`/`Q`) ────────────────────────────────────────────────────────
     // 🔴 **이 단계에서 등록은 *관측*이지 제어가 아니다.** 하행 경로를 한 줄도 안 바꾼다 —
@@ -716,7 +715,8 @@ struct Node {
     long long   last_q_ms;      // 마지막 `Q` — 슬롯당 1회로 묶는다
     std::vector<std::pair<std::string, std::string> > mods;   // (name, kind) · **순서가 곧 idx**
 
-    Node() : sock(BAD_SOCK), seen(false), last_ms(0), last_epoch_ms(0),
+    Node() : fd(BAD_SOCK), seen(false), last_ms(0), last_epoch_ms(0),
+             connected_ms(0), frames(0), drops(0), online(false), offline_episodes(0),
              reg_n(-1), reg_drain(-1), reg_done(false), reg_giveup(false),
              reg_first_ms(0), q_sent(0), last_q_ms(0) {}
 
@@ -725,6 +725,12 @@ struct Node {
         reg_first_ms = 0; q_sent = 0; last_q_ms = 0; mods.clear();
     }
 };
+
+// 🔴 **`AuxNode` 는 이제 `Node` 다**(REQ-0203 2단계). 이름만 남긴다 —
+// 호출부 20여 곳이 `AuxNode` 로 적혀 있고 **그것을 지금 바꾸면 이 단계가 커진다.**
+// ⚠ **다음 단계에서 이 이름도 없앤다.** 지금 남긴 이유는 **한 단계에 한 가지만 바꾸려는 것**이다.
+// 🔑 별명이라 **보조 노드도 등록 상태를 갖게 된다** — 쓰지 않을 뿐 구조가 이미 준비된다.
+typedef Node AuxNode;
 
 struct UnknownSock {
     sock_t fd;
@@ -783,7 +789,7 @@ struct Server {
     Node park;
     // ⚠ **별칭은 옛 이름을 유지하기 위한 것이다.** 새 코드는 `park.<필드>` 를 직접 쓴다 —
     //   별칭을 늘리지 마라. 2단계에서 `map<devid,Node>` 로 올릴 때 **별칭이 많을수록 못 올린다.**
-    sock_t&      ard      = park.sock;   // **주차 노드**의 연결 (여전히 하나)
+    sock_t&      ard      = park.fd;   // **주차 노드**의 연결 (여전히 하나)
     std::string& park_dev = park.devid;  // 주차 노드의 device_id. "" = 미정(first-S-wins)
     std::string& ard_peer = park.peer;   // 현재 주차 노드 소켓의 "IP:포트" (REQ-0215)
     // 🔴 **같은 devid 로 동시에 붙은 것을 센다.** 0 이 아니면 관측 자료가 오염된 것이다 —
@@ -799,7 +805,7 @@ struct Server {
     std::vector<UnknownSock> unknown;     // id 미상 소켓 — 첫 유효 프레임에서 승격
     int  aux_conflicts;                // `S` 를 보냈지만 주차 노드가 아닌 장치 수(가정 붕괴 신호)
     int  admit_rejects;                // 상한 초과로 거절한 연결 수
-    std::string& ard_buf   = park.rxbuf;
+    std::string& ard_buf   = park.buf;
     bool&        ard_seen  = park.seen;
     long long&   ard_last_ms = park.last_ms;
 
