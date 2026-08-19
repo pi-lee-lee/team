@@ -173,22 +173,59 @@ typedef bool (*CommandFn)(uint32_t arg);   // 반환 true → ACK `result=0`(성
 class CommandRouter {
  public:
   // 이름으로 등록한다. 표에 없는 이름이면 false — **조용히 무시하지 않는다.**
+  // 🔴 **명령을 받을 수 있는 모듈에만 붙는다** — `kind` 첫 글자가 `O` 여야 한다.
+  //   왜 막나: 센서 이름에 붙이면 아래 **에코 비트가 그 자리의 실제 점유 비트와 겹친다.**
+  //   그러면 명령 한 번이 "차가 들어왔다"로 보고된다. **조용히 틀린 자료를 만든다.**
   bool on(const char* name, CommandFn fn) {
     for (uint8_t i = 0; i < MODULE_N; i++) {
       char n4[4];
       moduleNameOf(i, n4);
-      if (strcmp(n4, name) == 0) { fn_[i] = fn; return true; }
+      if (strcmp(n4, name) == 0) {
+        char k4[4]; moduleKindOf(i, k4);
+        if (k4[0] != 'O') return false;      // 명령 대상이 아니다
+        fn_[i] = fn; return true;
+      }
     }
     return false;
   }
   // 전선에서 온 `idx` 로 부른다. 등록이 없으면 false → 호출부가 `result=3` 으로 답한다.
-  bool dispatch(uint8_t idx, uint32_t arg) const {
+  // 🔴 **성공했을 때만 에코를 갱신한다.** 거절된 명령은 상태를 안 바꾼다.
+  bool dispatch(uint8_t idx, uint32_t arg) {
     if (idx >= MODULE_N || fn_[idx] == 0) return false;
-    return fn_[idx](arg);
+    curEcho_ = (arg != 0);                 // 기본값 — 핸들러가 `echoIs()` 로 덮을 수 있다
+    if (!fn_[idx](arg)) return false;      // 🔴 거절된 명령은 상태를 안 바꾼다
+    const uint16_t bit = (uint16_t)1 << idx;
+    if (curEcho_) echo_ |= bit; else echo_ &= (uint16_t)~bit;
+    return true;
   }
+
+  // 🔴 **핸들러 안에서 부른다 — "이 명령 뒤 내 모듈은 켜진 상태인가"를 직접 정한다.**
+  //
+  //   기본값은 `arg != 0` 이고, **on/off 모듈에는 그것으로 맞는다.**
+  //   ⚠ **동작 명령 모듈에는 안 맞는다**: `DR` 의 명령표가 `1=열기 2=닫기` 라면
+  //     **문을 닫는 `arg=2` 도 `!= 0` 이라 에코가 켜진 채**가 된다 — 서버는 열린 줄 안다.
+  //   🔑 그래서 **뜻을 아는 쪽이 정한다**: `router.echoIs(a == 1);`
+  //
+  //   판별자: **명령표에 "끄는 값"이 0 말고 따로 있으면 이 함수를 불러라.**
+  void echoIs(bool on) { curEcho_ = on; }
   bool has(uint8_t idx) const { return idx < MODULE_N && fn_[idx] != 0; }
+
+  // ═══ 🔴 **액추에이터 에코** — `S` 의 자리 비트열에 실려 나간다 ═══════════════
+  //   서버는 **`ACK` 이 아니라 이 비트**로 "명령이 먹었나"를 안다.
+  //   `ACK result=0` 은 *"콜백이 true 를 냈다"* 이고, 이 비트는 *"장치가 그 값을 갖고 있다"* 다.
+  //
+  // ⚠⚠ **둘 다 "물리적으로 그렇게 됐다"는 아니다.** 차단봉이 걸려 있어도 콜백은 true 를 내고
+  //   이 비트도 선다. **물리 확인이 필요하면 리밋 스위치를 `I*` 모듈로 한 줄 더 붙여라** —
+  //   그건 센서이므로 **지금 구조로 이미 된다.**
+  //
+  // ⚠ **비트는 숫자를 못 나른다.** `LC` 에 1234567 을 보내도 이 비트는 "0이 아니다"만 말한다.
+  //   전선 비용이 **0B** 인 대신 그 한계를 진다 — 그 비트는 이미 필드 안에 있었고 늘 0 이었을 뿐이다.
+  uint16_t echoMask() const { return echo_; }
+
  private:
   CommandFn fn_[MODULE_N];   // ⚠ 생성자 없음 — 전역은 `.bss` 로 0(=미등록) 시작이다
+  uint16_t  echo_;           // 비트 i = 모듈 i 가 지금 "켜진" 상태인가 (에코)
+  bool      curEcho_;        // 지금 처리 중인 명령의 에코값. `echoIs()` 가 덮는다
 };
 
 static CommandRouter router;
@@ -336,6 +373,9 @@ static uint8_t buildStatus(char* buf, uint8_t cap) {
   for (uint8_t k = 0; k < GATE_N; k++)
     if (gates.isOpen(k, slotNo)) occOut |= (uint16_t)(1u << (GATE_BASE + k));
 #endif
+  // 🔴 **액추에이터 에코** — 명령이 먹은 것을 서버가 이 비트로 안다(전선 비용 0B).
+  //   센서 비트와 안 겹친다: `router.on` 이 `O*` 모듈에만 붙기 때문이다.
+  occOut |= router.echoMask();
   bitsToHex(occOut, mn, occ);
   bitsToHex(node.resMask, mn, res);
 

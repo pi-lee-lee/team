@@ -266,6 +266,10 @@ static bool cmdLcd(uint32_t arg) {
 //   🔑 **의미는 값으로 검증되지 않는다. 사람이 맞추는 수밖에 없다.**
 // ❌ 표 없이 `1,2,3,4` 만 쓰지 마라 — 반년 뒤에 아무도 못 읽는다.
 static bool cmdDoor(uint32_t arg) {
+  // 🔴 **에코를 직접 정한다.** 기본값(`arg != 0`)은 여기서 틀린다 —
+  //   `2=닫기` 도 0 이 아니라서, 안 정해 주면 **문을 닫았는데 서버는 열린 줄 안다.**
+  //   판별자: **명령표에 "끄는 값"이 0 말고 따로 있으면 반드시 불러라.**
+  router.echoIs(arg == 1);          // 열린 상태 = 1(열기) 뿐이다
   switch (arg) {
     case 1: digitalWrite(PIN_SAMPLE_DOOR, HIGH); break;   // 열기
     case 2: digitalWrite(PIN_SAMPLE_DOOR, LOW);  break;   // 닫기

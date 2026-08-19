@@ -1499,6 +1499,41 @@ int main() {
                             "★★ ③ 표에 **없는** 값(9)은 result=3 — 조용히 성공하지 않는다"); }
       ok(g_pinLevel[PIN_SAMPLE_DOOR] == HIGH,
                             "★★ ③ 거절된 명령은 **상태를 안 바꾼다** (열린 채 그대로다)");
+
+      // ── 🔴 **에코** — 서버가 "명령이 먹었나"를 아는 비트. 전선 비용 0B ──────────
+      //   표 순서: A1(0) B1(1) LD(2) LC(3) DR(4) E1(5) X1(6)
+      ok((router.echoMask() & (1u << 4)) != 0,
+                            "★★ DR 열기(1) 뒤 에코 비트가 선다");
+      ok((router.echoMask() & (1u << 2)) == 0,
+                            "★★ LD 는 마지막이 0(끔)이라 에코가 내려가 있다");
+      ok((router.echoMask() & (1u << 3)) != 0,
+                            "★★ LC 는 마지막이 1234567 이라 에코가 서 있다 (0 이 아니다)");
+      // 🔴 **거절된 명령은 에코를 안 바꾼다** — 위 `G,406,4,9` 가 거절됐고 DR 은 열린 채다
+      ok((router.echoMask() & (1u << 4)) != 0,
+                            "★★ 거절된 명령이 에코를 **뒤집지 않는다**");
+
+      // 🔴🔴 **이 시험이 `echoIs()` 의 존재 이유다.**
+      //   DR 의 명령표는 `1=열기 2=닫기` 다. 기본 규약(`arg != 0`)만 쓰면 **닫기(2)도 0 이 아니라서
+      //   에코가 켜진 채**로 남는다 — 문은 닫혔는데 서버는 열린 줄 안다. 조용히 틀린 자료다.
+      ackQ.clearCache(); ackQ.clearQueue();
+      snprintf(gg, sizeof gg, "G,407,4,2,"); appendChecksum(gg, (uint8_t)strlen(gg));
+      handleFrameLine(gg);
+      ok(g_pinLevel[PIN_SAMPLE_DOOR] == LOW, "★ DR 닫기(2)가 핀을 내린다");
+      ok((router.echoMask() & (1u << 4)) == 0,
+                            "★★ **닫기(2)면 에코가 내려간다** — 0 이 아닌 값인데도 (echoIs 가 정한다)");
+
+      // 나머지도 내려 두고 뒤 시험(가상 차단봉)이 자기 비트만 보게 한다
+      ackQ.clearCache(); ackQ.clearQueue();
+      snprintf(gg, sizeof gg, "G,408,3,0,"); appendChecksum(gg, (uint8_t)strlen(gg));
+      handleFrameLine(gg);
+      ok(router.echoMask() == 0,
+                            "★★ 전부 내리면 에코 마스크가 0 이다 (센서 비트를 안 건드린다)");
+
+      // 🔴 **센서 이름에는 명령 핸들러가 안 붙는다** — 붙으면 에코 비트가 **실제 점유 비트와 겹친다**
+      ok(!router.on("A1", cmdLed),
+                            "★★ 센서(kind I*)에는 명령 핸들러를 못 붙인다 — 에코가 점유와 겹친다");
+      ok(router.on("DR", cmdDoor),
+                            "★ 액추에이터(kind O*)에는 붙는다 (위 거절이 이름 탓이 아님을 보인다)");
       ackQ.clearCache(); ackQ.clearQueue();
     }
 
