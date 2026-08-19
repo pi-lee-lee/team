@@ -181,6 +181,32 @@
                     if (!ok) bad++;
                 }
 
+                // ㊸ 🔴🔴 **한 장치 안 이름 중복을 잡는가** (2026-08-19)
+                //   web REQ-0179 §① 이 `(devid,name)` 을 전역 신원으로 쓴다. 중복이 있으면
+                //   **그 키가 오늘 이미 애매하고, 화면이 둘 중 하나를 임의로 집는다.**
+                //   ⚠ 증상이 "가끔 엉뚱한 모듈이 보인다"라서 **결함으로 안 보인다.**
+                //   🔑 **검사에 이빨이 있는지 여기서 본다** — 중복을 일부러 만들어 발화를 확인한다.
+                {
+                    Server t; t.build_default_zones();
+                    t.park.devid = "P1";
+                    t.park.mods.push_back(std::make_pair(std::string("A1"), std::string("IP")));
+                    t.park.mods.push_back(std::make_pair(std::string("A2"), std::string("IP")));
+                    t.bind_modules(t.park);
+                    long long clean = t.mod_dup_name;          // 중복 없음 → 0 이어야 한다
+
+                    Server d; d.build_default_zones();
+                    d.park.devid = "P1";
+                    d.park.mods.push_back(std::make_pair(std::string("A1"), std::string("IP")));
+                    d.park.mods.push_back(std::make_pair(std::string("A1"), std::string("IP")));
+                    d.bind_modules(d.park);
+                    long long dirty = d.mod_dup_name;          // 중복 → 1 이어야 한다
+
+                    bool ok = (clean == 0) && (dirty == 1);
+                    std::cout << (ok ? "  ✓ " : "  ✗ ") << "장치 안 이름 중복 — 깨끗 "
+                              << clean << " · 중복 " << dirty << " (기대 0 · 1)\n";
+                    if (!ok) bad++;
+                }
+
                 // ㊷ 🔴 **자가검증은 대장 파일을 안 건드린다** — `no_disk` 가 그 약속이다
                 //    ⚠ 안 지키면 자가검증을 한 번 돌릴 때마다 **운영 대장이 덮인다.**
                 //      §"시험이 실기 자료를 오염시킨다"의 자리다

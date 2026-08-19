@@ -207,6 +207,33 @@
 
     // 결속. 🔴 **규칙은 `Lot` 이 안다. 여기 남는 것은 "얼마나 크게 알리나" 뿐이다.**
     //   전에는 충돌 로그를 결속 안에서 찍었다 — 그러면 지형이 로그 형식을 알게 된다.
+    // 🔴🔴 **한 장치 안에서 모듈 이름이 고유한가** (2026-08-19 · socket 이 찾았다)
+    //
+    //   위 `mod_name_conflict` 는 **노드 *사이*** 충돌만 본다(두 노드가 같은 자리를 주장).
+    //   🔴 **한 노드 안의 중복은 아무도 안 봤다.** 그런데 web 은 REQ-0179 §① 에서
+    //     *"모듈의 전역 신원은 `(devid, name)` 복합 키"* 라고 정하고 **이미 그렇게 구현했다.**
+    //   → **중복이 있으면 그 키가 오늘 이미 애매하다.** 화면이 두 모듈 중 하나를 임의로 집는다.
+    //   ⚠ **증상이 "가끔 엉뚱한 모듈이 보인다"라서 결함으로 안 보인다.**
+    //
+    //   🔑 §"감시할 수 없는 것을 조건으로 적지 마라" 의 역방향이다 —
+    //     **남이 이미 조건으로 쓰고 있는 것을 내가 감시하지 않고 있었다.**
+    void check_dup_names(const Node& n) {
+        for (size_t i = 0; i < n.mods.size(); i++)
+            for (size_t k = i + 1; k < n.mods.size(); k++)
+                if (n.mods[i].first == n.mods[k].first) {
+                    mod_dup_name++;
+                    if (mod_dup_name <= 3 || mod_dup_name % 100 == 0)
+                        logf("🔴", "장치 안 모듈 이름 중복 — 노드 "
+                                   + (n.devid.empty() ? std::string("(미승격)") : n.devid)
+                                   + " 의 idx " + std::to_string(i) + " 와 " + std::to_string(k)
+                                   + " 가 둘 다 '" + n.mods[i].first + "' 이다. "
+                                     "**`(devid,name)` 조회가 애매해진다**(web REQ-0179 §①). "
+                                     "전선 주소는 `idx` 라 동작은 하지만 **화면이 둘 중 하나를 임의로 집는다**. "
+                                     "누적 " + std::to_string(mod_dup_name));
+                    return;   // 한 등록에 한 번만 알린다 — 로그를 덮지 않는다
+                }
+    }
+
     void bind_modules(Node& n) {
         Lot::BindResult r = lot.bind(n.devid, n.mods, lot_);
         for (size_t i = 0; i < r.conflicts.size(); i++) {
@@ -219,7 +246,33 @@
                              " 누적 " + std::to_string(mod_name_conflict)
                            + " · 자리 결속이 아직 이름 기반이라 생기는 한계다(REQ-0260)");
         }
-        if (r.changed) bump_epoch("노드 " + n.devid + " 등록 결속");
+        check_dup_names(n);
+        // 🔴🔴 **어느 자리에도 안 붙은 모듈을 *말한다*.** (2026-08-19 · 루트 지시)
+        //
+        //   `Modules.h` 주석이 이미 경고하고 있었다: *"이름은 자리 id 와 같아야 한다 —
+        //   다른 이름을 쓰면 등록은 성공하고 자리에는 아무것도 안 붙는다. **오류가 안 뜬다**"*
+        //   🔴 **주석에 적혀 있다는 것은 아무 데도 없다는 뜻이다.** 기여자는 주석을 안 읽고,
+        //     읽어도 자기가 그 경우인지 모른다. **값으로 말해야 한다.**
+        //
+        //   ⚠ **이건 거절이 아니다.** 노드는 정상 등록되고 하행도 그대로 간다 —
+        //     그 모듈이 **어떤 자리에도 안 나타날 뿐**이다. 그래서 더 조용하다.
+        for (size_t i = 0; i < r.unbound.size(); i++) {
+            mod_unbound++;
+            if (mod_unbound <= 5 || mod_unbound % 100 == 0) {
+                std::string known;
+                for (size_t z = 0; z < lot.zones().size() && z < 12; z++)
+                    known += (z ? ", " : "") + lot.zones()[z].id;
+                logf("🔴", "모듈 `" + r.unbound[i].second + "` (idx "
+                           + std::to_string(r.unbound[i].first) + ", 노드 "
+                           + (n.devid.empty() ? std::string("(미승격)") : n.devid)
+                           + ") 은 **어떤 자리에도 안 붙는다** — 지형에 그 이름이 없다. "
+                             "**등록은 성공했고 하행도 정상이지만 이 모듈은 화면에 안 나타난다.** "
+                             "지금 지형의 자리: " + known
+                           + " · 자리에 붙이려면 그 자리 id 와 같은 이름을 쓰거나(현행 규칙) "
+                             "대장에 할당을 걸어라(4단계) · 누적 " + std::to_string(mod_unbound));
+            }
+        }
+                if (r.changed) bump_epoch("노드 " + n.devid + " 등록 결속");
     }
 
     // ── REQ-0203 3a: **노드를 하나로 훑는 길** ──────────────────────────────────

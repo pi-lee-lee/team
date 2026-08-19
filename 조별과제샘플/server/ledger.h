@@ -42,9 +42,24 @@ public:
         std::vector<Mod> mods;
         Entry() : first_seen(0), last_seen(0), sessions(0), state(NEW) {}
     };
+    // 🔴 **키는 `(devid, name)` 이다. `idx` 가 아니다.** (2026-08-19 · 루트가 정정을 받았다)
+    //
+    //   초안은 `(devid, idx)` 였다. 배제한 이유가 *"이름으로 걸면 지금 문제가 그대로 남는다"* 였는데,
+    //   🔴 **지금 문제는 `name` 이 아니라 `name == 자리 id` 라는 *암묵 규칙* 이다.**
+    //   명시적으로 사상하면(이름 `B7` → 자리 `A3`) 그 결합은 `name` 으로도 똑같이 끊긴다.
+    //
+    //   `idx` 를 안 쓰는 적극적 이유 둘:
+    //     ① `idx` 는 **등록 순서**로 정해진다 → 순서가 바뀌면 **같은 idx 가 다른 물건을 가리킨다.**
+    //        할당이 조용히 딴 데를 가리키고, 그래서 `mod_order_changed` 계기가 따로 있다
+    //     ② web 이 REQ-0179 §① 에서 **`(devid, name)` 을 전역 신원으로 이미 쓴다.**
+    //        키가 둘이면 화면이 매핑을 만들게 되고 **그 매핑은 등록이 바뀔 때마다 낡는다**
+    //
+    //   ⚠ **전선은 여전히 `idx` 로 주소를 정한다**(`G,<rid>,<idx>,<val>`).
+    //     보낼 때 **현재 등록에서 name→idx 로 푼다.** 없으면 보내지 않고 사유를 준다.
+    //   ⚠ 전제: **한 장치 안에서 `name` 이 고유해야 한다** → `mod_dup_name` 이 그것을 본다.
+    //     **감시할 수 없는 것을 키로 쓰지 않는다.**
     struct Assign {
-        std::string devid; int idx; std::string zone, role;
-        Assign() : idx(-1) {}
+        std::string devid, name, zone, role;
     };
 
     NodeLedger() : persist_(false), dirty_(false), loads_(0), saves_(0),
@@ -161,7 +176,7 @@ public:
             } else if (c[0] == "A") {
                 if (c.size() < 5) { lines_bad_++; continue; }
                 Assign a;
-                a.devid = c[1]; a.idx = atoi(c[2].c_str());
+                a.devid = c[1]; a.name = c[2];
                 a.zone = c[3]; a.role = c[4];
                 assigns_.push_back(a);
             } else if (c[0] == "v" || c[0] == "srv") {
@@ -197,7 +212,7 @@ public:
             }
             for (size_t i = 0; i < assigns_.size(); i++) {
                 const Assign& a = assigns_[i];
-                f << "A\t" << clean(a.devid) << "\t" << a.idx << "\t"
+                f << "A\t" << clean(a.devid) << "\t" << clean(a.name) << "\t"
                   << clean(a.zone) << "\t" << clean(a.role) << "\n";
             }
             if (!f.good()) { save_fails_++; return false; }

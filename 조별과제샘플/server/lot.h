@@ -62,6 +62,12 @@ public:
     struct BindResult {
         bool changed;                                        // 지형이 바뀌었나(판을 올릴 이유)
         std::vector<std::pair<std::string, std::string> > conflicts;  // (자리 id, 이름)
+        // 🔴🔴 **어느 자리에도 안 붙은 모듈** — (idx, 이름). 2026-08-19 신설
+        //   전에는 `if (!z) continue;` 로 **조용히 건너뛰었다.** 그래서 기여자가 이름을
+        //   잘못 쓰면 **등록은 성공하고 자리에는 아무것도 안 붙고 아무도 안 알려 줬다.**
+        //   ⚠ 다인원 협업에서 가장 나쁜 형태다 — **코드는 도는데 결과가 없다.**
+        //   🔑 여기서는 *사실만* 실어 보낸다. 얼마나 크게 알릴지는 부르는 쪽이 정한다.
+        std::vector<std::pair<size_t, std::string> > unbound;
         BindResult() : changed(false) {}
     };
     BindResult bind(const std::string& devid,
@@ -70,7 +76,7 @@ public:
         BindResult r;
         for (size_t i = 0; i < mods.size(); i++) {
             Zone* z = find(zoneOfModule(mods[i].first, table));
-            if (!z) continue;
+            if (!z) { r.unbound.push_back(std::make_pair(i, mods[i].first)); continue; }
             std::pair<std::string, std::string> key(devid, mods[i].first);
             bool dup = false, takenByOther = false;
             for (size_t k = 0; k < z->modules.size(); k++) {
