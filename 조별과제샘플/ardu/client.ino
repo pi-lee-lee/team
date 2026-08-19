@@ -104,6 +104,17 @@ struct ModuleDef {
 #ifndef VIRTUAL_MODULES
 #define VIRTUAL_MODULES 0
 #endif
+// 🔓 **샘플 액추에이터 스위치 — 기본값 1(켬)**
+//   `LD`(LED) · `LC`(표시기) · `DR`(문) 셋. **명령 왕복 세 꼴이 이 샘플의 본문**이라 켜 둔다.
+//   실물이 안 달려 있어도 `digitalWrite` 는 성공하고 ACK `result=0` 이 돌아온다 —
+//   **왕복 자체는 그대로 검증된다.**
+//   ⚠ **자기 장치에 이 셋이 없으면 0 으로 꺼라.** 없는 모듈을 선언하면 화면에 유령이 뜬다.
+#ifndef SAMPLE_ACTUATORS
+#define SAMPLE_ACTUATORS 1
+#endif
+// 샘플 액추에이터의 핀. 🔴 D7·D8 은 ESP 가 쓴다 — 겹치면 통신이 죽는다.
+#define PIN_SAMPLE_LED   5
+#define PIN_SAMPLE_DOOR  6
 
 static const ModuleDef MODULE_TABLE[] PROGMEM = {
   // 🔓 **자리 하나 · 센서 둘** — 서버 샘플과 짝이다:
@@ -119,13 +130,22 @@ static const ModuleDef MODULE_TABLE[] PROGMEM = {
   // {"A4", KIND_PARK_SENSOR,  5}, {"B4", KIND_PARK_SENSOR, 12},
   // {"A5", KIND_PARK_SENSOR,  6}, {"B5", KIND_PARK_SENSOR, A0},
 
-  // 🔓 **액추에이터를 붙이려면** — 종류를 `O` 로 시작하는 것으로 하고 아래 `setup()` 에서 등록한다
-  // {"G1", KIND_BARRIER, 7},     // 예: 차단봉. `router.on("G1", myGate);`
+  // 🔓 **액추에이터(명령을 받는 모듈)** — 종류를 `O` 로 시작하는 것으로 하고
+  //   아래 `setup()` 에서 `router.on()` 으로 핸들러를 붙인다.
+  //   쓸 수 있는 종류: `KIND_GUIDE_LIGHT`(OG 안내등) · `KIND_LEAD_LIGHT`(OL 유도등) ·
+  //                    `KIND_BARRIER`(OB 차단봉)
+  //   🔑 **첫 글자 `O` 가 "명령을 받는다"를 뜻한다.** 서버는 그 한 글자만 본다.
   //
-  // ⚠ **이름이 자리 id 와 같을 필요는 없다.** 서버가 `sensor("KIM01","왼쪽센서")` 로 받는다 —
-  //   **장치의 이름과 서버 조립 표의 이름이 같기만 하면 된다.**
+  // 🔴🔴 **이름은 정확히 2글자다.** `char name[3]` 이고 전선에도 2글자만 나간다 —
+  //   `"LED1"` 처럼 3글자 이상을 적으면 **컴파일이 막는다**(초기화 문자열이 배열보다 길다).
+  //   ⚠ 서버 조립 표(`main.cpp`)에 적는 이름과 **글자 그대로** 같아야 붙는다.
   // 🔴 **중간에 끼워 넣지 마라.** 전선의 `idx` 는 **이 표의 순서**다 —
   //   중간 삽입은 뒤의 `idx` 를 전부 밀어 **지금 되는 결속을 조용히 깬다.** 끝에 붙여라.
+#if SAMPLE_ACTUATORS
+  {"LD", KIND_GUIDE_LIGHT, PIN_SAMPLE_LED},    // ① on/off
+  {"LC", KIND_LEAD_LIGHT,  PIN_NONE},          // ② 7자리 숫자 (표시기 — 핀은 라이브러리가 잡는다)
+  {"DR", KIND_BARRIER,     PIN_SAMPLE_DOOR},   // ③ 동작 명령
+#endif
 #if VIRTUAL_MODULES
   // ⚠ **시험용 가상 차단봉.** 기본값은 꺼져 있다 — `VIRTUAL_MODULES` 를 1 로 켤 때만 실린다.
   //   회귀 시험이 이것으로 **명령 수신 콜백 경로를 실제로 밟는다.**
@@ -183,11 +203,70 @@ static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_T
 // ⚠ **등록 안 한 모듈에 명령이 오면 `result=3`(수행 불가)로 답한다** — 조용히 성공하지 않는다.
 // 🔑 **이름으로 등록한다.** 전선은 `idx`(표 순서)로 오는데 표를 고치면 idx 가 밀린다 —
 //   **이름은 안 밀린다.** 그 변환은 `CommandRouter` 가 한다.
+#if SAMPLE_ACTUATORS
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔓 **샘플 — 명령 왕복 세 꼴.** 서버 쪽 `srv.send(devid, 모듈이름, 값)` 과 짝이다.
+//   셋 다 **같은 통로**다. 다른 것은 **네가 정한 값의 뜻**뿐이다.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── ① on/off ───────────────────────────────────────────────────────────────
+//   [LD 명령표]  0 = 끔 · 그 외 = 켬
+//   서버:  srv.send("P1", "LD", 1);
+static bool cmdLed(uint32_t arg) {
+  digitalWrite(PIN_SAMPLE_LED, arg ? HIGH : LOW);
+  return true;                       // 어떤 값이 와도 뜻이 정해지므로 항상 성공이다
+}
+
+// ── ② 7자리 숫자를 그대로 전달 ─────────────────────────────────────────────
+//   [LC 명령표]  값 = 표시할 수 (0 ~ 9999999)
+//   서버:  srv.send("P1", "LC", 1234567);
+//   🔴 `arg` 는 **부호 없는 32비트**다. 7자리는 여유 있게 들어간다.
+//     ⚠ 옛 파서는 16비트라 65,535 를 넘으면 `result=3` 이 나갔다. 지금은 32비트로 받는다.
+// 🔴 **실물 LCD 없이도 안전하다 — 라이브러리를 안 붙였기 때문이다.**
+//   여기서 하는 일은 USB 시리얼에 한 줄 찍는 것뿐이고, ESP 링크(SoftwareSerial)는 안 건드린다.
+//   ⚠ **실물 LCD 라이브러리를 붙일 때 그 안전이 사라진다:**
+//     `LiquidCrystal` 류는 `delayMicroseconds` 로 수십~수백 µs 를 **블로킹**하고,
+//     I2C 판은 버스가 죽어 있으면 **타임아웃까지 멈춘다.**
+//     🔴 이 핸들러는 **수신 창 안에서 불린다** — 여기서 오래 멈추면 그 슬롯의 수신을 잃는다.
+//     🔑 붙일 거면 **값만 저장하고 실제 출력은 `loop()` 의 송신 창에서** 해라.
+static bool cmdLcd(uint32_t arg) {
+  if (arg > 9999999UL) return false; // 🔴 7자리를 넘는 값은 **거절한다**(표시할 수 없다)
+#if DEBUG
+  Serial.print(F("[LC] "));  Serial.println(arg);
+#endif
+  return true;
+}
+
+// ── ③ 동작 명령 — **뜻을 정하는 표를 여기 적는다. 이 표가 곧 '명령 작성 방법'이다** ──
+//
+//   [DR 명령표]   (P1 / 모듈 "DR" · 정한 사람: ____ )
+//     1 = 열기    2 = 닫기    3 = 잠금    4 = 잠금해제
+//     ⚠ 그 밖의 값은 `result=3`(수행 불가)로 답한다
+//   서버:  srv.send("P1", "DR", 1);   // 열기
+//
+// 🔴 **이 표를 서버 호출부에도 똑같이 적어라.** 서버도 프로토콜도 값의 뜻을 모른다 —
+//   그냥 32비트 정수를 실어 나른다. **표가 어긋나면 조용히 다른 동작을 한다.**
+//   ⚠ 오류도 안 뜬다: 서버는 `2` 를 보냈고 장치는 `2` 를 받았으니 **양쪽 다 성공**이다.
+//   🔑 **의미는 값으로 검증되지 않는다. 사람이 맞추는 수밖에 없다.**
+// ❌ 표 없이 `1,2,3,4` 만 쓰지 마라 — 반년 뒤에 아무도 못 읽는다.
+static bool cmdDoor(uint32_t arg) {
+  switch (arg) {
+    case 1: digitalWrite(PIN_SAMPLE_DOOR, HIGH); break;   // 열기
+    case 2: digitalWrite(PIN_SAMPLE_DOOR, LOW);  break;   // 닫기
+    case 3: /* 잠금   — 자기 장치에 맞게 채운다 */         break;
+    case 4: /* 잠금해제 */                                 break;
+    default: return false;   // 🔴 모르는 값에 true 를 돌려주지 마라 —
+                             //   서버는 성공으로 알고 사람은 왜 안 되는지 모른다
+  }
+  return true;
+}
+#endif  // SAMPLE_ACTUATORS
+
 #if VIRTUAL_MODULES
 // 시험용 가상 차단봉의 핸들러. **실물 액추에이터도 똑같은 모양으로 쓴다** —
 //   실물이 붙으면 아래 `setup()` 의 등록 한 줄만 바꾸면 된다.
 static bool virtualGate(uint8_t k, uint32_t arg) {
-  gates.latch((uint8_t)(moduleCount() - SLOT_N), slotNo);   // 첫 명령이 자율 토글을 영구 정지
+  gates.latch(GATE_N, slotNo);      // 첫 명령이 자율 토글을 영구 정지시킨다
   gates.set(k, arg != 0);
   return true;
 }
@@ -214,6 +293,13 @@ void setup() {
   // 🔓 **명령 수신 등록 — 자기 액추에이터를 여기 붙인다**
   //   예)  `router.on("G1", myGate);`   ← 표에 `{"G1", KIND_BARRIER, 7}` 을 더한 뒤
   //   ⚠ 등록 안 한 모듈에 명령이 오면 `result=3`(수행 불가)로 답한다. 조용히 성공하지 않는다.
+#if SAMPLE_ACTUATORS
+  pinMode(PIN_SAMPLE_LED,  OUTPUT);
+  pinMode(PIN_SAMPLE_DOOR, OUTPUT);
+  router.on("LD", cmdLed);      // ① on/off
+  router.on("LC", cmdLcd);      // ② 7자리 숫자
+  router.on("DR", cmdDoor);     // ③ 동작 명령
+#endif
 #if VIRTUAL_MODULES
   router.on("E1", gateE1);      // 시험용 가상 차단봉 — 실물이 오면 이 줄만 바꾼다
   router.on("X1", gateX1);

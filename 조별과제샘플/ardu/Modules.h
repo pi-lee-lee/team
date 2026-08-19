@@ -121,6 +121,9 @@ class VirtualGates {
 };
 
 static VirtualGates gates;
+// 가상 차단봉의 개수와 **표에서의 시작 자리**. 표의 맨 끝에 붙는다.
+static const uint8_t GATE_N    = 2;
+static const uint8_t GATE_BASE = (uint8_t)(MODULE_N - GATE_N);
 #endif
 
 static void moduleNameOf(uint8_t i, char* out4) {
@@ -296,8 +299,11 @@ static uint8_t buildStatus(char* buf, uint8_t cap) {
   //     서버는 다음 `S` 에서 그 비트가 바뀌는 것으로 조작 성공을 안다.
   uint16_t occOut = node.occMask;
 #if VIRTUAL_MODULES
-  for (uint8_t k = 0; k + SLOT_N < mn; k++)
-    if (gates.isOpen(k, slotNo)) occOut |= (uint16_t)(1u << (SLOT_N + k));
+  // 🔴 가상 차단봉은 **표의 맨 끝 두 칸**이다. 그 자리를 `MODULE_N` 에서 거꾸로 센다.
+  //   ⚠ **"`SLOT_N` 뒤는 전부 차단봉"으로 세지 마라.** 센서와 차단봉 사이에 다른 모듈
+  //     (액추에이터 등)이 끼면 그 모듈의 비트에 차단봉 상태가 얹혀 **없는 조작이 보고된다.**
+  for (uint8_t k = 0; k < GATE_N; k++)
+    if (gates.isOpen(k, slotNo)) occOut |= (uint16_t)(1u << (GATE_BASE + k));
 #endif
   bitsToHex(occOut, mn, occ);
   bitsToHex(node.resMask, mn, res);
