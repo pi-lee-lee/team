@@ -33,7 +33,7 @@
 
 | 대상 | 무엇 | 미룬 이유 |
 |---|---|---|
-| `조별과제샘플/server.cpp:190` | 주석의 근거가 틀렸다 — *"3.5초(하트비트 3회분 + 여유)"*. 실측 주기가 **1.113초**라 3500ms 는 **3.14주기**이고 여유는 0.5초가 아니라 **0.16초**다 | 2026-08-17 관측 창. 고치면 `git diff <build sha> HEAD -- 조별과제샘플/` 이 안 비어 **배포된 바이너리의 소스를 해시로 특정하는 성질**이 흐려진다(§4.2.1) |
+| `조별과제샘플/server/server.cpp`(옛 `조별과제샘플/server.cpp:190`) | 주석의 근거가 틀렸다 — *"3.5초(하트비트 3회분 + 여유)"*. 실측 주기가 **1.113초**라 3500ms 는 **3.14주기**이고 여유는 0.5초가 아니라 **0.16초**다 | 2026-08-17 관측 창. 고치면 `git diff <build sha> HEAD -- 조별과제샘플/` 이 안 비어 **배포된 바이너리의 소스를 해시로 특정하는 성질**이 흐려진다(§4.2.1) |
 
 ### 🔴 0.5.1 **운영 cwd 에 `index.html` 이 있어야 화면이 나온다** — 배포마다 확인할 것
 
@@ -124,9 +124,22 @@ git rev-parse --short HEAD               # ← 이 값을 BUILD_ID 로 넘긴다
 ## 2. 빌드 — 경고 0
 
 ```bash
-cd /Users/idong-u/learn/조별과제샘플
+cd /Users/idong-u/learn/조별과제샘플/server      # 🔴 2026-08-19 이사: 소스가 여기로 왔다
 c++ -std=c++11 -O2 -Wall -Wextra -DBUILD_ID='"<sha>"' -o server_test server.cpp
 ```
+
+### 🔴 2.1 **산출물 대조를 실행파일로 하지 마라** (2026-08-19 실측)
+
+```
+같은 소스·같은 경로·같은 BUILD_ID 로 두 번 빌드 → **49바이트가 다르다**
+원인 : `LC_UUID`(링크마다 새로 생긴다) + 그로부터 파생되는 ad-hoc 코드서명
+```
+> ### **실행파일 해시는 매 빌드마다 다르다. "달라졌다"가 항상 참인 검사는 아무 말도 안 한다.**
+✅ **재현되는 것은 링크 전 `.o` 다** — UUID 도 서명도 없다.
+```bash
+c++ -std=c++11 -O2 -Wall -Wextra -DBUILD_ID='"<sha>"' -c -o /tmp/a.o server.cpp
+```
+**경로를 바꿔 빌드해도 `.o` 가 바이트까지 같았다**(이사 검증에 그것을 썼다).
 
 - **`-DBUILD_ID` 를 빼지 마라.** 빼면 `unknown-source(compiled …)` 로 찍혀
   귀속이 끊긴다(§L280 주석이 그 사실을 값 자체로 드러내게 해 뒀다).
@@ -145,7 +158,7 @@ c++ -std=c++11 -O2 -Wall -Wextra -DBUILD_ID='"<sha>"' -o server_test server.cpp
 ## 3. 🔴 시험 인스턴스에서 먼저 돌린다 — 운영 포트를 절대 먼저 잡지 않는다
 
 ```bash
-cd /Users/idong-u/learn/조별과제샘플
+cd /Users/idong-u/learn/조별과제샘플/server
 ./server_test --port-offset=100          # 10091 · 10000 · 5600
 ```
 
@@ -163,10 +176,18 @@ lsof -nP -iTCP -sTCP:LISTEN -p <pid>
 
 ### 3.1 시험 왕복 — 넷 다 통과해야 한다
 
+🔴 **아래 python 도구는 *저장소 루트* 에서 친다.** 위 `cd` 로 `조별과제샘플/server` 에 있으면
+`net/` 이 없어서 안 돈다 — **빌드 디렉터리와 도구 디렉터리가 다르다**(2026-08-19 이사 이후).
+
 ```bash
+cd /Users/idong-u/learn
 python3 net/fake_arduino.py --port 10091 --start-empty --interval 1.0   # 별도 창
 python3 net/ws_probe.py --port 10000 --reserve A1 --listen 4
 ```
+⚠ `ws_probe.py --listen` 은 **건수가 아니라 초다.** 그리고 **메시지를 잘라 찍으므로
+`state` 전문을 못 읽는다** — 전문이 필요하면 다른 수단을 써라(2026-08-19 실측).
+⚠ **`timeout` 은 이 macOS 에 없다.** `timeout … | grep` 을 쓰면 도구 실패가
+**"결과 없음"으로 둔갑한다** — 실제로 세 번 그렇게 읽을 뻔했다.
 
 | 확인 | 기대 |
 |---|---|
