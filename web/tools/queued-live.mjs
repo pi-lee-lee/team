@@ -12,6 +12,7 @@
  * 사용: node web/tools/queued-live.mjs --page 8788 --ws 10500
  */
 import { launch, evaluate, sleep } from './cdp.mjs';
+import { guardProdPort } from './ports.mjs';
 import { assertServedIsCurrent } from './screen-build.mjs';
 
 const argv = process.argv.slice(2);
@@ -25,7 +26,7 @@ const WS = SERVED || arg('--ws', null);
 if (!PAGE || !WS) { console.error('--served <포트>  또는  --page <정적서버포트> --ws <시험서버포트>'); process.exit(2); }
 /* 🔴 운영 포트 거부 — 팀 표준(원장 §5.5). 기본값이 없고 운영은 거부한다. */
 for (const p of [PAGE, WS]) {
-  if (['9900', '9991', '5500'].includes(String(p))) { console.error('🔴 운영 포트 거부: ' + p); process.exit(2); }
+  guardProdPort(p);
 }
 const URL_ = SERVED
   ? ('http://127.0.0.1:' + SERVED + '/index.html')      // 시연 구성 — 화면이 스스로 포트를 정한다

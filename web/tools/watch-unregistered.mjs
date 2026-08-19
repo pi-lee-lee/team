@@ -17,6 +17,7 @@
  * 사용: node web/tools/watch-unregistered.mjs --port 9900 --allow-prod --seconds 180
  */
 import { launch, evaluate, sleep, localStamp } from './cdp.mjs';
+import { guardProdPort } from './ports.mjs';
 import { assertServedIsCurrent } from './screen-build.mjs';
 
 const argv = process.argv.slice(2);
@@ -25,9 +26,7 @@ const PORT = arg('--port', null);
 const SECONDS = Number(arg('--seconds', '180'));
 if (!PORT) { console.error('--port <포트>'); process.exit(2); }
 /* 운영 포트 가드는 `live-map.mjs` 와 같은 규칙이다 — 지우지 않고 예외를 손으로 준다(§5.5). */
-if (['9900', '9991', '5500'].includes(String(PORT)) && !argv.includes('--allow-prod')) {
-  console.error('🔴 운영 포트 거부: ' + PORT + ' — --allow-prod 를 명시해라'); process.exit(2);
-}
+guardProdPort(PORT, { allow: argv.includes('--allow-prod') });
 const URL_ = 'http://127.0.0.1:' + PORT + '/index.html';
 /* 🔴 **현지 시각으로 찍는다** — UTC 로 찍었더니 서버 로그(KST)와 시(hour)가 어긋났다(§5.64). */
 const stamp = () => localStamp();

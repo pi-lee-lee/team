@@ -31,6 +31,7 @@ import { promisify } from 'node:util';
 import { readFile, writeFile, copyFile, stat } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { compare, readStamp, contentSha, applyStamp, makeStamp, UNSTAMPED, SOURCE_HTML } from './screen-build.mjs';
+import { readProdPorts } from './ports.mjs';
 
 const pexec = promisify(execFile);
 const argv = process.argv.slice(2);
@@ -41,7 +42,12 @@ const val = (f, d) => { const i = argv.indexOf(f); return i >= 0 && argv[i + 1] 
    ⚠ 전에는 cwd 상대 문자열이었다 — **어디서 실행하느냐로 원본이 달라지는** 형태이고,
    그것이 바로 이 도구가 잡으려는 결함(REQ-0240)과 같은 병이다. 도구가 그 병을 앓으면 안 된다. */
 const SOURCE = resolve(val('--source', SOURCE_HTML));
-const PORT = val('--port', '9900');
+/* 🔴 기본 포트도 **정본에서 읽는다**(`config.h` 의 `PORT_HTTP`). 손으로 `9900` 을 들고 있었더니
+   서버가 9990 으로 옮긴 순간 **"포트를 듣는 프로세스가 없다"로 죽었다**(2026-08-20 실측).
+   ⚠ 그건 시끄럽게 죽어서 그나마 나았다 — **조용히 빈 가드**와 대비된다(ports.mjs 머리말). */
+const PORT = val('--port', (() => {
+  try { return readProdPorts().named.PORT_HTTP || '9990'; } catch (e) { return '9990'; }
+})());
 const MODE = has('--deploy') ? 'deploy' : 'check';
 
 let pass = 0, fail = 0, unknown = 0;

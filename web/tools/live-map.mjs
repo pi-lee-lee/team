@@ -13,6 +13,7 @@
  * 사용: node web/tools/live-map.mjs --port 10000
  */
 import { launch, evaluate, sleep, localStamp } from './cdp.mjs';
+import { guardProdPort } from './ports.mjs';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { compare } from './screen-build.mjs';
@@ -27,11 +28,10 @@ if (!PORT) { console.error('--port <시험 인스턴스 포트>'); process.exit(
    줬다는 사실을 **화면에 크게 찍고 조작을 전부 시각과 함께 기록**한다.
    🔑 **사용자 브라우저가 같은 화면을 볼 수 있으므로 조작은 최소 횟수**여야 한다(루트 지시). */
 const ALLOW_PROD = argv.includes('--allow-prod');
-if (['9900', '9991', '5500'].includes(String(PORT))) {
-  if (!ALLOW_PROD) { console.error('🔴 운영 포트 거부: ' + PORT + ' — 통합 검증이면 --allow-prod 를 명시해라'); process.exit(2); }
-  console.log('🔴🔴 운영 인스턴스(' + PORT + ')에 붙는다 — 사용자 지시에 의한 예외.');
-  console.log('     사용자 브라우저가 같은 화면을 볼 수 있다. 조작은 최소로, 전부 기록한다.\n');
-}
+/* 🔴 **목록을 손으로 들지 않는다.** `조별과제샘플/server/config.h` 가 정본이고 `ports.mjs` 가 읽는다 —
+   포트가 바뀌면 가드가 **자동으로 따라간다**. 손으로 든 목록은 포트가 바뀌는 순간
+   **있는 채로 빈다**(2026-08-20 에 실제로 그랬다: config.h 는 9990 인데 가드는 9900 을 지키고 있었다). */
+guardProdPort(PORT, { allow: ALLOW_PROD });
 /** 조작을 언제 무엇을 했는지 남긴다 — socket 이 서버 로그와 맞출 수 있게. */
 const acted = [];
 function actLog(what) {

@@ -14,6 +14,7 @@
  * 사용: node web/tools/probe-slots.mjs --port 10000
  */
 import { launch, evaluate, sleep } from './cdp.mjs';
+import { guardProdPort } from './ports.mjs';
 import { assertServedIsCurrent } from './screen-build.mjs';
 import { writeFileSync, mkdirSync } from 'node:fs';
 
@@ -21,7 +22,7 @@ const argv = process.argv.slice(2);
 const arg = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
 const PORT = arg('--port', null);
 if (!PORT) { console.error('--port 를 줘라'); process.exit(2); }
-if (['9900', '9991', '5500'].includes(String(PORT))) { console.error('🔴 운영 포트 거부'); process.exit(2); }
+guardProdPort(PORT);
 const BASE = 'http://127.0.0.1:' + PORT + '/index.html?demo=1';
 const OUT = new URL('../artifacts/', import.meta.url);
 mkdirSync(OUT, { recursive: true });

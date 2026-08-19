@@ -10,6 +10,7 @@
  *       node web/tools/blink.mjs --port 10500 --case B --n 3
  */
 import { launch, evaluate, waitFor, sleep } from './cdp.mjs';
+import { guardProdPort } from './ports.mjs';
 import { assertServedIsCurrent } from './screen-build.mjs';
 import { writeFileSync, mkdirSync, readFileSync, appendFileSync } from 'node:fs';
 
@@ -23,11 +24,7 @@ const TRIGGER = arg('--trigger', 'offline');   // offline | silence — B 에서
 const OUT = new URL('../artifacts/', import.meta.url);
 
 if (!PORT) { console.error('--port 를 반드시 줘라 (기본값 없음)'); process.exit(2); }
-const FORBIDDEN = ['9900', '9991', '5500'];
-if (FORBIDDEN.includes(String(PORT))) {
-  console.error('🔴 ' + PORT + ' 는 운영 포트다. 중단.');
-  process.exit(2);
-}
+guardProdPort(PORT);   /* 🔴 목록을 손으로 들지 않는다 — config.h 가 정본이다(ports.mjs) */
 const BASE = 'http://127.0.0.1:' + PORT + '/';
 mkdirSync(OUT, { recursive: true });
 

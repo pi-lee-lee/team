@@ -12,6 +12,7 @@
  * 사용: node web/tools/e2e.mjs --port 10000 [--head]
  */
 import { launch, evaluate, waitFor, sleep, freePort } from './cdp.mjs';
+import { guardProdPort } from './ports.mjs';
 import { assertServedIsCurrent } from './screen-build.mjs';
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 
@@ -36,11 +37,7 @@ const LOG_OK = existsSync(LOG);
 const OUT = new URL('../artifacts/', import.meta.url);
 
 if (!PORT) { console.error('--port 를 반드시 줘라 (기본값 없음: 운영 포트를 실수로 집지 않게 하려는 것)'); process.exit(2); }
-const FORBIDDEN = ['9900', '9991', '5500'];
-if (FORBIDDEN.includes(String(PORT))) {
-  console.error('🔴 ' + PORT + ' 는 운영 포트다. 이 스크립트는 시험 인스턴스에만 붙는다. 중단.');
-  process.exit(2);
-}
+guardProdPort(PORT);   /* 🔴 목록을 손으로 들지 않는다 — config.h 가 정본이다(ports.mjs) */
 const BASE = 'http://127.0.0.1:' + PORT + '/';
 mkdirSync(OUT, { recursive: true });
 
