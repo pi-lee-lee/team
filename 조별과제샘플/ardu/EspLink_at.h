@@ -136,7 +136,8 @@ static void handleFrameLine(char* cand) {
                      Serial.print(F(" op=")); Serial.println(gop); }
 #endif
     // ⚠ 캐시에 넣어야 재전송(같은 rid)이 같은 답을 받는다 — 멱등이 여기서도 성립해야 한다
-    commitAck(grid, 'G', (char)('0' + (gidx % 10)), gres);
+    cachePut(grid, 'G', (char)('0' + (gidx % 10)), gres);
+    sendAck(grid, 'G', (char)('0' + (gidx % 10)), gres);
     return;
   }
 
@@ -465,7 +466,8 @@ static void handleLine(char* s) {
     // 실제로 성공한 경우라 진짜로 "이미 붙었다"는 뜻이다. 여기서는 그대로 온라인으로 받고
     // **캐시를 비우지 않는다** — 새 연결이 아니므로(REQ-0035 [18]-4 불변식).
     netOnline = true;
-    onlineSince = millis();            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
+    onlineSince = millis();
+    if (hwRstPending) { if (hwRstOk < 65535) hwRstOk++; hwRstPending = false; }  // 4단이 들었다            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
     lastTxOkAt  = millis();            // ★ 살아있음 불변식의 출발점 — 붙자마자 발동하지 않게 한다
     sendFailStreak = 0;
     markNeedsRegistration();           // ★ 새 소켓 = 서버가 우리를 모른다. **세 곳 전부**에서 예약한다(아래)
@@ -478,7 +480,8 @@ static void handleLine(char* s) {
   }
   if (isConnectLine(s)) {
     netOnline = true;
-    onlineSince = millis();            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
+    onlineSince = millis();
+    if (hwRstPending) { if (hwRstOk < 65535) hwRstOk++; hwRstPending = false; }  // 4단이 들었다            // 사다리 복귀 판정의 기준 시각 (REQ-0071)
     lastTxOkAt  = millis();            // ★ 살아있음 불변식의 출발점 — 붙자마자 발동하지 않게 한다
     sendFailStreak = 0;
     markNeedsRegistration();           // ★ 새 소켓 = 서버가 우리를 모른다. **세 곳 전부**에서 예약한다(아래)

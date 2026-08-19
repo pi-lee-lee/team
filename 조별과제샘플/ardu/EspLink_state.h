@@ -230,6 +230,11 @@ static const uint8_t PIN_ESP_RST = A2;
 
 static bool          espRstHeld = false;
 static uint16_t      hwRstAsserts = 0;   // 🔴 4단(하드리셋) **실행** 횟수 — 선언이 아니라 결과다(§30)
+static uint16_t      hwRstOk      = 0;   // 그중 **온라인까지 간** 횟수 = 4단이 **들었는지**
+static bool          hwRstPending = false;
+// 🔑 **분모를 같이 둔다**: `hwrst=<실행>/<성공>`. `0` 이 혼자 서면 "안 일어났다"인지
+//   "듣지 않았다"인지 못 가른다(monitor 규칙). `2/0` 이면 4단이 안 듣는 것이고,
+//   `2/2` 면 듣는 것이다 — 그때 5단(MOSFET)이 필요한지가 갈린다.
 static unsigned long espRstReleaseAt = 0;
 
 // 무엇을 보냈는지 찍는다(REQ-0042 3순위). 이게 없으면 5초마다 CIPSTART 를 재시도하는지조차

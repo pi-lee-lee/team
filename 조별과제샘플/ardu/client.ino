@@ -543,6 +543,7 @@ void espRstAssert(uint16_t holdMs) {
   // 🔴 **조치가 실제로 실행된 횟수.** `[LADDER]` 문구는 DEBUG 안이라 DEBUG=0 이면 사라진다.
   //   계수는 밖에 둬서 **"4단이 있다"와 "4단이 돌았다"를 가를 자리**를 만든다(§30 선언 vs 결과).
   if (hwRstAsserts < 65535) hwRstAsserts++;
+  hwRstPending = true;                 // 이 조치가 온라인으로 이어지는지 본다
   pinMode(PIN_ESP_RST, OUTPUT);
   digitalWrite(PIN_ESP_RST, LOW);      // ★ 절대 OUTPUT HIGH 로 놓지 않는다(5V 가 3.3V 핀에 실린다)
   espRstHeld = true;
@@ -917,7 +918,8 @@ static void cntTick(uint32_t now) {
   Serial.print(F("[CNT] up="));      Serial.print(now / 1000);
   Serial.print(F(" drop="));         Serial.print(linkDrops);
   Serial.print(F(" esprst="));       Serial.print(espResets);
-  Serial.print(F(" hwrst="));        Serial.print(hwRstAsserts);   // 4단 실제 실행 수
+  Serial.print(F(" hwrst="));        Serial.print(hwRstAsserts);
+  Serial.print('/');                 Serial.print(hwRstOk);        // 4단 실행/성공 — 분모를 같이 둔다
   Serial.print(F(" resync="));       Serial.print(promptResyncs);
   Serial.print(F(" sendfail="));     Serial.print(sendFails);
   Serial.print(F(" okto="));         Serial.print(sendOkTimeouts);
@@ -1203,15 +1205,6 @@ static bool sendAck(uint16_t rid, char s0, char s1, uint8_t result) {
   return true;          // "보냈다"가 아니라 **"담았다"**. 호출부 5곳 모두 반환값을 안 쓴다(확인함)
 }
 
-// 🔴 **멱등 커밋 + ACK 예약을 한 번에.** 순서(캐시 먼저)를 호출부에서 빼앗아 여기 가둔다.
-//   ⚠ 둘을 따로 부르면 **캐시를 빠뜨린 재전송이 *다른 답*을 받는다**(§4.2 멱등 파손) — 조용히 틀린다.
-//   주석으로만 지키던 순서를 **함수로** 지킨다. 호출부는 이것만 부른다(5곳).
-//   🔑 캐시에서 되보내는 재전송 경로(2곳)는 `sendAck` 을 그대로 쓴다 — 그건 이미 캐시에 있다.
-static void commitAck(uint16_t rid, char s0, char s1, uint8_t result) {
-  cachePut(rid, s0, s1, result);
-  sendAck(rid, s0, s1, result);
-}
-
 // ─────────────────────────────────────────────────────────────────────────
 // 🔴 슬롯 배치 — **S 프레임 + 밀린 ACK 를 한 거래로 묶는다** (2026-08-17 · REQ-0164)
 //
@@ -1443,13 +1436,15 @@ static void processCommand(char* cand) {
 #if DEBUG
     Serial.print(F("[BAD FIELDS] rid=")); Serial.println(rid);
 #endif
-    commitAck(rid, s0, s1, result);
+    cachePut(rid, s0, s1, result);
+    sendAck(rid, s0, s1, result);
     return;
   }
 
   if (type == 'T') {
     processTest(f, &s0, &s1, &result);
-    commitAck(rid, s0, s1, result);      // §4.2 멱등은 T 에도 그대로 적용된다
+    cachePut(rid, s0, s1, result);       // §4.2 멱등은 T 에도 그대로 적용된다
+    sendAck(rid, s0, s1, result);
     return;
   }
 
@@ -1471,7 +1466,8 @@ static void processCommand(char* cand) {
       Serial.println((simOcc >> idx) & 1);
 #endif
     }
-    commitAck(rid, s0, s1, result);
+    cachePut(rid, s0, s1, result);
+    sendAck(rid, s0, s1, result);
     return;
   }
 
@@ -1513,7 +1509,8 @@ static void processCommand(char* cand) {
     }
   }
 
-  commitAck(rid, s0, s1, result);
+  cachePut(rid, s0, s1, result);
+  sendAck(rid, s0, s1, result);
 }
 
 #include "EspLink_at.h"   // ← AT 응답 어휘 해석 (REQ-0273). **위치를 옮기지 마라**
