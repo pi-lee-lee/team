@@ -38,15 +38,29 @@ public:
     // ── 결속 규칙 — **어느 센서가 어느 자리인가** ───────────────────────────
     // 표(조립 API)가 있으면 **표가 답한다.** 없으면 이름 규칙으로 떨어진다.
     // 🔑 표가 생기면 *"B3 은 A3 의 둘째 센서"* 라는 **추측이 사실로 바뀐다.**
-    std::string zoneOfModule(const std::string& nm, const ParkingLot* table) const {
+    // 🔴 **`devid` 를 같이 받는다** (2026-08-19). 조립 표가 장치를 못 박을 수 있게 됐다.
+    //   `Attach::devid` 가 비어 있으면 **아무 장치나** — 1인자 선언이 그 뜻이다.
+    // ⚠ **첫 번째로 맞는 것을 돌려준다.** 같은 이름이 두 자리에 있으면 뒤엣 자리는 못 받는다 —
+    //   그래서 `validate_assembly()` 가 기동 때 그것을 말한다.
+    std::string zoneOfModule(const std::string& devid, const std::string& nm,
+                             const ParkingLot* table) const {
         if (table && !table->empty()) {
             const std::vector<ParkingLot::Area>& as = table->areas();
             for (size_t i = 0; i < as.size(); i++)
-                for (size_t k = 0; k < as[i].sensors.size(); k++)
-                    if (as[i].sensors[k] == nm) return as[i].id;
+                for (size_t k = 0; k < as[i].modules.size(); k++) {
+                    const ParkingLot::Attach& at = as[i].modules[k];
+                    if (at.name != nm) continue;
+                    // 🔑 devid 가 비면 아무 장치나. 있으면 **그 장치일 때만**.
+                    if (!at.devid.empty() && at.devid != devid) continue;
+                    return as[i].id;
+                }
             return nm;                       // 표에 없는 이름 — 자기 이름으로 찾아본다
         }
         return nameRule(nm);
+    }
+    // 옛 형태 — devid 를 모르는 자리에서 부른다. **"아무 장치나"로 읽는다.**
+    std::string zoneOfModule(const std::string& nm, const ParkingLot* table) const {
+        return zoneOfModule(std::string(), nm, table);
     }
 
     // 이름 규칙(표가 없을 때) : `B3` → 자리 `A3` 의 둘째 센서
@@ -75,7 +89,7 @@ public:
                     const ParkingLot* table) {
         BindResult r;
         for (size_t i = 0; i < mods.size(); i++) {
-            Zone* z = find(zoneOfModule(mods[i].first, table));
+            Zone* z = find(zoneOfModule(devid, mods[i].first, table));
             if (!z) { r.unbound.push_back(std::make_pair(i, mods[i].first)); continue; }
             std::pair<std::string, std::string> key(devid, mods[i].first);
             bool dup = false, takenByOther = false;

@@ -181,24 +181,39 @@
 
         // ① **같은 센서 이름이 두 자리에** — `zoneOfModule` 은 **첫 자리를 돌려준다.**
         //    🔴 그래서 뒤엣 자리는 그 센서를 **영영 못 받는다.** 아무 오류도 안 난다.
+        // ⚠ **`devid` 가 둘 다 비었거나 같을 때만 충돌이다.** 장치가 다르면 같은 이름이어도
+        //   서로 다른 모듈이고, 그것을 갈라 주는 것이 2인자 형태의 목적이다(2026-08-19).
         for (size_t i = 0; i < as.size(); i++)
-            for (size_t k = 0; k < as[i].sensors.size(); k++)
+            for (size_t k = 0; k < as[i].modules.size(); k++)
                 for (size_t j = i; j < as.size(); j++)
-                    for (size_t m = (j == i ? k + 1 : 0); m < as[j].sensors.size(); m++)
-                        if (as[i].sensors[k] == as[j].sensors[m]) {
+                    for (size_t m = (j == i ? k + 1 : 0); m < as[j].modules.size(); m++) {
+                        const ParkingLot::Attach& x = as[i].modules[k];
+                        const ParkingLot::Attach& y = as[j].modules[m];
+                        if (x.name != y.name) continue;
+                        // 둘 중 하나라도 "아무 장치나"면 겹친다. 둘 다 지정이면 같을 때만.
+                        if (!x.devid.empty() && !y.devid.empty() && x.devid != y.devid) continue;
+                        {
                             asm_warn_++;
-                            logf("🔴", "조립 표 — 센서 이름 `" + as[i].sensors[k]
+                            logf("🔴", "조립 표 — 센서 이름 `" + as[i].modules[k].name
                                        + "` 이 자리 " + as[i].id + " 와 " + as[j].id
                                        + " 에 둘 다 적혀 있다. **앞엣 자리(" + as[i].id
                                        + ")가 이기고 " + as[j].id + " 는 이 센서를 영영 못 받는다.** "
-                                         "`main.cpp` 의 조립 표에서 한쪽을 고쳐라");
+                                         "`main.cpp` 의 조립 표에서 한쪽을 고쳐라"
+                                         + std::string(x.devid.empty() && y.devid.empty()
+                                             ? " (둘 다 장치를 안 정했다 — `sensor(\"devid\",\"이름\")` 로 갈라라)"
+                                             : ""));
                         }
+                    }
 
         // ② **센서가 하나도 없는 주차 자리** — 점유를 영원히 모른다(`value_state: unknown` 고정).
         //    ⚠ 화면에는 자리가 보이는데 값이 안 채워진다 → *"센서가 고장났나"* 를 쫓게 된다
         for (size_t i = 0; i < as.size(); i++) {
             if (as[i].kind != "parking") continue;      // 입출구는 센서가 없어도 된다
-            if (!as[i].sensors.empty()) continue;
+            // 🔑 **센서만 센다.** 차단봉만 붙은 자리는 점유를 말할 수 없는 게 당연하다.
+            bool hasSensor = false;
+            for (size_t k = 0; k < as[i].modules.size(); k++)
+                if (!as[i].modules[k].actuator) { hasSensor = true; break; }
+            if (hasSensor) continue;
             asm_warn_++;
             logf("🔴", "조립 표 — 자리 " + as[i].id + " 에 **센서가 하나도 없다.** "
                        "화면에는 자리가 보이지만 점유는 **영원히 `unknown`** 이다 "

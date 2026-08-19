@@ -223,8 +223,18 @@ static ProcessInit g_process_init;
 //   ⏳ 지금은 **얇은 층**이다. `Server` 3,900줄을 쪼개는 것은 3단계이고, 그때 이 층은 안 바뀐다.
 //   🔑 그래서 **사용 코드가 먼저 돌고** 내부는 나중에 정리된다.
 
+// 🔑 셋 다 **한 곳으로 모은다** — 규칙이 세 곳에 생기면 갈린다.
 Spot& Spot::sensor(const std::string& name) {
-    lot_->areas_[idx_].sensors.push_back(name);
+    // devid 를 안 준 형태 = "아무 장치나 그 이름을 가진 것"
+    lot_->areas_[idx_].modules.push_back(ParkingLot::Attach("", name, false));
+    return *this;
+}
+Spot& Spot::sensor(const std::string& devid, const std::string& name) {
+    lot_->areas_[idx_].modules.push_back(ParkingLot::Attach(devid, name, false));
+    return *this;
+}
+Spot& Spot::actuator(const std::string& devid, const std::string& name) {
+    lot_->areas_[idx_].modules.push_back(ParkingLot::Attach(devid, name, true));
     return *this;
 }
 

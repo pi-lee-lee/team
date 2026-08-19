@@ -46,6 +46,45 @@
                     if (!ok) bad++;
                 }
 
+                // ㊽ 🔴🔴 **2인자 선언이 실제로 되는가** — 이름이 자리 id 와 달라도 붙는가
+                //
+                //   > **`devid` 를 받는 순간 "모듈 이름이 자리 id 와 같아야 한다"는 암묵 규칙이 사라진다.**
+                //   `Modules.h` 주석이 경고하던 함정이 여기서 구조적으로 없어지는 것을 **값으로** 본다.
+                //   ⚠ **쓰이지 않는 일반화는 검증되지 않은 코드다.** 그래서 더하자마자 밟는다.
+                {
+                    ParkingLot lt;
+                    lt.spot("A1").sensor("P1", "왼쪽센서");   // 🔑 이름이 자리 id 와 **다르다**
+                    Server t; t.lot_ = &lt;
+                    t.build_default_zones();
+                    t.park.devid = "P1";
+                    t.park.mods.push_back(std::make_pair(std::string("왼쪽센서"), std::string("IP")));
+                    t.bind_modules(t.park);
+                    const Zone* z = t.lot.find("A1");
+                    bool bound = z && z->modules.size() == 1
+                                 && z->modules[0].first == "P1"
+                                 && z->modules[0].second == "왼쪽센서";
+                    bool quiet = (t.mod_unbound == 0);
+
+                    // 음성 대조 — **다른 장치의 같은 이름은 안 붙어야 한다**
+                    //   ⚠ 이게 없으면 "그냥 이름만 보고 붙은 것"과 구분이 안 된다
+                    ParkingLot lt2;
+                    lt2.spot("A1").sensor("P9", "왼쪽센서");   // 🔴 P9 를 지정했는데 P1 이 온다
+                    Server u; u.lot_ = &lt2;
+                    u.build_default_zones();
+                    u.park.devid = "P1";
+                    u.park.mods.push_back(std::make_pair(std::string("왼쪽센서"), std::string("IP")));
+                    u.bind_modules(u.park);
+                    const Zone* z2 = u.lot.find("A1");
+                    bool notBound = z2 && z2->modules.empty() && u.mod_unbound == 1;
+
+                    bool ok = bound && quiet && notBound;
+                    std::cout << (ok ? "  ✓ " : "  ✗ ") << "2인자 선언 — 이름이 자리 id 와 달라도 붙는다("
+                              << (bound ? "붙는다" : "🔴안 붙는다") << ", 미결속 " << t.mod_unbound
+                              << ") · **다른 devid 는 안 붙는다**("
+                              << (notBound ? "안 붙는다" : "🔴붙는다") << ")\n";
+                    if (!ok) bad++;
+                }
+
                 // ㊼ 🔴 **재정의가 실제로 듣는가** — 이게 이 구조의 전부다.
                 //    기여자가 상속해서 구현한 것이 안 불리면 **기본이 조용히 계속 쓰인다.**
                 //    ⚠ 그 고장은 "내가 쓴 코드가 아무 일도 안 한다"이고, 오늘 우리가 없앤 부류다.
