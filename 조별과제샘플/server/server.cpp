@@ -638,6 +638,24 @@ static std::string cur_cwd() {
 #endif
 }
 
+// 🔴 상대경로를 **해석된 절대경로**로 바꾼다 (REQ-0248 · 2026-08-19)
+//
+//   `serve_file()` 과 `data_log.json` 이 cwd 상대라 **같은 바이너리가 어디서 떴느냐에 따라
+//   다른 실체를 읽고 쓴다.** 오늘 그것 때문에 반나절이 들었다 — 로그에 "무엇을 열었나"가 없었다.
+//   ⚠ 파일이 없어도 **경로는 답할 수 있어야 한다**(그게 곧 "왜 404 인가"의 답이다).
+//     그래서 `realpath` 로 풀리지 않으면 **cwd 를 붙여서라도** 절대경로를 만든다.
+static std::string abs_path(const std::string& rel) {
+    if (!rel.empty() && rel[0] == '/') return rel;
+#ifndef _WIN32
+    char rp[1024];
+    if (realpath(rel.c_str(), rp)) return std::string(rp);
+#endif
+    std::string cw = cur_cwd();
+    if (cw.empty() || cw == "?") return rel;
+    return cw + "/" + rel;
+}
+
+
 static std::string iso8601(long long ep_ms) {
     time_t tt = (time_t)(ep_ms / 1000);
     char b[40];
@@ -860,6 +878,7 @@ struct Server {
     //     떨어뜨리면 **"바꿨는데 안 올린 경로"** 가 생기고, 그건 **탐지 장치가 있는데 안 울리는 것**이라
     //     아예 없는 것보다 나쁘다. → `bump_epoch()` 하나만 그 일을 한다.
     Lot lot;
+    std::string last_screen_build_;   // 🔑 같은 판본을 반복해 찍지 않는다(요청마다 오면 로그가 덮인다)
     // 🔴🔴 **`epoch` 는 *이 서버 인스턴스 안에서만* 단조다**(설계 §6.8).
     //   재기동하면 0 부터 다시 시작하므로, 화면이 옛 판을 들고 있으면 **새 서버의 판 1 을
     //   "늦게 온 옛 프레임"으로 무시한다** — 그러면 화면이 영영 새 맵을 안 받고 **오류도 안 뜬다.**
@@ -3893,6 +3912,32 @@ struct Server {
         }
         std::ostringstream ss; ss << f.rdbuf();
         std::string body = ss.str();
+
+        // ── 🔴 **무엇을 내줬는지 로그에 남긴다** (REQ-0248 · 2026-08-19)
+        //
+        //   2026-08-19 에 `:9900` 이 **08-17 판 화면을 이틀간** 내줬다. 서버는 아무 잘못이 없었고
+        //   로그에도 흔적이 없었다 — **`serve_file()` 이 cwd 상대경로로 열기 때문**이다.
+        //   ⚠ `ls` 도 `curl 200` 도 둘 다 통과했다. **존재형 검사는 유물을 통과시킨다.**
+        //   → 화면이 자기 판본을 `<meta name="screen-build">` 로 싣기로 했으므로(web) **그것을 찍는다.**
+        //   🔑 **한 번만 찍는다** — 요청마다 찍으면 로그가 그것으로 덮이고, 판본은 파일이 바뀔 때만 바뀐다.
+        if (fn.size() > 5 && fn.substr(fn.size()-5) == ".html") {
+            size_t mp = body.find("name=\"screen-build\"");
+            std::string tag = "(표지 없음)";
+            if (mp != std::string::npos) {
+                size_t cs = body.find("content=\"", mp);
+                if (cs != std::string::npos) {
+                    cs += 9;
+                    size_t ce = body.find('"', cs);
+                    if (ce != std::string::npos) tag = body.substr(cs, ce - cs);
+                }
+            }
+            if (tag != last_screen_build_) {
+                last_screen_build_ = tag;
+                logf("=", "화면 판본 — " + tag + " · " + std::to_string(body.size()) + "B · "
+                          + abs_path(fn));
+            }
+        }
+
         const char* ct = "application/octet-stream";
         if (fn.size() > 5 && fn.substr(fn.size()-5) == ".html") ct = "text/html; charset=utf-8";
         else if (fn.size() > 5 && fn.substr(fn.size()-5) == ".json") ct = "application/json; charset=utf-8";
@@ -4241,6 +4286,22 @@ struct Server {
             //   자가검증이 만드는 `Server` 들이 실기 커서 파일을 덮어쓰지 못하게 하려는 것이다.
             //   ⚠ 이 한 줄이 빠지면 **아무 경고 없이** 매 기동이 1에서 시작한다(=옛 거동).
             //   그래서 기동 로그에 값을 찍는다 — 빠진 것이 로그의 *부재*로 보이게.
+            // 🔴 **정적 자원·영속 상태의 해석된 절대경로를 찍는다** (REQ-0248 · 2026-08-19)
+            //
+            //   `serve_file()`(index.html)과 `data_log.json` 이 **cwd 상대**다.
+            //   2026-08-19 에 그 때문에 `:9900` 이 이틀 된 화면을 내줬고 **로그에 흔적이 없어**
+            //   "무엇을 열고 있나"를 사후에 못 물었다 — 반나절이 들었다.
+            //   🔑 `cwd=` 는 경계 줄에 이미 찍는다. 그런데 **cwd 를 안다고 경로를 아는 것은 아니다** —
+            //     읽는 사람이 머릿속에서 이어 붙여야 한다. **서버가 이어 붙여서 찍는다.**
+            //   ⚠ 파일이 없어도 경로는 찍는다 — 그게 곧 "왜 404 인가"의 답이다.
+            {
+                char pb[512];
+                snprintf(pb, sizeof(pb), "정적 자원 — index.html %s%s · data_log.json %s",
+                         abs_path("index.html").c_str(),
+                         std::ifstream("index.html").good() ? "" : " 🔴(없다 — GET / 는 404 다)",
+                         abs_path("data_log.json").c_str());
+                logf("=", pb);
+            }
             rid_cursor_load();
             // 🔴 **조건을 적었으면 그것을 보는 감시를 같은 자리에 만든다.**
             //   재사용 주기가 장치 멱등창(16)에 가까워지면 명령이 **조용히 삼켜진다.**
