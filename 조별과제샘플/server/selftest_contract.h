@@ -253,8 +253,9 @@
             {
                 ParkingLot L;
                 L.spot("A1").sensor("P1", "A1").actuator("P1", "LD").actuator("P1", "L2");
-                L.control("P1", "LD").toggle("등");
-                L.control("P1", "L2").number("표시기", 0, 9999999);
+                L.control("P1", "LD").toggle();
+                L.label("P1", "LD", "등");
+                L.control("P1", "L2").number(0, 9999999);
                 Server t; t.lot_ = &L; t.build_default_zones(); t.init_srv_id();
                 t.park.devid = "P1"; t.park.reg_done = true;
                 t.park.mods.push_back(std::make_pair(std::string("A1"), std::string("IP")));
@@ -266,9 +267,17 @@
 
                 // ── 선언이 `map` 에 나간다. **이름을 손으로 박는다**(㉟ 와 같은 이유)
                 const std::string m = t.map_json();
-                bool c1 = (m.find("\"control\":{\"widget\":\"toggle\",\"label\":") != std::string::npos);
+                bool c1 = (m.find("\"control\":{\"widget\":\"toggle\"") != std::string::npos);
                 std::cout << (c1 ? "  ✓ " : "  ✗ ") << "map: control.widget=toggle 이 나간다\n";
                 if (!c1) bad++;
+                // 🔴 **이름은 `control` 이 아니라 모듈의 `label` 이 나른다** (2026-08-20)
+                //   ⚠ 부정형 하나로 끝내지 않는다 — *"control 에 label 이 없다"* 는
+                //     **control 자체가 없어도 참**이다. 있어야 할 것을 같이 단언한다.
+                bool c1b = (m.find("\"label\":\"등\"") != std::string::npos
+                            && m.find("\"control\":{\"widget\":\"toggle\",\"label\"") == std::string::npos);
+                std::cout << (c1b ? "  ✓ " : "  ✗ ")
+                          << "🔴 이름은 모듈의 label 로 나가고 control 에는 없다\n";
+                if (!c1b) bad++;
                 bool c2 = (m.find("\"widget\":\"number\"") != std::string::npos
                            && m.find("\"min\":0,\"max\":9999999") != std::string::npos);
                 std::cout << (c2 ? "  ✓ " : "  ✗ ") << "map: number 는 min·max 를 같이 낸다\n";

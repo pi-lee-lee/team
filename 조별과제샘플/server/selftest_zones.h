@@ -289,8 +289,8 @@
                 //   🔑 이 시험이 지키는 것은 문법이 아니라 *"거절 사유가 갈린다"* 이고,
                 //     그 요구는 경로가 바뀌어도 그대로다. **사유가 뭉치면 고칠 곳을 못 가른다.**
                 ParkingLot CL3;
-                CL3.control("P1", "E1").toggle("입구 차단봉");
-                CL3.control("P1", "QQ").toggle("장치에 없는 모듈");   // ④ 용
+                CL3.control("P1", "E1").toggle();
+                CL3.control("P1", "QQ").toggle();   // ④ 용
                 LoopPair lw;                       // 화면 소켓 자리(진짜 fd 가 있어야 응답이 나간다)
                 Server t; t.lot_ = &CL3; t.build_default_zones(); t.init_srv_id();
                 t.conns[lw.a].kind = Conn::WS;     // 🔑 **WS 로 승격해야 응답이 나간다**

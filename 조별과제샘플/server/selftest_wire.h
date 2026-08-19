@@ -115,8 +115,8 @@
                     // ⚠ E1 은 `toggle`, X1 은 `choice` 로 **일부러 다르게** 선언한다 —
                     //   두 위젯이 `confirmed` 를 다르게 판정하는 것이 이 시험의 요점이다.
                     ParkingLot CL;
-                    CL.control("P1", "E1").toggle("입구 차단봉");
-                    CL.control("P1", "X1").choice("출구 차단봉")
+                    CL.control("P1", "E1").toggle();
+                    CL.control("P1", "X1").choice()
                             .option(1, "열기").option(2, "닫기");
                     Server t; t.lot_ = &CL; t.build_default_zones(); t.init_srv_id();
                     t.ard = gs[0]; t.ard_seen = true; t.ard_last_ms = now_ms();
@@ -324,7 +324,7 @@
                 sock_t os_[2];
                 if (socketpair(AF_UNIX, SOCK_STREAM, 0, os_) == 0) {
                     ParkingLot CL2;
-                    CL2.control("P1", "E1").toggle("입구 차단봉");
+                    CL2.control("P1", "E1").toggle();
                     Server t; t.lot_ = &CL2; t.build_default_zones(); t.init_srv_id();
                     t.ard = os_[0]; t.ard_seen = true; t.ard_last_ms = now_ms();
                     t.park.devid = "P1";                 // 🔑 등록 전에(위 ㉚ 주석과 같은 이유)

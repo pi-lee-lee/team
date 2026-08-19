@@ -31,6 +31,7 @@
 #include <string>
 #include <vector>
 #include <cstddef>
+#include <map>
 #include <iostream>   // 🔑 기여자가 `std::cout` 을 바로 쓸 수 있게 — include 를 둘로 만들지 않는다
 #include "spot.h"      // SpotBehavior — 자리의 동작 방식(기여자가 구현한다)
 #include "cmdresult.h" // CmdResult — 명령 결과를 나중에 받는다
@@ -85,6 +86,11 @@ public:
     // ⚠ **참조를 든다. 사본이 아니다.** 지역 변수를 넘기면 그 함수가 끝나는 순간 죽는다 —
     //   `static` 이나 전역으로 둬라. **그래서 인자가 `&` 다**(포인터였으면 `new` 를 부르게 된다).
     Spot& behavior(SpotBehavior& b);
+
+    // 🔴 **이 자리의 표시 이름** (2026-08-20 · 사용자 지시)
+    //   `lot.spot("A1").label("1번 자리");`
+    //   안 부르면 화면이 **자리 id 를 그대로** 쓴다. 그래서 안 써도 된다.
+    Spot& label(const std::string& text);
 private:
     friend class ParkingLot;
     Spot(ParkingLot* lot, std::size_t idx) : lot_(lot), idx_(idx) {}
@@ -95,9 +101,10 @@ private:
 // 🔴🔴 **모듈 하나의 조작 UI 를 선언한다** (2026-08-20 · 화면 직접 조작)
 //
 //   ```
-//   lot.control("P1","LD").toggle("표시등");                    // 0 / 1
-//   lot.control("P1","LC").number("표시기", 0, 9999999);        // 숫자 칸
-//   lot.control("P1","DR").choice("차단봉")                     // 🔑 **이것이 명령표다**
+//   lot.label("P1","LD","안내등");                     // 🔑 이름은 label 이 정한다
+//   lot.control("P1","LD").toggle();                   // 0 / 1
+//   lot.control("P1","LC").number(0, 9999999);         // 숫자 칸
+//   lot.control("P1","DR").choice()                    // 🔑 **이것이 명령표다**
 //           .option(1,"열기").option(2,"닫기").option(3,"잠금").option(4,"해제");
 //   ```
 //   🔑 **화면은 값의 뜻을 모른다.** 라벨을 그리고 값을 보낼 뿐이다 —
@@ -106,9 +113,10 @@ private:
 //   ⚠ 모듈 종류를 안 가린다 — 센서(`IP`)에도 선언할 수 있다.
 class Control {
 public:
-    Control& toggle(const std::string& label);
-    Control& number(const std::string& label, long vmin, long vmax);
-    Control& choice(const std::string& label);
+    // ⚠ **이름은 안 받는다.** `lot.label(devid, module, "…")` 이 이름의 정본이다.
+    Control& toggle();
+    Control& number(long vmin, long vmax);
+    Control& choice();
     // ⚠ `{{1,"열기"},…}` 대신 **연쇄**로 둔 이유: 초기화 리스트는 중괄호를 틀리기 쉽고
     //   오류 문구가 길다. **`sensor().actuator()` 와 같은 모양**이 기여자에게 낫다.
     Control& option(long value, const std::string& label);
@@ -129,6 +137,21 @@ public:
     //   두 벌이 생기면 화면에 버튼이 둘 뜨고 어느 것이 참인지 아무도 모른다.
     Control control(const std::string& devid, const std::string& name);
 
+    // 🔴🔴 **모듈의 표시 이름** (2026-08-20 · 사용자 지시)
+    //   `lot.label("P1", "LD", "안내등");`
+    //
+    // 🔑 **모듈 종류를 안 가린다 — 센서에도 붙는다.** 그게 이 함수가 생긴 이유다:
+    //   전에는 이름을 줄 데가 `control` 뿐이었고 **`control` 은 조작 가능한 것에만 붙는다.**
+    //   그래서 센서의 표시 이름을 **`kind` 의 둘째 글자**(`IP`=주차확인센서)가 메우고 있었다 —
+    //   🔴 **정해진 다섯 중에 고르게 하는 구조**였고, 기여자가 자기 이름을 못 붙였다.
+    //
+    // ⚠ **이름의 정본은 여기 하나다.** `control` 은 위젯만 받는다 —
+    //   같은 모듈에 이름이 둘이면 **우선순위 규칙**이 생기고, 규칙이 생기면 사람이 틀린다.
+    //   (`choice` 의 `.option(1,"열기")` 는 **버튼 글자**라 다른 것이다.)
+    //
+    // 안 부르면 화면이 **모듈 이름(2바이트)이나 자기 폴백 표**를 쓴다. 안 써도 된다.
+    void label(const std::string& devid, const std::string& module, const std::string& text);
+
     // 서버가 읽는다. **호출자가 쓸 일은 없다** — 다만 감출 이유도 없다(상태는 드러낸다).
     // 자리에 붙은 모듈 하나의 **선언**. (실제로 붙었는지는 등록이 정한다)
     struct Attach {
@@ -145,6 +168,7 @@ public:
         // ⚠ 이름이 `sensors` 였다. **센서만 담지 않게 됐으므로 바꿨다** —
         //   담는 것이 바뀌었는데 이름이 그대로면 다음 사람이 센서만 있다고 읽는다.
         std::vector<Attach> modules;
+        std::string label;                    // 🔑 비면 화면이 `id` 를 쓴다
         // 🔑 `0` 이면 **서버의 기본 판정**을 쓴다. 자리마다 다른 것을 꽂을 수 있다.
         //   ⚠ 소유하지 않는다 — 호출자가 준 것이 살아 있어야 한다(위 `behavior()` 주석).
         SpotBehavior* behavior;
@@ -152,6 +176,8 @@ public:
     };
     const std::vector<Area>& areas() const { return areas_; }
     const std::vector<ControlDecl>& controls() const { return controls_; }
+    // 키: `devid\tmodule` → 표시 이름. **없으면 비어 있다**(존재/부재 규칙).
+    const std::map<std::string, std::string>& labels() const { return labels_; }
     bool empty() const { return areas_.empty(); }
 
 private:
@@ -159,6 +185,7 @@ private:
     friend class Control;
     std::vector<Area>        areas_;
     std::vector<ControlDecl> controls_;
+    std::map<std::string, std::string> labels_;
 };
 
 // 서버. 🔴 **복잡함은 전부 이 뒤에 있다** — 헤더에 자료구조가 하나도 안 나온다.

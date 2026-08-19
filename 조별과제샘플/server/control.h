@@ -37,7 +37,10 @@ struct ControlDecl {
     };
     std::string devid;
     std::string name;      // 모듈 이름(2바이트)
-    std::string label;     // 사람이 읽는 이름. **뜻은 여기로만 전달된다**
+    // 🔴 **`label` 필드가 여기 있었다. 2026-08-20 에 뺐다.**
+    //   이름의 정본은 `lot.label(devid, module, "…")` 하나다 —
+    //   같은 모듈에 이름이 둘이면 **우선순위 규칙**이 생기고, 규칙이 생기면 사람이 틀린다.
+    //   ⚠ `choice` 의 `.option(1,"열기")` 는 **버튼 글자**라 다른 것이다. 그건 남는다.
     Widget      widget;
     long        vmin, vmax;                              // NUMBER 전용
     std::vector<std::pair<long, std::string> > options;  // CHOICE 전용

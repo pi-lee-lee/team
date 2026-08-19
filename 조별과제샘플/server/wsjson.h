@@ -30,7 +30,10 @@
         for (size_t i = 0; i < lot.zones().size(); i++) {
             const Zone& z = lot.zones()[i];
             if (i) o << ",";
-            o << "{\"id\":" << jstr(z.id) << ",\"kind\":" << jstr(z.kind) << ",\"cells\":[";
+            o << "{\"id\":" << jstr(z.id) << ",\"kind\":" << jstr(z.kind);
+            // 🔴 **선언했을 때만 나간다**(존재/부재 규칙). 없으면 화면이 `id` 를 쓴다.
+            emit_label(o, "", z.id);
+            o << ",\"cells\":[";
             for (size_t c = 0; c < z.cells.size(); c++) {
                 if (c) o << ",";
                 o << "[" << z.cells[c].first << "," << z.cells[c].second << "]";
@@ -50,6 +53,9 @@
                 }
                 o << "{\"devid\":" << jstr(dv) << ",\"name\":" << jstr(nm)
                   << ",\"kind\":" << jstr(kind) << ",\"idx\":" << idx;
+                // 🔴 **모듈 표시 이름** (2026-08-20). 선언 안 했으면 **키가 없다** —
+                //   화면이 자기 폴백 표(`MOD_KIND_LABEL`)를 쓸 수 있게 남겨 둔다.
+                emit_label(o, dv, nm);
                 emit_control(o, dv, nm);
                 o << "}";
             }
@@ -134,12 +140,30 @@
             if (cs[i].devid == devid && cs[i].name == name) return &cs[i];
         return 0;
     }
+    // 🔴 **표시 이름을 싣는다** — 모듈이면 `devid` 를 주고, 자리면 빈 `devid` 에 자리 id 를 준다.
+    //   ⚠ **선언 안 했으면 키를 아예 안 만든다.** 빈 문자열을 실으면 화면이
+    //     *"이름이 있는데 비었다"* 로 읽고 폴백을 안 쓴다.
+    void emit_label(std::ostringstream& o, const std::string& devid, const std::string& key) {
+        if (!lot_) return;
+        if (devid.empty()) {                      // 자리
+            for (size_t i = 0; i < lot_->areas().size(); i++)
+                if (lot_->areas()[i].id == key && !lot_->areas()[i].label.empty()) {
+                    o << ",\"label\":" << jstr(lot_->areas()[i].label);
+                    return;
+                }
+            return;
+        }
+        std::map<std::string, std::string>::const_iterator it =
+            lot_->labels().find(devid + "\t" + key);
+        if (it != lot_->labels().end() && !it->second.empty())
+            o << ",\"label\":" << jstr(it->second);
+    }
     // `map` 의 모듈에 붙는다. **선언된 것에만 키가 생긴다**(존재/부재 규칙).
     void emit_control(std::ostringstream& o, const std::string& devid, const std::string& name) {
         const ControlDecl* c = control_of(devid, name);
         if (!c) return;
-        o << ",\"control\":{\"widget\":\"" << c->widget_name() << "\""
-          << ",\"label\":" << jstr(c->label);
+        // 🔴 `"label"` 이 여기 있었다. **이름은 모듈의 `label` 키가 나른다**(2026-08-20).
+        o << ",\"control\":{\"widget\":\"" << c->widget_name() << "\"";
         if (c->widget == ControlDecl::NUMBER) o << ",\"min\":" << c->vmin << ",\"max\":" << c->vmax;
         if (c->widget == ControlDecl::CHOICE) {
             o << ",\"options\":[";

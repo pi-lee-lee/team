@@ -267,6 +267,15 @@ void ParkingLot::gate(const std::string& id, Gate::Kind kind) {
     areas_.push_back(a);
 }
 
+Spot& Spot::label(const std::string& text) {
+    lot_->areas_[idx_].label = text;
+    return *this;
+}
+void ParkingLot::label(const std::string& devid, const std::string& module, const std::string& text) {
+    // 🔑 **덮어쓴다.** 같은 모듈에 이름이 둘이면 어느 것이 참인지 아무도 모른다 —
+    //   나중 선언이 이기는 것이 조용히 갈리는 것보다 낫다(`control` 과 같은 규칙).
+    labels_[devid + "\t" + module] = text;
+}
 Control ParkingLot::control(const std::string& devid, const std::string& name) {
     // 🔑 **같은 (devid,name) 은 덮어쓴다.** 두 벌이 생기면 화면에 버튼이 둘 뜨고
     //   어느 것이 참인지 아무도 모른다 — 조용히 갈리는 것보다 나중 선언이 이기는 것이 낫다.
@@ -277,17 +286,15 @@ Control ParkingLot::control(const std::string& devid, const std::string& name) {
     controls_.push_back(c);
     return Control(this, controls_.size() - 1);
 }
-Control& Control::toggle(const std::string& label) {
-    ControlDecl& c = lot_->controls_[idx_];
-    c.widget = ControlDecl::TOGGLE; c.label = label; return *this;
+Control& Control::toggle() {
+    lot_->controls_[idx_].widget = ControlDecl::TOGGLE; return *this;
 }
-Control& Control::number(const std::string& label, long vmin, long vmax) {
+Control& Control::number(long vmin, long vmax) {
     ControlDecl& c = lot_->controls_[idx_];
-    c.widget = ControlDecl::NUMBER; c.label = label; c.vmin = vmin; c.vmax = vmax; return *this;
+    c.widget = ControlDecl::NUMBER; c.vmin = vmin; c.vmax = vmax; return *this;
 }
-Control& Control::choice(const std::string& label) {
-    ControlDecl& c = lot_->controls_[idx_];
-    c.widget = ControlDecl::CHOICE; c.label = label; return *this;
+Control& Control::choice() {
+    lot_->controls_[idx_].widget = ControlDecl::CHOICE; return *this;
 }
 Control& Control::option(long value, const std::string& label) {
     // ⚠ `choice()` 없이 부르면 위젯이 `NONE` 인 채로 목록만 쌓인다.
