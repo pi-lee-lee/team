@@ -272,6 +272,18 @@ ParkingServer::ParkingServer(const ParkingLot& lot) : p_(new Impl) {
 bool ParkingServer::send(const std::string& devid, const std::string& moduleName, long value) {
     return p_->srv.send_to_module(devid, moduleName, value);
 }
+ParkingServer::Batch& ParkingServer::Batch::add(const std::string& moduleName, long value) {
+    items_.push_back(std::make_pair(moduleName, value));
+    return *this;
+}
+ParkingServer::BatchResult ParkingServer::Batch::send() {
+    BatchResult r;
+    srv_->p_->srv.send_batch(devid_, items_, &r.queued, &r.rejected);
+    items_.clear();               // 🔑 두 번 보내지 않는다
+    return r;
+}
+int ParkingServer::maxPerBatch() const { return p_->srv.max_per_batch(); }
+
 ParkingServer::~ParkingServer() { delete p_; }
 
 bool ParkingServer::openPorts()    { return p_->srv.openPorts(); }

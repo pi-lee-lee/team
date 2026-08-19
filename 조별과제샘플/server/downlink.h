@@ -116,6 +116,50 @@
         }
         return -1;
     }
+    // 🔴 **한 창에 몇 건까지 묶을 수 있나** — 상수가 아니라 **지금 상한에서 계산한다.**
+    //   `DOWN_BATCH_CAP_B` 는 `--down-cap` 으로 바뀐다. 리터럴로 박으면 손잡이를 돌렸을 때 어긋난다.
+    //
+    // 🔴 **최악값으로 센다** — 인자가 10자리(uint32 최대)일 때의 줄 길이로.
+    //   실제 인자가 짧다고 그 수를 쓰면 **긴 인자에서 조용히 잘린다.**
+    //     `G,999,255,4294967295,` + 체크섬 = 23B · 줄 사이 LF 1B
+    //     192B 기준 → 23 + 7×24 = 191 ⇒ **8건**
+    // ⚠ 묶는 제약이 둘이다 : 하행 배치(여기) **8** · ACK 되돌림 약 9(arduino 계산).
+    //   **작은 쪽이 먼저 걸린다.** 넘기면 두 슬롯으로 쪼개져 "묶었는데 왜 느리지"가 된다.
+    int max_per_batch() const {
+        const int one = (int)std::string("G,999,255,4294967295,").size() + 2;   // 23
+        int byN = 0, used = 0;
+        while (true) {
+            const int add = (byN == 0) ? one : one + 1;    // 줄 사이 LF
+            if (used + add > DOWN_BATCH_CAP_B) break;
+            used += add; byN++;
+        }
+        // 🔴🔴 **바이트만 보면 틀린다.** 건수 상한이 따로 있고 **그쪽이 먼저 걸린다.**
+        //   `DOWN_BATCH_MAX_N` 은 장치의 ACK 배출률에서 유도된 값이다(지금 4).
+        //   ⚠ 바이트로 8이 들어가도 **건수에서 4로 끊긴다** — 나머지는 다음 창으로 밀린다.
+        //   🔑 상한이 셋이면(바이트·건수·ACK 되돌림) **가장 작은 것이 답이다.**
+        return (byN < DOWN_BATCH_MAX_N) ? byN : DOWN_BATCH_MAX_N;
+    }
+
+    // 묶음 발행. 🔑 **큐가 이미 한 거래로 묶는다** — 여기서 더하는 것은 **상한과 보고**다.
+    //   ⚠ 상한을 넘기면 **자동 분할하지 않고 거절한다.** 분할하면 "묶었는데 왜 느리지"가 조용해진다.
+    void send_batch(const std::string& devid,
+                    const std::vector<std::pair<std::string, long> >& items,
+                    int* queued, int* rejected) {
+        *queued = 0; *rejected = 0;
+        const int cap = max_per_batch();
+        if ((int)items.size() > cap) {
+            *rejected = (int)items.size();
+            logf("!", "묶음 거절 — " + std::to_string(items.size()) + "건은 한 창에 안 들어간다"
+                      " (지금 상한 " + std::to_string(cap) + "건). **나눠서 보내라** — "
+                      "자동으로 쪼개면 두 창에 걸쳐 나가고 **묶은 뜻이 사라진다**");
+            return;
+        }
+        for (size_t i = 0; i < items.size(); i++) {
+            if (send_to_module(devid, items[i].first, items[i].second)) (*queued)++;
+            else (*rejected)++;      // 사유는 send_to_module 이 이름을 지목해 로그에 남긴다
+        }
+    }
+
     // 🔴🔴 **모듈에 값을 보낸다** — 공개 API `ParkingServer::send()` 의 실물 (2026-08-19)
     //
     //   전에는 하행 경로가 **차단봉 전용**이었다(`dispatch_gate`, 0/1). 기여자가 자기 모듈에

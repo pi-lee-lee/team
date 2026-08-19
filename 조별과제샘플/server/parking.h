@@ -142,6 +142,42 @@ public:
     //   실제 수행은 장치 ACK 과 다음 상태 프레임이 답한다.
     bool send(const std::string& devid, const std::string& moduleName, long value);
 
+    // ── 묶음 하행 ───────────────────────────────────────────────────────────
+    //
+    //   하행은 **슬롯당 한 창**(1.2초)에만 나간다. 낱개로 N건이면 **N × 1.2초**다.
+    //   묶으면 **하행 1슬롯 + ACK 1슬롯 ≈ 2.4초** 로 끝난다.
+    //
+    //   ```
+    //   ParkingServer::Batch b = srv.batch("P1");
+    //   b.add("LD", 1).add("LC", 1234567).add("DR", 2);
+    //   ParkingServer::BatchResult r = b.send();
+    //   ```
+    //
+    // 🔴 **원자적이 아니다. 독립이다.** 각 명령이 자기 rid 와 자기 ACK 을 갖는다 —
+    //   3건 중 2번이 거절돼도 1·3번은 그대로 수행된다.
+    //   **되돌릴 수단이 없으므로 "전부 아니면 전무"를 약속하지 않는다.**
+    //   🔑 못 지키는 보장을 API 가 약속하면 **그 약속을 믿고 쓴 코드가 조용히 틀린다.**
+    struct BatchResult {
+        int queued;      // 전선 큐에 들어간 건수. ⚠ **"보냈다"이지 "됐다"가 아니다**
+        int rejected;    // 보내기 전에 거절된 건수(모듈 없음 · 이름 틀림 · 상한 초과 · rid 고갈)
+        BatchResult() : queued(0), rejected(0) {}
+    };
+    class Batch {
+    public:
+        Batch& add(const std::string& moduleName, long value);
+        BatchResult send();          // 🔑 부를 때까지 아무것도 안 나간다
+    private:
+        friend class ParkingServer;
+        Batch(ParkingServer* s, const std::string& d) : srv_(s), devid_(d) {}
+        ParkingServer* srv_;
+        std::string devid_;
+        std::vector<std::pair<std::string, long> > items_;
+    };
+    Batch batch(const std::string& devid) { return Batch(this, devid); }
+
+    // 한 번에 묶을 수 있는 최대 건수. 🔴 **상수가 아니다** — 손잡이(`--down-cap`)를 따라간다.
+    int maxPerBatch() const;
+
     bool openPorts();        // 포트를 연다. 실패하면 false (이유는 로그에 남는다)
     bool serveOneTick();     // 한 박자: 수신 → 자리 판정 → 하행 송신 → 화면 방송
     void closeDown();        // 요약을 남기고 닫는다

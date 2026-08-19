@@ -125,7 +125,13 @@ def main():
         while time.time() < t_end:
             # 🔑 **비트 `>= len(SLOTS)` 는 자리 점유가 아니라 차단봉 상태다**(명세 §7.2).
             #    같은 비트열인데 의미가 다르고 그 구분은 `kind` 에 있다.
-            occ = [1 if sl in occ_set else 0 for sl in SLOTS] + list(gate_state)
+            # 🔴 표를 직접 준 경우에는 **그 표의 이름들**로 비트를 만든다.
+            #   전에는 `SLOTS` 고정이라 `--modules` 와 폭도 이름도 어긋났다 —
+            #   그러면 **액추에이터 에코 비트를 세워 볼 수가 없다**(그 자리가 표에 없다).
+            if custom:
+                occ = [1 if nm in occ_set else 0 for nm, _ in custom]
+            else:
+                occ = [1 if sl in occ_set else 0 for sl in SLOTS] + list(gate_state)
             res = [0] * n
             body = "S,%d,%s,%s,%d,%s," % (
                 seq, bits_to_hex(occ, n), bits_to_hex(res, n), uptime, a.devid)
