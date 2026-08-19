@@ -3,7 +3,8 @@
  *
  * 🔴 **기여자가 여는 파일은 이것 하나다.** 고칠 자리에 🔓 표시가 있다:
  *      DEVICE_ID · 망 설정(Config.h) · MODULE_TABLE · 명령/센서 핸들러 · setup() 의 등록
- * 📖 설명서 : **같은 폴더의 `GUIDE.md`** (프로토콜 정본은 docs/net/parking-protocol.md)
+ * 📖 설명서 : **같은 폴더의 `GUIDE.md`** — 🔴 **처음이면 §0 부터 읽어라**
+ *      (프로젝트 이름을 `client` 로 안 만들면 **첫 컴파일에서 막힌다**. §0 이 그 이유다)
  *
  * 보드 : Arduino Uno (`arduino:avr:uno`) · ESP-01 AT 펌웨어 · SoftwareSerial 9600bps
  * 배선 : D7 = ESP TX → Uno / D8 = Uno → ESP RX
