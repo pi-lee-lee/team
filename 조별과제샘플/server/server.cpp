@@ -757,98 +757,8 @@ static std::string peer_host(const std::string& hp) {
 //   기존 이름(`ard_last_ms` 등)을 **참조 별칭**으로 남겨 **호출부 약 150곳을 한 곳도 안 고친다.**
 //   ⚠ 참조 멤버는 `operator=` 를 지운다 — **`Server` 가 어디서도 대입되지 않는 것을 먼저 확인했다**
 //     (선언 13곳 전부 생성이고 대입 0곳).
-// ⚠ **낱말**: 여기의 `Node` 는 통신 단위(ESP 하나 = 소켓 하나 = 자기 1.2초 주기)다.
-//   **주차 자리가 아니다.** 자리는 `Zone`(§0 낱말표).
-struct Node {
-    // ⚠ **필드 이름을 `AuxNode` 쪽에 맞췄다**(REQ-0203 2단계). 반대로 하면 보조 노드
-    //   호출부 20여 곳을 고쳐야 하는데, 이쪽은 **별칭 7줄만** 바꾸면 된다.
-    //   🔑 **적게 고치는 쪽을 고른 것이 아니라, 고치는 자리가 내가 방금 만든 자리인 쪽**을 골랐다.
-    std::string devid;          // 전선의 장치 id. "" = 아직 미정(first-S-wins)
-    sock_t      fd;             // 이 노드의 연결
-    std::string peer;           // "IP:포트" — `devid` 가 고유하지 않을 때 유일한 구분자(REQ-0215)
-    std::string buf;            // 수신 조립 버퍼
-    bool        seen;           // 유효 프레임을 한 번이라도 받았나
-    long long   last_ms;        // 마지막 **유효** 프레임 수신 시각(단조 시계) — 유휴 마감의 기준
-    long long   last_epoch_ms;  // 같은 사건의 벽시계 — **로그 대조용이지 계산용이 아니다**
-
-    // ── `AuxNode` 에서 흡수한 것들 (REQ-0203 2단계) ─────────────────────────────
-    // 🔑 **보조 노드는 처음부터 `Node` 의 부분집합이었다.** 두 구조체를 유지하면
-    //    "노드마다 있는 상태"가 두 곳에 나뉘어 **다음 단계(`map<devid,Node>`)에서 합칠 수 없다.**
-    long long   connected_ms;     // 접속 시각
-    long long   frames;           // 누적 유효 프레임
-    long long   drops;            // 버린 줄
-    bool        online;           // §3.4 엣지 판정용 직전 상태
-    int         offline_episodes;
-
-    // ── 등록(§5 `D`/`Q`) ────────────────────────────────────────────────────────
-    // 🔴 **이 단계에서 등록은 *관측*이지 제어가 아니다.** 하행 경로를 한 줄도 안 바꾼다 —
-    //    지금 하행(`R`·`C`·`T`·`M`)은 **자리(슬롯 번호)** 로 주소를 정하므로 모듈 구성과 무관하다.
-    //    **모듈 신원 기반 명령이 생길 때** 비로소 이 상태가 제어에 쓰인다(설계 §5).
-    // ⚠ 그래서 옛 펌웨어(등록을 모르는 노드)도 **종전 그대로 동작한다.** 분기를 안 만든다.
-    int         reg_n;          // 선언된 모듈 수. -1 = `D,*` 를 아직 못 받았다
-    int         reg_drain;      // 선언된 슬롯당 ACK 배출 하한. -1 = 미선언
-    bool        reg_done;       // `reg_n` 개를 다 받았다
-    bool        reg_giveup;     // `Q` 3회에도 안 와서 굳혔다(node_unregistered)
-    long long   reg_first_ms;   // 승격(첫 `S`) 시각 — `REG_TIMEOUT` 의 기준
-    int         q_sent;         // 보낸 `Q` 수
-    long long   last_q_ms;      // 마지막 `Q` — 슬롯당 1회로 묶는다
-    std::vector<std::pair<std::string, std::string> > mods;   // (name, kind) · **순서가 곧 idx**
-
-    // ── 🔴 ②-c — **자리 비트열은 노드의 것이다** (REQ-0262/0263 · 2026-08-19)
-    //   전에는 `Server` 에 한 벌뿐이었다. 그래서 보조 노드의 모듈은 값 경로가 없었고
-    //   `state_json()` 이 그것을 정직하게 `known:false` 로 냈다(설계 §8.9).
-    //   🔴 **이 필드가 `Node` 로 오기 전에 보조 노드의 줄을 파서에 넣으면**
-    //     그 `S` 가 **주 노드의 비트열을 덮는다.** 그래서 ②-c 가 ②-b 보다 먼저다.
-    int         mod_bits[REG_MODS_MAX];   // 자리 비트열(자리 10칸을 넘는 비트 포함)
-    int         mod_bits_n;               // 해독한 비트 수. **0 = 안 읽었다**(모른다이지 0 이 아니다)
-
-    Node() : fd(BAD_SOCK), seen(false), last_ms(0), last_epoch_ms(0),
-             connected_ms(0), frames(0), drops(0), online(false), offline_episodes(0),
-             reg_n(-1), reg_drain(-1), reg_done(false), reg_giveup(false),
-             reg_first_ms(0), q_sent(0), last_q_ms(0), mod_bits_n(0) {}
-
-    void reg_reset() {          // 세션이 새로 서면 등록도 처음부터다
-        reg_n = -1; reg_drain = -1; reg_done = false; reg_giveup = false;
-        reg_first_ms = 0; q_sent = 0; last_q_ms = 0; mods.clear();
-    }
-};
-
-// 🔴 **`AuxNode` 는 이제 `Node` 다**(REQ-0203 2단계). 이름만 남긴다 —
-// 호출부 20여 곳이 `AuxNode` 로 적혀 있고 **그것을 지금 바꾸면 이 단계가 커진다.**
-// ⚠ **다음 단계에서 이 이름도 없앤다.** 지금 남긴 이유는 **한 단계에 한 가지만 바꾸려는 것**이다.
-// 🔑 별명이라 **보조 노드도 등록 상태를 갖게 된다** — 쓰지 않을 뿐 구조가 이미 준비된다.
-typedef Node AuxNode;
-
-struct UnknownSock {
-    sock_t fd;
-    std::string buf;
-    long long since_ms;
-    std::string peer;          // "IP:포트" — 승격 시 세션으로 넘어간다
-    UnknownSock() : fd(BAD_SOCK), since_ms(0) {}
-};
-
-// ---------------------------------------------------------------- 상태
-// 🔴🔴 **`Zone` — 주소를 갖는 장소 하나**(설계 §0·§1 · REQ-0203 4a)
-// ⚠ **`Node`(통신 단위)와 다른 것이다.** 자리는 여러 노드에 걸칠 수 있고, 한 노드가 여러 자리를 가질 수 있다.
-// 🔑 **`cells` 를 목록으로 둔다** — 지금은 **항상 길이 1**이고 그것을 코드가 강제한다.
-//   좌표를 필드에 하나 박으면 큰 자리가 생길 때 **자료형이 바뀌어 읽는 모든 곳이 같이 바뀐다.**
-//   목록이면 **길이 제한만 푼다.** ⚠ **목록으로 두는 것과 아무 길이나 받는 것은 다르다** —
-//   후자는 **검증되지 않은 경로를 여는 것**이라 지금 막는다.
-struct Zone {
-    std::string id;                                     // 전역 고유 · **좌표에서 유도하지 않는다**
-    std::string kind;                                   // parking | entrance | exit
-    std::vector<std::pair<int,int> > cells;             // (row, col) · **지금은 길이 1**
-    std::vector<std::pair<std::string,std::string> > modules;  // 🔴 **(devid, name)** — name 만 쓰면 안 된다
-};
-
-struct Slot {
-    int occupied;            // 아두이노가 진실값을 준다
-    int reserved;            // 서버가 durable owner (§7.4)
-    std::string user_id;     // 빈 문자열 = null
-    long long reserved_at;   // 0 = null
-    Slot() : occupied(0), reserved(0), reserved_at(0) {}
-};
-
+#include "node.h"
+#include "zone.h"
 struct Pending {             // 아두이노에 내려보내고 ACK 를 기다리는 요청
     uint16_t wire_rid;
     sock_t   ws_fd;          // 요청한 브라우저 (BAD_SOCK = 서버 자체 재동기화)
@@ -6233,3 +6143,4 @@ static int selftest() {
 //   원래 자리에서 그대로 `#include` 한다 — **전처리 결과가 같아야 `.o` 0 차이가 성립한다.**
 //   ⚠ `#include` 위치를 옮기는 순간 그것은 "분리"가 아니라 "변경"이다. 이 자리를 지켜라.
 #include "main.cpp"
+
