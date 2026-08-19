@@ -6,6 +6,18 @@
     //   대조가 0 이 아니면 이동이 아니라 재배치다. 되돌리고 보고한다(REQ-0272).
     // ═══════════════════════════════════════════════════════════════════
 
+    // 코드포인트를 UTF-8 로. digitcam 명세 §4.3 의 \uXXXX 복원에 쓴다.
+    static void utf8_append(std::string& o, unsigned cp) {
+        if (cp < 0x80) o += char(cp);
+        else if (cp < 0x800) {
+            o += char(0xC0 | (cp >> 6)); o += char(0x80 | (cp & 0x3F));
+        } else {
+            o += char(0xE0 | (cp >> 12));
+            o += char(0x80 | ((cp >> 6) & 0x3F));
+            o += char(0x80 | (cp & 0x3F));
+        }
+    }
+
     // ---------- 브라우저 → 서버 (§5.4)
     static std::string jget(const std::string& s, const char* key) {
         std::string pat = std::string("\"") + key + "\"";
