@@ -24,10 +24,14 @@
         "조별과제샘플/ardu/EspLink_state.h",
         "조별과제샘플/ardu/EspLink_gate.h",
         "조별과제샘플/ardu/EspLink_tx.h",
+        "조별과제샘플/ardu/EspLink_at.h",
         "조별과제샘플/ardu/EspLink_ladder.h"
       ],
       "include_host": "조별과제샘플/ardu/client.ino",
-      "note": "🔴 이 분리의 안전성은 파일이 아니라 **위치**에 있다 — client.ino 안 #include 줄을 옮기거나 순서를 바꾸면 그 순간 hex 가 달라진다(arduino §31). 그래서 include 줄 순서도 같이 본다. ⚠ 2026-08-19 이사: 조별과제샘플/ → 조별과제샘플/ardu/. **경로가 바뀌면 이 목록도 같이 바꿔야 한다** — 안 바꾸면 대상이 사라져 검사가 영원히 초록이다(arduino 가 잡았다)."
+      "note": "🔴 이 분리의 안전성은 파일이 아니라 **위치**에 있다 — client.ino 안 #include 줄을 옮기거나 순서를 바꾸면 그 순간 hex 가 달라진다(arduino §31). 그래서 include 줄 순서도 같이 본다. ⚠ 2026-08-19 이사: 조별과제샘플/ → 조별과제샘플/ardu/. **경로가 바뀌면 이 목록도 같이 바꿔야 한다** — 안 바꾸면 대상이 사라져 검사가 영원히 초록이다(arduino 가 잡았다).",
+      "_주의": [
+        "2026-08-19 14:1x — EspLink_at.h 추가. REQ-0273 에서 handleLine 의 링크 계층 424줄이 client.ino 에서 이리로 **옮겨졌다**. 잠금이 낡은 것은 경로가 아니라 **범위**였다 — 파일은 다 있는데 지켜야 할 코드가 목록 밖으로 이사했다. ⚠ 미결: Slots.h·AckQueue.h 도 넣을지는 다음 세션이 정한다(사용자 지시 '슬롯 리팩터링 보호'에 걸리지만, 넓히면 정상 작업을 막는다)."
+      ]
     }
   ],
   "_pending": [
