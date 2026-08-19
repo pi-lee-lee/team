@@ -64,6 +64,11 @@
     //     열라고 했는데 닫혀 있어도 `settled` 가 됐다. **거짓 완료를 막으려던 값이 거짓 완료를 만든다.**
     //   🔑 그리고 `pend` 는 ACK 에 지워지므로 **거기서는 대조할 수 없다.** 별도로 들고 있어야 한다.
     std::map<int,int> gate_want;
+    // 🔴 **모듈에 마지막으로 보낸 값** — 키는 `devid\tname` (2026-08-20)
+    //   ⚠ **색인이 아니라 이름으로 건다.** 재등록으로 순서가 바뀌어도 안 깨진다
+    //     (`gate_want` 는 색인이라 순서가 바뀌면 버려야 한다 — 그래서 저쪽만 clear 한다).
+    //   🔑 **키가 없으면 "보낸 적 없다"** 이고, 그때 화면에 `requested` 를 안 보낸다.
+    std::map<std::string, long> mod_req;
     // 재등록 직전의 모듈 목록. `D,*` 에서 찍고 등록 완료에서 대조한 뒤 비운다.
     std::vector<std::pair<std::string,std::string> > prev_mods_snapshot;
     long long mod_order_changed;   // 🔴 약속이 깨진 횟수. **0 이 정상이고 1 이상은 조사 대상이다**

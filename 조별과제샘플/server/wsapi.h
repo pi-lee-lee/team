@@ -120,16 +120,105 @@
                 send_err(fd, rid, "not_supported", "이 조작을 맡을 모듈이 이 자리에 없습니다");
                 return;
             }
-            // 🔴 **장치가 `idx >= SLOT_N` 만 받는다**(arduino 파서). 자리 센서 인덱스를 보내면
-            //   장치가 `result=3` 으로 거절한다 — **여기서 먼저 막아 전선을 낭비하지 않는다.**
-            //   ⚠ 그래도 장치의 검사를 없애지 않는다. **양쪽이 각자 확인하는 것이 낫다.**
-            if (gidx < 10) {
-                logf("!", "조작 거절 — 모듈 인덱스 " + std::to_string(gidx)
-                          + " 가 자리 구간(0~9)이다. **명령 가능 모듈은 자리 뒤에 온다**");
-                send_err(fd, rid, "not_supported", "이 자리의 모듈은 조작 대상이 아닙니다");
+            // 🔴🔴 **여기 `if (gidx < 10)` 가드가 있었다. 2026-08-20 에 걷어냈다.**
+            //   근거였던 주석: *"장치가 `idx >= SLOT_N` 만 받는다"* — **옛 12자리 지형의 사실**이다.
+            //   지금 모듈 색인은 노드의 모듈 표 그대로 `0..n-1` 이고(`DR` = 4), 그래서
+            //   **화면의 차단봉 버튼이 항상 `not_supported` 로 거절됐다.**
+            //
+            //   ⚠ **실측으로 확인하고 고쳤다**(판독만으로 고치지 않았다):
+            //     `{"type":"open_gate","slot":"E1"}` → `{"code":"not_supported"}` 를 시험
+            //     인스턴스(+300)에서 재현했다. 없는 결함을 고치는 것이 아니다.
+            //
+            //   🔑 **왜 안 보였나**: 같은 모듈로 가는 길이 둘인데 **규칙이 달랐다.**
+            //     `send_to_module`(기여자 API)에는 이 가드가 없어서 `srv.send("P1","DR",1)` 은
+            //     실기에서 실제로 돌았다 — **도는 쪽만 밟혀서 막힌 쪽을 아무도 안 봤다.**
+            //     그리고 자가검증의 지형은 `gidx >= 10` 이라 **시험은 이 갈래를 못 밟았다**
+            //     (§"시험 경로 ≠ 실기 경로").
+            //
+            //   범위 검사를 없앤 것이 아니다 — **`gate_index_of()` 가 이미
+            //   `kind_commandable()` 인 모듈만 돌려준다.** 이 가드는 중복이면서 틀렸다.
+            dispatch_gate(fd, rid, slot, gidx, type == "open_gate");
+            return;
+        }
+
+        // ---- 🔴 화면에서 모듈을 직접 조작한다 (2026-08-20 · REQ-0281)
+        //   명세: docs/net/SPEC-web-control.md
+        //   🔑 **자리를 지목하지 않는다.** `open_gate` 는 자리→모듈 라우팅이 서버에 있어야 했지만,
+        //     이건 화면이 `map` 에서 본 모듈을 그대로 지목한다. **라우팅할 것이 없다.**
+        if (type == "send_cmd" || type == "send_batch") {
+            const std::string dv = jget(msg, "devid");
+            const Node* n = node_by_devid(dv);
+            if (!n) { send_err(fd, rid, "module_absent", "그런 장치를 모릅니다"); return; }
+            if (!n->reg_done) {
+                // 🔑 **등록 전과 미접속을 가른다.** 사람이 할 일이 다르다 —
+                //   전자는 기다리는 것이고 후자는 선을 보는 것이다.
+                send_err(fd, rid, "node_unregistered", "장치가 아직 등록되지 않았습니다");
                 return;
             }
-            dispatch_gate(fd, rid, slot, gidx, type == "open_gate");
+            if (!device_online()) { send_err(fd, rid, "device_offline", "장치가 연결되어 있지 않습니다"); return; }
+
+            std::vector<std::pair<std::string, long> > items;
+            if (type == "send_cmd") {
+                items.push_back(std::make_pair(jget(msg, "module"), atol(jget(msg, "value").c_str())));
+            } else {
+                // `items` 배열을 훑는다. 🔑 **jget 은 첫 일치만 찾으므로** 객체 단위로 잘라 읽는다.
+                const std::string key = "\"items\"";
+                size_t i = msg.find(key);
+                while (i != std::string::npos) {
+                    i = msg.find('{', i);
+                    if (i == std::string::npos) break;
+                    size_t j = msg.find('}', i);
+                    if (j == std::string::npos) break;
+                    const std::string one = msg.substr(i, j - i + 1);
+                    const std::string mn = jget(one, "module");
+                    if (!mn.empty())
+                        items.push_back(std::make_pair(mn, atol(jget(one, "value").c_str())));
+                    i = j + 1;
+                    if (msg.find('{', i) == std::string::npos || msg.find(']', i) < msg.find('{', i)) break;
+                }
+            }
+            if (items.empty()) { send_err(fd, rid, "bad_request", "보낼 명령이 없습니다"); return; }
+
+            // 🔴 **선언과 범위를 서버가 판정한다** — 화면이 먼저 막아도 좋지만 믿지 않는다.
+            for (size_t k = 0; k < items.size(); k++) {
+                const ControlDecl* c = control_of(dv, items[k].first);
+                if (!c) {
+                    logf("!", "화면 명령 거절 — 모듈 `" + items[k].first
+                              + "` 에 `lot.control(...)` 선언이 없다. **선언해야 화면에 조작 UI 가 뜬다**");
+                    send_err(fd, rid, "not_declared", "이 모듈은 조작 UI 가 선언되지 않았습니다");
+                    return;
+                }
+                const char* why = c->reject_reason(items[k].second);
+                if (why) { send_err(fd, rid, why, "이 모듈이 받을 수 있는 값이 아닙니다"); return; }
+                bool found = false;
+                for (size_t q = 0; q < n->mods.size(); q++)
+                    if (n->mods[q].first == items[k].first) { found = true; break; }
+                if (!found) { send_err(fd, rid, "module_absent", "장치에 그 모듈이 없습니다"); return; }
+            }
+            if ((int)items.size() > max_per_batch()) {
+                // 🔴 **한 건도 안 보낸다. 자동 분할 안 한다** — 쪼개면 두 창에 걸쳐 나가고
+                //   **묶은 뜻이 사라진다.** 거절이 정직하다.
+                send_err(fd, rid, "batch_too_big", "한 번에 보낼 수 있는 개수를 넘었습니다");
+                return;
+            }
+            int q = 0, rj = 0;
+            if (items.size() == 1) {
+                if (send_to_module(dv, items[0].first, items[0].second, 0, fd, rid)) q = 1; else rj = 1;
+            } else {
+                send_batch(dv, items, &q, &rj, fd, rid);
+            }
+            if (type == "send_batch") {
+                std::ostringstream o;
+                o << "{\"type\":\"batch_result\",\"rid\":" << jstr(rid)
+                  << ",\"devid\":" << jstr(dv)
+                  << ",\"queued\":" << q << ",\"rejected\":" << rj
+                  << ",\"max\":" << max_per_batch() << "}";
+                if (fd != BAD_SOCK && conns.count(fd)) ws_send(fd, o.str());
+            } else if (rj) {
+                // ⚠ 큐에 못 들어갔으면 **ACK 이 영영 안 온다** → `cmd_result` 도 안 온다.
+                //   화면이 영원히 기다리지 않게 여기서 끝낸다.
+                send_err(fd, rid, "bad_request", "명령을 큐에 넣지 못했습니다");
+            }
             return;
         }
 

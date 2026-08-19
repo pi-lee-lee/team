@@ -235,3 +235,132 @@
                           << ") · 예약 " << t.ridpool_.reservedTo() << " ≥ 커서 " << t.ridpool_.cursor() << "\n";
                 if (!okG) bad++;
             }
+
+            // ㊶ 🔴🔴 **화면 직접 조작 계약** (REQ-0281 · 2026-08-20)
+            //
+            //   여기 있는 것 둘은 **주석이 지키던 것을 시험으로 옮긴 것**이다:
+            //     ① `send_to_module` 의 *"화면이 시킨 것이 아니다 — 답할 곳이 없다"*
+            //        → 그 주석을 고치면서 사실이 같이 사라질 뻔했다.
+            //     ② *"요청이 2 이상이면 `settled` 를 낼 수 없다"*
+            //
+            //   🔴 ②를 **모의(mock_node)로는 못 잰다** — 모의가 에코를 안 하기 때문이다.
+            //     그리고 **일부러 안 넣었다**: 실기에 없는 것을 흉내 내면 없는 것을 시험하게 된다.
+            //     그래서 이 갈래는 **여기가 유일한 계측 지점**이다.
+            //
+            //   ⚠ 명세 초안은 이 규칙을 *"숫자 모듈은 settled 를 안 낸다"* 로 적었는데 **부정확했다** —
+            //     조건은 **모듈이 아니라 값**이다. `number` 위젯에 1 을 보내면 비트가 그것을 증명한다.
+            //     **구현하면서 찾았다. 명세를 고쳤다.**
+            {
+                ParkingLot L;
+                L.spot("A1").sensor("P1", "A1").actuator("P1", "LD").actuator("P1", "L2");
+                L.control("P1", "LD").toggle("등");
+                L.control("P1", "L2").number("표시기", 0, 9999999);
+                Server t; t.lot_ = &L; t.build_default_zones(); t.init_srv_id();
+                t.park.devid = "P1"; t.park.reg_done = true;
+                t.park.mods.push_back(std::make_pair(std::string("A1"), std::string("IP")));
+                t.park.mods.push_back(std::make_pair(std::string("LD"), std::string("OG")));
+                t.park.mods.push_back(std::make_pair(std::string("L2"), std::string("OL")));
+                t.bind_modules(t.park);
+                t.park.mod_bits_n = 3;
+                for (int i = 0; i < 3; i++) t.park.mod_bits[i] = 0;
+
+                // ── 선언이 `map` 에 나간다. **이름을 손으로 박는다**(㉟ 와 같은 이유)
+                const std::string m = t.map_json();
+                bool c1 = (m.find("\"control\":{\"widget\":\"toggle\",\"label\":") != std::string::npos);
+                std::cout << (c1 ? "  ✓ " : "  ✗ ") << "map: control.widget=toggle 이 나간다\n";
+                if (!c1) bad++;
+                bool c2 = (m.find("\"widget\":\"number\"") != std::string::npos
+                           && m.find("\"min\":0,\"max\":9999999") != std::string::npos);
+                std::cout << (c2 ? "  ✓ " : "  ✗ ") << "map: number 는 min·max 를 같이 낸다\n";
+                if (!c2) bad++;
+                // 선언 안 한 모듈(A1)에는 **키가 아예 없어야 한다**(존재/부재 규칙).
+                // 🔑 `control` 총 개수로 센다 — "있나"가 아니라 **"몇 개인가"** 를 물어야
+                //   선언 안 한 것에 붙는 사고가 잡힌다.
+                {
+                    int nctl = 0; size_t p = 0;
+                    while ((p = m.find("\"control\":", p)) != std::string::npos) { nctl++; p += 9; }
+                    bool c3 = (nctl == 2);
+                    std::cout << (c3 ? "  ✓ " : "  ✗ ")
+                              << "map: 선언한 2개에만 control 이 붙는다 (실제 " << nctl << ")\n";
+                    if (!c3) bad++;
+                }
+
+                // ── 🔴 `confirmed` 판정 넷. **분모를 먼저 세운다** — LD=idx1 · L2=idx2
+                struct C { const char* mod; long req; int bit; const char* want; };
+                static const C cases[] = {
+                    { "LD", 1,       1, "settled"  },   // 요청 1 · 비트 1 → 증명된다
+                    { "LD", 1,       0, "mismatch" },   // 요청 1 · 비트 0 → 어긋났다
+                    { "L2", 1234567, 1, "partial"  },   // 🔴 비트는 "0이 아니다"만 말한다
+                    { "L2", 1234567, 0, "mismatch" },   // 2 이상인데 비트 0 → 장치가 안 갖고 있다
+                };
+                for (int i = 0; i < 4; i++) {
+                    const int mi = (std::string(cases[i].mod) == "LD") ? 1 : 2;
+                    t.mod_req.clear();
+                    t.mod_req[std::string("P1\t") + cases[i].mod] = cases[i].req;
+                    t.park.mod_bits[mi] = cases[i].bit;
+                    const std::string st = t.state_json();
+                    // 그 모듈 조각만 잘라 본다 — 다른 모듈의 값에 걸리면 시험이 거짓말한다
+                    const std::string key = std::string("\"name\":\"") + cases[i].mod + "\"";
+                    size_t p = st.find(key);
+                    // 🔴 **`}` 로 자르면 안 된다** — 이 조각 안에 `"cmd":{...}` 가 중첩돼 있어서
+                    //   첫 `}` 가 그 안쪽이다. **`confirmed` 는 그보다 뒤에 있어 창 밖으로 나간다.**
+                    //   ⚠ 실제로 그렇게 짰다가 넷이 다 ✗ 로 나왔다 — **코드가 아니라 시험이 틀렸다.**
+                    //   §"`없다`를 잘린 창에서 결론 내지 마라" 의 시험 판본이다.
+                    size_t e = (p == std::string::npos) ? p : st.find("\"name\":\"", p + key.size());
+                    if (e == std::string::npos) e = st.size();
+                    const std::string one = (p == std::string::npos) ? std::string("")
+                                          : st.substr(p, e - p);
+                    const std::string want = std::string("\"confirmed\":\"") + cases[i].want + "\"";
+                    bool ok = (one.find(want) != std::string::npos);
+                    std::cout << (ok ? "  ✓ " : "  ✗ ") << "confirmed: " << cases[i].mod
+                              << " req=" << cases[i].req << " bit=" << cases[i].bit
+                              << " → " << cases[i].want << "\n";
+                    if (!ok) bad++;
+                }
+                // 🔴 **요청이 2 이상이면 `settled` 가 어떤 비트에서도 안 나온다** (루트 지시)
+                //   ⚠ 위 네 갈래와 겹쳐 보이지만 **다른 것을 묻는다** — 저건 값 하나씩이고
+                //     이건 **"이 조건에서 그 값이 절대 안 나온다"** 는 전칭이다.
+                {
+                    bool never = true;
+                    for (int b = 0; b <= 1; b++) {
+                        t.mod_req.clear(); t.mod_req["P1\tL2"] = 7654321; t.park.mod_bits[2] = b;
+                        const std::string st = t.state_json();
+                        size_t p = st.find("\"name\":\"L2\"");
+                        size_t e = st.find("\"name\":\"", p + 10);
+                        if (e == std::string::npos) e = st.size();
+                        if (st.substr(p, e - p).find("\"confirmed\":\"settled\"") != std::string::npos)
+                            never = false;
+                    }
+                    std::cout << (never ? "  ✓ " : "  ✗ ")
+                              << "🔴 요청 2 이상은 settled 를 **절대** 안 낸다\n";
+                    if (!never) bad++;
+                }
+
+                // ── 🔴 **화면이 안 시킨 명령은 화면에 아무것도 안 보낸다**
+                //   `send_to_module` 주석이 지키던 것이 이것이다. 주석은 고쳐도 이 시험은 남는다.
+                // 🔴 **전선이 없으면 `enqueue_down` 이 거절해 `pend` 가 빈다** — 처음에 그렇게 짜서
+                //   둘 다 ✗ 였다. **코드가 아니라 시험이 실기 경로를 안 밟은 것**이다(§시험≠실기).
+                //   그래서 소켓쌍을 꽂는다. `t.ard` 가 있어야 큐에 든다.
+                sock_t ap[2];
+                if (socketpair(AF_UNIX, SOCK_STREAM, 0, ap) == 0) { t.ard = ap[0]; t.ard_seen = true; }
+                t.pend.clear();
+                bool sent = t.send_to_module("P1", "LD", 1);
+                bool quiet = sent && !t.pend.empty();
+                for (std::map<uint16_t, Pending>::const_iterator it = t.pend.begin();
+                     it != t.pend.end(); ++it)
+                    if (it->second.web_cmd || it->second.ws_fd != BAD_SOCK) quiet = false;
+                std::cout << (quiet ? "  ✓ " : "  ✗ ")
+                          << "기여자 API 로 낸 명령은 web_cmd=false · ws_fd=BAD_SOCK (답할 곳이 없다)\n";
+                if (!quiet) bad++;
+                // 반대 갈래도 밟는다 — 🔑 **한쪽만 재면 "언제나 false" 여도 통과한다**
+                t.pend.clear();
+                t.send_to_module("P1", "LD", 1, 0, (sock_t)999, "w9");
+                bool web = !t.pend.empty();
+                for (std::map<uint16_t, Pending>::const_iterator it = t.pend.begin();
+                     it != t.pend.end(); ++it)
+                    if (!it->second.web_cmd || it->second.browser_rid != "w9") web = false;
+                std::cout << (web ? "  ✓ " : "  ✗ ") << "화면이 낸 명령은 web_cmd=true · rid 를 든다\n";
+                if (!web) bad++;
+                t.pend.clear();
+                if (t.ard != BAD_SOCK) { closesock(ap[0]); closesock(ap[1]); t.ard = BAD_SOCK; }
+            }

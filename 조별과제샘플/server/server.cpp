@@ -134,10 +134,15 @@ struct Pending {             // 아두이노에 내려보내고 ACK 를 기다�
     // 같은 rid 가 큐에 두 번 들어가고, 내가 없애려던 증폭이 큐 안에서 다시 생긴다.
     // `tick()` 은 이 값이 true 인 항목을 건너뛴다. `sent_ms` 는 **실제 송신 시각**이다.
     bool queued;
+    // 🔴 **화면이 시킨 명령인가** (2026-08-20 · REQ-0281)
+    //   ⚠ `ws_fd != BAD_SOCK` 만으로는 못 가른다 — 차단봉(`open_gate`)도 화면이 시키지만
+    //     그쪽은 **옛 계약대로 `ack` 봉투**로 답해야 한다. 새 경로만 `cmd_result` 를 낸다.
+    //   **한 칸에 두 뜻을 담지 않는다** — 위 `top`/`g_arg` 에서 이미 배운 것이다.
+    bool web_cmd;
     // 🔴 ctor 가 없어서 `dispatch` 가 `top`·`queued` 를 안 세운 채 복사해 왔다.
     // 지금은 모든 경로가 곧바로 덮으므로 실동작은 맞지만 **`-Wall -Wextra` 가 이걸 안 잡는다** —
     // `Server` 의 여섯 칸이 무경고로 통과했던 것과 같은 이유다. 여기서 닫는다.
-    Pending() : wire_rid(0), ws_fd(BAD_SOCK), kind(0), mod_idx(-1), top(0), g_arg(0), sent_ms(0), tries(0), queued(false) {}
+    Pending() : wire_rid(0), ws_fd(BAD_SOCK), kind(0), mod_idx(-1), top(0), g_arg(0), sent_ms(0), tries(0), queued(false), web_cmd(false) {}
 };
 
 struct Conn {

@@ -122,6 +122,38 @@
         if (k == CmdResult::OK)            cb_ok_++;
         else if (k == CmdResult::REJECTED) cb_rejected_++;
         else                               cb_noanswer_++;
+        // 🔴 **화면이 시킨 명령이면 결과를 화면으로 돌려준다** (2026-08-20)
+        //   ⚠ **`ack` 에 얹지 않는다.** 옛 화면은 `type==='ack'` 만 보고 pending 을 지우며
+        //     "예약되었습니다" 를 띄운다 — 모르는 타입은 조용히 무시하므로 새 타입이 안전하다.
+        //     (seam.h §4-B 가 같은 함정에 같은 답을 냈다. 그것을 그대로 쓴다.)
+        if (p.web_cmd && p.ws_fd != BAD_SOCK && conns.count(p.ws_fd)) {
+            const char* out = (k == CmdResult::OK) ? "ok"
+                            : (k == CmdResult::REJECTED) ? "rejected" : "no_answer";
+            const char* msg = (k == CmdResult::OK) ? "명령이 적용되었습니다"
+                            : (k == CmdResult::REJECTED) ? "장치가 이 명령을 거절했습니다"
+                            : "장치가 응답하지 않습니다";
+            // 🔴 **사유 코드** (web 이 찾은 빈 자리 · 2026-08-20)
+            //   ⚠ **`error` 봉투의 코드와 뜻이 겹치지 않는다.** 갈래가 다르다:
+            //     `error`      — **전선에 나가기 전** 거절(선언 없음·범위 밖·묶음 초과). **안 나갔다**
+            //     `cmd_result` — **나갔고** 장치가 답했다(또는 안 답했다)
+            //   🔑 화면이 이 둘을 다르게 그려야 한다 — 사람이 할 일이 다르다.
+            //     앞은 *"내 요청을 고쳐라"* 이고 뒤는 *"장치·선을 봐라"* 다.
+            const char* why = (k == CmdResult::OK) ? 0
+                            : (k == CmdResult::REJECTED) ? "device_refused"   // **새 코드**
+                            : "ack_timeout";                                   // 기존 코드
+            std::ostringstream o;
+            o << "{\"type\":\"cmd_result\",\"rid\":" << jstr(p.browser_rid)
+              << ",\"devid\":" << jstr(park.devid)
+              << ",\"module\":" << jstr(p.slot)
+              << ",\"value\":" << p.g_arg
+              << ",\"outcome\":\"" << out << "\""
+              << ",\"result\":" << devResult;
+            // **없으면 키를 안 보낸다**(존재/부재 규칙) — `ok` 에 `reason:null` 을 실으면
+            // 화면이 "사유가 있는데 비었다"로 읽을 여지가 생긴다.
+            if (why) o << ",\"reason\":" << jstr(why);
+            o << ",\"message\":" << jstr(msg) << "}";
+            ws_send(p.ws_fd, o.str());
+        }
         if (!cmd_cb_) return;              // 등록 안 했으면 세기만 한다
         CmdResult r;
         r.kind = k; r.devid = park.devid; r.module = p.slot;
@@ -175,7 +207,8 @@
     //   ⚠ 상한을 넘기면 **자동 분할하지 않고 거절한다.** 분할하면 "묶었는데 왜 느리지"가 조용해진다.
     void send_batch(const std::string& devid,
                     const std::vector<std::pair<std::string, long> >& items,
-                    int* queued, int* rejected) {
+                    int* queued, int* rejected,
+                    sock_t ws_fd = BAD_SOCK, const std::string& brid = "") {
         *queued = 0; *rejected = 0;
         // 🔴 **실제 줄 길이로 잰다.** `max_per_batch()` 는 *어떤 인자가 와도* 되는 하한이고,
         //   여기서는 이 배치의 **진짜 바이트**를 세므로 짧은 인자면 더 들어간다.
@@ -210,7 +243,7 @@
         //   통째로 미뤄진다. 그것이 "묶는다"의 뜻이다("묶어진다"가 아니라).
         const long long bid = ++batch_seq_;
         for (size_t i = 0; i < items.size(); i++) {
-            if (send_to_module(devid, items[i].first, items[i].second, bid)) (*queued)++;
+            if (send_to_module(devid, items[i].first, items[i].second, bid, ws_fd, brid)) (*queued)++;
             else (*rejected)++;      // 사유는 send_to_module 이 이름을 지목해 로그에 남긴다
         }
     }
@@ -227,8 +260,12 @@
     //
     //   반환: 전선 큐에 들어갔으면 true. **`true` 는 "보냈다"이지 "됐다"가 아니다** —
     //   실제 수행 여부는 장치의 ACK(`result`)와 다음 `S` 의 에코가 답한다.
+    // 🔴 `ws_fd`/`brid` (2026-08-20 · REQ-0281 · 잠금 concern `server-wire`=REQ-0272)
+    //   **전선 형식은 한 글자도 안 바뀐다.** 바뀌는 것은 *"답을 어디로 돌려주나"* 하나다.
+    //   기본값을 유지해 기여자 경로(`ParkingServer::send()`)는 그대로 둔다.
     bool send_to_module(const std::string& devid, const std::string& name, long arg,
-                        long long batch_id = 0) {
+                        long long batch_id = 0,
+                        sock_t ws_fd = BAD_SOCK, const std::string& brid = "") {
         const Node* n = node_by_devid(devid);
         if (!n) {
             logf("!", "발행 실패 — 노드 `" + devid + "` 를 모른다 "
@@ -251,7 +288,11 @@
         uint16_t rid = alloc_rid();
         if (rid == RID_NONE) { logf("!", "rid 공간 고갈 — 발행 포기"); return false; }
         Pending p;
-        p.wire_rid = rid; p.ws_fd = BAD_SOCK;      // 🔑 화면이 시킨 것이 아니다 — 답할 곳이 없다
+        // 🔑 **`ws_fd == BAD_SOCK` 이면 답할 곳이 없다** — 기여자의 `srv.send()` 가 그 경우다.
+        //   그 갈래를 자가검증이 지키고 있다(㊵ — "화면이 안 시킨 명령은 화면에 아무것도 안 보낸다").
+        //   ⚠ 전에는 이 사실이 **주석에만** 있었다. 주석을 고치면 같이 사라지므로 시험으로 옮겼다.
+        p.wire_rid = rid; p.ws_fd = ws_fd; p.browser_rid = brid;
+        p.web_cmd = (ws_fd != BAD_SOCK);
         p.slot = name; p.kind = 'G'; p.mod_idx = idx; p.g_arg = arg;
         p.sent_ms = now_ms(); p.tries = 1;
         pend[rid] = p;
@@ -260,6 +301,9 @@
             return false;
         }
         gate_q++;
+        // 🔑 **화면이 `requested` 로 볼 값.** 전선에 나간 뒤가 아니라 **큐에 든 뒤** 기록한다 —
+        //   큐에서 죽어도 "내가 무엇을 시켰나"는 남아야 한다.
+        mod_req[devid + "\t" + name] = arg;
         return true;
     }
 

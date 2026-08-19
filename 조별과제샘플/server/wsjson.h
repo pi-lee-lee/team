@@ -49,7 +49,9 @@
                         if (ns[k]->mods[j].first == nm) { kind = ns[k]->mods[j].second; idx = (int)j; }
                 }
                 o << "{\"devid\":" << jstr(dv) << ",\"name\":" << jstr(nm)
-                  << ",\"kind\":" << jstr(kind) << ",\"idx\":" << idx << "}";
+                  << ",\"kind\":" << jstr(kind) << ",\"idx\":" << idx;
+                emit_control(o, dv, nm);
+                o << "}";
             }
             o << "]}";
         }
@@ -124,6 +126,32 @@
             if (it->second.slot == z.id) return "pending";
         return "";
     }
+    // 🔴 **기여자가 선언한 조작 UI 를 찾는다** (2026-08-20). 없으면 0 — 화면은 UI 를 안 그린다.
+    const ControlDecl* control_of(const std::string& devid, const std::string& name) const {
+        if (!lot_) return 0;
+        const std::vector<ControlDecl>& cs = lot_->controls();
+        for (size_t i = 0; i < cs.size(); i++)
+            if (cs[i].devid == devid && cs[i].name == name) return &cs[i];
+        return 0;
+    }
+    // `map` 의 모듈에 붙는다. **선언된 것에만 키가 생긴다**(존재/부재 규칙).
+    void emit_control(std::ostringstream& o, const std::string& devid, const std::string& name) {
+        const ControlDecl* c = control_of(devid, name);
+        if (!c) return;
+        o << ",\"control\":{\"widget\":\"" << c->widget_name() << "\""
+          << ",\"label\":" << jstr(c->label);
+        if (c->widget == ControlDecl::NUMBER) o << ",\"min\":" << c->vmin << ",\"max\":" << c->vmax;
+        if (c->widget == ControlDecl::CHOICE) {
+            o << ",\"options\":[";
+            for (size_t i = 0; i < c->options.size(); i++) {
+                if (i) o << ",";
+                o << "{\"value\":" << c->options[i].first
+                  << ",\"label\":" << jstr(c->options[i].second) << "}";
+            }
+            o << "]";
+        }
+        o << "}";
+    }
     void emit_action(std::ostringstream& o, bool& first,
                      const char* name, const std::string& reason) {
         if (!first) o << ",";
@@ -135,6 +163,8 @@
         std::ostringstream o;
         int split_now = 0;                     // 이번 판의 갈린 자리 수 — 끝에서 계기에 옮긴다
         o << "{\"type\":\"state\",\"srv_id\":" << jstr(srv_id)
+          // 🔑 **화면이 상수로 갖지 마라.** 장치의 ACK 배출률에서 유도되므로 판마다 바뀐다.
+          << ",\"max_per_batch\":" << max_per_batch()
           << ",\"epoch\":" << lot.epoch() << ",\"ts_ms\":" << epoch_ms() << ",\"zones\":[";
         for (size_t i = 0; i < lot.zones().size(); i++) {
             const Zone& z = lot.zones()[i];
@@ -276,6 +306,7 @@
                   << ",\"value\":" << (known ? (mn->mod_bits[mi] ? "true" : "false") : "null")
                   << ",\"known\":" << (known ? "true" : "false");
                 if (why) o << ",\"reason\":" << jstr(why);
+                emit_module_cmd(o, z.modules[m].first, z.modules[m].second, mn, mi, known);
                 o << "}";
             }
             o << "]}";
@@ -283,6 +314,57 @@
         o << "]}";
         sensor_split_now = split_now;      // 🔑 누적이 아니라 **지금 값**으로 덮는다
         return o.str();
+    }
+    // 🔴🔴 **`requested` · `confirmed` · `cmd`** (2026-08-20 · SPEC-web-control §3.2/§4)
+    //
+    //   web 이 찾은 빈 자리: *"`value` 가 bool 이라 7654321 을 보냈는데 그렇게 됐나를 못 잰다."*
+    //   **맞다. 그리고 넓힐 수 없다** — 상행 `S` 의 모듈 상태는 **비트마스크**다(`decode_mod_bits`).
+    //   **모듈당 1비트.** 숫자를 실을 자리가 **전선에 없다.**
+    //
+    //   🔑 그래서 `value` 를 숫자로 **안 넓혔다.** 넓히면 `known:false`(모른다)를
+    //     `known:true`(안다·틀림)로 바꾸는 것이고, **값 경로가 없는데 값을 만들면 지어내는 것**이다.
+    //     대신 **세 값을 갈랐다**: 에코 비트 · 내가 보낸 값 · 판정.
+    //
+    // 🔴 **판정을 한 키에 몬다.** 초안은 `completion` + `echo_proves` **둘을 읽어야**
+    //   거짓 완료를 피하는 형태였다 — **두 키를 읽어야 안전한 계약은 언젠가 한 키만 읽힌다.**
+    void emit_module_cmd(std::ostringstream& o, const std::string& devid,
+                         const std::string& name, const Node* mn, int mi, bool known) {
+        const ControlDecl* c = control_of(devid, name);
+        // ── `cmd` : 지금 보낼 수 있나. 🔑 **사유를 붙인다** — 원인이 다르면 고칠 곳도 다르다.
+        const char* blk = 0;
+        if (!c)                        blk = "not_declared";
+        else if (mi < 0)               blk = "module_absent";
+        else if (!mn || !mn->reg_done) blk = "node_unregistered";
+        else if (!device_online())     blk = "device_offline";
+        o << ",\"cmd\":{\"ok\":" << (blk ? "false" : "true")
+          << ",\"reason\":" << (blk ? jstr(blk) : std::string("null")) << "}";
+
+        std::map<std::string, long>::const_iterator ri = mod_req.find(devid + "\t" + name);
+        if (ri == mod_req.end()) {
+            // **보낸 적이 없으면 키를 안 보낸다**(존재/부재 규칙). `unknown` 이 옳은 답이다.
+            o << ",\"confirmed\":\"unknown\"";
+            return;
+        }
+        const long req = ri->second;
+        o << ",\"requested\":" << req;
+
+        // 떠 있는 명령이 있나 — 🔑 **색인으로 본다.** `Pending::slot` 은 경로마다 뜻이 다르다
+        //   (`dispatch_gate` 는 자리 id, `send_to_module` 은 모듈 이름). **겸한 칸을 믿지 않는다.**
+        bool pending = false;
+        for (std::map<uint16_t, Pending>::const_iterator it = pend.begin(); it != pend.end(); ++it)
+            if (it->second.kind == 'G' && it->second.mod_idx == mi) pending = true;
+        if (pending)      { o << ",\"confirmed\":\"pending\""; return; }
+        if (!known)       { o << ",\"confirmed\":\"unknown\""; return; }
+
+        const bool bit = mn->mod_bits[mi] != 0;
+        // 🔴 **에코 비트가 값 전체를 증명하는 것은 요청이 0 이나 1 일 때뿐이다.**
+        //   ⚠ 명세 초안은 이것을 *"숫자 모듈은 settled 를 안 낸다"* 로 적었는데 **부정확했다** —
+        //     조건은 **모듈이 아니라 값**이다. `number` 위젯에 1 을 보내면 비트가 그것을 증명한다.
+        if (req == 0 || req == 1) o << ",\"confirmed\":\"" << ((bit ? 1L : 0L) == req ? "settled" : "mismatch") << "\"";
+        // 2 이상을 보냈는데 비트가 0 이면 **장치가 그 값을 갖고 있지 않다** — 어긋난 것이다.
+        else if (!bit)            o << ",\"confirmed\":\"mismatch\"";
+        // 🔴 비트는 **"0이 아니다"만** 말한다. `1234567 이 됐다`는 **확인되지 않았다.**
+        else                      o << ",\"confirmed\":\"partial\"";
     }
     void push_state() { ws_broadcast(state_json()); }
 
