@@ -355,4 +355,23 @@ static const size_t MAX_ARD_NODES = 8;
 static const int UNKNOWN_TIMEOUT_MS = OFFLINE_MS * 2;
 static const size_t MAX_UNKNOWN_SOCKS = MAX_ARD_NODES;   // id 없는 소켓이 노드 예산을 넘지 못한다
 
+// 🔴🔴 **기여자가 안 바꾼 예시 `devid` 들** (2026-08-19)
+//
+//   기여 흐름이 ①서버 배포 → ②각자 로컬에서 자기 아두이노로 시험 → ③합쳐서 한 서버로 다.
+//   `client.ino` 의 `#define DEVICE_ID` 기본값을 안 바꾸면 **모두가 같은 id** 로 붙는다.
+//   🔴 **②에서는 각자 혼자라 아무 증상이 없고, ③에서 합치는 순간 서로 쫓아낸다.**
+//   → **결함이 생기는 단계와 드러나는 단계가 멀다.** 그 사이가 통째로 낭비다.
+//
+//   🔑 그래서 **로컬 서버가 ②에서 말한다.** 장치를 안 굽고 합류를 안 기다린다.
+//
+// ⚠ **여기는 목록이 맞다** — §"불변식이 목록이면 낡는다, 범위로 바꿔라" 의 **예외**다.
+//   범위로 쓸 수 없는 이유: `P1` 은 형식이 아니라 **우리가 정한 특정 값**이고,
+//   유효한 기여자 id 와 형식으로 구분되지 않는다. **유한 집합이라 목록으로 셀 수 있다.**
+//
+// 🔴 **`client.ino` 의 `#define DEVICE_ID` 기본값이 바뀌면 이 목록도 같이 고쳐라.**
+//   그쪽이 바뀌었는데 여기가 그대로면 **새 기본값을 아무도 안 잡는다** — 조용히 낡는다.
+//   (2026-08-19 확인: `arduino/.burn/client/Config.h:39` = `"P1"`)
+static const char* EXAMPLE_DEVIDS[] = { "P1" };
+static const size_t EXAMPLE_DEVIDS_N = sizeof(EXAMPLE_DEVIDS) / sizeof(EXAMPLE_DEVIDS[0]);
+
 static const char* SLOT_ID[10] = {"A1","A2","A3","A4","A5","B1","B2","B3","B4","B5"};

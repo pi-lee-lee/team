@@ -85,6 +85,25 @@
                     if (!ok) bad++;
                 }
 
+                // ㊾ 🔴 **예시 `devid` 를 잡는가** — 그리고 **다른 값에는 안 뜨는가**
+                //   ⚠ 음성 대조가 없으면 **"늘 뜨는 줄"** 이 되고, 늘 뜨는 경고는 아무 말도 안 하는 것과 같다.
+                {
+                    Server t; t.build_default_zones();
+                    t.warn_example_devid("P1");
+                    long long hit = t.devid_example_;
+
+                    Server u; u.build_default_zones();
+                    u.warn_example_devid("KIM7");      // 기여자가 자기 것으로 바꾼 경우
+                    u.warn_example_devid("");          // 미승격(빈 값)도 안 걸려야 한다
+                    u.warn_example_devid("P10");       // 🔑 **접두가 같아도 다른 값**이다
+                    long long miss = u.devid_example_;
+
+                    bool ok = (hit == 1) && (miss == 0);
+                    std::cout << (ok ? "  ✓ " : "  ✗ ") << "예시 devid — `P1` " << hit
+                              << "건 · `KIM7`/빈값/`P10` " << miss << "건 (기대 1 · 0)\n";
+                    if (!ok) bad++;
+                }
+
                 // ㊼ 🔴 **재정의가 실제로 듣는가** — 이게 이 구조의 전부다.
                 //    기여자가 상속해서 구현한 것이 안 불리면 **기본이 조용히 계속 쓰인다.**
                 //    ⚠ 그 고장은 "내가 쓴 코드가 아무 일도 안 한다"이고, 오늘 우리가 없앤 부류다.

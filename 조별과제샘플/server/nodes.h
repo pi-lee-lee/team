@@ -76,6 +76,7 @@
         //   **지형에 `("", "A1")` 같은 결속이 생겼다.** 로그도 `노드  등록 결속` 으로 나왔다.
         //   🔑 **읽는 사람이 없던 필드는 틀려도 안 보인다.** 새 독자가 생기는 순간 드러난다.
         a.devid = dev;
+        warn_example_devid(dev);       // 보조 노드도 같은 함정을 밟는다
         a.fd = c; a.buf.clear();
         a.connected_ms = now_ms();
         a.last_ms = now_ms();               // 유휴 마감 기준선. 0 이면 즉시 회수 대상이 된다
@@ -298,6 +299,30 @@
                 }
     }
 
+    // 🔴🔴 **예시 `devid` 로 붙었는가** — 기여자가 기본값을 안 바꿨을 때 **로컬에서** 말한다
+    //
+    //   왜 여기서 말하나: 결함이 **생기는 단계**(② 각자 로컬 시험)와 **드러나는 단계**(③ 합류)가
+    //   멀다. ②에서는 각자 혼자라 아무 증상이 없고, ③에서 전부 충돌한다.
+    //   🔑 **그런데 ②에도 서버가 있다.** 그 서버가 말하면 **장치를 안 굽고 그 자리에서 보인다.**
+    //
+    // ⚠ **막지 않는다.** 혼자 시험할 때는 이 값으로도 정상 동작하고,
+    //   기동을 막으면 기여자가 *"내 것 때문에 서버가 안 뜬다"* 로 겁을 먹는다.
+    //   🔑 판별자 그대로다 — **증상이 보이면 말한다**(여기는 로그에 뜨고 사람이 본다).
+    //
+    // ⚠ 매 재접속마다 찍으면 로그를 덮는다 → 처음 셋과 이후 100회마다만 찍는다(다른 계수기와 같은 규율).
+    void warn_example_devid(const std::string& dev) {
+        for (size_t i = 0; i < EXAMPLE_DEVIDS_N; i++) {
+            if (dev != EXAMPLE_DEVIDS[i]) continue;
+            devid_example_++;
+            if (devid_example_ <= 3 || devid_example_ % 100 == 0)
+                logf("🔴", "devid 가 **예시값 `" + dev + "`** 이다 — 기여자가 자기 것으로 "
+                           "안 바꿨을 수 있다. **혼자 시험할 때는 정상 동작하지만, 합치면 "
+                           "같은 이름끼리 서로 쫓아낸다.** `client.ino` 의 `#define DEVICE_ID` 를 "
+                           "자기 것으로 바꿔라(1~8자) · 누적 " + std::to_string(devid_example_));
+            return;
+        }
+    }
+
     void bind_modules(Node& n) {
         Lot::BindResult r = lot.bind(n.devid, n.mods, lot_);
         for (size_t i = 0; i < r.conflicts.size(); i++) {
@@ -430,6 +455,7 @@
             if (park_dev.empty())
                 logf("=", "주차 노드 지정 — device=" + dev
                           + " (first-S-wins: 첫 S 프레임을 보낸 장치가 주차 노드다)");
+            if (park_dev.empty()) warn_example_devid(dev);   // 🔑 **처음 아는 자리**에서 본다
             // 🔴🔴 **동시 접속 감지 — 1차 판별자는 시간이 아니라 IP 다** (REQ-0217)
             // 종전 규칙은 *"같은 devid = 같은 장치"* 를 전제했다. **조원들의 동일 카피 보드가
             // 전부 `P1` 이라 그 전제가 깨졌고, 그래서 이 경로가 조용히 통과했다.**
