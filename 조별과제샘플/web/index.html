@@ -709,6 +709,17 @@ const ERROR_TEXT = {
   bad_request:    '잘못된 요청입니다',
   rate_limited:   '요청이 너무 잦습니다. 잠시 후 다시 시도하세요',
 
+  /* ── 🔴 모듈 직접 조작의 **전선 전 거절** (SPEC-web-control §5 · socket 정정 2026-08-20)
+     🔑 **이 코드들은 `cmd_result` 가 아니라 `error` 봉투로 온다.** 명령이 **아직 안 나갔다** —
+     장치는 이 일을 모른다. 그래서 문구가 *"요청을 고쳐라"* 여야 하고, **장치를 의심하게 만들면 안 된다.**
+     ⚠ 전선 뒤 거절(`cmd_result.reason`)과 **사람이 할 일이 다르다** — 그쪽은 *"장치·선을 봐라"* 다. */
+  not_declared:   '이 모듈은 조작 가능하도록 선언되어 있지 않습니다 — 명령을 보내지 않았습니다',
+  out_of_range:   '선언된 범위를 벗어난 값입니다 — 명령을 보내지 않았습니다',
+  batch_too_big:  '한 번에 보낼 수 있는 개수를 넘었습니다 — 한 건도 보내지 않았습니다',
+  not_supported:  '이 모듈은 직접 조작 대상이 아닙니다 — 명령을 보내지 않았습니다',
+  module_absent:  '그 장치에 그 이름의 모듈이 없습니다 — 명령을 보내지 않았습니다',
+  node_unregistered: '그 장치가 아직 모듈 목록을 알려 주지 않았습니다 — 명령을 보내지 않았습니다',
+
   /* ── 하행 슬롯 큐의 거절 둘 (REQ-0155 계약 · 원본 docs/net/DESIGN-server-slot-queue.md §4-B)
      🔴 **둘 다 사용자 잘못이 아니다.** 코드가 없으면 이 자리에서
      `'오류가 발생했습니다'` 로 떨어지는데, 그러면 읽는 사람이 자기가 뭘 잘못했거나
@@ -2228,6 +2239,11 @@ function applyCmdResult(msg) {
     phase: 'done',
     rid: msg.rid,
     outcome: msg.outcome,          /* "ok" | "rejected" | "no_answer" */
+    /* 🔴 `reason` — socket 이 2026-08-20 에 추가했다(§3.3).
+       `rejected` → `device_refused` · `no_answer` → `ack_timeout` **둘뿐**이다.
+       ⚠ **`ok` 면 키가 없다**(존재/부재 규칙) — `reason:null` 을 안 싣는 것이 계약이다.
+       🔑 이 줄이 없어서 사유 코드가 통째로 버려지고 있었다. **검사가 잡았다.** */
+    reason: msg.reason,
     result: msg.result,            /* no_answer 면 -1 */
     value: msg.value,
     message: msg.message,
@@ -2599,7 +2615,11 @@ const REASON_TEXT = {
   ack_timeout:       '장치가 응답하지 않았습니다',
   not_declared:      '이 모듈은 조작 가능하도록 선언되어 있지 않습니다',
   out_of_range:      '선언된 범위를 벗어난 값입니다',
-  batch_too_big:     '한 번에 보낼 수 있는 개수를 넘었습니다'
+  batch_too_big:     '한 번에 보낼 수 있는 개수를 넘었습니다',
+  /* 🔴 **전선 뒤 거절** — 명령이 나갔고 **장치가 답해서** 거절했다(SPEC §3.3 · socket 2026-08-20).
+     ⚠ 위의 `not_declared`·`out_of_range` 와 **사람이 할 일이 다르다**: 저쪽은 요청을 고치는 것이고
+     이쪽은 **장치 쪽 상태**다. 재시도는 뜻이 없다 — 같은 답이 온다. */
+  device_refused:    '장치가 이 명령을 거절했습니다'
 };
 /** 계열 → 기호. 🔑 기호는 **원인**이고 강조는 **영향**이다(두 축 · 원장 §5.33). */
 const FAMILY_MARK = {
@@ -3087,7 +3107,11 @@ function moduleCmdText(rec) {
   if (!rec) return null;
   if (rec.phase === 'sending') return { cls: 'wait', text: '보내는 중…' };
   if (rec.outcome === 'ok')        return { cls: 'ok',   text: '✅ ' + (rec.message || '명령이 적용되었습니다') };
-  if (rec.outcome === 'rejected')  return { cls: 'bad',  text: '🔴 거절 — ' + (REASON_TEXT[rec.reason] || rec.message || '값을 확인해 주세요') + '  (다시 눌러도 같습니다)' };
+  /* 🔴 **전선 전 거절** — 명령이 아직 안 나갔다. 고칠 것은 **내 요청**이다(SPEC §5 · `error` 봉투).
+     ⚠ 아래 `rejected` 와 **뭉치면 안 된다**: 저쪽은 장치가 답한 것이고 이쪽은 장치가 모른다. */
+  if (rec.outcome === 'not_sent')  return { cls: 'bad',  text: '🚫 보내지 않았습니다 — ' + (ERROR_TEXT[rec.reason] || rec.message || '요청을 확인해 주세요') };
+  /* 🔴 **전선 뒤 거절** — 나갔고 장치가 답했다. 재시도는 뜻이 없다. */
+  if (rec.outcome === 'rejected')  return { cls: 'bad',  text: '🔴 장치가 거절 — ' + (REASON_TEXT[rec.reason] || rec.message || '값을 확인해 주세요') + '  (다시 눌러도 같습니다)' };
   if (rec.outcome === 'no_answer') return { cls: 'bad',  text: '⏱ 장치가 응답하지 않았습니다 — 장치·연결 문제입니다 (값을 바꿔도 안 낫습니다)' };
   return { cls: 'warn', text: '⚠ 알 수 없는 결말 (' + String(rec.outcome) + ')' };
 }
@@ -3444,6 +3468,21 @@ function handleServerMessage(msg) {
   if (msg.type === 'error') {
     const code = typeof msg.code === 'string' ? msg.code : '';
     const text = ERROR_TEXT[code] || (typeof msg.message === 'string' ? msg.message : '오류가 발생했습니다');
+    /* 🔴 모듈 직접 조작의 **전선 전 거절**(SPEC §5). `cmd_result` 가 아니라 이 봉투로 온다.
+       🔑 **그 모듈 자리에 붙여서 보여 준다** — 화면 위쪽 한 줄로만 띄우면 **어느 모듈이 거절됐는지**를
+       사용자가 못 고른다. 특히 연습 칸으로 일부러 범위를 넘겼을 때 그 자리에서 답이 보여야 배운다.
+       ⚠ 문구는 *"보내지 않았습니다"* 다 — **장치는 이 일을 모른다.** 장치를 의심하게 만들면 안 된다. */
+    if (msg.rid && state.modPending.has(msg.rid)) {
+      const mp = state.modPending.get(msg.rid);
+      state.modPending.delete(msg.rid);
+      state.modCmd.set(modKey(mp.devid, mp.module), {
+        phase: 'done', rid: msg.rid, outcome: 'not_sent', reason: code,
+        value: mp.value, message: text, at: Date.now()
+      });
+      showMessage(mp.module + ' — ' + text, 'err');
+      render();
+      return;
+    }
     if (msg.rid && state.cmdPending.has(msg.rid)) {
       const tp = state.cmdPending.get(msg.rid);
       clearCmdPending(msg.rid, false);

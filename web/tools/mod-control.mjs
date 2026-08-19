@@ -186,8 +186,49 @@ try {
   ok('🔴 outcome no_answer 가 **장치·연결 문제**로 보인다 (거절과 다른 문구)',
      /응답하지 않/.test(naMsg) && !/거절/.test(naMsg), naMsg);
 
-  skip('실기에서 control 이 온다', '서버가 아직 control 을 안 내려보낸다 — socket 배포 뒤 --live 로 재라');
-  skip('숫자 모듈에서 settled 가 온 적 없다 (§6)', '실기 관측 항목이다. 주입으로는 "서버가 안 낸다"를 못 잰다');
+  /* ── ⑥ 🔴 **전선 전 거절**(`error`)과 **전선 뒤 거절**(`cmd_result`)이 갈려 보이는가
+     socket 정정(2026-08-20): §5 코드 대부분은 `cmd_result` 가 아니라 **`error` 봉투**로 온다.
+     명령이 **아직 안 나갔고 장치는 그 일을 모른다** — 사람이 할 일이 다르므로 문구가 달라야 한다. */
+  await evaluate(client, `(() => {
+    window.__sent = [];
+    const box = document.querySelector('.zctl[data-module="LC"]');
+    const prac = box.querySelector('.zctl__prac');
+    prac.querySelector('.zctl__num').value = '99999999';
+    prac.querySelector('.zctl__btn').click();
+    return true;
+  })()`);
+  await sleep(60);
+  const ridSent = await evaluate(client, `window.__sent[0] && window.__sent[0].rid`);
+  ok('연습 칸이 보낸 요청의 rid 를 잡았다 (이어서 error 를 그 rid 로 되돌린다)', !!ridSent, String(ridSent));
+  await evaluate(client, inject({ type: 'error', rid: ridSent, code: 'out_of_range', message: '범위를 벗어났습니다' }));
+  await sleep(100); v = await evaluate(client, READ);
+  const preMsg = (v.LC.msgs || []).join(' ');
+  ok('🔴 전선 전 거절이 **그 모듈 자리에** 붙는다 (어느 모듈인지 사용자가 고를 수 있다)',
+     /보내지 않았습니다/.test(preMsg), preMsg);
+  ok('🔴 전선 전 거절은 "보내지 않았다"로 말한다 — 장치를 의심하게 만들지 않는다',
+     /보내지 않았습니다/.test(preMsg) && !/장치가 거절/.test(preMsg), preMsg);
+
+  await evaluate(client, inject({ type: 'cmd_result', rid: 'w9', devid: 'P1', module: 'DR',
+    value: 9, outcome: 'rejected', result: 3, reason: 'device_refused', message: '장치 거절' }));
+  await sleep(80); v = await evaluate(client, READ);
+  const postMsg = (v.DR.msgs || []).join(' ');
+  ok('🔴 전선 뒤 거절은 "장치가 거절" 로 말한다 (device_refused 가 한국어로 뜬다)',
+     /장치가 거절/.test(postMsg) && /장치가 이 명령을 거절/.test(postMsg), postMsg);
+  ok('🔴 두 거절의 문구가 서로 다르다 — 뭉치면 고칠 곳을 못 가른다', preMsg !== postMsg);
+
+  /* ── ⑦ 🔴 `settled` 규칙 — socket 이 정정했다: **조건은 모듈이 아니라 값이다** ──
+     초안: *"숫자 모듈은 settled 를 안 낸다"* → 부정확.
+     정정: **요청 값이 0 이나 1 이 아니면** settled 가 안 나온다. `number` 에 1 을 보내면
+           비트가 그 값을 증명하므로 `settled` 가 맞다. */
+  await evaluate(client, inject(ST(withConf('LC', 'settled', { requested: 1, value: true }))));
+  await sleep(100); v = await evaluate(client, READ);
+  ok('요청 값이 1 이면 number 위젯에서도 settled 를 그대로 그린다 (모듈이 아니라 값이 조건이다)',
+     /요청대로/.test((v.LC.msgs || []).join(' ')), JSON.stringify(v.LC.msgs));
+
+  skip('실기에서 control 이 온다', '화면이 **미배포**다 — 서빙본은 옛 판이라 지금 실기로 재면 남의 판을 잰다');
+  skip('🔴 요청 2 이상에서 settled 가 한 번도 안 온다 (§6)',
+       '실기 관측 항목이다. 주입으로는 "서버가 안 낸다"를 못 잰다 — 배포 뒤 --live 로 재라');
+  skip('no_answer 갈래', '아직 아무도 못 밟았다(장치가 살아 있다) — socket 도 미측정으로 뒀다');
 
 } catch (e) {
   console.log('\n💥 중단: ' + (e && e.message ? e.message : String(e)));
