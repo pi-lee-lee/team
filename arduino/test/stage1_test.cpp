@@ -10,6 +10,29 @@
 //
 // 검증하지 않는 것: 타이밍의 실제 값(가짜 시계다), 실기 전기 특성, ESP 의 진짜 응답 지연.
 // 검증하는 것: **어떤 응답에 어떤 판정을 내리는가**와 **그 결과 무엇이 바뀌는가**.
+//
+// ═════════════════════════════════════════════════════════════════════════
+// 🔴🔴 **이 시험이 밟지 못하는 것 — 통과 수를 보기 전에 여기를 읽어라**
+//
+//   `client.ino` 는 **샘플 구성**이다: 자리 하나(A1)에 센서 둘(A1·B1) + 가상 차단봉 둘.
+//   즉 `MODULE_N = 4` 이고 **자리 비트열의 hex 폭이 1 로 고정**돼 있다.
+//   그래서 다음 경로는 **통합에서 한 번도 안 돈다:**
+//
+//     ❌ hex 폭 3 (모듈 9~12) · 폭 4 (모듈 13~16)
+//     ❌ 등록이 `BATCH_CAP` 에 가까워지는 큰 배치 (샘플은 54B / 160B)
+//
+//   ✅ 폭 3·4 의 **변환 자체**는 `[31u]` 가 `bitsToHex` 를 직접 불러서 본다.
+//   🔴 **그것으로 안 메워지는 것**: **단위 시험은 호출 지점을 안 탄다.**
+//      `bitsToHex` 를 부르는 곳은 셋(occ·res·tmask)인데, **폭이 3 인 상황에서
+//      그 셋 중 하나가 빠져도 `[31u]` 는 통과한다.** 세 지점을 같이 보던 검사는
+//      이제 **폭 1 에서만** 돈다.
+//
+//   🔑 **언제 다시 밟히는가**: `client.ino` 의 `MODULE_TABLE` 에서 주석 처리된
+//      A2~B5 를 풀어 **모듈이 9개를 넘는 순간** 폭 3 이 통합으로 돌아온다.
+//      그때 이 문단과 `[31u]` 의 같은 경고를 지워라 — 남겨 두면 없는 구멍을 계속 경고한다.
+//
+//   ⚠ **`N pass / 0 fail` 은 분모가 아니다.** 위 두 줄이 그 분모에서 빠진 것이다.
+// ═════════════════════════════════════════════════════════════════════════
 
 #include "Arduino.h"
 #include "SoftwareSerial.h"
@@ -54,6 +77,21 @@ static int g_pass = 0, g_fail = 0;
 static void ok(bool cond, const char* what) {
   if (cond) { g_pass++; printf("  PASS  %s\n", what); }
   else      { g_fail++; printf("  FAIL  %s\n", what); }
+}
+
+// `S` 프레임의 k 번째 쉼표 칸을 그대로 뽑는다 (0 = "S").
+//   왜 필요한가: `strstr(",6,")` 은 **다른 칸에서 우연히 맞아도 통과한다**.
+//   `S,3,6,0,389,P1,35` 에서 `,3,` 은 up 칸이지 occ 칸이 아니다 — 칸을 짚어야 그 헷갈림이 없다.
+static bool sField(const char* line, int k, char* out, size_t cap) {
+  const char* p = line; int i = 0;
+  while (i < k) { p = strchr(p, ','); if (!p) return false; p++; i++; }
+  const char* e = strchr(p, ',');
+  size_t len = e ? (size_t)(e - p) : strlen(p);
+  if (len + 1 > cap) return false;
+  memcpy(out, p, len); out[len] = '\0'; return true;
+}
+static bool sFieldIs(const char* line, int k, const char* want) {
+  char f[24]; return sField(line, k, f, sizeof f) && strcmp(f, want) == 0;
 }
 
 // 각 시험을 같은 출발점에서 시작시킨다.
@@ -1058,8 +1096,11 @@ int main() {
   //   🔑 통과 수는 그 경로를 봤다는 뜻이 아니다(원장 §16.4 ③).
   printf("\n[31] S 프레임이 실제로 hex 로 나간다 (형식 전환 확인)\n");
   {
-    node.occMask = 0x346;            // 슬롯 {1,2,6,8,9} — ★ 비대칭이라 순서를 검증한다
-    node.resMask = 0;
+    // 🔴 **샘플 구성(n=4)으로 다시 박았다** (2026-08-19). 옛 값은 n=12 기준이었다.
+    //   모듈: A1(0) B1(1) E1(2) X1(3) — 앞의 둘이 실물 센서, 뒤의 둘이 가상 차단봉.
+    //   ⚠ **폭이 3 → 1 로 줄었다.** 폭 3 경로는 이제 [31u] 단위 시험이 대신 본다.
+    node.occMask = 0x1;              // 모듈 0(A1)만 점유 — ★ 비대칭이라 순서를 검증한다
+    node.resMask = 0x2;              // 모듈 1(B1)만 예약 — ★ occ 와 **다른 값**이라 뒤바뀜도 잡는다
     node.testArmed = false;
     // 🔴 가상 차단봉을 **닫힌 상태로 고정**한다 — 안 하면 slotNo 에 따라 값이 흔들려
     //   이 시험이 비결정적이 된다(자율 토글이 slotNo 를 본다).
@@ -1068,32 +1109,68 @@ int main() {
     uint8_t n = buildStatus(buf, sizeof buf);
     printf("      S = %s   (%u B)\n", buf, (unsigned)n);
     ok(n > 0,                                  "★ 프레임이 만들어진다");
-    // 🔴 **n=10 → 12 로 바뀌어 값이 이동했다. 손으로 재계산한 값이다:**
-    //   슬롯 i → 비트 (n−1−i) 이므로 {1,2,6,8,9} → 비트 {10,9,5,3,2} = 0x62C
-    //   ⚠ **같은 점유인데 hex 가 다르다** — 이것이 `n` 이 바뀔 때의 위험 그 자체다.
-    ok(strstr(buf, ",62C,") != NULL,
-                            "★★ 자리 필드가 hex '62C' 다 (n=12 에서 재계산)");
+    // 🔴 손으로 재계산한 값이다 — 슬롯 i → 비트 (n−1−i), n=4:
+    //   occ: 모듈 0 → 비트 3 → 0b1000 = **8**   (뒤집으면 0001 이므로 순서를 검증한다)
+    //   res: 모듈 1 → 비트 2 → 0b0100 = **4**   (뒤집으면 0010 · occ 와도 달라 맞바꿈을 잡는다)
+    ok(sFieldIs(buf, 2, "8"),
+                            "★★ 자리 필드가 hex '8' 이다 (n=4 에서 재계산)");
     ok(strstr(buf, "0110001011") == NULL,
                             "★★ 옛 10진 표기가 남아 있지 않다");
-    ok(strstr(buf, ",000,") != NULL,
+    ok(sFieldIs(buf, 3, "4"),
                             "★ res 도 같이 hex 로 바뀌었다 (하나만 바뀌면 어긋난다)");
 
-    // 폭이 실제로 줄었나 — 명세의 근거(D 6→7)가 이 감소에 서 있다
-    ok(n < 45,              "★★ S 프레임이 45B 미만이다 (폭 3 유지 — n=12 가 공짜 상한)");
+    // 폭이 실제로 `n` 을 따라가나 — n=4 는 폭 1 이다
+    ok(hexWidthFor(MODULE_N) == 1,
+                            "★★ 샘플 구성의 hex 폭은 1 이다 (n=4)");
+    ok(n < 24,              "★★ S 프레임이 24B 미만이다 (폭 1)");
 
     // tmask 갈래도 같은 변환을 타는가 — **셋째 마스크를 빠뜨리기 쉬운 자리다**
-    node.testArmed = true; node.ovrActive = 0x346;
+    node.testArmed = true; node.ovrActive = 0x1;
     uint8_t n2 = buildStatus(buf, sizeof buf);
     printf("      S(tmask) = %s   (%u B)\n", buf, (unsigned)n2);
     ok(n2 > 0 && strstr(buf, "0110001011") == NULL,
                             "★★ tmask 갈래에도 10진이 안 남는다 (셋째 마스크)");
     {
-      // '18B' 가 두 번 나와야 한다 — occ 와 tmask 둘 다
-      const char* f = strstr(buf, "62C");
-      ok(f != NULL && strstr(f + 1, "62C") != NULL,
+      // '8' 이 두 번 나와야 한다 — occ 와 tmask 둘 다 (같은 마스크를 넣었다)
+      // 칸 2 = occ · 칸 6 = tmask (S,up,occ,res,slot,dev,tmask,ck)
+      ok(sFieldIs(buf, 2, "8") && sFieldIs(buf, 6, "8"),
                             "★★ occ 와 tmask 가 둘 다 hex 다");
     }
     node.testArmed = false; node.ovrActive = 0; node.occMask = 0;
+  }
+
+  // ── [31u] 🔴 **폭 3·폭 4 는 단위 시험으로만 밟힌다** — 통합이 못 보는 자리 ──
+  //
+  // 🔴 **왜 여기 있나**: `client.ino` 가 샘플 구성(n=4)이 되면서 **통합 경로의 hex 폭이 1 로 고정됐다.**
+  //   폭 3(n=9~12)·폭 4(n=13~16) 는 이제 **`buildStatus` 를 타고는 한 번도 안 돈다.**
+  //   그래서 `bitsToHex` 를 **직접 부른다.**
+  //
+  // ⚠⚠ **이 단위 시험이 메우지 못하는 것을 명시한다** (루트 지적 · 2026-08-19):
+  //   **단위 시험은 호출 지점을 안 탄다.** `bitsToHex` 를 부르는 곳은 셋이다
+  //   (occ · res · tmask). 폭이 3 인 상황에서 **그 셋 중 하나가 빠져도 이 시험은 통과한다.**
+  //   → 통합에서 셋을 같이 보던 검사([31] 의 "occ 와 tmask 가 둘 다 hex")는
+  //     **이제 폭 1 에서만 돈다.** 폭 3 에서 세 지점이 다 도는지는 **아무도 안 본다.**
+  //
+  // 🔑 **언제 다시 밟히는가**: `MODULE_TABLE` 이 **9개를 넘는 순간** 폭 3 이 통합으로 돌아온다.
+  //   주석 처리된 A2~B5 를 풀면 n=12 가 되어 옛 커버리지가 그대로 복구된다.
+  //   **그때 이 문단을 지워라.** 남겨 두면 없는 구멍을 계속 경고한다.
+  printf("\n[31u] bitsToHex 단위 — 폭 3·폭 4 (통합이 못 밟는 경로)\n");
+  {
+    char h[8];
+    // n=12 · 슬롯 {1,2,6,8,9} → 비트 {10,9,5,3,2} = 0x62C — **옛 통합 시험이 쓰던 바로 그 값**
+    bitsToHex(0x346, 12, h);
+    printf("      n=12 0x346 → %s\n", h);
+    ok(strcmp(h, "62C") == 0,   "★★ n=12 에서 0x346 → '62C' (폭 3 · 비대칭이라 순서도 검증한다)");
+    ok(strlen(h) == 3,          "★ 폭이 3 이다 (n=12)");
+    ok(hexWidthFor(12) == 3,    "★ 폭 계산식도 3 을 준다");
+    // n=16 → 폭 4. 상한 쪽 경계다
+    bitsToHex(0x0001, 16, h);
+    printf("      n=16 0x0001 → %s\n", h);
+    ok(strcmp(h, "8000") == 0,  "★★ n=16 에서 슬롯 0 → 최상위 비트 '8000' (폭 4 · 뒤집기 축)");
+    ok(hexWidthFor(16) == 4,    "★ 폭 계산식도 4 를 준다");
+    // 🔴 뒤집기를 빼먹으면 통과하는가 — **음성 시험**. 안 뒤집으면 0x346 → "346" 이다
+    ok(strcmp("346", "62C") != 0,
+                                "★★ 뒤집지 않은 값('346')과 다르다 — 이 시험이 뒤집기를 실제로 잡는다");
   }
 
   // ── [32] 🔴 등록(`D`) — 첫 슬롯은 D 만, **ACK 는 잃지 않는다** (명세 §5) ────
@@ -1148,8 +1225,9 @@ int main() {
                             "★★ 맨 앞이 배출률 선언이다 (D,*,...)");
     ok(line.find("D,A1,IP,") != std::string::npos,
                             "★★ 모듈 줄이 실린다 (name,kind)");
-    ok(line.find("D,B5,IP,") != std::string::npos,
-                            "★ 마지막 모듈까지 다 실린다");
+    ok(line.find("D,B1,IP,") != std::string::npos,
+                            "★ 마지막 실물 센서(B1)까지 실린다");
+    // ✏️ 2026-08-19 샘플 구성 — 실물은 A1·B1 둘이다. 옛 값 `B5` 는 10칸 장치 기준이었다.
     {
       // 줄 수 = 1(배출률) + moduleCount()
       size_t cnt = 0;
@@ -1217,7 +1295,7 @@ int main() {
     // ✏️ 2026-08-19 — 가상 모듈이 들어와 `moduleCount() > SLOT_N` 이 됐다
     ok(moduleCount() >= SLOT_N,
                             "★★ 표가 실물 자리를 전부 포함한다");
-    ok(MODULE_N == 12,      "★ 표 길이가 12 다 (실물 10 + 가상 2)");
+    ok(MODULE_N == 4,       "★ 표 길이가 4 다 (샘플: 센서 A1·B1 + 가상 E1·X1)");
 
     // ① 🔴 **이름 열 개가 서버의 자리 id 와 같아야 한다** (socket 통보 2026-08-18)
     //   서버는 `D,<name>,<kind>` 의 **name 이 자리 id 와 같으면** 그 자리에 붙인다.
@@ -1225,8 +1303,9 @@ int main() {
     //   **화면에 모듈이 안 보이고 오류도 안 뜬다.** 장치 쪽에서는 볼 수 없는 고장이다.
     //   ⚠ **그래서 이 시험이 유일한 감시다.** 여기가 깨지면 socket 에 먼저 물어라.
     //   (겸해서 옛 계산식과의 동일성도 본다 — 표 도입이 무해했다는 증거)
-    static const char* EXPECT[10] =
-      {"A1","A2","A3","A4","A5","B1","B2","B3","B4","B5"};
+    // ✏️ 2026-08-19 — **샘플 구성(자리 A1 · 센서 둘)** 으로 다시 박았다.
+    //   옛 값은 10칸 장치(`A1~A5,B1~B5`)였다. **주석 처리된 A2~B5 를 풀면 그 값으로 돌아온다.**
+    static const char* EXPECT[SLOT_N] = {"A1","B1"};
     // ⚠ **실물 열 개만 본다** — 가상 모듈(E1·X1)은 아래에서 따로 검사한다
     bool allName = true;
     for (uint8_t i = 0; i < SLOT_N; i++) {
@@ -1234,7 +1313,7 @@ int main() {
       if (strcmp(nm, EXPECT[i]) != 0) { allName = false;
         printf("      🔴 i=%u: 표 '%s' 대 기대 '%s'\n", i, nm, EXPECT[i]); }
     }
-    ok(allName,             "★★ 열 개 이름이 옛 계산식과 전부 같다");
+    ok(allName,             "★★ 두 이름이 옛 계산식과 같다 (A1·B1 — 서버의 자리 id 와 동일해야 한다)");
 
     // ② 핀이 SLOT_PIN 과 같은가 — **표와 핀 표가 갈리면 엉뚱한 칸을 읽는다**
     // ⚠ **실물 범위(SLOT_N)까지만 돈다** — 가상 모듈은 핀이 없고
@@ -1256,8 +1335,9 @@ int main() {
     // ✏️ 2026-08-19 — 가상 모듈로 n 이 12 가 되어 이 리터럴이 바뀌었다. **의도한 변경이다.**
     //   🔑 이 시험의 원래 목적(표 도입이 무해했다)은 이미 달성됐고(커밋 021e16e),
     //     지금은 **"n 이 바뀌면 자리 필드가 이동한다"를 못 박는 자리**로 성격이 바뀌었다.
-    ok(strstr(sbuf, ",62C,") != NULL,
-                            "★★ n=12 에서 자리 필드가 62C 다 (18B 가 아니다)");
+    // ✏️ 2026-08-19 샘플 구성 — n=4 라 0x346 의 하위 4비트(0b0110)만 남고 뒤집혀 **6** 이다.
+    ok(sFieldIs(sbuf, 2, "6"),
+                            "★★ n=4 에서 자리 필드가 6 이다 (n 이 바뀌면 자리 필드가 이동한다)");
 
     char rbuf[BATCH_CAP + 1];
     uint16_t rn = buildRegistration(rbuf, sizeof rbuf);
@@ -1269,8 +1349,12 @@ int main() {
     //   🔑 **시험이 이 변경을 잡았다** — 145 를 리터럴로 못 박아 뒀기 때문이다. 그게 이 줄의 목적이다.
     //   ⚠ 새 값도 리터럴로 박는다. 다음에 kind 가 또 바뀌면 여기가 다시 깨져야 한다.
     //   여유: BATCH_CAP 160 − 143 = **17B** (모듈 한 줄이 10~11B 이므로 여전히 더 못 넣는다)
-    ok(rn == 143,           "★★ 등록이 143B — REQ-0271 로 OB(2글자). BATCH_CAP 160 까지 여유 17B");
-    ok(strncmp(rbuf, "D,*,7,12,", 9) == 0,
+    // ✏️ ~~143B~~ → **54B** (샘플 구성 · 2026-08-19). 모듈이 12 → 4 로 줄었다.
+    //   내역: 머리 `D,*,7,4,`+ck = 10B · 모듈 줄 4 × 11B = 44B → 54B.
+    //   ⚠ **주석 처리된 A2~B5 를 풀면 143B 로 돌아온다.** 그때 이 리터럴이 깨지는 것이 맞다.
+    //   여유: BATCH_CAP 160 − 54 = **106B** (샘플이라 등록이 배치를 못 넘긴다)
+    ok(rn == 54,            "★★ 등록이 54B — 샘플 구성(모듈 4). BATCH_CAP 160 까지 여유 106B");
+    ok(strncmp(rbuf, "D,*,7,4,", 8) == 0,
                             "★★ 머리가 D,*,<drain>,<n>, 이다 (drain=7 · **n=12**)");
     // 🔴 **①선언 n · ②실제 D 줄 수 · ③hex 폭 — 셋이 서로를 정확히 못 박는다**
     {
@@ -1285,7 +1369,7 @@ int main() {
                             "★★ 선언한 n 과 실제 D 줄 수가 같다 (①==②)");
       ok(declaredN == moduleCount(),
                             "★★ 그리고 둘 다 moduleCount() 다 (원천이 하나다)");
-      ok(hexWidthFor((uint8_t)declaredN) == 3,
+      ok(hexWidthFor((uint8_t)declaredN) == 1,
                             "★ hex 폭도 그 n 에서 나온다 (③)");
     }
     node.occMask = 0;
@@ -1375,15 +1459,15 @@ int main() {
     slotNo = 0;
     ok(gates.isOpen(0, slotNo) == e0,  "★ 같은 slotNo 면 같은 값이다 (결정적 · 재현 가능)");
 
-    // ③ 🔴 `G` 명령 — idx 10 = E1 (SLOT_N=10 이므로)
-    char g[24]; snprintf(g, sizeof g, "G,301,10,0,"); appendChecksum(g, (uint8_t)strlen(g));
+    // ③ 🔴 `G` 명령 — idx 2 = E1 (실물 센서 A1·B1 이 0·1 이므로 그다음이 가상이다)
+    char g[24]; snprintf(g, sizeof g, "G,301,2,0,"); appendChecksum(g, (uint8_t)strlen(g));
     handleFrameLine(g);
     ok(gates.manual,         "★★ 첫 명령이 자율 토글을 **영구 정지**시킨다");
     ok(!gates.isOpen(0, slotNo),       "★★ op=0 이면 닫힌다");
     slotNo = 0;
     ok(!gates.isOpen(0, slotNo),       "★★ 자율 주기가 와도 안 열린다 — **명령이 되돌려지지 않는다**");
 
-    snprintf(g, sizeof g, "G,302,10,1,"); appendChecksum(g, (uint8_t)strlen(g));
+    snprintf(g, sizeof g, "G,302,2,1,"); appendChecksum(g, (uint8_t)strlen(g));
     handleFrameLine(g);
     ok(gates.isOpen(0, slotNo),        "★★ op=1 이면 열린다");
 
@@ -1394,15 +1478,16 @@ int main() {
       // ✏️ 기대가 "002" 였는데 실제는 "003" 이다. **코드가 맞고 시험이 틀렸다:**
       //   자율을 굳힌 시점이 `slotNo=0` 이라 **X1 도 열린 상태로 굳었다.**
       //   슬롯10 → 비트 1 · 슬롯11 → 비트 0 → 둘 다 열림 = 0b…011 = "003"
-      ok(strstr(sbuf, ",003,") != NULL,
-                            "★★ E1·X1 이 열린 것이 occ 비트로 나간다 (에코가 완료를 말한다)");
+      // n=4 : E1(idx2) → 비트 1 · X1(idx3) → 비트 0 → 둘 다 열림 = 0b0011 = "3"
+      ok(sFieldIs(sbuf, 2, "3"),
+                            "★★ E1·X1 이 열린 것이 occ 칸으로 나간다 (에코가 완료를 말한다)");
       // 🔴 X1 만 닫아서 **비트가 따로 움직이는지** 본다 — 하나로 뭉쳐 있으면 못 가른다
-      char g2[24]; snprintf(g2, sizeof g2, "G,305,11,0,"); appendChecksum(g2, (uint8_t)strlen(g2));
+      char g2[24]; snprintf(g2, sizeof g2, "G,305,3,0,"); appendChecksum(g2, (uint8_t)strlen(g2));
       handleFrameLine(g2);
       char sb2[64]; buildStatus(sb2, sizeof sb2);
       printf("      S(E1 열림·X1 닫힘) = %s\n", sb2);
-      ok(strstr(sb2, ",002,") != NULL,
-                            "★★ X1 만 닫으면 002 — 두 비트가 **독립으로** 움직인다");
+      ok(sFieldIs(sb2, 2, "2"),
+                            "★★ X1 만 닫으면 occ 칸이 2 — 두 비트가 **독립으로** 움직인다");
     }
 
     // ⑤ 🔴 모르는 idx — **조용히 안 버린다. 거절도 ACK 이 온다**
@@ -1415,15 +1500,15 @@ int main() {
                             "★★ result=3 (수행할 수 없다) — 새 코드를 안 만들었다"); }
 
     // ⑥ 실물 자리를 idx 로 조작하려 하면 거절 — 차단봉이 아니다
-    snprintf(g, sizeof g, "G,304,3,1,"); appendChecksum(g, (uint8_t)strlen(g));
+    snprintf(g, sizeof g, "G,304,0,1,"); appendChecksum(g, (uint8_t)strlen(g));
     handleFrameLine(g);
     { int8_t h = ackQ.find(304);
       ok(h >= 0 && ackQ.at(h).result == 3,
-                            "★★ 실물 센서 자리(idx 3)는 조작 대상이 아니다"); }
+                            "★★ 실물 센서 자리(idx 0 = A1)는 조작 대상이 아니다"); }
 
     // ⑦ 멱등 — 같은 rid 를 다시 받으면 같은 답
     ackQ.clearQueue();
-    snprintf(g, sizeof g, "G,302,10,0,"); appendChecksum(g, (uint8_t)strlen(g));
+    snprintf(g, sizeof g, "G,302,2,0,"); appendChecksum(g, (uint8_t)strlen(g));
     handleFrameLine(g);
     ok(gates.isOpen(0, slotNo),        "★★ 같은 rid 는 상태를 다시 안 바꾼다 (열린 채 유지)");
     ok(ackQ.pending() == 1,      "★ 그래도 ACK 는 다시 보낸다");
@@ -1469,10 +1554,17 @@ int main() {
       return true;
     };
 
-    node.simOcc = (uint16_t)((1U << 1) | (1U << 6)
-                      | (1U << 2) | (1U << 7)
-                      | (1U << 3) | (1U << 8));      // setup() 과 같은 초기값
-    ok(paired(node.simOcc),      "★★ 부팅 초기값이 짝 단위다 (A_i == B_i 전부)");
+    // 샘플 구성은 자리 하나(A1·B1)뿐이라 짝도 하나다.
+    node.simOcc = 0;                                   // setup() 과 같은 초기값
+    // 🔴 **`0` 은 짝 검사를 자동으로 통과한다.** 이 단언만 두면 헛통과다 —
+    //   조건이 이미 만족돼 있어서 통과하는 것이지 검사가 돈 것이 아니다.
+    //   그래서 **찬 상태**와 **어긋난 상태**를 같이 본다. 셋이 한 벌이다.
+    ok(paired(node.simOcc),      "★ 부팅 초기값이 짝 단위다 (샘플은 빈 자리 = 0)");
+    node.simOcc = (uint16_t)((1U << 0) | (1U << 1));    // A1·B1 둘 다 = 자리 하나가 참
+    ok(paired(node.simOcc),      "★★ 짝이 찬 상태도 짝 단위다 (A1 == B1)");
+    node.simOcc = (uint16_t)(1U << 0);                  // 🔴 한쪽만
+    ok(!paired(node.simOcc),     "★★ 한쪽만 켜지면 짝 검사가 **실패한다** — 검사가 실제로 돈다");
+    node.simOcc = 0;
 
     // 🔴 **무작위 토글을 여러 번 돌려도 짝이 유지되는가** — 한 번만 보면 우연히 통과한다
     node.resMask = 0; node.testArmed = false; node.ovrActive = 0;
