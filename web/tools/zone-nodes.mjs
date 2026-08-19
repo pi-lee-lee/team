@@ -46,7 +46,7 @@ const S = (arr) => JSON.stringify(arr.slice().sort());
      Z3 ← 모듈 0개             등록 전·결속 끊김
    ⚠ `idx`/`value`/`known` 은 **서버가 실제로 내는 이름 그대로**다. 지어낸 필드가 하나도 없다. */
 let MAP = {
-  type: 'map', srv_id: 'T-1', epoch: 3, grid: { rows: 1, cols: 3 },
+  type: 'map', srv_id: 'T-1', epoch: 3, grid: { rows: 2, cols: 3 },
   zones: [
     { id: 'Z1', kind: 'parking', cells: [[0, 0]], modules: [
       { devid: 'P2', name: 'C1', kind: 'IP', idx: 2 },
@@ -55,6 +55,10 @@ let MAP = {
     { id: 'Z2', kind: 'entrance', cells: [[0, 1]], modules: [
       { devid: 'P1', name: 'D1', kind: 'OB', idx: 3 } ] },
     { id: 'Z3', kind: 'parking', cells: [[0, 2]], modules: [] },
+    /* 🔴 **cells 가 둘인 자리** — socket 이 길이 강제를 풀면 실재한다(REQ-0269).
+       옛 코드는 이것을 **칸마다 통째로 다시 그려** 예약 버튼이 두 개가 됐다. */
+    { id: 'A1', kind: 'parking', cells: [[1, 0], [1, 1]], modules: [
+      { devid: 'P1', name: 'A1', kind: 'IP', idx: 0 } ] },
   ],
 };
 const ST = {
@@ -69,14 +73,22 @@ const ST = {
     { id: 'Z2', actions: {}, completion: 'settled', modules: [
       { devid: 'P1', name: 'D1', idx: 3, value: true, known: true } ] },
     { id: 'Z3', occupied: false, reserved: false, actions: {}, completion: 'unknown', modules: [] },
+    { id: 'A1', occupied: false, reserved: false, completion: 'unknown',
+      actions: { reserve: { ok: true } }, modules: [
+      { devid: 'P1', name: 'A1', idx: 0, value: false, known: true } ] },
   ],
 };
 
 const readZones = `(() => {
   const out = {};
   for (const z of document.querySelectorAll('#zone-grid .zone')) {
-    const id = (z.querySelector('.zone__id') || {}).textContent;
-    out[id] = {
+    /* 🔑 dataset.zone 으로 센다. .zone__id 의 글자를 키로 쓰면 표시가 바뀔 때 조용히 깨진다.
+       (역따옴표 금지 — 이 문자열 자체가 템플릿 리터럴이다. 원장 5.49) */
+    const id = z.dataset.zone;
+    out[id] = (out[id] ? (out[id].dup = (out[id].dup || 1) + 1, out[id]) : {
+      dup: 1,
+      name: (z.querySelector('.zone__name') || {}).textContent || null,
+      idText: (z.querySelector('.zone__id') || {}).textContent || null,
       nodes: [...z.querySelectorAll('.znode:not(.znode--empty)')].map(n => ({
         devid: n.dataset.devid,
         headText: (n.querySelector('.znode__id') || {}).textContent,
@@ -88,9 +100,10 @@ const readZones = `(() => {
       })),
       emptyBoxes: z.querySelectorAll('.znode--empty').length,
       emptyText: (z.querySelector('.znode--empty') || {}).textContent || null,
-    };
+      reserveBtns: z.querySelectorAll('.zbtn[data-act="reserve"]').length,
+    });
   }
-  return out;
+  return { zones: out, cont: document.querySelectorAll('#zone-grid .zcell--cont').length };
 })()`;
 
 let client = null;
@@ -143,7 +156,20 @@ try {
   ok('개정 격자가 켜졌다 (map 이 쓰인다)', usable === true, '옛 slots[] 경로면 이 검사는 무의미하다');
   if (usable !== true) throw new Error('격자가 안 켜졌다');
 
-  const z = await evaluate(client, readZones);
+  /* 🔑 **기대 표를 하니스가 따로 갖지 않는다** — 화면의 ZONE_LABEL 을 읽어 온다.
+     여기에 복사본을 두면 판정자가 둘이 되고, 표를 고칠 때 한쪽만 고치는 날이 온다. */
+  if (process.argv.includes('--drop-labels')) {
+    /* 🔴 **음성 대조**: 라벨 표를 비우면 정말 빨강이 되는가(REQ-0269 §4).
+       ⚠ 여기에 함정이 있다 — 기대 집합을 **화면에서 읽으므로** 표를 비우면 기대도 비어
+       *"집합 == 집합"* 이 **공허하게 통과**한다. 그래서 **표가 비어 있지 않다**를 따로 단언한다.
+       🔑 이 플래그가 그 단언이 실제로 작동하는지 재는 자리다. */
+    await evaluate(client, `(() => { for (const k of Object.keys(ZONE_LABEL)) delete ZONE_LABEL[k]; renderZoneGrid(); return true; })()`);
+    console.log('  ⚠ --drop-labels: ZONE_LABEL 을 비웠다. **여기서 빨강이 나와야 정상이다.**\n');
+  }
+  const LABELS = await evaluate(client, `(typeof ZONE_LABEL === 'object' && ZONE_LABEL) || {}`);
+  ok('화면에 ZONE_LABEL 표가 있다', LABELS && Object.keys(LABELS).length > 0, JSON.stringify(LABELS));
+  const _read = await evaluate(client, readZones);
+  const z = _read.zones;
 
   /* ── ① 노드 그룹핑 — 집합 대조 (긍정형) ───────────────────────────── */
   const expect = {};
@@ -207,6 +233,35 @@ try {
     const got = z[zone.id] ? z[zone.id].nodes.length : 0;
     ok('🔴 ' + zone.id + ' 는 노드가 ' + devids.length + '개라 박스가 그만큼 갈린다 (→ ' + got + ')',
        got === devids.length, JSON.stringify(devids));
+  }
+
+  /* ── ②-b 🔴 자리를 두 번 그리지 않는가 · 표시 이름 · id 노출 ──────── */
+  {
+    const dups = Object.keys(z).filter((zid) => (z[zid].dup || 1) > 1);
+    ok('🔴 어떤 자리도 두 번 그려지지 않는다 (cells 가 둘이어도)', dups.length === 0,
+       '중복: ' + JSON.stringify(dups) + ' — 같은 자리에 예약 버튼이 여러 개 생긴다');
+    const multi = MAP.zones.filter((zz) => (zz.cells || []).length > 1).map((zz) => zz.id);
+    if (!multi.length) skip('cells 가 둘 이상인 자리', '지금 지형에 없다');
+    else for (const zid of multi) {
+      ok('🔴 ' + zid + ' (cells ' + (MAP.zones.find((q) => q.id === zid).cells.length) + '칸) 가 한 번만 그려진다',
+         z[zid] && (z[zid].dup || 1) === 1, JSON.stringify(z[zid] && z[zid].dup));
+      ok(zid + ' 의 예약 버튼이 한 개다', !z[zid] || z[zid].reserveBtns <= 1,
+         '버튼 ' + (z[zid] && z[zid].reserveBtns) + '개 — 자리 하나에 예약이 둘이면 사용자가 두 번 건다');
+    }
+  }
+  {
+    /* 🔴 표시 이름 — **집합 대조**. "이름이 어딘가 있다"가 아니다. */
+    const labeled = Object.keys(z).filter((zid) => z[zid].name);
+    const wantLabeled = Object.keys(z).filter((zid) => LABELS[zid]);
+    ok('🔴 표시 이름이 붙은 자리 집합 == ZONE_LABEL 이 정의한 집합  ' + S(labeled) + ' == ' + S(wantLabeled),
+       setEq(labeled, wantLabeled), '그렸다: ' + S(labeled) + ' · 표: ' + S(wantLabeled));
+    const wrong = wantLabeled.filter((zid) => z[zid].name !== LABELS[zid]);
+    ok('표시 이름의 글자가 표와 같다', wrong.length === 0,
+       JSON.stringify(wrong.map((zid) => zid + ': ' + z[zid].name + ' != ' + LABELS[zid])));
+    /* 🔴 id 는 **반드시** 보인다 — 로그와 맞추는 유일한 값이다. */
+    const hidden = Object.keys(z).filter((zid) => (z[zid].idText || '').trim() !== zid);
+    ok('🔴 모든 자리에서 날 id 가 화면에 그대로 보인다 (' + Object.keys(z).length + '개)',
+       hidden.length === 0, '안 보이거나 다른 자리: ' + JSON.stringify(hidden));
   }
 
   /* ── ③ 모듈 0개 영역 — 정상처럼 그리지 않는가 (있는 만큼 전부) ───── */
