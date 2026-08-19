@@ -202,6 +202,16 @@ public:
     //   ⚠ **접속만으로는 부족하다.** 등록(`D`)이 끝나야 모듈 이름을 풀 수 있다.
     bool deviceReady(const std::string& devid) const;
 
+    // 🔑 **단조 시계(ms).** `onTick` 에서 주기 동작을 쓰려면 이것이 필요하다 —
+    //   `onTick` 은 매 박자 불리므로 "언제 할 것인가"는 호출자가 정해야 한다.
+    //
+    //   ```
+    //   static long long last = 0;
+    //   if (srv.nowMs() - last >= 10000) { last = srv.nowMs(); … }
+    //   ```
+    // ⚠ **벽시계가 아니다.** 기준점 없이 절대 시각으로 읽지 마라 — 구간만 뜻이 있다.
+    long long nowMs() const;
+
     // 한 번에 묶을 수 있는 최대 건수. 🔴 **상수가 아니다** — 손잡이(`--down-cap`)를 따라간다.
     int maxPerBatch() const;
 

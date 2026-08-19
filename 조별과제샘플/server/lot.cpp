@@ -55,6 +55,8 @@ void onTick(ParkingServer& srv) {
     //     b.add("LD",1).add("LC",1234567).add("DR",1).add("L2",7654321);
     //     ParkingServer::BatchResult r = b.send();      // 최대 srv.maxPerBatch() 건
     // }
+    //   🔑 주기 동작이 필요하면 `srv.nowMs()` — **단조 시계(ms)**. 벽시계가 아니다
+    //   if (srv.nowMs() - last >= 10000) { last = srv.nowMs(); … }
     //   🔴 상한(지금 4)을 넘기면 **한 건도 안 보내고 거절한다**   자세히: §묶음
     //   ⚠ 창 원자성은 보장한다. **실행 원자성은 아니다** — 하나가 거절돼도 나머지는 수행된다
     //   ⚠ 주석 안의 코드는 컴파일러가 안 본다 — **켜면 한 번 빌드해 봐라**
