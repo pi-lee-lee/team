@@ -45,10 +45,13 @@
       "req": "REQ-0272",
       "paths": [
         "조별과제샘플/server/uplink.h",
-        "조별과제샘플/server/downlink.h"
+        "조별과제샘플/server/downlink.h",
+        "조별과제샘플/server/server.cpp"
       ],
       "왜_지키나": "🔴 **전선 축이다** — 상행 파서(on_ard_line)와 하행 발행(dispatch/G/T/M·tick). 이 둘이 갈리기 전에는 *\"이 변경이 전선에 닿았나\"를 기계가 볼 수 없었다*(socket, 2026-08-19). 장치 쪽 firmware-esp-link 와 **한 계약의 양끝**이다. 한쪽만 바뀌면 그 순간 프로토콜이 깨진다.",
-      "🔴_아직_안_잠근_것": "**`server.cpp` 의 include 위치**(현재 2933 downlink · 2935 uplink)가 잠금 밖이다. socket 이 짚었다 — 헤더를 안 건드리고 **include 줄만 옮겨도 전선 축이 바뀐다**(위치가 곧 문법이다). 🔴 **지금 안 넣는 이유**: `server.cpp` 가 REQ-0272 3단계로 활발히 이동 중이라 매 커밋마다 발화한다. **항상 발화하는 검사는 아무 말도 안 하는 검사다**(오늘 원장). ✅ **3단계가 끝나면 `server.cpp` 를 include 숙주로 넣는다** — arduino 의 client.ino 와 같은 형태다. **이 항목을 지우지 마라. 넣기 전까지 검사에 구멍이 하나 있다.**"
+      "_주의": [
+        "2026-08-19 3단계 완료로 조건 충족 → `server.cpp` 를 **include 숙주**로 넣었다(arduino 의 client.ino 와 같은 형태). 🔴 이유: 헤더를 안 건드리고 **include 줄만 옮겨도 전선 축이 바뀐다 — 위치가 곧 문법이다**(socket). 보류했던 이유(파일이 이동 중이라 매 커밋 발화)가 사라졌다 — server.cpp 가 **262줄**이고 downlink·uplink 가 **13줄 목차의 8·9번째**라 움직일 이유가 없다. ⚠ **include 순서 자체가 계약이다**(뒤엣것이 앞엣것을 쓴다)."
+      ]
     }
   ],
   "_pending": [
