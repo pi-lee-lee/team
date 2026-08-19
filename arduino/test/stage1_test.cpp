@@ -1696,6 +1696,64 @@ int main() {
     node.srcReal = SLOT_SRC_DEFAULT;
   }
 
+  // ── [39] 🔴 **거절이 조용하지 않은가** — 로그가 셋을 갈라 주는가 ──────────────
+  //   🔴 왜 이 시험이 있나: 거절한 갈래는 **로그가 없으면 "안 불렸다"와 모양이 같다.**
+  //     기여자가 가장 먼저 겪는 실패가 이것이다 — `result=3` 이 왔는데 시리얼이 비어 있다.
+  //   ⚠ 그리고 원인이 셋인데 고치는 곳이 다 다르다:
+  //     인자 해독 실패(프레임/서버) · 등록 없음(setup) · 콜백이 거절(핸들러)
+  printf("\n[39] 거절 로그 — 셋이 서로 다른 문구로 갈리는가\n");
+  {
+    Serial.echoToStdout = false;          // 시험 출력이 지저분해지지 않게
+    char gg[32];
+    // ① 콜백이 거절 — 8자리
+    Serial.out.clear(); ackQ.clearCache(); ackQ.clearQueue();
+    snprintf(gg, sizeof gg, "G,910,3,12345678,"); appendChecksum(gg, (uint8_t)strlen(gg));
+    handleFrameLine(gg);
+    ok(Serial.out.find("[LC] 거절") != std::string::npos,
+                            "★★ ① 핸들러가 거절을 **로그로 남긴다** (조용히 false 하지 않는다)");
+    ok(Serial.out.find("12345678") != std::string::npos,
+                            "★★ ① 거절 로그에 **온 값**이 찍힌다 (표를 잘못 맞춘 경우에 필요하다)");
+    ok(Serial.out.find("콜백이 거절") != std::string::npos,
+                            "★★ ① 라우터도 '콜백이 거절'로 갈라 준다");
+    ok(Serial.out.find("등록 없음") == std::string::npos,
+                            "★★ ① '등록 없음'은 **안 나온다** — 둘이 섞이면 못 가른다");
+
+    // ② 등록 없음 — idx 0 은 센서(A1)라 명령 핸들러가 없다
+    Serial.out.clear(); ackQ.clearCache(); ackQ.clearQueue();
+    snprintf(gg, sizeof gg, "G,911,0,1,"); appendChecksum(gg, (uint8_t)strlen(gg));
+    handleFrameLine(gg);
+    ok(Serial.out.find("등록 없음") != std::string::npos,
+                            "★★ ② 등록이 없으면 '등록 없음'이라고 말한다");
+    ok(Serial.out.find("콜백이 거절") == std::string::npos,
+                            "★★ ② '콜백이 거절'은 안 나온다 — 부를 콜백이 없었다");
+
+    // ③ 인자 해독 실패 — 숫자가 아니다
+    Serial.out.clear(); ackQ.clearCache(); ackQ.clearQueue();
+    snprintf(gg, sizeof gg, "G,912,3,abc,"); appendChecksum(gg, (uint8_t)strlen(gg));
+    handleFrameLine(gg);
+    ok(Serial.out.find("인자 해독 실패") != std::string::npos,
+                            "★★ ③ 숫자가 아니면 '인자 해독 실패' — 프레임 쪽 문제라고 말해 준다");
+
+    // ④ DR 의 명령표 밖 값
+    Serial.out.clear(); ackQ.clearCache(); ackQ.clearQueue();
+    snprintf(gg, sizeof gg, "G,913,4,9,"); appendChecksum(gg, (uint8_t)strlen(gg));
+    handleFrameLine(gg);
+    ok(Serial.out.find("[DR] 거절") != std::string::npos,
+                            "★★ ④ 동작 명령도 거절을 남긴다 (명령표에 없는 값)");
+
+    // ⑤ 🔴 **성공 갈래도 확인한다** — 거절만 보면 '늘 거절'인 코드도 통과한다
+    Serial.out.clear(); ackQ.clearCache(); ackQ.clearQueue();
+    snprintf(gg, sizeof gg, "G,914,3,1234567,"); appendChecksum(gg, (uint8_t)strlen(gg));
+    handleFrameLine(gg);
+    ok(Serial.out.find("[LC] 1234567") != std::string::npos,
+                            "★★ ⑤ 성공하면 값이 찍힌다 (거절 문구가 아니다)");
+    ok(Serial.out.find("거절") == std::string::npos,
+                            "★★ ⑤ 성공 갈래에는 '거절'이 **한 번도** 안 나온다");
+    ackQ.clearCache(); ackQ.clearQueue();
+    Serial.out.clear();
+    Serial.echoToStdout = true;
+  }
+
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }

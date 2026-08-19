@@ -122,7 +122,16 @@ static void handleFrameLine(char* cand) {
     uint8_t gres = 3;                       // 기본 = 수행할 수 없다(§2.4 result=3)
     if (okIdx && gidx <= 0xFF && router.dispatch((uint8_t)gidx, garg)) gres = 0;
 #if DEBUG
-    if (gres != 0) { Serial.print(F("[G] 거절 idx=")); Serial.println(gidx); }
+    // 🔴 **거절의 *까닭* 을 가른다.** 셋은 완전히 다른 고장이고 고치는 곳도 다르다:
+    //     해독실패 → 프레임/서버 쪽    · 등록없음 → `setup()` 의 `router.on`
+    //     콜백거절 → 기여자의 핸들러
+    //   ⚠ 이걸 안 가르면 셋이 다 `[G] 거절` 한 줄로 보이고, **기여자는 어디를 볼지 모른다.**
+    if (gres != 0) {
+      Serial.print(F("[G] 거절 idx=")); Serial.print(gidx);
+      if (!okIdx || gidx > 0xFF)                    Serial.println(F(" — 인자 해독 실패"));
+      else if (!router.has((uint8_t)gidx))          Serial.println(F(" — 등록 없음"));
+      else { Serial.print(F(" — 콜백이 거절 arg=")); Serial.println(garg); }
+    }
     else           { Serial.print(F("[G] idx=")); Serial.print(gidx);
                      Serial.print(F(" arg=")); Serial.println(garg); }
 #endif

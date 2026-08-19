@@ -198,6 +198,14 @@ static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_T
 //        }
 //        ```
 //     ⚠ **모르는 값에 `true` 를 돌려주지 마라** — 서버는 성공으로 알고 사람은 왜 안 되는지 모른다.
+//
+// ██ 🔴 **거절할 때도 한 줄 남겨라 — 이게 규칙이다** ██████████████████████████
+//   `false` 를 내는 자리마다 로그를 하나 둬라. 안 두면 **"거절했다"와 "안 불렸다"가
+//   장치 쪽에서 같은 모양**이 된다 — 둘 다 아무 줄도 안 나오기 때문이다.
+//   ⚠ 그리고 그것이 **기여자가 가장 먼저 겪는 실패**다: 값을 보냈는데 `result=3` 이 왔고,
+//     시리얼에는 아무것도 없다. *"내 콜백이 안 불린 건가, 불렸는데 거절한 건가?"* — 답이 없다.
+//   🔑 **판별자**: *"내 콜백이 `false` 를 낼 수 있는 모든 자리에 로그가 있는가."*
+//   (라우터도 `[G] 거절 … — 등록 없음 / 콜백이 거절` 로 갈라 준다. 이 둘이 겹쳐야 완전하다.)
 // ████████████████████████████████████████████████████████████████████████
 //
 // ⚠ **등록 안 한 모듈에 명령이 오면 `result=3`(수행 불가)로 답한다** — 조용히 성공하지 않는다.
@@ -214,7 +222,9 @@ static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_T
 //   서버:  srv.send("P1", "LD", 1);
 static bool cmdLed(uint32_t arg) {
   digitalWrite(PIN_SAMPLE_LED, arg ? HIGH : LOW);
-  return true;                       // 어떤 값이 와도 뜻이 정해지므로 항상 성공이다
+  // 🔑 **거절 로그가 없는 이유**: 이 핸들러는 `false` 를 낼 자리가 없다.
+  //   모든 값에 뜻이 있다(0=끔 · 그 외=켬). 거절이 없으면 남길 것도 없다.
+  return true;
 }
 
 // ── ② 7자리 숫자를 그대로 전달 ─────────────────────────────────────────────
@@ -230,7 +240,13 @@ static bool cmdLed(uint32_t arg) {
 //     🔴 이 핸들러는 **수신 창 안에서 불린다** — 여기서 오래 멈추면 그 슬롯의 수신을 잃는다.
 //     🔑 붙일 거면 **값만 저장하고 실제 출력은 `loop()` 의 송신 창에서** 해라.
 static bool cmdLcd(uint32_t arg) {
-  if (arg > 9999999UL) return false; // 🔴 7자리를 넘는 값은 **거절한다**(표시할 수 없다)
+  if (arg > 9999999UL) {             // 🔴 7자리를 넘는 값은 **거절한다**(표시할 수 없다)
+#if DEBUG
+    // 🔴 **거절도 남긴다.** 이 줄이 없으면 "안 불렸다"와 구분이 안 된다.
+    Serial.print(F("[LC] 거절 — 7자리 초과: ")); Serial.println(arg);
+#endif
+    return false;
+  }
 #if DEBUG
   Serial.print(F("[LC] "));  Serial.println(arg);
 #endif
@@ -255,9 +271,18 @@ static bool cmdDoor(uint32_t arg) {
     case 2: digitalWrite(PIN_SAMPLE_DOOR, LOW);  break;   // 닫기
     case 3: /* 잠금   — 자기 장치에 맞게 채운다 */         break;
     case 4: /* 잠금해제 */                                 break;
-    default: return false;   // 🔴 모르는 값에 true 를 돌려주지 마라 —
-                             //   서버는 성공으로 알고 사람은 왜 안 되는지 모른다
+    default:
+#if DEBUG
+      // 🔴 **거절도 남긴다.** 그리고 **무엇이 왔는지** 같이 찍는다 —
+      //   표를 서버 쪽과 잘못 맞춘 경우가 가장 흔하고, 그때 필요한 것이 이 숫자다.
+      Serial.print(F("[DR] 거절 — 명령표에 없는 값: ")); Serial.println(arg);
+#endif
+      return false;        // 🔴 모르는 값에 true 를 돌려주지 마라 —
+                           //   서버는 성공으로 알고 사람은 왜 안 되는지 모른다
   }
+#if DEBUG
+  Serial.print(F("[DR] arg=")); Serial.println(arg);
+#endif
   return true;
 }
 #endif  // SAMPLE_ACTUATORS
