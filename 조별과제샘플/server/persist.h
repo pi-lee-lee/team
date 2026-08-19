@@ -132,6 +132,33 @@
         return ridpool_.alloc(in, now_ms());
     }
     void rid_release(uint16_t rid) { ridpool_.release(rid, now_ms()); }
+    // ── 노드 대장 (온보딩 2단계 · `docs/net/DESIGN-node-ledger.md`) ─────────
+    // 🔑 **경로를 만드는 것은 서버의 일이다**(오프셋에 따라 갈린다). 대장은 경로를 받기만 한다.
+    // ⚠ `no_disk`(자가검증)면 빈 경로를 준다 — 대장이 스스로 "영속 안 함"으로 돈다.
+    void ledger_load() {
+        ledger_.load(no_disk ? std::string() : node_ledger_path(), srv_id);
+        if (!ledger_.persistOn()) {
+            // 🔴 조용히 넘어가면 **"재기동했더니 등록이 사라졌다"의 원인을 못 찾는다.**
+            logf("!", "노드 대장 — **영속 안 함**"
+                      + std::string(no_disk ? " (자가검증)" : " (HOME 없음 — 메모리로만 돈다)"));
+            return;
+        }
+        char b[320];
+        snprintf(b, sizeof(b),
+                 "노드 대장 — %lld 노드 이어받음 · 할당 %zu · 깨진줄 %lld · 모르는줄 %lld · %s",
+                 ledger_.loaded(), ledger_.assignCount(),
+                 ledger_.linesBad(), ledger_.linesUnknown(), ledger_.path().c_str());
+        logf("=", b);
+    }
+    // 🔴 **사건이 있을 때만 쓴다**(명세 §0.4). 매 프레임·매 슬롯이 아니다.
+    //   `save()` 는 `dirty` 가 아니면 아무것도 안 하므로 불러도 싸다.
+    void ledger_save(const char* why) {
+        if (!ledger_.dirty()) return;
+        if (!ledger_.save(srv_id))
+            logf("!", std::string("노드 대장 저장 실패(") + why + ") — 실패 누적 "
+                      + std::to_string(ledger_.saveFails()));
+    }
+
     void rid_cursor_load() {
         // 🔑 **경로를 만드는 것은 서버의 일이다**(오프셋에 따라 갈린다). 풀은 경로를 받기만 한다.
         ridpool_.loadCursor(rid_cursor_path(), epoch_ms(), no_disk);

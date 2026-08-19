@@ -103,6 +103,7 @@
                rid_alloc_n(0), rid_skips(0), rid_forced(0), rid_exhausted(0),
                ack_unknown_rid(0), ack_slot_mismatch(0), mod_name_conflict(0), sensor_split_now(0), not_reservable_n(0),
                base_valid(false), test_armed(false),
+               ledger_new_(0), ledger_review_(0),
                resync_count(0), no_disk(false),
                soak_start_ms(0), ard_sessions(0), sess_start_ms(0), sess_frames(0),
                sess_last_line_ms(0), sess_max_gap_ms(0), all_frames(0), all_max_gap_ms(0),
@@ -391,6 +392,23 @@
            + " · ACK 미상rid " + std::to_string(ack_unknown_rid)
            + " 자리불일치 " + std::to_string(ack_slot_mismatch)
            + (ack_slot_mismatch > 0 ? " 🔴" : "");
+
+        // ── 노드 대장 (온보딩 2단계) ────────────────────────────────────────
+        // 🔴 **분모를 같이 둔다.** `0` 혼자 서 있으면 건강처럼 보인다 —
+        //   `0/0` 은 최소한 "표본이 없다"고 말해 준다(monitor 가 세운 규칙).
+        // 🔑 그리고 **영속 여부를 매번 찍는다.** 대장이 메모리로만 돌고 있는데
+        //   요약이 정상으로 보이면, 재기동 뒤에야 "다 사라졌다"를 알게 된다.
+        s += " · 대장 " + std::to_string(ledger_.size()) + "노드"
+           + "(신규 " + std::to_string(ledger_new_)
+           + "/재확인 " + std::to_string(ledger_review_)
+           + (ledger_review_ > 0 ? " 🔴" : "") + ")"
+           + " 할당 " + std::to_string(ledger_.assignCount())
+           + " 저장 " + std::to_string(ledger_.saves())
+           + (ledger_.saveFails() > 0
+                ? ("/실패 " + std::to_string(ledger_.saveFails()) + " 🔴") : "")
+           + (ledger_.persistOn() ? "" : " **영속꺼짐** 🔴")
+           + (ledger_.linesBad() > 0
+                ? (" 깨진줄 " + std::to_string(ledger_.linesBad()) + " 🔴") : "");
         return s;
     }
 
@@ -434,6 +452,13 @@
                          + " · 최대공백 " + secs(sess_max_gap_ms)
                          + " · 상대 " + (ard_peer.empty() ? std::string("?") : ard_peer));
             sess_start_ms = 0;
+            // 명세 §0.4 ② — 세션 종료에 `last_seen` 을 굳힌다.
+            // ⚠ **SIGKILL 로 죽으면 이게 안 남는다.** 받아들인 대가다 —
+            //   대장의 목적은 *누가 있었나*이지 *언제까지 있었나*가 아니다.
+            if (!park.devid.empty()) {
+                ledger_.onSessionEnd(park.devid, epoch_ms());
+                ledger_save("세션종료");
+            }
         }
         if (!link_down_since) link_down_since = now_ms();
         // 설계 §2 — **세션이 끝나면 하행 큐를 비운다.** 옛 큐를 새 세션에 쏘면 장치가 모르는

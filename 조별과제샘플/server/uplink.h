@@ -359,6 +359,35 @@
                          "등록 완료 — n=%d · drain=%d · 명령가능 %d개 (device=%s)",
                          n.reg_n, n.reg_drain, reg_cmdable(), n.devid.c_str());
                 logf("=", b);
+
+                // ── 노드 대장 (온보딩 2단계 · `docs/net/DESIGN-node-ledger.md` §0.4 ①) ──
+                // 🔴 **여기서만 부른다.** `reg_done` 이 참인 자리이므로 목록이 완전하다.
+                //   부분 목록으로 지문을 접으면 **거짓 "구성 변경"** 이 된다(명세 §0.3).
+                // ⚠ 대장은 **판정에 관여하지 않는다.** 아래 어떤 값도 결속·하행을 안 바꾼다.
+                if (!n.devid.empty()) {
+                    std::vector<NodeLedger::Mod> lm;
+                    for (size_t mi = 0; mi < n.mods.size(); mi++)
+                        lm.push_back(NodeLedger::Mod(n.mods[mi].first, n.mods[mi].second));
+                    NodeLedger::State st =
+                        ledger_.onRegister(n.devid, peer_host(n.peer), lm, epoch_ms());
+                    if (st == NodeLedger::NEW)               ledger_new_++;
+                    else if (st == NodeLedger::NEEDS_REVIEW) ledger_review_++;
+
+                    const NodeLedger::Entry* e = ledger_.find(n.devid);
+                    char lb[320];
+                    snprintf(lb, sizeof(lb),
+                             "노드 대장 — %s = **%s** · 지문 %s · 접속 %lld회 · 상대 %s%s",
+                             n.devid.c_str(), NodeLedger::stateName(st),
+                             e ? e->fp.c_str() : "?",
+                             e ? e->sessions : 0,
+                             peer_host(n.peer).c_str(),
+                             st == NodeLedger::NEEDS_REVIEW
+                               ? " 🔴 **구성이 대장과 다르다 — 사람이 봐야 한다.**"
+                                 " ⚠ 원인이 *다른 보드* 일 수 있다(devid 가 아직 고유하지 않다). 상대 IP 를 같이 봐라"
+                               : "");
+                    logf("=", lb);
+                    ledger_save("등록완료");
+                }
             }
             return;
         }

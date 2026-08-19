@@ -250,5 +250,10 @@
     // --selftest 전용 이음매 두 개. **판정에는 절대 관여하지 않는다.**
     // resync_count : 재동기화가 실제로 몇 번 일어났는지 세어 §7.4 오탐을 증명한다.
     // no_disk      : 자가검증이 작업 디렉터리의 data_log.json 을 덮어쓰지 않게 막는다.
+    // ── 노드 대장 (온보딩 2단계 · `docs/net/DESIGN-node-ledger.md`) ──────────
+    // 🔴 **판정에 관여하지 않는다.** 결속은 여전히 이름 일치다. 이건 *기억* 이다.
+    NodeLedger ledger_;
+    long long  ledger_new_, ledger_review_;   // 이 인스턴스에서 본 사건 수(요약에 싣는다)
+
     int  resync_count;
     bool no_disk;

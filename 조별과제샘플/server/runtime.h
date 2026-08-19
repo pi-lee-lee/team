@@ -132,6 +132,20 @@ static std::string default_log_path() {
 //
 // 🔑 **로그와 같은 규칙으로 오프셋에 따라 경로를 가른다.** 안 그러면 시험 인스턴스가
 //   운영의 커서를 덮어써서 **운영 재시작이 시험이 쓴 자리로 되돌아간다.**
+// 노드 대장 경로 — **rid 커서와 같은 규율이다**(명세 `DESIGN-node-ledger.md` §1).
+// 🔴 `data_log.json` 처럼 cwd 상대로 두지 않는다. 다른 디렉터리에서 띄우면
+//   **대장이 조용히 새로 생기고**, 증상은 "재기동했더니 등록이 다 사라졌다"로 나타난다.
+static std::string node_ledger_path() {
+    const char* home = getenv("HOME");
+#ifdef _WIN32
+    if (!home || !*home) home = getenv("USERPROFILE");
+#endif
+    if (!home || !*home) return std::string();   // 빈 값 = 영속 불가. 호출자가 크게 남긴다
+    std::string base = std::string(home) + "/parking-logs/parking-nodes";
+    if (g_port_offset != 0) base += ".test+" + std::to_string(g_port_offset);
+    return base + ".txt";
+}
+
 static std::string rid_cursor_path() {
     const char* home = getenv("HOME");
 #ifdef _WIN32

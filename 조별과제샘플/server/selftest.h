@@ -161,6 +161,7 @@ static int selftest() {
 #include "selftest_zones.h"      // ㉒~㉖  지형과 판 · map/state 봉투 · 조작 라우팅
 #include "selftest_wire.h"       // ㉘~㉛  자리 비트열 · 자가 치유 · `G` 전선 왕복
 #include "selftest_contract.h"   // ㉟~㉜  봉투 키 계약 · known 사유 · rid 폭과 격리
+#include "selftest_ledger.h"     // ㊱~㊷  노드 대장 — 지문·상태 전이·파일 왕복
 
             s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
             closesock(sv[0]); closesock(sv[1]);
