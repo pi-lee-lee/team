@@ -3,6 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!--
+  🔴 판본 표지 — **이 줄을 지우지 마라.** (REQ-0240 · 2026-08-19)
+  까닭: 서버는 `srv_id` 를 주는데 **화면에는 그런 것이 없어서** :9900 이 08-17 사본을
+  이틀간 내주는 것을 아무도 못 봤다. `serve_file()` 은 cwd 상대경로로 열기 때문에
+  **서버를 어느 디렉터리에서 띄웠는가**가 곧 어느 화면이 나가는가다(원장 §5.85).
+
+  content 값의 뜻:
+    __UNSTAMPED__            저장소 원본 그대로다(배포 도구를 안 거쳤다)
+    src=<sha12> git=<short> at=<시각>   web/tools/deploy-screen.mjs 가 찍은 배포본이다
+
+  ⚠ `src=` 는 **이 meta 의 content 를 `__UNSTAMPED__` 로 되돌린 뒤** 잰 sha256 이다.
+  자기 자신을 포함해서 재면 값이 자기를 바꿔 영원히 안 맞는다 — 그래서 정규화 후에 잰다.
+  판정: `web/tools/deploy-screen.mjs --check`
+-->
+<meta name="screen-build" content="__UNSTAMPED__">
 <title>주차 관제 — 실시간 자리 현황</title>
 <!--
   주차 관제 데모 (단일 파일 · 외부 의존성 없음)
@@ -197,8 +212,29 @@
   .zone__head { display: flex; align-items: baseline; gap: 6px; }
   .zone__id   { font-weight: 800; font-family: ui-monospace, Menlo, monospace; }
   .zone__sum  { font-size: 13px; font-weight: 700; }
+  /* ── 노드 박스 (박스 안의 박스) — REQ-0261 ────────────────────────────
+     영역 박스 > **노드 박스** > 모듈 리스트. 한 영역에 노드가 여럿일 수 있다.
+     🔴 지금 지형은 영역당 1대라 1:1 로 보이지만 **곧 둘이 된다**(REQ-0260) — 층을 빼지 않는다. */
+  .znodes { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .znode  { border: 1px solid var(--line); border-radius: 7px; padding: 3px 6px 4px;
+            background: color-mix(in srgb, var(--panel) 62%, transparent); }
+  .znode__head  { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+  .znode__id    { font-family: ui-monospace, Menlo, monospace; font-weight: 800; font-size: 11.5px; }
+  .znode__count { font-size: 10.5px; opacity: .75; }
+  /* 🔴 모듈 0개는 조용한 정상이 아니다 — 점선으로 **비어 있음이 보이게** 둔다(§"빈 지형은 고장이다"). */
+  .znode--empty { border-style: dashed; font-size: 11px; color: var(--ink-dim); }
+
   .zone__mods { list-style: none; margin: 2px 0 0; padding: 0; font-size: 11.5px; }
-  .zmod { display: flex; justify-content: space-between; gap: 8px; }
+  .zmod { display: flex; align-items: center; gap: 6px; }
+  /* 모듈 이름이 남는 자리를 먹고 값(●/○)은 오른쪽 끝에 붙는다 — 등·이름·값 세 칸이 안 흔들린다. */
+  .zmod > :nth-child(2) { flex: 1 1 auto; min-width: 0; }
+
+  /* 🔴 **동작 상태등 — 셋.** 색만으로 뜻을 나르지 않는다(색각 이상·스크린리더):
+     도형이 다르고(● ▲ ○) `aria-label` 에 문장이 붙는다. **모름을 녹/적으로 칠하지 않는다.** */
+  .zlamp { flex: 0 0 auto; font-size: 10px; line-height: 1; width: 1em; text-align: center; }
+  .zlamp[data-state="ok"]      { color: #1a8f3c; }
+  .zlamp[data-state="bad"]     { color: #c62828; }
+  .zlamp[data-state="unknown"] { color: var(--ink-dim); opacity: .8; }
   /* 🔑 강조축 — **조작을 막는 것만 진하다.** 막지 않는 미상은 조용한 배경이다(원장 §5.33).
      이 규칙 덕에 20~30개가 다 떠 있어도 눈에 걸리는 것은 막는 것뿐이다. */
   .zmod[data-loud="0"] { opacity: .55; }
@@ -2580,27 +2616,76 @@ function renderZone(li, z, zs) {
   head.appendChild(idEl); head.appendChild(sum);
   li.appendChild(head);
 
-  const ul = document.createElement('ul');
-  ul.className = 'zone__mods';
+  /* 🔴 **박스 안의 박스** — 영역 박스 > **노드 박스** > 모듈 리스트 (사용자 지시 · REQ-0261).
+     묶는 키는 **`devid`** 다. 한 영역에 여러 노드의 모듈이 들어올 수 있다
+     (`Zone.modules` 가 `(devid,name)` 벡터인 이유).
+     ⚠ **지금 지형은 영역당 노드 1대라 1:1 로 보인다.** 그렇다고 묶는 층을 빼면 안 된다 —
+     곧 영역 7개에 **영역1 ← A1·B1** 처럼 둘이 된다(REQ-0260). **퇴화형에 맞춰 줄이지 않는다.** */
   const mods = orderedModules(z.modules);
-  const kindCount = new Map();
-  for (const mm of mods) kindCount.set(mm.kind, (kindCount.get(mm.kind) || 0) + 1);
-  for (const mod of mods) {
-    /* 🔴 모듈 조회는 **`(devid, name)` 복합 키**로 한다. `name` 단독 조회 금지 —
-       같은 `name` 이 다른 노드에 또 있을 수 있고 그게 정상이다(§5.42).
 
-       ⚠ **부트스트랩 임시 규칙을 알고 있어야 한다**(socket 4a): 지금 서버는 **모듈 `name` 이
-       자리 `id` 와 같으면** 그 자리에 붙인다(펌웨어가 `D,A1,IP` 처럼 자리 이름을 쓰기 때문이다).
-       🔴 **그래서 모듈 이름을 바꾸면 결속이 끊긴다.** 설정이 생기면 설정이 대체한다.
-       → **화면은 `name` 을 표시에도 가공하지 않고 편집하지도 않는다**(라벨은 `kind` 에서 온다).
-       ⚠ **결속이 끊긴 것을 화면은 볼 수 없다** — 그 자리는 `modules` 가 빈 것으로 올 뿐이고
-       "이름이 안 맞아서"인지 "모듈이 없어서"인지 구분할 근거가 없다(§5.34 의 형태). */
-    const smod = zs && Array.isArray(zs.modules)
-      ? zs.modules.find(function (x) { return x && x.devid === mod.devid && x.name === mod.name; })
-      : null;
-    ul.appendChild(renderModuleRow(mod, smod, zs, (kindCount.get(mod.kind) || 0) > 1));
+  const nodes = document.createElement('ul');
+  nodes.className = 'znodes';
+  nodes.setAttribute('role', 'list');
+
+  if (!mods.length) {
+    /* 🔴 **빈 영역을 정상처럼 그리지 않는다.** 모듈 0개는 "조용한 정상"이 아니라 **등록 전이거나
+       결속이 끊긴 것**이다. ⚠ 그런데 **화면은 그 둘을 가를 근거가 없다**(§5.34 의 형태) —
+       그래서 **"없다"는 말하되 원인은 단정하지 않는다.** 둘 중 하나로 적으면 그게 곧 지어낸 것이다. */
+    const none = document.createElement('li');
+    none.className = 'znode znode--empty';
+    none.textContent = '모듈 없음 — 등록 전이거나 결속이 끊겼습니다';
+    nodes.appendChild(none);
   }
-  li.appendChild(ul);
+
+  const byNode = new Map();
+  for (const mod of mods) {
+    /* `devid` 가 비어 오는 것은 계약 위반이지만, **그때 조용히 뭉뚱그리지 않는다** — 따로 보이게 둔다. */
+    const dv = (mod && mod.devid) || '(devid 없음)';
+    if (!byNode.has(dv)) byNode.set(dv, []);
+    byNode.get(dv).push(mod);
+  }
+  /* 🔑 **노드 정렬 규칙을 정한다.** 안 정하면 프레임마다 순서가 흔들려 눈이 못 따라간다(루트 지적).
+     `devid` 사전순이고, 노드 안의 모듈 순서는 `orderedModules` 의 종류 순위를 그대로 물려받는다. */
+  const nodeIds = Array.from(byNode.keys()).sort(function (a, b) { return a.localeCompare(b); });
+  for (const dv of nodeIds) {
+    const nodeMods = byNode.get(dv);
+    const box = document.createElement('li');
+    box.className = 'znode';
+    box.dataset.devid = dv;
+
+    const nh = document.createElement('div');
+    nh.className = 'znode__head';
+    const nid = document.createElement('span');
+    nid.className = 'znode__id';
+    nid.textContent = dv;                        /* 🔴 노드 ID 를 명시한다 (사용자 지시) */
+    nid.title = '노드 ' + dv;
+    const ncount = document.createElement('span');
+    ncount.className = 'znode__count';
+    ncount.textContent = '모듈 ' + nodeMods.length;
+    nh.appendChild(nid); nh.appendChild(ncount);
+    box.appendChild(nh);
+
+    const ul = document.createElement('ul');
+    ul.className = 'zone__mods';
+    ul.setAttribute('role', 'list');
+    for (const mod of nodeMods) {
+      /* 🔴 모듈 조회는 **`(devid, name)` 복합 키**로 한다. `name` 단독 조회 금지 —
+         같은 `name` 이 다른 노드에 또 있을 수 있고 그게 정상이다(§5.42).
+         🔑 서버 주석도 그것을 명시한다: *"이름만으로 찾으면 안 된다(복합 키)."*
+
+         ⚠ **부트스트랩 임시 규칙을 알고 있어야 한다**(socket 4a): 지금 서버는 **모듈 `name` 이
+         자리 `id` 와 같으면** 그 자리에 붙인다(펌웨어가 `D,A1,IP` 처럼 자리 이름을 쓰기 때문이다).
+         🔴 **그래서 모듈 이름을 바꾸면 결속이 끊긴다.** 설정이 생기면 설정이 대체한다.
+         → **화면은 `name` 을 표시에도 가공하지 않고 편집하지도 않는다**(라벨은 `kind` 에서 온다). */
+      const smod = zs && Array.isArray(zs.modules)
+        ? zs.modules.find(function (x) { return x && x.devid === mod.devid && x.name === mod.name; })
+        : null;
+      ul.appendChild(renderModuleRow(mod, smod, zs));
+    }
+    box.appendChild(ul);
+    nodes.appendChild(box);
+  }
+  li.appendChild(nodes);
 
   const acts = document.createElement('div');
   acts.className = 'zone__acts';
@@ -2693,7 +2778,7 @@ function zoneSummary(z, zs) {
   return '⚠ 알 수 없는 상태 (' + String(c) + ')';
 }
 
-function renderModuleRow(mod, smod, zs, dupKind) {
+function renderModuleRow(mod, smod, zs) {
   const li = document.createElement('li');
   li.className = 'zmod';
   const nameEl = document.createElement('span');
@@ -2706,21 +2791,38 @@ function renderModuleRow(mod, smod, zs, dupKind) {
      실물로 읽으면 안 된다.
      🔑 **`*`(장치가 보고한 값)와 `(가상)`은 다른 축이다.** `*` 는 *"내가 관측한 게 아니라 되비친 값"*,
      `(가상)` 은 *"그 장치가 물리적으로 없다"* 다. **둘이 같이 붙을 수 있고 그게 맞다.**
-     ⚠ `dupKind`(같은 종류가 둘 이상일 때 `name` 으로 가르기)는 **그대로 둔다** — 실물 `OB` 와
-     가상 `OBV` 는 라벨이 이미 갈리므로(`차단봉` / `차단봉 (가상)`) 이름을 덧붙일 필요가 없다. */
+     🔴 ~~`dupKind`(같은 종류가 둘 이상일 때만 이름을 덧붙인다)~~ **지웠다** (REQ-0268 · 사용자 지시).
+     그 조건은 **1영역:1모듈인 지금 지형에서 항상 거짓**이라 화면에 `주차확인센서` 만 나왔다 —
+     **아두이노 하나에 센서가 10개면 어느 것인지 알 수 없다.** *"인덱스는 늘 노출되어야 한다."* */
   const virt = isVirtualKind(mod.kind);
   const label = (MOD_KIND_LABEL[baseKind(mod.kind)] || mod.kind || mod.name || '(이름 없음)')
               + (virt ? ' (가상)' : '');
   /* 같은 `kind` 가 그 자리에 둘 이상이면 `name` 으로 가른다. `name` 은 **노드 안에서만 유효한
      명칭**이라 그 자체로는 고유하지 않다(§5.42) — 그래서 기본 표시는 `kind` 라벨이다. */
-  nameEl.textContent = label + (dupKind ? ' (' + (mod.name || '?') + ')' : '') + (isAct ? '*' : '');
+  /* 🔴 **`idx` 는 그냥 번호가 아니라 *전선 주소* 다** — 하행 `G,<rid>,<idx>,<op>` 가 이 값으로 모듈을 친다.
+     화면에 보이면 *"이 자리를 조작하면 어느 모듈이 움직이는가"* 가 사람 눈에 이어진다.
+     ⚠ **없으면 지어내지 않는다**: `idx` 가 없거나 음수면 `#?` 다. `-1` 은 서버가 **모른다**는 뜻이고
+     (`known:false` 와 같은 자리에서 나온다) **0 으로 보이게 하면 1번 모듈로 오독된다.**
+
+     🔑 **`name` 을 늘 같이 적는 근거**(§5.42 를 버리는 것이 아니라 좁히는 것이다):
+     §5.42 는 *"`name` 은 노드 안에서만 유효하므로 **단독으로** 쓰지 마라"* 다.
+     **이 행은 `devid` 가 머리에 박힌 노드 박스 *안* 에 그려진다** — 그 안에서 `name` 은 이미 고유하다.
+     ⚠ **박스 밖으로 이 문자열을 옮기면 그 조건이 깨진다.** 그때는 `devid` 를 같이 붙여야 한다. */
+  const idxText = (typeof mod.idx === 'number' && mod.idx >= 0) ? '#' + mod.idx : '#?';
+  nameEl.textContent = label + ' ' + idxText + ' (' + (mod.name || '?') + ')' + (isAct ? '*' : '');
   /* 🔴 가상 모듈은 **한 층 더 약하다.** 실물 출력은 *"장치가 켰다고 보고한다"* 까지 말할 수 있지만,
      가상은 **켤 물건이 없다** — 값은 장치가 흉내낸 것이다. 층 표(§5.34.2)에 이 줄이 하나 더 붙는다.
      ⚠ 이걸 안 갈라 쓰면 시험용 가상 모듈의 값을 **실제 개방으로 읽는다.** */
+  /* 🔑 좁은 곳은 기호, 넓은 곳은 문장(§7.2). 화면에는 `#0` 이 붙고 **여기서는 그 뜻을 풀어 쓴다** —
+     `#` 하나만 보고 "몇 번째 줄"로 읽으면 안 된다. 이것은 **장치 안의 모듈 번호**다. */
+  const idxWord = (typeof mod.idx === 'number' && mod.idx >= 0)
+    ? ('모듈 번호 ' + mod.idx + '번')
+    : '모듈 번호를 모릅니다';
+  const who = label + ' · ' + idxWord + ' · 이름 ' + (mod.name || '(없음)');
   nameEl.title = virt
-    ? (label + ' — 이 자리에 실제 장치가 없습니다. 장치가 흉내낸 값이며 실제 동작이 아닙니다')
-    : isAct ? (label + ' — 장치가 보고한 값입니다 (실제 점등·개방은 확인할 수 없습니다)')
-            : (label + ' — 장치가 측정한 값입니다');
+    ? (who + ' — 이 자리에 실제 장치가 없습니다. 장치가 흉내낸 값이며 실제 동작이 아닙니다')
+    : isAct ? (who + ' — 장치가 보고한 값입니다 (실제 점등·개방은 확인할 수 없습니다)')
+            : (who + ' — 장치가 측정한 값입니다');
   const valEl = document.createElement('span');
 
   let mark = '·', loud = '0';
@@ -2733,8 +2835,49 @@ function renderModuleRow(mod, smod, zs, dupKind) {
   }
   valEl.textContent = mark;
   li.dataset.loud = loud;
-  li.appendChild(nameEl); li.appendChild(valEl);
+
+  /* 🔴 **동작 상태등 — 셋이다.** 사용자는 "녹색/적색"이라고 했고 루트가 셋째를 못 박았다:
+       🟢 값을 받고 있다   🔴 고장 계열로 막혀 있다   ⚪ **모른다**
+     **"모름"을 녹색이나 적색으로 칠하면** `0` 이 건강인지 못 셈인지를 못 가르는 그 형태가 된다(원장 1.1).
+
+     🔴🔴 **이 등은 `value` 와 다른 축이다 — 한 칸에 합치지 마라.**
+       `value`(●/○) = **측정값**: 차가 있다/없다 · 차단봉이 열렸다/닫혔다
+       이 등     = **그 모듈이 지금 값을 내고 있는가**
+     합치면 *"차가 없다"* 와 *"모듈이 죽었다"* 가 같은 색이 된다 — §5.33(기호는 원인, 강조는 영향 —
+     두 축을 섞지 마라)의 형태다. 그래서 **등과 값을 나란히 둘 다 그린다.**
+
+     ⚠ **적색의 근거는 화면이 만들지 않는다** — 서버가 준 `reason` 의 계열(`fault`)만 읽는다(§5.14).
+     계열을 모르면 적색이 아니라 **⚪ 모름**이다. *"모르는 것을 이상으로 그리는 것"* 도 지어내는 것이다. */
+  let lamp = 'unknown', lampWhy = '값을 받지 못하고 있습니다 (등록 전·오프라인·결속 끊김 — 원인은 화면이 알 수 없습니다)';
+  if (smod && smod.known === true) {
+    lamp = 'ok'; lampWhy = '값을 받고 있습니다';
+  } else if (zoneBlockedByFault(zs)) {
+    lamp = 'bad'; lampWhy = '이 자리가 고장 계열 사유로 막혀 있습니다';
+  }
+  const lampEl = document.createElement('span');
+  lampEl.className = 'zlamp';
+  lampEl.dataset.state = lamp;
+  /* 🔑 색만으로 뜻을 나르지 않는다 — 색각 이상과 스크린리더 양쪽에 대한 규칙이다.
+     보이는 자리에는 도형이, 접근 이름에는 **문장**이 간다(§7.2). */
+  lampEl.textContent = lamp === 'ok' ? '\u25CF' : lamp === 'bad' ? '\u25B2' : '\u25CB';
+  lampEl.setAttribute('role', 'img');
+  lampEl.setAttribute('aria-label', '동작 상태: ' + (lamp === 'ok' ? '정상' : lamp === 'bad' ? '이상' : '모름') + ' — ' + lampWhy);
+  lampEl.title = lampEl.getAttribute('aria-label');
+
+  li.appendChild(lampEl); li.appendChild(nameEl); li.appendChild(valEl);
   return li;
+}
+
+/** 이 자리의 조작 중 하나라도 **고장 계열로** 막혔나. 🔴 화면이 규칙을 만들지 않는다 —
+    서버가 준 `reason` 의 계열만 읽는다(`zoneBlockedByUnknown` 의 짝). */
+function zoneBlockedByFault(zs) {
+  const map = zs && zs.actions;
+  if (!map) return false;
+  for (const k of Object.keys(map)) {
+    const a = map[k];
+    if (a && a.ok !== true && familyOf(a.reason) === 'fault') return true;
+  }
+  return false;
 }
 
 /** 이 자리의 조작 중 하나라도 **미상 계열로** 막혔나. 🔴 화면이 규칙을 만들지 않는다 —

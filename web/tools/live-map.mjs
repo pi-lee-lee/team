@@ -13,6 +13,9 @@
  * 사용: node web/tools/live-map.mjs --port 10000
  */
 import { launch, evaluate, sleep, localStamp } from './cdp.mjs';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { compare } from './screen-build.mjs';
 
 const argv = process.argv.slice(2);
 const arg = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
@@ -39,6 +42,9 @@ function actLog(what) {
   console.log('  🕐 ' + t + ' — ' + what);
 }
 const URL_ = 'http://127.0.0.1:' + PORT + '/index.html';
+/* 🔑 **cwd 가 아니라 이 파일 위치를 기준으로 잡는다.** 이 도구를 어디서 실행하든 같은 원본을 본다 —
+   cwd 상대경로가 무엇을 만드는지는 REQ-0240 이 보여 줬다(서버가 바로 그것 때문에 08-17 판을 냈다). */
+const SOURCE_HTML = fileURLToPath(new URL('../../조별과제샘플/index.html', import.meta.url));
 
 let pass = 0, fail = 0, skipped = 0;
 function ok(name, cond, detail) {
@@ -106,7 +112,35 @@ try {
   ok('🔴 [하니스] 서빙된 페이지가 내 현재 판본이다', mine,
      JSON.stringify(finger) + ' — 🔴 **아니면 이 하니스는 남의 코드를 잰다.** '
      + '서버 cwd 의 index.html 이 옛 사본이다. 제품 판정으로 읽지 마라');
+
+  /* 🔴🔴 **위 지표만으로는 부족하다** — REQ-0240 이 그것을 보여 줬다.
+     위 검사는 *기능이 있나*(`zone-grid` 가 존재하나)를 묻는 **존재형**이다. 08-17 사본처럼
+     기능이 통째로 없으면 잡지만, **`zone-grid` 를 가진 어제 사본은 그대로 통과한다.**
+     🔑 **물어야 할 것은 "있나"가 아니라 "같은가"다.** 그래서 실기가 내준 HTML 을 **그대로 받아**
+     내 저장소 원본과 **내용 해시로 대조**한다 — 긍정형 단언이다(원장 §5.68: 부정형은 대상이
+     사라져도 참이 된다).
+     ⚠ 이 검사는 **DOM 이 아니라 전선을 탄다.** 브라우저가 이미 받은 것과 같은 경로를 한 번 더 긁어
+     **계측 경로(WS)와 실기 경로(HTML)가 갈리는 것**을 닫는다 — 그 갈림이 REQ-0240 의 본체였다. */
+  let sameScreen = null;
+  try {
+    const servedHtml = await (await fetch(URL_)).text();
+    const sourceHtml = await readFile(SOURCE_HTML, 'utf8');
+    const c = compare(servedHtml, sourceHtml);
+    sameScreen = c.same;
+    console.log('  · 서빙본 해시 ' + c.servedSha + ' / 원본 ' + c.sourceSha
+              + '   표지: ' + (c.stamp.present ? c.stamp.raw : '(표지 없음)'));
+    ok('🔴 [하니스] 서빙된 HTML 의 내용이 저장소 원본과 같다 (' + c.servedSha + ' == ' + c.sourceSha + ')',
+       c.same,
+       '서빙 ' + c.servedSha + ' ≠ 원본 ' + c.sourceSha + ' — 🔴 **화면이 낡았다.** '
+       + '`node web/tools/deploy-screen.mjs --check --port ' + PORT + '` 로 어느 파일이 서빙되는지 봐라. '
+       + '제품 판정으로 읽지 마라.');
+  } catch (e) {
+    /* 못 잰 것을 통과로 두지 않는다(§5.40). */
+    skip('[하니스] 서빙 HTML 대조', 'HTML 을 다시 못 받았다: ' + e.message);
+  }
+
   if (!mine) throw new Error('서빙된 판본이 내 것이 아니다 — 대조를 진행하면 잘못된 결론이 난다');
+  if (sameScreen === false) throw new Error('서빙된 HTML 이 내 원본과 다르다 — 낡은 화면을 재면 잘못된 결론이 난다');
 
 
   let link = null;

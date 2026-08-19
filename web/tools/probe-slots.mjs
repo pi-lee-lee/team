@@ -14,6 +14,7 @@
  * 사용: node web/tools/probe-slots.mjs --port 10000
  */
 import { launch, evaluate, sleep } from './cdp.mjs';
+import { assertServedIsCurrent } from './screen-build.mjs';
 import { writeFileSync, mkdirSync } from 'node:fs';
 
 const argv = process.argv.slice(2);
@@ -40,6 +41,9 @@ const CASES = [
 const client = await launch({ headless: true });
 await client.send('Page.enable');
 await client.send('Runtime.enable');
+/* 🔴 **낡은 화면을 재지 않는다** — 서빙본이 저장소 원본과 다르면 던진다(원장 §5.85).
+   :9900 이 08-17 사본을 이틀간 내주는 동안 이 하니스들은 아무 말도 안 했다. */
+await assertServedIsCurrent(BASE);
 await client.send('Page.navigate', { url: BASE });
 for (let i = 0; i < 100; i++) {
   const ready = await evaluate(client, `document.readyState === 'complete' && !!document.querySelector('.tile')`).catch(() => false);

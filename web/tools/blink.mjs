@@ -10,6 +10,7 @@
  *       node web/tools/blink.mjs --port 10500 --case B --n 3
  */
 import { launch, evaluate, waitFor, sleep } from './cdp.mjs';
+import { assertServedIsCurrent } from './screen-build.mjs';
 import { writeFileSync, mkdirSync, readFileSync, appendFileSync } from 'node:fs';
 
 const argv = process.argv.slice(2);
@@ -68,6 +69,9 @@ const SAMPLE = `(() => {
 })()`;
 
 async function goto(client, url) {
+  /* 🔴 **낡은 화면을 재지 않는다** — 서빙본이 저장소 원본과 다르면 던진다(원장 §5.85).
+     :9900 이 08-17 사본을 이틀간 내주는 동안 이 하니스들은 아무 말도 안 했다. */
+  await assertServedIsCurrent(url);
   await client.send('Page.navigate', { url });
   await waitFor(client,
     `document.readyState === 'complete' && !!document.getElementById('conn-text') && !!document.querySelector('.tile')`,

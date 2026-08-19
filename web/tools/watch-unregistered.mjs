@@ -17,6 +17,7 @@
  * 사용: node web/tools/watch-unregistered.mjs --port 9900 --allow-prod --seconds 180
  */
 import { launch, evaluate, sleep, localStamp } from './cdp.mjs';
+import { assertServedIsCurrent } from './screen-build.mjs';
 
 const argv = process.argv.slice(2);
 const arg = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
@@ -71,6 +72,10 @@ try {
   if (!fp || !fp.zoneGrid || !fp.hasGetMap || !fp.hasSrvId) {
     throw new Error('서빙된 판본이 내 것이 아니다 — 이 관측은 무효다(§5.43)');
   }
+  /* 🔴 **위 지표만으로는 부족하다**(원장 §5.85). 저것은 *기능이 있나*를 묻는 **존재형**이라
+     08-17 사본처럼 통째로 없으면 잡지만 **`zone-grid` 를 가진 어제 사본은 그대로 통과한다.**
+     🔑 물어야 할 것은 "있나"가 아니라 "같은가"다 — 내용 해시로 원본과 대조한다. */
+  await assertServedIsCurrent(URL_);
   console.log('✅ 붙었다. 기록 중 — 지금 재접속을 유도해도 된다.\n');
 
   /** 어떤 자리의 어떤 조작이 이 코드로 막혔나. `reason` 은 `actions[act].reason` 에 온다. */

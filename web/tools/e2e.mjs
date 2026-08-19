@@ -12,6 +12,7 @@
  * 사용: node web/tools/e2e.mjs --port 10000 [--head]
  */
 import { launch, evaluate, waitFor, sleep, freePort } from './cdp.mjs';
+import { assertServedIsCurrent } from './screen-build.mjs';
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';
 
 /* ── 인자 ─────────────────────────────────────────────────────── */
@@ -106,6 +107,9 @@ async function click(client, selector) {
  *   그러면 다음 evaluate 가 아직 없는 노드를 읽어 null 예외로 죽는다(실제로 겪었다).
  */
 async function goto(client, url) {
+  /* 🔴 **낡은 화면을 재지 않는다** — 서빙본이 저장소 원본과 다르면 던진다(원장 §5.85).
+     :9900 이 08-17 사본을 이틀간 내주는 동안 이 하니스들은 아무 말도 안 했다. */
+  await assertServedIsCurrent(url);
   await client.send('Page.navigate', { url });
   try {
     await waitFor(client,

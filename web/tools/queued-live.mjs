@@ -12,6 +12,7 @@
  * 사용: node web/tools/queued-live.mjs --page 8788 --ws 10500
  */
 import { launch, evaluate, sleep } from './cdp.mjs';
+import { assertServedIsCurrent } from './screen-build.mjs';
 
 const argv = process.argv.slice(2);
 const arg = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
@@ -85,6 +86,9 @@ try {
   client = await launch({ headless: true });
   await client.send('Page.enable');
   await client.send('Runtime.enable');
+  /* 🔴 **낡은 화면을 재지 않는다** — 서빙본이 저장소 원본과 다르면 던진다(원장 §5.85).
+     :9900 이 08-17 사본을 이틀간 내주는 동안 이 하니스들은 아무 말도 안 했다. */
+  await assertServedIsCurrent(URL_);
   await client.send('Page.navigate', { url: URL_ });
 
   let ready = false;
