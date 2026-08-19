@@ -146,7 +146,12 @@ static bool sendSlotBatch(uint8_t* ackOut, uint16_t* bytesOut) {
 
     if (used + 1 + ol > BATCH_CAP) break;     // 이번 배치엔 자리가 없다 — 다음 슬롯으로 민다
     buf[used++] = '\n';                       // 줄 구분자. 서버 파서는 LF 로 가른다
-    memcpy(buf + used, one, ol);
+    // 🔴 **NUL 까지 복사한다**(`ol + 1`). 전선은 `espWrite(buf, used)` 로 **길이 기반**이라
+    //   안 닫아도 안 깨진다 — 그런데 **진단 `[TX]` 줄은 `Serial.println(buf)` 로 NUL 종단**이다.
+    //   안 닫으면 **앞선 호출이 그 스택 자리에 남긴 바이트까지 찍혀** 로그가 전선에 없던
+    //   글자를 보여 준다. 실기에서 `…A,471,G5,0,31` 이 `…315` 로 찍혔다.
+    //   🔑 `buildRegistration` 은 처음부터 `ll + 1` 로 복사했다. **같은 관용으로 맞춘다.**
+    memcpy(buf + used, one, (size_t)ol + 1);
     used += ol;
     take++;
   }

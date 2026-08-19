@@ -1893,6 +1893,59 @@ int main() {
     Serial.echoToStdout = true;
   }
 
+  // ── [41] 🔴 `[TX]` 로그가 **전선과 같은 것을 말하는가** (실기에서 monitor 가 봤다) ──
+  //   실기 관측: 전선은 `…A,471,G5,0,31` 인데 장치 디버그는 `…A,471,G5,0,**315**` 였다.
+  //   🔴 기전: `espWrite(buf, used)` 는 **길이 기반**이라 전선이 옳다. 그런데 그 디버그 줄은
+  //     `Serial.println(line)` — **NUL 종단**이다. `sendSlotBatch` 가 `buf[used]` 를 안 닫으면
+  //     **앞선 호출이 그 스택 자리에 남긴 바이트까지** 찍힌다.
+  //   ⚠ 전선은 안 깨진다. **그런데 로그가 전선에 없던 프레임을 보여 줄 수 있다** —
+  //     우리는 오늘 로그 줄로 판정을 여러 번 했다. 그래서 고친다.
+  //   🔑 이 시험은 **긴 배치 → 짧은 배치** 순서라야 잡힌다. 잔재가 있어야 하기 때문이다.
+  printf("\n[41] [TX] 로그 == 전선 바이트\n");
+  {
+    Serial.echoToStdout = false;
+    arm(nullptr);
+    node.occMask = 0; node.resMask = 0; node.testArmed = false;
+
+    // ① 긴 배치를 먼저 낸다 — ACK 을 여럿 쌓아 버퍼 뒤쪽을 채운다
+    ackQ.clearCache(); ackQ.clearQueue();
+    for (uint16_t rid = 700; rid < 706; rid++) commitAck(rid, 'G', '2', 0);
+    { uint8_t a = 0; uint16_t b = 0; wifi.sentLines.clear(); Serial.out.clear();
+      sendSlotBatch(&a, &b); }
+    ok(!wifi.sentLines.empty(), "★ 긴 배치가 나갔다 (잔재를 남긴다)");
+    const size_t longLen = wifi.sentLines.empty() ? 0 : wifi.sentLines.back().size();
+
+    // ② 짧은 배치 — ACK 하나만
+    //   ⚠ 슬롯당 1거래라 그냥 부르면 안 나간다. 슬롯을 넘겨 준다.
+    slotSent = false;
+    { char sk[] = "SEND OK"; handleLine(sk); }     // 앞 전송의 SEND OK 를 닫는다
+    ackQ.clearCache(); ackQ.clearQueue();
+    commitAck(800, 'G', '5', 0);
+    { uint8_t a = 0; uint16_t b = 0; wifi.sentLines.clear(); Serial.out.clear();
+      sendSlotBatch(&a, &b); }
+    ok(!wifi.sentLines.empty(), "★ 짧은 배치가 나갔다");
+    const std::string wire = wifi.sentLines.empty() ? std::string() : wifi.sentLines.back();
+    ok(wire.size() < longLen,  "★ 둘째가 첫째보다 짧다 (잔재가 남을 조건이다)");
+
+    // ③ 🔴 `[TX] ` 로그 줄을 뽑아 **전선과 글자 그대로** 견준다
+    // 🔴 **배치 페이로드 안에 LF 가 들어 있다.** 그래서 "첫 `\n` 까지" 로 뽑으면 안 된다 —
+    //   처음에 그렇게 짜서 로그가 잘린 것을 결함으로 읽을 뻔했다. `println` 이 붙인
+    //   **마지막** LF 까지가 그 줄이다. 이 블록은 앞서 `Serial.out` 을 비웠으므로 끝까지 취한다.
+    std::string logged;
+    size_t at = Serial.out.rfind("[TX] ");
+    if (at != std::string::npos) logged = Serial.out.substr(at + 5);
+    while (!logged.empty() && (logged.back() == '\n' || logged.back() == '\r')) logged.pop_back();
+    printf("      전선 %u B : [%s]\n", (unsigned)wire.size(), wire.c_str());
+    printf("      로그 %u B : [%s]\n", (unsigned)logged.size(), logged.c_str());
+    ok(logged.size() == wire.size(),
+                            "★★★ `[TX]` 로그 길이 == 전선 길이 (잔재가 안 붙는다)");
+    ok(logged == wire,      "★★★ `[TX]` 로그가 **전선과 글자 그대로 같다**");
+
+    ackQ.clearCache(); ackQ.clearQueue();
+    Serial.out.clear(); wifi.sentLines.clear();
+    Serial.echoToStdout = true;
+  }
+
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }
