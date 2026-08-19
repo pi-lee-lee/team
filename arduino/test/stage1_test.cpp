@@ -1055,7 +1055,7 @@ int main() {
     node.testArmed = false;
     // 🔴 가상 차단봉을 **닫힌 상태로 고정**한다 — 안 하면 slotNo 에 따라 값이 흔들려
     //   이 시험이 비결정적이 된다(자율 토글이 slotNo 를 본다).
-    vGateManual = true; vGateState = 0;
+    gates.manual = true; gates.state = 0;
     char buf[64];
     uint8_t n = buildStatus(buf, sizeof buf);
     printf("      S = %s   (%u B)\n", buf, (unsigned)n);
@@ -1325,7 +1325,7 @@ int main() {
   printf("\n[36] 가상 차단봉과 G 조작 명령\n");
   {
     wifi.refusePrompt = false;
-    vGateManual = false; vGateState = 0;
+    gates.manual = false; gates.state = 0;
     ackQ.clearCache(); ackQ.clearQueue();
     node.occMask = 0; node.resMask = 0; node.testArmed = false;
 
@@ -1340,25 +1340,25 @@ int main() {
     ok(strstr(rbuf, "D,A1,IP,")  != NULL, "★ 실물 모듈은 그대로다 (V 없음)");
 
     // ② 자율 모드 — slotNo 로 결정적으로 토글한다. **무작위가 아니다**
-    slotNo = 0;  bool e0 = vGateOpen(0), x0 = vGateOpen(1);
-    slotNo = 10; bool e1 = vGateOpen(0);
-    slotNo = 7;  bool x1 = vGateOpen(1);
+    slotNo = 0;  bool e0 = gates.isOpen(0, slotNo), x0 = gates.isOpen(1, slotNo);
+    slotNo = 10; bool e1 = gates.isOpen(0, slotNo);
+    slotNo = 7;  bool x1 = gates.isOpen(1, slotNo);
     ok(e0 && !e1,           "★★ E1 이 주기 20 으로 토글한다 (0→열림 · 10→닫힘)");
     ok(x0 && !x1,           "★★ X1 은 주기 14 로 토글한다 — **서로 소라 조합이 다 나온다**");
     slotNo = 0;
-    ok(vGateOpen(0) == e0,  "★ 같은 slotNo 면 같은 값이다 (결정적 · 재현 가능)");
+    ok(gates.isOpen(0, slotNo) == e0,  "★ 같은 slotNo 면 같은 값이다 (결정적 · 재현 가능)");
 
     // ③ 🔴 `G` 명령 — idx 10 = E1 (SLOT_N=10 이므로)
     char g[24]; snprintf(g, sizeof g, "G,301,10,0,"); appendChecksum(g, (uint8_t)strlen(g));
     handleFrameLine(g);
-    ok(vGateManual,         "★★ 첫 명령이 자율 토글을 **영구 정지**시킨다");
-    ok(!vGateOpen(0),       "★★ op=0 이면 닫힌다");
+    ok(gates.manual,         "★★ 첫 명령이 자율 토글을 **영구 정지**시킨다");
+    ok(!gates.isOpen(0, slotNo),       "★★ op=0 이면 닫힌다");
     slotNo = 0;
-    ok(!vGateOpen(0),       "★★ 자율 주기가 와도 안 열린다 — **명령이 되돌려지지 않는다**");
+    ok(!gates.isOpen(0, slotNo),       "★★ 자율 주기가 와도 안 열린다 — **명령이 되돌려지지 않는다**");
 
     snprintf(g, sizeof g, "G,302,10,1,"); appendChecksum(g, (uint8_t)strlen(g));
     handleFrameLine(g);
-    ok(vGateOpen(0),        "★★ op=1 이면 열린다");
+    ok(gates.isOpen(0, slotNo),        "★★ op=1 이면 열린다");
 
     // ④ 🔴 에코 — occ 비트 10 에 실려 나간다. **완료 판정이 이걸로 이뤄진다**
     char sbuf[64]; buildStatus(sbuf, sizeof sbuf);
@@ -1398,7 +1398,7 @@ int main() {
     ackQ.clearQueue();
     snprintf(g, sizeof g, "G,302,10,0,"); appendChecksum(g, (uint8_t)strlen(g));
     handleFrameLine(g);
-    ok(vGateOpen(0),        "★★ 같은 rid 는 상태를 다시 안 바꾼다 (열린 채 유지)");
+    ok(gates.isOpen(0, slotNo),        "★★ 같은 rid 는 상태를 다시 안 바꾼다 (열린 채 유지)");
     ok(ackQ.pending() == 1,      "★ 그래도 ACK 는 다시 보낸다");
 
     // 🔴 **G 의 ACK 가 전선에서 실제로 어떻게 보이나** — socket 이 명세에 적을 값이다.
@@ -1426,7 +1426,7 @@ int main() {
       { char sk[] = "SEND OK"; handleLine(sk); }
     }
 
-    vGateManual = false; vGateState = 0; node.occMask = 0;
+    gates.manual = false; gates.state = 0; node.occMask = 0;
   }
 
   // ── [37] 시뮬 점유가 지형과 맞는다 — A_i 와 B_i 는 같은 자리다 (REQ-0270) ──────

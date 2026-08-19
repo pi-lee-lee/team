@@ -120,13 +120,10 @@ static void handleFrameLine(char* cand) {
       const uint8_t k = (uint8_t)(gidx - SLOT_N);
       // 🔴 **첫 명령이 자율 토글을 영구 정지시킨다.**
       //   안 그러면 명령 효과가 다음 주기에 되돌려져 "안 먹었다"로 보인다.
-      if (!vGateManual) {
-        vGateManual = true;
-        for (uint8_t j = 0; j + SLOT_N < moduleCount(); j++)   // 지금 상태를 그대로 굳힌다
-          if (vGateAuto(j)) vGateState |= (uint16_t)(1u << j);
-      }
-      if (gop) vGateState |=  (uint16_t)(1u << k);
-      else     vGateState &= (uint16_t)~(1u << k);
+      // 🔴 첫 명령이 자율 토글을 영구 정지시킨다 — 굳히는 절차를 `gates` 안으로 넣었다.
+      //   호출부가 "굳히고 나서 세운다"는 **순서를 지킬 필요가 없어졌다**(§commitAck 과 같은 종류).
+      gates.latch((uint8_t)(moduleCount() - SLOT_N), slotNo);
+      gates.set(k, gop != 0);
       gres = 0;
     }
 #endif

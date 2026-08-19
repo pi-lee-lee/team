@@ -105,19 +105,44 @@ static uint8_t moduleCount(void) { return MODULE_N; }
 // 🔑 주기를 **서로 소**로 잡았다(20 과 14):
 //     lcm = 140슬롯 ≈ 168초 안에 **네 조합(00·01·10·11)이 전부 나타난다.**
 //     같은 주기면 둘이 항상 같이 움직여 **"하나만 도는지"를 못 가른다.**
-static bool     vGateManual = false;      // 첫 명령을 받았나 (받으면 자율 정지)
-static uint16_t vGateState  = 0;          // 비트 i = MODULE_TABLE 의 SLOT_N+i 번째가 열렸나
+// ═════════════════════════════════════════════════════════════════════════
+// 🔴 `VirtualGates` — 가상 차단봉의 상태 (REQ-0275 C단계 · 2026-08-19)
+//
+//   ⚠ **`slotNo` 를 인자로 받는다.** 옛 `vGateAuto()` 는 세션의 전역 `slotNo` 를 **몰래 읽었다** —
+//     노드 쪽 코드가 세션 상태에 손을 뻗는 형태였고, 서명만 봐서는 그 의존이 안 보였다.
+//     🔑 **인자로 드러내면 "이 값이 어디서 오는가"가 호출부에 남는다.**
+//   ⚠ 생성자 없음 · NSDMI 없음 — 전역은 `.bss` 로 0 시작이다(§AVR 전역 생성자 함정).
+// ═════════════════════════════════════════════════════════════════════════
+class VirtualGates {
+ public:
+  bool     manual;      // 첫 명령을 받았나 (받으면 자율 정지)
+  uint16_t state;       // 비트 i = MODULE_TABLE 의 SLOT_N+i 번째가 열렸나
 
-// 자율 패턴 — `slotNo` 는 부팅부터 세므로 리셋하면 위상이 처음으로 돌아간다(재현 가능)
-static bool vGateAuto(uint8_t k) {
-  return (k == 0) ? ((slotNo % 20) < 10)     // E1 : 24.1초 주기
-                  : ((slotNo % 14) <  7);    // X1 : 16.9초 주기
-}
+  // 자율 패턴 — `slotNo` 는 부팅부터 세므로 리셋하면 위상이 처음으로 돌아간다(재현 가능)
+  bool autoOpen(uint8_t k, uint32_t slotNo) const {
+    return (k == 0) ? ((slotNo % 20) < 10)     // E1 : 24.1초 주기
+                    : ((slotNo % 14) <  7);    // X1 : 16.9초 주기
+  }
 
-// 지금 열려 있나 — `S` 의 비트열에 실릴 값
-static bool vGateOpen(uint8_t k) {
-  return vGateManual ? ((vGateState >> k) & 1) : vGateAuto(k);
-}
+  // 지금 열려 있나 — `S` 의 비트열에 실릴 값
+  bool isOpen(uint8_t k, uint32_t slotNo) const {
+    return manual ? ((state >> k) & 1) : autoOpen(k, slotNo);
+  }
+
+  // 🔴 첫 명령이 자율 토글을 **영구 정지**시킨다. 지금 상태를 그대로 굳힌 뒤 잠근다.
+  //   ⚠ 안 굳히면 명령 효과가 다음 주기에 되돌려져 "안 먹었다"로 보인다.
+  void latch(uint8_t n, uint32_t slotNo) {
+    if (manual) return;
+    manual = true;
+    for (uint8_t j = 0; j < n; j++) if (autoOpen(j, slotNo)) state |= (uint16_t)(1u << j);
+  }
+  void set(uint8_t k, bool open) {
+    if (open) state |=  (uint16_t)(1u << k);
+    else      state &= (uint16_t)~(1u << k);
+  }
+};
+
+static VirtualGates gates;
 #endif
 
 static void moduleNameOf(uint8_t i, char* out4) {
@@ -247,7 +272,7 @@ static uint8_t buildStatus(char* buf, uint8_t cap) {
   uint16_t occOut = node.occMask;
 #if VIRTUAL_MODULES
   for (uint8_t k = 0; k + SLOT_N < mn; k++)
-    if (vGateOpen(k)) occOut |= (uint16_t)(1u << (SLOT_N + k));
+    if (gates.isOpen(k, slotNo)) occOut |= (uint16_t)(1u << (SLOT_N + k));
 #endif
   bitsToHex(occOut, mn, occ);
   bitsToHex(node.resMask, mn, res);
