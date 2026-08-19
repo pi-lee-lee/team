@@ -896,6 +896,12 @@ const user = loadUser();
 const state = {
   /** 정규화된 스냅샷. 서버 데이터는 여기에만 들어가고 절대 변조하지 않는다. */
   snapshot: null,
+  /* 🔴 모듈 명령의 **마지막 결말**을 `devid|module` 로 보관한다(SPEC-web-control §3.3).
+     ⚠ `cmd_result` 는 **`state` 와 별개 봉투**라 자리 상태에 안 실린다 — 그래서 화면이 따로 들고 있어야
+     사용자가 결과를 볼 수 있다. **`state` 가 다시 와도 지워지지 않는다**(다음 결과가 덮을 때까지). */
+  modCmd: new Map(),
+  /* 보낸 뒤 결말을 기다리는 것. 키는 rid. */
+  modPending: new Map(),
   /** 낙관적 UI 는 스냅샷을 건드리지 않고 별도 레이어에 쌓는다 → 롤백이 delete 한 줄. */
   pending: new Map(),            // rid -> { rid, slot, action, status, timer, settleTimer }
 
@@ -2158,6 +2164,62 @@ el.grid.addEventListener('click', function (event) {
   else sendCommand('test_set', slot, action === 'set1' ? 1 : 0);
 });
 
+/* ────────────────────────────────────────────────────────────────
+   모듈 직접 조작 — 정본은 `docs/net/SPEC-web-control.md` (socket · 1단계)
+   🔴 **필드 이름을 하나도 지어내지 않았다.** 명세에 없는 것은 안 만든다.
+   ──────────────────────────────────────────────────────────────── */
+
+/** `devid|module` — 모듈 하나를 가리키는 키. 🔑 **복합 키다**(§5.42: 이름만으로는 고유하지 않다). */
+function modKey(devid, name) { return String(devid) + '|' + String(name); }
+
+/**
+ * 🔴 모듈에 값을 보낸다 (§2.1 `send_cmd`).
+ *
+ * ⚠ **성공을 여기서 선언하지 않는다.** 보낸 것은 "보냈다"까지이고 결말은 `cmd_result` 가 가져온다.
+ * 우리는 이 함정을 이미 밟았다 — 옛 화면이 `ack` 만 보고 *"예약되었습니다"* 를 띄워
+ * **전선에 나가지도 않은 요청을 성공으로 선언**했다(seam.h §4-B · 명세 §3.3 이 그것을 인용한다).
+ */
+function sendModuleCmd(devid, name, value) {
+  if (!canAct()) { showMessage(actionBlockedReason(), 'err'); return; }
+  const rid = newRid();
+  const key = modKey(devid, name);
+  state.modPending.set(rid, { devid: devid, module: name, value: value, at: Date.now() });
+  /* 보내는 즉시 "보내는 중"으로 바꾼다 — 사용자가 눌린 것을 알아야 한다.
+     🔴 다만 이것은 **화면의 낙관 표시가 아니라 "요청 접수"** 다. 값은 안 바꾼다. */
+  state.modCmd.set(key, { phase: 'sending', rid: rid, value: value });
+  transport.send({ type: 'send_cmd', rid: rid, devid: devid, module: name, value: value });
+  render();
+}
+
+/**
+ * 🔴 `cmd_result` — **새 타입이다**(§3.3). `ack` 에 얹혀 오지 않는다.
+ * `outcome` 셋을 **갈라서** 보관한다 — 고치는 곳이 다르기 때문이다:
+ *   ok(없음) · rejected(값·등록을 고쳐라 · 재시도 무의미) · no_answer(장치·링크)
+ */
+function applyCmdResult(msg) {
+  if (!msg || typeof msg !== 'object') return;
+  const key = modKey(msg.devid, msg.module);
+  const p = state.modPending.get(msg.rid);
+  if (p) state.modPending.delete(msg.rid);
+  state.modCmd.set(key, {
+    phase: 'done',
+    rid: msg.rid,
+    outcome: msg.outcome,          /* "ok" | "rejected" | "no_answer" */
+    result: msg.result,            /* no_answer 면 -1 */
+    value: msg.value,
+    message: msg.message,
+    at: Date.now()
+  });
+  render();
+}
+
+/** `batch_result` (§3.4) — **접수** 결과이지 결말이 아니다. 건별 결말은 `cmd_result` 로 따로 온다. */
+function applyBatchResult(msg) {
+  if (!msg) return;
+  showMessage('묶음 접수: 대기 ' + msg.queued + '건 · 거절 ' + msg.rejected + '건 (상한 ' + msg.max + ')'
+    + ' — 각 건의 결과는 따로 옵니다', msg.rejected > 0 ? 'err' : 'info');
+}
+
 function currentSlot(slotId) {
   if (!state.snapshot) return null;
   return state.snapshot.slots.find(function (s) { return s.id === slotId; }) || null;
@@ -2503,7 +2565,18 @@ const REASON_TEXT = {
   queue_full:        '지금 전송 대기가 가득 차 접수하지 못했습니다',
   /* 🔑 **고장처럼 읽히지 않게 쓴다.** 이건 정상 상태이고, 사용자가 할 일은 **기다리는 것**이지
      확인하거나 다시 누르는 것이 아니다. 그리고 **왜 풀리는지**를 같이 말한다. */
-  occupied:          '이 자리에는 지금 차가 있습니다 — 나가면 예약할 수 있습니다'
+  occupied:          '이 자리에는 지금 차가 있습니다 — 나가면 예약할 수 있습니다',
+
+  /* 🔴 모듈 직접 조작(SPEC-web-control §5). **이름은 socket 명세 그대로다 — 하나도 안 지어냈다.**
+     ⚠ 셋(`not_declared`·`out_of_range`·`batch_too_big`)만 새것이고 나머지는 기존 어휘를 재사용한 것이다. */
+  device_offline:    '그 장치가 붙어 있지 않습니다',
+  bad_request:       '요청 형식이 올바르지 않습니다',
+  not_supported:     '이 모듈은 직접 조작 대상이 아닙니다',
+  rate_limited:      '너무 자주 보냈습니다 — 잠시 뒤 다시 시도해 주세요',
+  ack_timeout:       '장치가 응답하지 않았습니다',
+  not_declared:      '이 모듈은 조작 가능하도록 선언되어 있지 않습니다',
+  out_of_range:      '선언된 범위를 벗어난 값입니다',
+  batch_too_big:     '한 번에 보낼 수 있는 개수를 넘었습니다'
 };
 /** 계열 → 기호. 🔑 기호는 **원인**이고 강조는 **영향**이다(두 축 · 원장 §5.33). */
 const FAMILY_MARK = {
@@ -2975,6 +3048,10 @@ function handleServerMessage(msg) {
      🔑 그래서 **서버 배포가 화면을 안 깨뜨리고, 화면 배포도 서버를 안 기다린다.** */
   if (msg.type === 'map')   { applyMap(msg);       return; }
   if (msg.type === 'state') { applyZoneState(msg); return; }
+  /* 🔴 모듈 직접 조작(SPEC-web-control §3.3·§3.4). **`ack` 와 다른 타입이라 따로 받는다** —
+     `ack` 에 얹었으면 옛 함정(전선에 안 나간 것을 성공으로 선언)을 반복했다. */
+  if (msg.type === 'cmd_result')   { applyCmdResult(msg);   return; }
+  if (msg.type === 'batch_result') { applyBatchResult(msg); return; }
 
   if (msg.type === 'snapshot') {
     applySnapshot(msg, state.link === 'demo' ? 'demo' : 'ws');
