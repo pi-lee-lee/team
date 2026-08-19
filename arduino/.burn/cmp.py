@@ -41,13 +41,29 @@ def parse_hex(path):
     return mem, seen
 
 
+USAGE = """사용법: cmp.py <칩덤프.hex>
+
+인자는 **하나**다. 후보(빌드 산출물)는 칩 덤프와 **같은 폴더의 하위 디렉터리**에서
+`*/*.ino.hex` 로 스스로 찾는다. 비교할 산출물을 둘째 인자로 주는 것이 아니다.
+
+🔴 왜 막는가: 산출물을 argv[1] 로 주면 그것을 "칩"으로 읽고 그 폴더에서 후보를 찾는다.
+   후보가 없으니 `후보 없음` 을 찍고 끝나는데, **그 출력이 성공처럼 보인다.**
+   실제로 2026-08-19 굽기에서 그렇게 불러 **대조를 안 한 채 넘어갈 뻔했다.**
+   ⚠ 게다가 파이프(`| tail`) 뒤의 `$?` 는 이 스크립트의 값이 아니다."""
+
+
 def main():
+    if len(sys.argv) != 2:
+        print(USAGE, file=sys.stderr)
+        return 2
     chip_path = sys.argv[1]
     chip, _ = parse_hex(chip_path)
 
     cands = sorted(glob.glob(os.path.join(os.path.dirname(chip_path), "*", "*.ino.hex")))
     if not cands:
-        print("후보 없음")
+        # 🔴 "같다" 가 아니라 **"아무것도 안 봤다"** 이다. 문구가 그렇게 읽히게 쓴다.
+        print(f"🔴 대조 안 함 — {os.path.dirname(chip_path) or '.'} 아래에서 "
+              f"빌드 산출물(*/*.ino.hex)을 하나도 못 찾았다", file=sys.stderr)
         return 1
 
     print(f"칩 덤프: {chip_path}")
