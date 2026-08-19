@@ -1104,6 +1104,7 @@ struct Server {
     long long rid_exhausted;           // 🔴 pend 가 공간을 다 먹어 발행 자체를 못 한 횟수
     long long ack_unknown_rid;         // pend 에 없는 rid 의 ACK — 늦은 ACK/재전송 중복
     long long ack_slot_mismatch;       // 🔴 ACK 에코 자리 ≠ 서버가 보낸 자리 (멱등 캐시 서명)
+    long long mod_name_conflict;       // 🔴 다른 노드가 이미 잡힌 모듈 이름을 다시 주장 (REQ-0260 전까지의 한계)
     std::string last_bits;             // data_log 중복 쓰기 방지
 
     // §7.5 예약 은퇴 — occupied 1→0 전이를 보려면 직전 프레임이 기준선으로 필요하다.
@@ -1220,7 +1221,7 @@ struct Server {
                rid_cursor(1), rid_reserved_to(0), rid_persist_on(false),
                rid_rel_seq(0),
                rid_alloc_n(0), rid_skips(0), rid_forced(0), rid_exhausted(0),
-               ack_unknown_rid(0), ack_slot_mismatch(0),
+               ack_unknown_rid(0), ack_slot_mismatch(0), mod_name_conflict(0),
                base_valid(false), test_armed(false),
                resync_count(0), no_disk(false),
                soak_start_ms(0), ard_sessions(0), sess_start_ms(0), sess_frames(0),
@@ -1466,6 +1467,9 @@ struct Server {
         //   🔑 §"조건을 적었으면 그것을 보는 감시를 같은 자리에 만들어라" 의 **한 걸음 뒤 판본**이다:
         //   감시는 만들었는데 **그 결과를 볼 자리를 안 만들었다.** 세는 것과 보이는 것은 다른 일이다.
         s += " · 순서변경 " + std::to_string(mod_order_changed);
+        // 🔴 계수를 만들었으면 **볼 자리도 만든다**(원장 규칙 셋째). 분모는 `등록 완료` 다.
+        s += " · 이름충돌 " + std::to_string(mod_name_conflict)
+           + (mod_name_conflict > 0 ? " 🔴" : "");
         // 🔴 **화면 수를 찍는다** (2026-08-19). `S` 처리 안에서 `push_snapshot`·`state` 방송이 돌고
         //   그 비용은 **붙어 있는 화면 수에 비례**한다. 창 M 에서 하행 송신 지연이
         //   `≥2ms 9.4% → 40.9%` 로 늘었는데 **그 축이 아무 데도 안 남아서 원인을 못 갈랐다.**
@@ -1750,7 +1754,32 @@ struct Server {
             if (!z) continue;
             std::pair<std::string,std::string> key(n.devid, n.mods[i].first);
             bool dup = false;
-            for (size_t k = 0; k < z->modules.size(); k++) if (z->modules[k] == key) dup = true;
+            // 🔴 **다른 노드가 같은 *이름* 을 주장하면 결속하지 않는다** (2026-08-19 · 모의 노드로 잡았다)
+            //
+            // 결속은 `zone_find(name)` 으로 **이름만 보고** 자리를 찾는다. 그래서 두 노드가
+            // 둘 다 `A1` 을 선언하면 **자리 A1 에 모듈이 둘** 붙었다 — 실측으로 그렇게 됐다.
+            // 🔑 설계는 *"전역 신원은 `(devid,name)` 복합 키"* 인데 **자리 결속에서 그게 안 지켜졌다.**
+            //
+            // ⚠ 여기서 **둘 다 받아들이면** 그 자리의 값이 어느 노드 것인지 화면이 못 가른다.
+            //   ⚠ **조용히 덮으면** 나중에 붙은 노드가 앞엣것을 지워 원인을 못 찾는다.
+            //   → **먼저 잡은 노드가 유지되고, 뒤엣것은 거절하고 센다.** first-S-wins 와 같은 규율이다.
+            // 🔴 이것은 지형이 자리마다 어느 모듈을 갖는지 **명시하기 전까지의 규칙**이다.
+            //   지형이 그것을 말하게 되면(REQ-0260) 이 추측은 사라진다.
+            bool taken_by_other = false;
+            for (size_t k = 0; k < z->modules.size(); k++) {
+                if (z->modules[k] == key) dup = true;
+                else if (z->modules[k].second == key.second) taken_by_other = true;
+            }
+            if (taken_by_other) {
+                mod_name_conflict++;
+                if (mod_name_conflict <= 3 || mod_name_conflict % 100 == 0)
+                    logf("🔴", "모듈 이름 충돌 — 자리 " + z->id + " 의 이름 '" + key.second
+                               + "' 을 노드 " + (n.devid.empty() ? std::string("(미승격)") : n.devid)
+                               + " 가 다시 주장한다. **먼저 잡은 노드를 유지하고 이것은 결속하지 않는다.**"
+                               " 누적 " + std::to_string(mod_name_conflict)
+                               + " · 자리 결속이 아직 이름 기반이라 생기는 한계다(REQ-0260)");
+                continue;
+            }
             if (!dup) { z->modules.push_back(key); changed = true; }
         }
         if (changed) bump_epoch("노드 " + n.devid + " 등록 결속");
