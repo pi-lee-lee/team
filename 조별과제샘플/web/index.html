@@ -2687,6 +2687,27 @@ function renderZoneGrid() {
   const keep = (af && af.classList && af.classList.contains('zbtn') && el.zoneGrid.contains(af))
     ? { zone: af.dataset.zone, act: af.dataset.act } : null;
 
+  /* 🔴🔴 **입력 칸은 사용자 소유다. 서버 값으로 절대 덮지 않는다.** (사용자 실측 2026-08-20)
+     증상: *"LC 에 타임사이클이 같이 돈다. 입력을 하는 중간에 글자가 없어진다."*
+     기전: 이 함수는 격자를 **통째로 다시 만드는데**(바로 아래 `textContent = ''`),
+           `state` 가 **초당 한 장** 온다. 그래서 사용자가 7자리를 치는 동안 **입력 칸이 파괴되고
+           새 빈 칸으로 바뀐다.** 🔑 **LED(toggle)가 멀쩡했던 이유가 이것이다** — 그쪽은
+           들고 있을 입력 상태가 없어서 다시 만들어도 잃을 것이 없다.
+     ⚠ **버튼 포커스 보존(위)만으로는 못 막는다** — 포커스를 되돌려도 **값은 이미 사라졌다.**
+     🔑 그래서 **값과 캐럿 위치**를 같이 안고 넘어간다. 서버 값은 이 칸에 안 넣는다 —
+        `requested`/`value` 는 **옆 상태 줄**에 따로 보인다(그게 화면이 서버를 말하는 자리다). */
+  const typed = new Map();
+  let caret = null;
+  for (const inp of el.zoneGrid.querySelectorAll('.zctl__num')) {
+    const k = inp.dataset.modKey + '|' + inp.dataset.role;
+    if (inp.value !== '') typed.set(k, inp.value);
+    if (inp === af) {
+      caret = { key: k, start: inp.selectionStart, end: inp.selectionEnd };
+      /* `<input type=number>` 는 selectionStart 를 안 줄 수 있다 — 그러면 캐럿은 포기하고
+         **값과 포커스만** 지킨다. 값이 살아 있으면 사용자는 이어서 칠 수 있다. */
+    }
+  }
+
   el.zoneGrid.textContent = '';
   /* 🔴 **자리를 두 번 그리지 않는다.** `cells` 가 둘 이상이면 예전 코드는 **칸마다 자리를 통째로
      다시 그렸다** — 같은 자리에 **예약 버튼이 두 개** 생기고 노드 박스도 두 벌이 된다.
@@ -2740,6 +2761,18 @@ function renderZoneGrid() {
   if (keep) {
     for (const b of el.zoneGrid.querySelectorAll('.zbtn')) {
       if (b.dataset.zone === keep.zone && b.dataset.act === keep.act) { b.focus(); break; }
+    }
+  }
+
+  /* 🔴 **치던 값을 되돌린다** — 위에서 안고 온 것. 이것이 없으면 초당 한 번 글자가 사라진다. */
+  for (const inp of el.zoneGrid.querySelectorAll('.zctl__num')) {
+    const k = inp.dataset.modKey + '|' + inp.dataset.role;
+    if (typed.has(k)) inp.value = typed.get(k);
+    if (caret && caret.key === k) {
+      inp.focus();
+      /* 캐럿 복원은 **되면 하고 안 되면 넘어간다.** `type=number` 는 브라우저에 따라
+         `setSelectionRange` 를 던진다 — 그때 값까지 잃으면 안 되므로 조용히 포기한다. */
+      try { if (caret.start !== null) inp.setSelectionRange(caret.start, caret.end); } catch (e) {}
     }
   }
   renderZoneBanner(m, st);
@@ -3181,6 +3214,10 @@ function renderModuleControl(mod, smod) {
     const inp = document.createElement('input');
     inp.type = 'number';
     inp.className = 'zctl__num';
+    /* 🔴 **입력 칸에 고정된 이름을 준다** — 격자는 매 `state`(초당 한 장)마다 통째로 다시 만들어진다.
+       이름이 없으면 다시 그릴 때 **사용자가 치던 글자가 사라진다**(사용자 실측 2026-08-20). */
+    inp.dataset.modKey = modKey(mod.devid, mod.name);
+    inp.dataset.role = 'main';
     /* 🔴 **범위가 오면 화면이 먼저 막는다**(§3.1). 서버도 막지만(`out_of_range`),
        사용자가 헛왕복을 하지 않게 하는 것이 화면의 몫이다. */
     if (lo !== null) inp.min = String(lo);
@@ -3230,6 +3267,9 @@ function renderModuleControl(mod, smod) {
   const pin = document.createElement('input');
   pin.type = 'number';
   pin.className = 'zctl__num';
+  /* ⚠ 연습 칸도 **똑같이 사용자 소유**다. 루트 지적대로 둘 다 지켜야 한다. */
+  pin.dataset.modKey = modKey(mod.devid, mod.name);
+  pin.dataset.role = 'prac';
   pin.setAttribute('aria-label', (ctl.label || mod.name) + ' 연습 값 (범위 검사 없음)');
   const pgo = document.createElement('button');
   pgo.type = 'button';

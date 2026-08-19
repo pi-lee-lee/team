@@ -15,7 +15,12 @@
 import { launch, evaluate, sleep } from './cdp.mjs';
 
 const HEAD = process.argv.includes('--head');
-const URL_ = new URL('../../조별과제샘플/web/index.html', import.meta.url).href + '?demo=1';
+/* `--file <경로>` — 🔑 **음성 대조용**. 고치기 전 판(예: 배포본)에 대고 돌려
+   **이 검사가 실제로 빨강이 되는지** 본다. 실패할 수 없는 검사의 초록은 아무 말도 안 한다(원장 §5.88). */
+const fileArg = (() => { const i = process.argv.indexOf('--file'); return i >= 0 ? process.argv[i + 1] : null; })();
+const URL_ = (fileArg
+  ? new URL('file://' + (fileArg.startsWith('/') ? fileArg : process.cwd() + '/' + fileArg)).href
+  : new URL('../../조별과제샘플/web/index.html', import.meta.url).href) + '?demo=1';
 
 let pass = 0, fail = 0, skipped = 0;
 const ok = (n, c, d) => { if (c) { pass++; console.log('  ✅ ' + n); } else { fail++; console.log('  ❌ ' + n + (d ? '\n       → ' + d : '')); } };
@@ -224,6 +229,44 @@ try {
   await sleep(100); v = await evaluate(client, READ);
   ok('요청 값이 1 이면 number 위젯에서도 settled 를 그대로 그린다 (모듈이 아니라 값이 조건이다)',
      /요청대로/.test((v.LC.msgs || []).join(' ')), JSON.stringify(v.LC.msgs));
+
+  /* ── ⑧ 🔴 **입력 칸은 사용자 소유다** — 주기 갱신이 치던 값을 덮으면 안 된다
+     사용자 실측(2026-08-20): *"LC 에 입력을 하는 중간에 글자가 없어진다."*
+     기전: 격자가 매 `state`(초당 한 장)마다 통째로 다시 만들어진다.
+     🔑 **긍정형으로 쓴다** — *"안 지워진다"* 가 아니라 **"친 값 그대로 남아 있다"**.
+        (부정형은 입력 칸 자체가 없어도 참이 된다 — 그래서 분모도 같이 단언한다.) */
+  const typeInto = async (role, text) => await evaluate(client, `(() => {
+    const box = document.querySelector('.zctl[data-module="LC"]');
+    const scope = ${role === 'prac' ? 'box.querySelector(".zctl__prac")' : 'box.querySelector(".zctl__row")'};
+    const inp = scope.querySelector('.zctl__num');
+    if (!inp) return 'NO_INPUT';
+    inp.focus();
+    inp.value = ${JSON.stringify(text)};
+    return inp.value;
+  })()`);
+  const readBack = async (role) => await evaluate(client, `(() => {
+    const box = document.querySelector('.zctl[data-module="LC"]');
+    const scope = ${role === 'prac' ? 'box.querySelector(".zctl__prac")' : 'box.querySelector(".zctl__row")'};
+    const inp = scope.querySelector('.zctl__num');
+    return inp ? inp.value : 'NO_INPUT';
+  })()`);
+
+  for (const role of ['main', 'prac']) {
+    const before = await typeInto(role, '1234567');
+    ok('분모: ' + role + ' 입력 칸이 존재한다 (없으면 아래 대조가 공허하게 참이 된다)',
+       before === '1234567', String(before));
+    /* 주기 갱신을 **세 번** 쏜다 — 실기에서 초당 한 장씩 오는 그것이다. */
+    for (let i = 0; i < 3; i++) { await evaluate(client, inject(ST(BASE))); await sleep(40); }
+    const after = await readBack(role);
+    ok('🔴 ' + role + ' 입력 칸: 주기 갱신 3회 뒤에도 **친 값 그대로 남아 있다** (1234567)',
+       after === '1234567',
+       '남은 값: ' + JSON.stringify(after) + ' — 🔴 갱신이 사용자가 치던 것을 덮었다');
+  }
+  /* 포커스도 지켜지는가 — 값만 살고 포커스가 날아가면 사용자는 계속 못 친다. */
+  await typeInto('main', '99');
+  await evaluate(client, inject(ST(BASE))); await sleep(60);
+  ok('입력 칸에 포커스가 남아 있다 (이어서 칠 수 있다)',
+     (await evaluate(client, `document.activeElement && document.activeElement.classList.contains('zctl__num')`)) === true);
 
   skip('실기에서 control 이 온다', '화면이 **미배포**다 — 서빙본은 옛 판이라 지금 실기로 재면 남의 판을 잰다');
   skip('🔴 요청 2 이상에서 settled 가 한 번도 안 온다 (§6)',
