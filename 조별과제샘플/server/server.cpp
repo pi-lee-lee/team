@@ -1105,6 +1105,11 @@ struct Server {
     long long ack_unknown_rid;         // pend 에 없는 rid 의 ACK — 늦은 ACK/재전송 중복
     long long ack_slot_mismatch;       // 🔴 ACK 에코 자리 ≠ 서버가 보낸 자리 (멱등 캐시 서명)
     long long mod_name_conflict;       // 🔴 다른 노드가 이미 잡힌 모듈 이름을 다시 주장 (REQ-0260 전까지의 한계)
+    // 🔴 **누적이 아니라 계기(gauge)다** — "지금 갈린 자리가 몇 개인가".
+    //   처음에 `state` 를 낼 때마다 올리는 누적으로 만들었더니 **방송 횟수를 세고 있었다**
+    //   (실측 `센서갈림 32` — 사건은 둘인데 방송이 32번이었다).
+    //   🔑 **파생 상태는 사건이 아니다. 사건처럼 세면 방송 빈도에 비례해 부풀고 창끼리 비교가 안 된다.**
+    int  sensor_split_now;             // 지금 두 센서가 갈린 주차 자리 수
     std::string last_bits;             // data_log 중복 쓰기 방지
 
     // §7.5 예약 은퇴 — occupied 1→0 전이를 보려면 직전 프레임이 기준선으로 필요하다.
@@ -1221,7 +1226,7 @@ struct Server {
                rid_cursor(1), rid_reserved_to(0), rid_persist_on(false),
                rid_rel_seq(0),
                rid_alloc_n(0), rid_skips(0), rid_forced(0), rid_exhausted(0),
-               ack_unknown_rid(0), ack_slot_mismatch(0), mod_name_conflict(0),
+               ack_unknown_rid(0), ack_slot_mismatch(0), mod_name_conflict(0), sensor_split_now(0),
                base_valid(false), test_armed(false),
                resync_count(0), no_disk(false),
                soak_start_ms(0), ard_sessions(0), sess_start_ms(0), sess_frames(0),
@@ -1468,6 +1473,8 @@ struct Server {
         //   감시는 만들었는데 **그 결과를 볼 자리를 안 만들었다.** 세는 것과 보이는 것은 다른 일이다.
         s += " · 순서변경 " + std::to_string(mod_order_changed);
         // 🔴 계수를 만들었으면 **볼 자리도 만든다**(원장 규칙 셋째). 분모는 `등록 완료` 다.
+        s += " · 센서갈림 " + std::to_string(sensor_split_now) + "자리"
+           + (sensor_split_now > 0 ? " 🔴" : "");
         s += " · 이름충돌 " + std::to_string(mod_name_conflict)
            + (mod_name_conflict > 0 ? " 🔴" : "");
         // 🔴 **화면 수를 찍는다** (2026-08-19). `S` 처리 안에서 `push_snapshot`·`state` 방송이 돌고
@@ -1718,8 +1725,16 @@ struct Server {
     // 기본 지형. ⚠ **기본값이지 고정값이 아니다** — 설정 적재가 생기면 이 함수를 대체한다.
     void build_default_zones() {
         zones.clear();
-        for (int i = 0; i < 10; i++) {              // 주차 자리 10 — 격자 앞 두 줄
+        // 🔴 **주차 자리는 5개다. 10개가 아니다** (사용자 확정 (A) · 2026-08-19 · 명세 §9)
+        //   각 자리에 **주차확인센서가 둘**이다 — 영역1 ← 센서 A1(#0) · B1(#5). 이중화다.
+        //   ⚠ 옛 지형은 10개를 만들었고 **그것이 화면의 "10자리"였다.**
+        //   🔑 `Zone.id` 는 **A1~A5 를 유지한다** — 전선 `R,<rid>,A1,<user>` 과 `slots[]` 색인이
+        //     그 이름을 쓰므로 바꾸면 **arduino 축까지 움직인다.** 화면 라벨은 web 이 붙인다.
+        //   ⏳ id 개명(영역1~5)은 별건 — 굽기와 같은 경계에서 나중에.
+        for (int i = 0; i < 5; i++) {
             Zone z; z.id = SLOT_ID[i]; z.kind = "parking";
+            // ⚠ 칸은 **하나로 둔다.** 두 센서를 격자에서 한 칸으로 그릴지 두 칸으로 그릴지는
+            //   **표현이고 web 의 몫**이다. 물리 배치를 서버가 지어내지 않는다(명세 §9.1).
             z.cells.push_back(std::make_pair(i / grid_cols, i % grid_cols));
             zones.push_back(z);
         }
@@ -1729,12 +1744,14 @@ struct Server {
         Zone x; x.id = "X1"; x.kind = "exit";
         x.cells.push_back(std::make_pair(grid_rows - 1, grid_cols - 1));
         zones.push_back(x);
-        // 🔴 **길이 1 을 여기서 강제한다.** 목록이라고 아무 길이나 받는 것이 아니다.
+        // ~~🔴 길이 1 을 여기서 강제한다~~ → **강제를 푼다**(2026-08-19 · 명세 §9.1).
+        //   ⚠ **지금 정의는 여전히 전부 길이 1 이다.** 강제를 푼 것은 web 이 여러 칸을 필요로 할 때
+        //   **서버가 조용히 잘라 버리지 않게** 하려는 것이다 — 전에는 `resize(1)` 로 말없이 깎았다.
+        //   🔴 대신 **길이가 1 이 아니면 로그에 남긴다.** 깎지는 않는다.
         for (size_t i = 0; i < zones.size(); i++)
-            if (zones[i].cells.size() != 1) {
-                logf("!", "자리 " + zones[i].id + " 의 칸 수가 1이 아니다 — 지금은 1:1 만 지원한다");
-                zones[i].cells.resize(1);
-            }
+            if (zones[i].cells.size() != 1)
+                logf("=", "자리 " + zones[i].id + " 의 칸 수 "
+                          + std::to_string(zones[i].cells.size()) + " — 1이 아니다(허용한다. 화면이 순회한다)");
         bump_epoch("기본 지형 구성");
     }
 
@@ -1747,10 +1764,20 @@ struct Server {
     // ⚠ **결속 규칙은 지금 부트스트랩이다**: 모듈 `name` 이 자리 `id` 와 같으면 그 자리에 붙는다.
     //   지금 펌웨어가 `D,A1,IP` 처럼 자리 이름을 그대로 쓰기 때문에 성립한다.
     //   🔴 **설정이 생기면 이 규칙을 설정이 대체한다** — 그때까지 이름이 곧 결속이라는 것을 적어 둔다.
+    // ── 🔴 센서 이름 → 자리 id (사용자 확정 (A) · 명세 §9)
+    //   한 자리에 센서가 둘이다: 영역1 ← `A1`(#0) · `B1`(#5).
+    //   ⚠ 전에는 `zone_find(name)` 으로 **이름이 곧 자리**였고 그래서 자리가 10개였다.
+    //   🔑 이 함수가 그 결합을 끊는다 — **자리는 5개, 센서는 10개.**
+    static std::string zone_of_module(const std::string& nm) {
+        if (nm.size() == 2 && nm[0] == 'B' && nm[1] >= '1' && nm[1] <= '5')
+            return std::string("A") + nm[1];      // B3 → 자리 A3 의 둘째 센서
+        return nm;                                  // A1..A5 · E1 · X1 은 그대로
+    }
+
     void bind_modules(Node& n) {
         bool changed = false;
         for (size_t i = 0; i < n.mods.size(); i++) {
-            Zone* z = zone_find(n.mods[i].first);
+            Zone* z = zone_find(zone_of_module(n.mods[i].first));
             if (!z) continue;
             std::pair<std::string,std::string> key(n.devid, n.mods[i].first);
             bool dup = false;
@@ -2484,16 +2511,52 @@ struct Server {
     }
     std::string state_json() {
         std::ostringstream o;
+        int split_now = 0;                     // 이번 판의 갈린 자리 수 — 끝에서 계기에 옮긴다
         o << "{\"type\":\"state\",\"srv_id\":" << jstr(srv_id)
           << ",\"epoch\":" << map_epoch << ",\"ts_ms\":" << epoch_ms() << ",\"zones\":[";
         for (size_t i = 0; i < zones.size(); i++) {
             const Zone& z = zones[i];
             if (i) o << ",";
             const std::string blk = zone_block_reason(z);
-            int si = slot_index(z.id);                 // 주차 자리면 옛 상태를 그대로 쓴다
+            int si = slot_index(z.id);                 // 예약 상태는 여전히 slots[] 가 원본이다
             o << "{\"id\":" << jstr(z.id);
-            if (si >= 0) o << ",\"occupied\":" << (slots[si].occupied ? "true" : "false")
-                           << ",\"reserved\":" << (slots[si].reserved ? "true" : "false");
+            // ── 🔴 `occupied` 를 **그 자리의 센서들에서 유도한다** (명세 §9.2)
+            //   한 자리에 센서가 둘이므로 두 값에서 하나를 만들어야 한다. **서버가 계산한다** —
+            //   화면이 조합하게 두면 규칙이 두 곳에 생긴다(§"파생 값은 원본을 가진 쪽이 계산한다").
+            int v_known = 0, v_total = 0, v_ones = 0;
+            for (size_t m = 0; m < z.modules.size(); m++) {
+                const Node* mn = node_by_devid(z.modules[m].first);
+                int mi = -1;
+                if (mn)
+                    for (size_t k = 0; k < mn->mods.size(); k++)
+                        if (mn->mods[k].first == z.modules[m].second) { mi = (int)k; break; }
+                if (mi < 0) continue;
+                // 🔑 **점유 센서만 센다.** 차단봉(OBV)은 자리 점유를 말하지 않는다(명세 §8.1).
+                if (!mn || mn->mods[mi].second != "IP") continue;
+                v_total++;
+                if (mi < mn->mod_bits_n) { v_known++; if (mn->mod_bits[mi]) v_ones++; }
+            }
+            if (z.kind == "parking") {
+                // 🔴 **OR 다.** 두 오류의 대가가 대칭이 아니다 —
+                //   빈 자리를 "찼다"고 하면 손해는 자리 하나이고,
+                //   찬 자리를 "비었다"고 하면 **운전자가 가서 못 댄다.**
+                //   ⚠ AND 로 하면 센서 하나가 죽었을 때 그 자리가 영영 "비었다"로 보인다.
+                const bool occ = (v_ones > 0);
+                const char* vs = (v_total == 0 || v_known == 0) ? "unknown"
+                               : (v_known == v_total ? "known" : "partial");
+                // 🔴 `value_state` 는 **모든 자리에 항상 싣는다.** 선택적이면 화면이 안 본다.
+                //   ⚠ `unknown` 일 때 `occupied:false` 는 **"비었다"가 아니라 "모른다"** 이다.
+                o << ",\"occupied\":" << (occ ? "true" : "false")
+                  << ",\"value_state\":" << jstr(vs)
+                  << ",\"value_known\":" << v_known << ",\"value_total\":" << v_total;
+                if (si >= 0) o << ",\"reserved\":" << (slots[si].reserved ? "true" : "false");
+                // 🔴 **둘 다 아는데 값이 갈리면 센다.** 이중화의 목적이 고장 감지인데
+                //   세지 않으면 이중화가 아무 일도 안 한다(명세 §9.2).
+                if (v_known >= 2 && v_ones > 0 && v_ones < v_known) split_now++;
+            } else if (si >= 0) {
+                o << ",\"occupied\":" << (slots[si].occupied ? "true" : "false")
+                  << ",\"reserved\":" << (slots[si].reserved ? "true" : "false");
+            }
             o << ",\"actions\":{";
             bool first = true;
             if (z.kind == "parking" && si >= 0) {
@@ -2565,6 +2628,7 @@ struct Server {
             o << "]}";
         }
         o << "]}";
+        sensor_split_now = split_now;      // 🔑 누적이 아니라 **지금 값**으로 덮는다
         return o.str();
     }
     void push_state() { ws_broadcast(state_json()); }
@@ -5315,13 +5379,20 @@ static int selftest() {
             {
                 Server t;
                 t.build_default_zones();
+                // 🔴 **7영역으로 바뀌었다**(사용자 확정 (A) · 명세 §9). 옛 기대는 12 였다 —
+                //   주차 자리가 10 이 아니라 **5**(각 자리에 센서 둘)이고 + 입구 + 출구 = 7.
+                //   ⚠ 이 시험이 옛 계약을 들고 있어서 지형을 바꾸자 곧바로 빨간불이 됐다. **그게 제 일이다.**
                 Zone* a1 = t.zone_find("A1"); Zone* e1 = t.zone_find("E1");
-                bool ok22 = (t.zones.size() == 12 && a1 && e1
+                Zone* b1 = t.zone_find("B1");        // 🔴 이제 자리가 아니라 **센서 이름**이다
+                bool ok22 = (t.zones.size() == 7 && a1 && e1
                              && a1->kind == "parking" && e1->kind == "entrance"
-                             && a1->cells.size() == 1 && t.map_epoch == 1);
+                             && a1->cells.size() == 1 && t.map_epoch == 1
+                             && b1 == 0);            // **B1 은 자리로 존재하지 않아야 한다**
                 std::cout << (ok22 ? "  ✓ " : "  ✗ ") << "지형: 자리 " << t.zones.size()
                           << " · A1 칸수 " << (a1 ? a1->cells.size() : 0)
-                          << " · 판 " << t.map_epoch << " (기대 12 · 1 · 1)\n";
+                          << " · 판 " << t.map_epoch
+                          << " · B1 자리없음 " << (b1 == 0 ? "예" : "🔴아니오")
+                          << " (기대 7 · 1 · 1 · 예)\n";
                 if (!ok22) bad++;
 
                 // 🔴 **등록이 지형을 바꾸면 판이 오른다**
