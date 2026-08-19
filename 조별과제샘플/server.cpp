@@ -2520,15 +2520,17 @@ struct Server {
                 // 🔴 **이제 값이 있다** — `S` 의 비트열에서 뽑는다(비트 `idx`).
                 //   ⚠ **모르면 여전히 `known:false` 다.** 등록 전이거나 폭을 못 읽었으면 `mod_bits_n == 0` 이고,
                 //     그때 `value:false` 를 내면 **화면이 "닫혀 있다"를 사실로 그린다.** 모름과 거짓은 다르다.
+                // 🔴 ②-d — **그 모듈의 노드**에서 색인과 비트를 읽는다(주 노드 고정을 걷어낸다).
+                const Node* mn = node_by_devid(z.modules[m].first);
                 int mi = -1;
-                if (z.modules[m].first == park.devid)
-                    for (size_t k = 0; k < park.mods.size(); k++)
-                        if (park.mods[k].first == z.modules[m].second) { mi = (int)k; break; }
-                const bool known = (mi >= 0 && mi < park.mod_bits_n);
+                if (mn)
+                    for (size_t k = 0; k < mn->mods.size(); k++)
+                        if (mn->mods[k].first == z.modules[m].second) { mi = (int)k; break; }
+                const bool known = (mn && mi >= 0 && mi < mn->mod_bits_n);
                 o << "{\"devid\":" << jstr(z.modules[m].first)
                   << ",\"name\":" << jstr(z.modules[m].second)
                   << ",\"idx\":" << mi
-                  << ",\"value\":" << (known ? (park.mod_bits[mi] ? "true" : "false") : "null")
+                  << ",\"value\":" << (known ? (mn->mod_bits[mi] ? "true" : "false") : "null")
                   << ",\"known\":" << (known ? "true" : "false") << "}";
             }
             o << "]}";
@@ -3019,6 +3021,25 @@ struct Server {
     }
     // 자리에 붙은 **명령 가능한 모듈**의 인덱스. 없으면 -1.
     // 🔑 **자리 → 모듈 라우팅은 여기 한 곳에만 있다**(설계 §6.8) — 화면은 자리만 지목한다.
+    // ── 🔴 ②-d — **그 모듈을 등록한 노드를 찾는다** (REQ-0262 · 2026-08-19)
+    //   전에는 `state_json()` 이 **주 노드만** 보고 나머지는 `known:false` 로 냈다.
+    //   그건 **버그가 아니라 옳은 답**이었다 — 값 경로가 없었으니까(설계 §8.9).
+    //   ②-c 로 비트열이 노드별이 됐고 ②-b 로 보조 노드 등록이 들어오므로 **이제 채울 수 있다.**
+    const Node* node_by_devid(const std::string& dev) const {
+        // ⚠ **빈 `devid` 를 걸러내지 않는다.** 처음에 `if (dev.empty()) return 0;` 을 넣었다가
+        //   **자가검증 셋이 깨졌다**(E1·X1 값, 세션 종료 뒤 known). 이유:
+        //   승격 전 주차 노드는 `devid` 가 비어 있고 그 상태로 등록하면 지형에 `("", "E1")` 이 들어간다.
+        //   옛 코드는 `z.modules[m].first == park.devid` 로 **빈 값끼리 맞춰** 동작했다.
+        //   🔑 방어를 넣으면서 **거동을 같이 바꿨다** — 시험이 아니었으면 화면에서 값이 조용히 사라졌다.
+        //   보조 노드의 빈 `devid` 는 `adopt_as_aux()` 에서 이미 고쳤으므로 여기서 또 막을 필요가 없다.
+        if (dev == park.devid) return &park;
+        std::map<std::string, AuxNode>::const_iterator it = aux.find(dev);
+        return (it != aux.end()) ? &it->second : 0;
+    }
+
+    // ⚠ **이 함수는 주차 노드만 본다. 그대로 둔다** — 보조 노드는 **상행 전용**이라
+    //   하행 경로가 없다. 없는 노드에 조작 색인을 만들어 주면 **누를 수 있는 버튼**이 생기고
+    //   눌러도 아무 일이 안 난다. 🔑 §"조용히 성공으로 답하지 않는 것이 지금의 정답" 그대로다.
     int gate_index_of(const Zone& z) const {
         for (size_t m = 0; m < z.modules.size(); m++) {
             if (z.modules[m].first != park.devid) continue;      // 지금은 주차 노드만 명령을 받는다
