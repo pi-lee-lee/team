@@ -51,11 +51,11 @@ grep -n "WIFI_SSID\|WIFI_PASS\|SERVER_IP" 조별과제샘플/ardu/client.ino
 
 ```sh
 # ① 사본 동기화 (⚠ 빠뜨리면 옛 소스를 굽는다 — 실제로 어긋나 있던 적이 있다)
-# 🔴 2026-08-19 — **파일이 하나가 아니다.** 링크 계층이 EspLink_*.h 넷으로 갈렸고(REQ-0264)
-#    소스가 ardu/ 로 이사했다(REQ-0265). **스케치만 복사하면 낡은 헤더로 굽는다.**
+# 🔴 2026-08-19 — **굽기 입력은 `조별과제샘플/ardu/` 폴더 전체다.** 헤더가 여덟이고 더 늘 수 있다.
+#    **파일을 나열하면 늘 때마다 여기가 낡는다 — 하루에 세 번 깨졌다.** 폴더로 잡는다.
 rm -rf arduino/.burn/client; mkdir -p arduino/.burn/client
-cp 조별과제샘플/ardu/client.ino 조별과제샘플/ardu/EspLink_*.h arduino/.burn/client/
-for f in 조별과제샘플/ardu/client.ino 조별과제샘플/ardu/EspLink_*.h; do \
+cp 조별과제샘플/ardu/* arduino/.burn/client/
+for f in 조별과제샘플/ardu/*; do \
   cmp "$f" "arduino/.burn/client/$(basename "$f")" || echo "🔴 불일치: $f"; done   # 한 줄이라도 뜨면 멈춰라
 
 # ② 회귀 시험 — 굽기 전에 돌린다
@@ -66,7 +66,7 @@ ls arduino/.burn/                                                   # 안 쓴 �
 arduino-cli compile --fqbn arduino:avr:uno --output-dir arduino/.burn/slot9 arduino/.burn/client
 
 # ④ 커밋 — 🔴 굽기 전에. 칩 판본을 커밋 해시로 말할 수 있어야 한다
-git commit -m "..." -- 조별과제샘플/ardu/client.ino 조별과제샘플/ardu/EspLink_*.h   # ⚠ commit 에 경로를 준다(add 금지)
+git commit -m "..." -- 조별과제샘플/ardu/   # ⚠ commit 에 경로를 준다(add 금지) · 폴더로 잡는다
 
 # ⑤ 포트 확인 — 🔴 이름을 박지 마라. USB 재연결마다 바뀐다 (1101 과 21201 전례)
 arduino-cli board list
