@@ -146,7 +146,7 @@ static std::string tmaskField(const std::string& s) {
 
 // 모든 칸의 시뮬을 얼린다 — 시뮬이 제멋대로 바뀌면 "무엇이 전송을 촉발했는가"를 가릴 수 없다.
 static void freezeAllSims() {
-  for (uint8_t i = 0; i < SLOT_N; i++) pinSimLow(i);
+  for (uint8_t i = 0; i < SENSOR_N; i++) pinSimLow(i);
 }
 
 // 하트비트가 **막 나간 직후**로 정렬한다. lastStatusAt 은 전송할 때마다 리셋되므로,
@@ -634,7 +634,7 @@ int main() {
   {
     testArmed = false;
     slotOverrideClearAll();
-    for (uint8_t i = 0; i < SLOT_N; i++) slotSourceSet(i, 0);
+    for (uint8_t i = 0; i < SENSOR_N; i++) slotSourceSet(i, 0);
     resMask = 0;
     ok(spinUntilOnline(20000), "온라인 상태다 (사전 조건)");
 
@@ -657,13 +657,13 @@ int main() {
     deliverIPD("M,60,4B");                           // 명세 §2.5 의 그 줄
     spin(300);
     int flipped = 0;
-    for (uint8_t i = 0; i < SLOT_N; i++) if (((simOcc >> i) & 1) != ((b1 >> i) & 1)) flipped++;
+    for (uint8_t i = 0; i < SENSOR_N; i++) if (((simOcc >> i) & 1) != ((b1 >> i) & 1)) flipped++;
     printf("        M,60 → simOcc %04X → %04X, ACK=%s\n", b1, simOcc, lastAck().c_str());
     ok(flipped == 1, "★ 트리거 한 번에 정확히 한 칸만 바뀐다");
     ok(lastAck()[0] == 'A' && lastAck().find(",0,") != std::string::npos, "ACK result=0");
     // ACK 의 slot 이 실제로 바뀐 칸인가
     uint8_t changedIdx = 0xFF;
-    for (uint8_t i = 0; i < SLOT_N; i++) if (((simOcc >> i) & 1) != ((b1 >> i) & 1)) changedIdx = i;
+    for (uint8_t i = 0; i < SENSOR_N; i++) if (((simOcc >> i) & 1) != ((b1 >> i) & 1)) changedIdx = i;
     std::vector<std::string> af = splitLine(lastAck());
     ok(af.size() == 5 && af[2] == std::string(1, slotCol(changedIdx)) + std::string(1, slotRow(changedIdx)),
        "ACK 의 slot 이 실제로 바뀐 칸이다");
@@ -708,7 +708,7 @@ int main() {
     // (h) 실물 칸은 트리거의 영향을 받지 않는다
     deliverIPD("T,141,D,??,-," + xorCk("T,141,D,??,-,"));
     spin(200);
-    for (uint8_t i = 0; i < SLOT_N; i++) slotSourceSet(i, 1);   // 전 칸 실물
+    for (uint8_t i = 0; i < SENSOR_N; i++) slotSourceSet(i, 1);   // 전 칸 실물
     resMask = 0;
     uint16_t b4 = simOcc;
     deliverIPD("M,63," + xorCk("M,63,"));
@@ -716,7 +716,7 @@ int main() {
     printf("        전 칸 실물 상태에서 M → ACK=%s\n", lastAck().c_str());
     ok(simOcc == b4, "실물 칸은 트리거로 바뀌지 않는다");
     ok(lastAck().find(",??,5,") != std::string::npos, "★ 바꿀 시뮬 칸이 없으면 result=5, slot=??");
-    for (uint8_t i = 0; i < SLOT_N; i++) slotSourceSet(i, 0);   // 원복
+    for (uint8_t i = 0; i < SENSOR_N; i++) slotSourceSet(i, 0);   // 원복
   }
 
   printf("\n[25] ★ 연속 전송 실패가 오프라인 전환을 일으킨다 (REQ-0049 ①)\n");

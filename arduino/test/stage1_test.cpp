@@ -1092,9 +1092,9 @@ int main() {
       ok(strcmp(o, "18B") == 0,
                             "★★ 전선에서는 슬롯 i = 비트 (n-1-i) (0x18B) — 반대다"); }
 
-    // ⚠ 축 3 의 기대: **거동 변화 0**. moduleCount 가 지금은 SLOT_N 과 같아야 한다
-    // ✏️ 2026-08-19 가상 모듈이 들어와 moduleCount() > SLOT_N 이 됐다
-    ok(moduleCount() >= SLOT_N,
+    // ⚠ 축 3 의 기대: **거동 변화 0**. moduleCount 가 지금은 SENSOR_N 과 같아야 한다
+    // ✏️ 2026-08-19 가상 모듈이 들어와 moduleCount() > SENSOR_N 이 됐다
+    ok(moduleCount() >= SENSOR_N,
                             "★★ 표가 실물 자리를 전부 앞쪽에 포함한다");
   }
 
@@ -1301,8 +1301,8 @@ int main() {
   //   🔑 **기대가 "아무 일도 안 일어난다"인 축은 바이트로 못 박지 않으면 검증이 없다.**
   printf("\n[34] 모듈 표 도입 — 거동 변화 0 (바이트 대조)\n");
   {
-    // ✏️ 2026-08-19 — 가상 모듈이 들어와 `moduleCount() > SLOT_N` 이 됐다
-    ok(moduleCount() >= SLOT_N,
+    // ✏️ 2026-08-19 — 가상 모듈이 들어와 `moduleCount() > SENSOR_N` 이 됐다
+    ok(moduleCount() >= SENSOR_N,
                             "★★ 표가 실물 자리를 전부 포함한다");
     ok(MODULE_N == 7,       "★ 표 길이가 7 이다 (센서 A1·B1 + 샘플 LD·LC·DR + 가상 E1·X1)");
 
@@ -1314,10 +1314,10 @@ int main() {
     //   (겸해서 옛 계산식과의 동일성도 본다 — 표 도입이 무해했다는 증거)
     // ✏️ 2026-08-19 — **샘플 구성(자리 A1 · 센서 둘)** 으로 다시 박았다.
     //   옛 값은 10칸 장치(`A1~A5,B1~B5`)였다. **주석 처리된 A2~B5 를 풀면 그 값으로 돌아온다.**
-    static const char* EXPECT[SLOT_N] = {"A1","B1"};
+    static const char* EXPECT[SENSOR_N] = {"A1","B1"};
     // ⚠ **실물 열 개만 본다** — 가상 모듈(E1·X1)은 아래에서 따로 검사한다
     bool allName = true;
-    for (uint8_t i = 0; i < SLOT_N; i++) {
+    for (uint8_t i = 0; i < SENSOR_N; i++) {
       char nm[4]; moduleNameOf(i, nm);
       if (strcmp(nm, EXPECT[i]) != 0) { allName = false;
         printf("      🔴 i=%u: 표 '%s' 대 기대 '%s'\n", i, nm, EXPECT[i]); }
@@ -1325,10 +1325,10 @@ int main() {
     ok(allName,             "★★ 두 이름이 옛 계산식과 같다 (A1·B1 — 서버의 자리 id 와 동일해야 한다)");
 
     // ② 핀이 SLOT_PIN 과 같은가 — **표와 핀 표가 갈리면 엉뚱한 칸을 읽는다**
-    // ⚠ **실물 범위(SLOT_N)까지만 돈다** — 가상 모듈은 핀이 없고
-    //   `SLOT_PIN[]` 은 크기가 `SLOT_N` 이라 그 밖은 배열 밖 읽기다.
+    // ⚠ **실물 범위(SENSOR_N)까지만 돈다** — 가상 모듈은 핀이 없고
+    //   `SLOT_PIN[]` 은 크기가 `SENSOR_N` 이라 그 밖은 배열 밖 읽기다.
     bool allPin = true;
-    for (uint8_t i = 0; i < SLOT_N; i++)
+    for (uint8_t i = 0; i < SENSOR_N; i++)
       if (pgm_read_byte(&MODULE_TABLE[i].pin) != slotPin(i)) { allPin = false;
         printf("      🔴 i=%u: 표 핀 %u 대 SLOT_PIN %u\n", i,
                pgm_read_byte(&MODULE_TABLE[i].pin), slotPin(i)); }
@@ -1609,7 +1609,7 @@ int main() {
   //     §"조건을 적었으면 그것을 보는 감시를 **같은 자리에** 만들어라".
   {
     printf("\n[37] 시뮬 점유의 지형 정렬 (A_i · B_i 짝)\n");
-    const uint8_t H = SLOT_N / 2;
+    const uint8_t H = SENSOR_N / 2;
     auto paired = [&](uint16_t m) {
       for (uint8_t i = 0; i < H; i++)
         if (((m >> i) & 1) != ((m >> (i + H)) & 1)) return false;

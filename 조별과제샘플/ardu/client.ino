@@ -124,7 +124,7 @@ static const ModuleDef MODULE_TABLE[] PROGMEM = {
   {"A1", KIND_PARK_SENSOR, 2},    // 자리 A1 의 첫째 센서 — 2번 핀
   {"B1", KIND_PARK_SENSOR, 9},    // 자리 A1 의 둘째 센서 — 9번 핀
 
-  // 🔓 **늘리려면 주석을 풀고 `SLOT_N`·`SLOT_PIN[]` 도 같이 늘려라**(셋이 어긋나면 컴파일이 막는다)
+  // 🔓 **늘리려면 주석을 풀고 `SENSOR_N`·`SLOT_PIN[]` 도 같이 늘려라**(셋이 어긋나면 컴파일이 막는다)
   // {"A2", KIND_PARK_SENSOR,  3}, {"B2", KIND_PARK_SENSOR, 10},
   // {"A3", KIND_PARK_SENSOR,  4}, {"B3", KIND_PARK_SENSOR, 11},
   // {"A4", KIND_PARK_SENSOR,  5}, {"B4", KIND_PARK_SENSOR, 12},
@@ -400,13 +400,13 @@ void setup() {
 
 #if DEBUG
   // 🔴 **셋이 서로 다른 값이다. 하나만 찍으면 반드시 오독된다.**
-  //     `SLOT_ROWS`  = **자리 수**   — 서버 지형의 `spot` 수와 비교할 값
-  //     `SLOT_N`     = **센서 수**   — 자리마다 둘이므로 자리 수의 2배다
-  //     `moduleCount()` = **모듈 수** — 센서 + 액추에이터. `D,*,<drain>,<n>` 의 `n` 이 이것이다
-  //   ⚠ 옛 판은 `SLOT_N` 하나만 `slots` 로 찍었다 — **센서 수를 자리 수로 읽게 만들었다.**
+  //     `SPOT_N`        = **자리 수**  — 서버 조립 표의 `spot` 수와 비교할 값
+  //     `SENSOR_N`      = **센서 수**  — 자리마다 둘이므로 자리 수의 2배다
+  //     `moduleCount()` = **모듈 수**  — 센서 + 액추에이터. `D,*,<drain>,<n>` 의 `n` 이 이것이다
+  //   ⚠ 옛 판은 센서 수 하나만 `slots` 라고 찍었다 — **센서 수를 자리 수로 읽게 만들었다.**
   Serial.print(F("\n[PARKING NODE] proto v1 / "));
-  Serial.print(SLOT_ROWS);         Serial.print(F(" spots / "));
-  Serial.print(SLOT_N);            Serial.print(F(" sensors / "));
+  Serial.print(SPOT_N);         Serial.print(F(" spots / "));
+  Serial.print(SENSOR_N);            Serial.print(F(" sensors / "));
   Serial.print(moduleCount());     Serial.println(F(" modules / dev=" DEVICE_ID));
 
   // ── 부팅 원인 — **추측을 사실로 바꾸는 한 줄**. 왜 재부팅했는지는 여기서만 알 수 있다 ──

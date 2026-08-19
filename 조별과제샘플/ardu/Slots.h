@@ -12,22 +12,26 @@
 // 자리 (§1)
 // ─────────────────────────────────────────────────────────────────────────
 // 🔴 **센서 칸 수**(자리 수가 아니다). `A_i` 와 `B_i` 는 **같은 자리의 두 센서**다 —
-//   그래서 자리 수 = `SLOT_N / 2` 다. 표(`MODULE_TABLE`)의 센서 줄 수와 **같아야 한다.**
+//   그래서 자리 수 = `SENSOR_N / 2` 다. 표(`MODULE_TABLE`)의 센서 줄 수와 **같아야 한다.**
 //   ⚠ 늘리려면 `SLOT_PIN[]` 과 `MODULE_TABLE` 을 **같이** 늘려라. 셋이 어긋나면 컴파일이 막는다.
-static const uint8_t SLOT_N    = 2;                 // 지금: 자리 하나(A1 + B1)
-static const uint8_t SLOT_ROWS = SLOT_N / 2;        // 자리 수 = 행 수
-static_assert(SLOT_N % 2 == 0, "SLOT_N 은 짝수여야 한다 — 자리마다 센서가 둘이다");
+// 🔴 **셋 다 다른 값이다. 이름이 그것을 말하게 해 뒀다:**
+//     `SENSOR_N`  = 센서 칸 수   · `SPOT_N` = 자리 수   · `moduleCount()` = 모듈 수
+//   ⚠ 그리고 `SLOT_MS`·`slotNo` 의 "slot" 은 **또 다른 뜻**이다 — 1.2초짜리 **반송파 슬롯**이다.
+//     한 낱말이 세 가지를 가리키고 있었다. 세는 값 둘만 이름을 갈랐다.
+static const uint8_t SENSOR_N = 2;                  // 🔓 센서 칸 수 (지금: A1 + B1)
+static const uint8_t SPOT_N   = SENSOR_N / 2;       // 자리 수 — 자리마다 센서가 둘이다
+static_assert(SENSOR_N % 2 == 0, "SENSOR_N 은 짝수여야 한다 — 자리마다 센서가 둘이다");
 
-// ✏️ 옛 판은 `5`(행 수)를 **세 곳에 박아** 뒀다. `SLOT_ROWS` 로 묶었다 —
+// ✏️ 옛 판은 `5`(행 수)를 **세 곳에 박아** 뒀다. `SPOT_N` 로 묶었다 —
 //   안 그러면 칸 수를 바꿀 때 **이름 규칙만 옛 값으로 남아 조용히 어긋난다.**
-static inline char slotCol(uint8_t i) { return (i < SLOT_ROWS) ? 'A' : 'B'; }
-static inline char slotRow(uint8_t i) { return (char)('1' + (i % SLOT_ROWS)); }
+static inline char slotCol(uint8_t i) { return (i < SPOT_N) ? 'A' : 'B'; }
+static inline char slotRow(uint8_t i) { return (char)('1' + (i % SPOT_N)); }
 
 // 자리 문자 2개 → 인덱스. 없으면 0xFF
 static uint8_t slotIndexOf(char c0, char c1) {
-  if (c1 < '1' || c1 >= (char)('1' + SLOT_ROWS)) return 0xFF;
+  if (c1 < '1' || c1 >= (char)('1' + SPOT_N)) return 0xFF;
   if (c0 == 'A') return (uint8_t)(c1 - '1');
-  if (c0 == 'B') return (uint8_t)(c1 - '1' + SLOT_ROWS);
+  if (c0 == 'B') return (uint8_t)(c1 - '1' + SPOT_N);
   return 0xFF;
 }
 
@@ -54,18 +58,18 @@ static uint8_t slotIndexOf(char c0, char c1) {
 //       그 세 칸을 다른 핀으로 옮겨야 한다. 옮길 때는 아래 표 한 줄씩만 고치면 된다.
 // ─────────────────────────────────────────────────────────────────────────
 #define PIN_NONE 0xFF              // 핀 없음(가상 모듈)
-static const uint8_t SLOT_PIN[SLOT_N] PROGMEM = {
+static const uint8_t SLOT_PIN[SENSOR_N] PROGMEM = {
   2,      // 인덱스 0 = A1 (자리 1 의 첫째 센서)
   9       // 인덱스 1 = B1 (자리 1 의 둘째 센서)
-  // 🔓 늘리려면 여기에 핀을 더하고 `SLOT_N` 과 `MODULE_TABLE` 도 같이 늘려라
+  // 🔓 늘리려면 여기에 핀을 더하고 `SENSOR_N` 과 `MODULE_TABLE` 도 같이 늘려라
   //    옛 10칸 배선 : A1~A5 = 2,3,4,5,6 · B1~B5 = 9,10,11,12,A0
 };
-// 🔴 **범위 가드** (2026-08-19) — `SLOT_PIN[]` 은 크기가 `SLOT_N`(실물 자리) 인데
+// 🔴 **범위 가드** (2026-08-19) — `SLOT_PIN[]` 은 크기가 `SENSOR_N`(실물 자리) 인데
 //   `moduleCount()` 는 가상 모듈까지 세므로 **그 값으로 루프를 돌면 배열 밖을 읽는다.**
-//   ⚠ 지금 모든 호출부가 `SLOT_N` 까지만 돌지만 **방어가 없으면 다음 사람이 밟는다** —
+//   ⚠ 지금 모든 호출부가 `SENSOR_N` 까지만 돌지만 **방어가 없으면 다음 사람이 밟는다** —
 //     PROGMEM 범위 밖 읽기는 **오류 없이 쓰레기를 돌려준다.**
 static inline uint8_t slotPin(uint8_t i) {
-  if (i >= SLOT_N) return PIN_NONE;          // 가상 모듈에는 핀이 없다
+  if (i >= SENSOR_N) return PIN_NONE;          // 가상 모듈에는 핀이 없다
   return pgm_read_byte(&SLOT_PIN[i]);
 }
 
@@ -80,7 +84,7 @@ static inline uint8_t slotPin(uint8_t i) {
 #ifndef SLOT_SRC_DEFAULT
 #define SLOT_SRC_DEFAULT 0x0000      // 기본: 센서가 아직 하나도 없으므로 10칸 전부 시뮬
 #endif
-static inline uint8_t simPair(uint8_t i) { return (uint8_t)((i + SLOT_N / 2) % SLOT_N); }
+static inline uint8_t simPair(uint8_t i) { return (uint8_t)((i + SENSOR_N / 2) % SENSOR_N); }
 
 // ═════════════════════════════════════════════════════════════════════════
 // ═════════════════════════════════════════════════════════════════════════
@@ -107,7 +111,7 @@ typedef bool (*SensorFn)(uint8_t pin);
 static SensorFn sensorFnOf(uint8_t idx);
 
 // 🔴 `ParkingNode` — **자리의 상태를 한 캡슐로**
-//   위의 것들은 **일부러 밖에 뒀다**: `SLOT_N`·`slotCol/Row/IndexOf`·`SLOT_PIN`·`slotPin`·`simPair` 는
+//   위의 것들은 **일부러 밖에 뒀다**: `SENSOR_N`·`slotCol/Row/IndexOf`·`SLOT_PIN`·`slotPin`·`simPair` 는
 //   **상태를 안 만지는 순수·표 함수**다. 클래스에 넣으면 `this` 를 얻는 대신 아무것도 안 준다.
 //   ★ **클래스는 상태를 가진 것만 가져간다.**
 //   ⚠ `SLOT_PIN` 은 `PROGMEM` 이라 멤버로 두면 AVR 에서 다루기 나빠진다 — 그것도 밖에 두는 이유다.
@@ -123,13 +127,13 @@ class ParkingNode {
   //   ⚠ `srcReal` 만 0 이 아닐 수 있다(`SLOT_SRC_DEFAULT` 를 바꾸면). 그래서 여기서 넣는다.
   void begin() {
     srcReal = SLOT_SRC_DEFAULT;
-    for (uint8_t i = 0; i < SLOT_N; i++) applySlotPinMode(i);
+    for (uint8_t i = 0; i < SENSOR_N; i++) applySlotPinMode(i);
   }
 
   // 센서를 한 번 훑어 점유 비트를 갱신한다 (옛 `sensorTick`)
   void readSensors() {
     uint16_t m = 0;
-    for (uint8_t i = 0; i < SLOT_N; i++) if (readSlotSensor(i)) m |= (uint16_t)1 << i;
+    for (uint8_t i = 0; i < SENSOR_N; i++) if (readSlotSensor(i)) m |= (uint16_t)1 << i;
     occMask = m;
   }
 
@@ -193,14 +197,14 @@ class ParkingNode {
   bool testArmed;
 
   void slotOverrideSet(uint8_t i, uint8_t value) {
-    if (i >= SLOT_N) return;
+    if (i >= SENSOR_N) return;
     uint16_t bit = (uint16_t)1 << i;
     ovrActive |= bit;
     if (value) ovrValue |= bit; else ovrValue &= (uint16_t)~bit;
   }
 
   void slotOverrideClear(uint8_t i) {
-    if (i >= SLOT_N) return;
+    if (i >= SENSOR_N) return;
     uint16_t bit = (uint16_t)1 << i;
     ovrActive &= (uint16_t)~bit;
     ovrValue  &= (uint16_t)~bit;
@@ -213,7 +217,7 @@ class ParkingNode {
 
   // 칸별 소스 전환. REAL 로 바꿀 때 입력 모드까지 같이 잡는다.
   void slotSourceSet(uint8_t i, uint8_t useReal) {
-    if (i >= SLOT_N) return;
+    if (i >= SENSOR_N) return;
     uint16_t bit = (uint16_t)1 << i;
     if (useReal) { srcReal |= bit; applySlotPinMode(i); }
     else         { srcReal &= (uint16_t)~bit; }
@@ -261,7 +265,7 @@ class ParkingNode {
   //     호출부는 "무엇이 바뀌었나"를 `occMask` 전체로 다시 읽으므로 문제가 없다.
   uint8_t simStep(void) {
     // 1순위: 예약됐지만 비어 있는 시뮬 칸을 채운다
-    for (uint8_t i = 0; i < SLOT_N; i++) {
+    for (uint8_t i = 0; i < SENSOR_N; i++) {
       uint16_t bit = (uint16_t)1 << i;
       if (!simCandidate(i)) continue;
       if ((resMask & bit) && !(simOcc & bit)) {
@@ -273,10 +277,10 @@ class ParkingNode {
     }
     // 2순위: 시뮬 칸 중 무작위 하나를 뒤집는다
     uint8_t n = 0;
-    for (uint8_t i = 0; i < SLOT_N; i++) if (simCandidate(i)) n++;
+    for (uint8_t i = 0; i < SENSOR_N; i++) if (simCandidate(i)) n++;
     if (n == 0) return 0xFF;
     uint8_t pick = (uint8_t)random(0, n);
-    for (uint8_t i = 0; i < SLOT_N; i++) {
+    for (uint8_t i = 0; i < SENSOR_N; i++) {
       if (!simCandidate(i)) continue;
       if (pick-- == 0) {
         simOcc ^= (uint16_t)1 << i;

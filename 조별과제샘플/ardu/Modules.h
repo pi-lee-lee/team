@@ -49,13 +49,13 @@
 static_assert(MODULE_N <= 16,
               "마스크가 uint16_t 다 — 17번째 모듈은 조용히 사라진다. 마스크 폭을 먼저 늘려라");
 // ⚠ 유동화 이행 중에는 둘이 같아야 한다. 달라지면 핀 표·초기값이 어긋난 것이다.
-// ✏️ 2026-08-19 — `MODULE_N == SLOT_N` 이었다. **가상 모듈이 들어와 깨졌고, 그게 가드가 작동한 것이다.**
-//   지키던 것: `SLOT_PIN[]`·`SLOT_SRC_DEFAULT` 가 `SLOT_N` 크기라 표가 그보다 크면 배열 밖을 읽는다.
-//   ✅ 해결: **실물은 앞 `SLOT_N` 개로 고정**하고 `slotPin()` 에 범위 가드를 넣었다.
+// ✏️ 2026-08-19 — `MODULE_N == SENSOR_N` 이었다. **가상 모듈이 들어와 깨졌고, 그게 가드가 작동한 것이다.**
+//   지키던 것: `SLOT_PIN[]`·`SLOT_SRC_DEFAULT` 가 `SENSOR_N` 크기라 표가 그보다 크면 배열 밖을 읽는다.
+//   ✅ 해결: **실물은 앞 `SENSOR_N` 개로 고정**하고 `slotPin()` 에 범위 가드를 넣었다.
 //   🔴 **가상 모듈은 반드시 표의 뒤쪽에만** 온다 — 앞에 끼면 실물 인덱스가 밀려
 //     `SLOT_PIN`·`node.occMask` 비트·서버 자리 결속이 **한꺼번에 어긋난다.**
-static_assert(MODULE_N >= SLOT_N,
-              "표는 실물 자리 SLOT_N 개를 **앞쪽에** 전부 포함해야 한다");
+static_assert(MODULE_N >= SENSOR_N,
+              "표는 실물 자리 SENSOR_N 개를 **앞쪽에** 전부 포함해야 한다");
 
 // 🔴 **등록 배치가 한 슬롯에 들어가야 한다.** `buildRegistration` 은 넘치면 **통째로 0 을 돌려주고**,
 //   그러면 **등록이 영영 안 된다**(잘린 등록을 내보내지 않는 것이 옳지만, 대안이 없으면 굶는다).
@@ -94,7 +94,7 @@ static uint8_t moduleCount(void) { return MODULE_N; }
 class VirtualGates {
  public:
   bool     manual;      // 첫 명령을 받았나 (받으면 자율 정지)
-  uint16_t state;       // 비트 i = MODULE_TABLE 의 SLOT_N+i 번째가 열렸나
+  uint16_t state;       // 비트 i = MODULE_TABLE 의 SENSOR_N+i 번째가 열렸나
 
   // 자율 패턴 — `slotNo` 는 부팅부터 세므로 리셋하면 위상이 처음으로 돌아간다(재현 가능)
   bool autoOpen(uint8_t k, uint32_t slotNo) const {
@@ -331,7 +331,7 @@ static uint8_t buildStatus(char* buf, uint8_t cap) {
   uint16_t occOut = node.occMask;
 #if VIRTUAL_MODULES
   // 🔴 가상 차단봉은 **표의 맨 끝 두 칸**이다. 그 자리를 `MODULE_N` 에서 거꾸로 센다.
-  //   ⚠ **"`SLOT_N` 뒤는 전부 차단봉"으로 세지 마라.** 센서와 차단봉 사이에 다른 모듈
+  //   ⚠ **"`SENSOR_N` 뒤는 전부 차단봉"으로 세지 마라.** 센서와 차단봉 사이에 다른 모듈
   //     (액추에이터 등)이 끼면 그 모듈의 비트에 차단봉 상태가 얹혀 **없는 조작이 보고된다.**
   for (uint8_t k = 0; k < GATE_N; k++)
     if (gates.isOpen(k, slotNo)) occOut |= (uint16_t)(1u << (GATE_BASE + k));
