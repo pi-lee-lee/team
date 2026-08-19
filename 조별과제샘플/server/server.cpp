@@ -2367,7 +2367,7 @@ struct Server {
         std::ostringstream o;
         o << "{\"type\":\"map\",\"srv_id\":" << jstr(srv_id) << ",\"epoch\":" << lot.epoch()
           << ",\"grid\":{\"rows\":" << grid_rows << ",\"cols\":" << grid_cols << "}"
-          << ",\"lot.zones()\":[";
+          << ",\"zones\":[";
         for (size_t i = 0; i < lot.zones().size(); i++) {
             const Zone& z = lot.zones()[i];
             if (i) o << ",";
@@ -2476,7 +2476,7 @@ struct Server {
         std::ostringstream o;
         int split_now = 0;                     // 이번 판의 갈린 자리 수 — 끝에서 계기에 옮긴다
         o << "{\"type\":\"state\",\"srv_id\":" << jstr(srv_id)
-          << ",\"epoch\":" << lot.epoch() << ",\"ts_ms\":" << epoch_ms() << ",\"lot.zones()\":[";
+          << ",\"epoch\":" << lot.epoch() << ",\"ts_ms\":" << epoch_ms() << ",\"zones\":[";
         for (size_t i = 0; i < lot.zones().size(); i++) {
             const Zone& z = lot.zones()[i];
             if (i) o << ",";

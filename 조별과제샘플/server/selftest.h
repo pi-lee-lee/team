@@ -876,15 +876,21 @@ static int selftest() {
             }
 
             // ㉗ 🔴 **기동 경로가 지형을 만드는가** — 시험이 자기 지형을 만들면 이걸 못 잡는다
+            //
+            //   🔴🔴 **이 시험은 REQ-0276 사고를 못 잡았다. 못 잡은 게 아니라 *같이 틀렸다*.**
+            //     정규식 치환이 **코드의 키와 이 시험의 기대값을 동시에** `"lot.zones()"` 로 바꿨다.
+            //     → 양쪽이 같이 틀려서 **114개 전부 통과**했고 실기 화면만 죽었다.
+            //   🔑 **기대값을 코드와 같은 도구로 만들면 이 부류가 구조적으로 못 잡힌다.**
+            //     계약의 이름은 **손으로 박아라**(㉟ 가 그 방식이다).
             //    실제로 첫 배포에서 `lot.zones()` 가 빈 채 나갔고 **시험은 전부 통과했다.**
             {
                 Server t;                                   // 🔑 **아무것도 안 부른 상태**
                 bool empty0 = t.lot.zones().empty() && t.lot.epoch() == 0;
                 std::string j = t.map_json();
-                bool ok31 = (empty0 && j.find("\"lot.zones()\":[]") != std::string::npos);
+                bool ok31 = (empty0 && j.find("\"zones\":[]") != std::string::npos);
                 std::cout << (ok31 ? "  ✓ " : "  ✗ ") << "새 Server 는 지형이 비어 있다 — "
                           << "**기동 경로가 build_default_zones() 를 불러야 한다**"
-                          << " (map 의 lot.zones()=" << (j.find("\"lot.zones()\":[]") != std::string::npos ? "빈 배열" : "채워짐")
+                          << " (map 의 zones=" << (j.find("\"zones\":[]") != std::string::npos ? "빈 배열" : "채워짐")
                           << ")\n";
                 if (!ok31) bad++;
             }
@@ -1277,6 +1283,41 @@ static int selftest() {
                     t.ard = BAD_SOCK;
                     closesock(os_[0]); closesock(os_[1]);
                 }
+            }
+
+            // ㉟ 🔴🔴 **전선 봉투의 키 이름을 단언한다** (REQ-0276 · 2026-08-19)
+            //
+            //   내가 `zones` → `lot.zones()` 정규식 치환을 하면서 **문자열 리터럴 안까지 바꿨다.**
+            //   `map`·`state` 가 `"lot.zones()"` 라는 키를 내보냈고 **화면 격자가 통째로 안 보였다.**
+            //   🔴 **자가검증 114개가 전부 통과했다** — 서버가 자기 JSON 을 자기가 파싱하지 않기 때문이다.
+            //   ⚠ 잡은 것은 web 이 **전선 프레임 원문을 뜬 것**이었다. **받는 쪽만 볼 수 있었다.**
+            //   🔑 그러면 **받는 쪽이 없어도 볼 수 있게** 만든다 — 봉투의 키를 여기서 단언한다.
+            //     이건 "JSON 이 맞나"가 아니라 **"계약이 약속한 이름이 그대로 나가나"** 를 묻는다.
+            {
+                Server t; t.build_default_zones(); t.init_srv_id();
+                const std::string m = t.map_json();
+                const std::string st = t.state_json();
+                struct K { const char* key; };
+                static const char* mapKeys[]   = { "\"type\":\"map\"", "\"epoch\":", "\"grid\":", "\"zones\":[" };
+                static const char* stateKeys[] = { "\"type\":\"state\"", "\"epoch\":", "\"ts_ms\":", "\"zones\":[" };
+                bool ok35 = true; std::string missing;
+                for (size_t i = 0; i < sizeof(mapKeys)/sizeof(mapKeys[0]); i++)
+                    if (m.find(mapKeys[i]) == std::string::npos) { ok35 = false; missing += std::string(" map:") + mapKeys[i]; }
+                for (size_t i = 0; i < sizeof(stateKeys)/sizeof(stateKeys[0]); i++)
+                    if (st.find(stateKeys[i]) == std::string::npos) { ok35 = false; missing += std::string(" state:") + stateKeys[i]; }
+                // 🔴 그리고 **키에 `.`·`(` 가 들어간 것이 하나라도 있으면 실패다** —
+                //   이번 사고의 서명이 정확히 그것이었다(`"lot.zones()"`).
+                for (size_t q = m.find("\":"); q != std::string::npos; q = m.find("\":", q + 1)) {
+                    size_t b = m.rfind('"', q - 1);
+                    if (b == std::string::npos) continue;
+                    std::string k = m.substr(b + 1, q - b - 1);
+                    if (k.find('.') != std::string::npos || k.find('(') != std::string::npos) {
+                        ok35 = false; missing += " 이상한키:" + k; break;
+                    }
+                }
+                std::cout << (ok35 ? "  ✓ " : "  ✗ ") << "전선 봉투의 키 이름이 계약대로다"
+                          << (ok35 ? "" : (" — 빠지거나 이상함:" + missing)) << "\n";
+                if (!ok35) bad++;
             }
 
             // ㉞ 🔴 **`known:false` 의 사유가 갈린다** (명세 §8.10)
