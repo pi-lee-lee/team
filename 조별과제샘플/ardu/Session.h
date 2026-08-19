@@ -14,20 +14,18 @@
 // 주기 처리
 #include "EspLink_ladder.h"   // ← EspLink 링크 계층 (REQ-0264). **위치를 옮기지 마라**
 
-static void sensorTick(void) {
-  uint16_t m = 0;
-  for (uint8_t i = 0; i < SLOT_N; i++) if (readSlotSensor(i)) m |= (uint16_t)1 << i;
-  occMask = m;
-}
+// ✏️ `sensorTick()` 은 **`ParkingNode::readSensors()` 로 옮겼다** (REQ-0275 B단계).
+//   자리 상태를 훑어 자리 상태를 쓰는 일이라 **자리의 주인이 하는 것이 맞다.**
+//   `loop()` 은 이제 `node.readSensors()` 를 부른다 — 흐름이 호출부에 보인다.
 
 static void statusTick(unsigned long now) {
   // §12A.4 무장 여부의 진실은 tmask 다. 그래서 tmask 변화도 occupied/reserved 와 **같은 경로**로
   // 즉시 전송을 트리거해야 한다. 안 그러면 무장 직후 최대 1초 동안 화면이 무장 사실을 모르고,
   // 그 사이에 주입이 들어오면 **주입값이 경고 없이 그려지는 프레임**이 생긴다(§12A.6 위반).
   // 비용은 사실상 0 이다 — 무장·해제·주입은 사람이 누르는 드문 사건이라 전송 횟수가 늘지 않는다.
-  uint16_t tmaskNow = testArmed ? ovrActive : TMASK_ABSENT;
+  uint16_t tmaskNow = node.testArmed ? node.ovrActive : TMASK_ABSENT;
 
-  bool changed = (occMask != sentOcc) || (resMask != sentRes) || (tmaskNow != sentTmask);
+  bool changed = (node.occMask != sentOcc) || (node.resMask != sentRes) || (tmaskNow != sentTmask);
   if (changed && !changePending) { changePending = true; changeAt = now; }
   if (!changed) changePending = false;
 
@@ -120,7 +118,7 @@ static void statusTick(unsigned long now) {
   //     옛 구조에서는 여기서 이벤트가 추가 전송을 만들어 양의 되먹임 고리가 열렸다.
   if (!netOnline || !heartbeatDue) return;
 
-  uint16_t occSnap = occMask, resSnap = resMask, tmaskSnap = tmaskNow;
+  uint16_t occSnap = node.occMask, resSnap = node.resMask, tmaskSnap = tmaskNow;
   uint8_t  batchAcks = 0;
   uint16_t batchBytes = 0;
   const uint32_t sendAt = (uint32_t)(millis() - slotStart);   // 슬롯 시작 기준 실제 송신 시각

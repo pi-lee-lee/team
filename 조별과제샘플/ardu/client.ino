@@ -61,20 +61,21 @@ void setup() {
   // (A0 은 자리 B5 의 센서 입력으로 배정했으므로 쓰면 안 된다.)
   randomSeed((unsigned long)analogRead(A1) ^ micros());
 
-  // 실물로 지정된 칸만 입력 모드를 잡는다. 시뮬 칸의 핀은 건드리지 않는다.
-  for (uint8_t i = 0; i < SLOT_N; i++) applySlotPinMode(i);
+  // 자리 초기화 — 실물로 지정된 칸의 입력 모드까지 **`node` 가 스스로 잡는다**.
+  //   ⚠ 생성자가 아니라 여기다: 전역 생성자는 `main()` 전에 돌아 `pinMode` 를 부를 수 없다.
+  node.begin();
 
   // §12A.3 재부팅하면 테스트 오버라이드는 사라진다 — 서버가 재하달하지 않는다(예약과 정반대).
   // 전역이라 어차피 0 이지만, "여기서 버린다"는 것을 코드로 남겨 둔다.
-  testArmed = false;
-  slotOverrideClearAll();
+  node.testArmed = false;
+  node.slotOverrideClearAll();
 
   // 시작 시 몇 칸은 차 있는 편이 주차장답다: A2, A3, B4
   // 이 값은 **트리거를 받기 전까지 그대로 유지된다**(§12B.1 — 자율 전진 없음).
   // 🔴 REQ-0270 — **짝 단위로 채운다.** 옛 값 `A2·A3·B4` 는 지형과 어긋났다:
   //   `A2` 의 짝 `B2` 가 비고 `B4` 의 짝 `A4` 가 비어 **한 자리에서 두 센서가 모순**이었다.
   //   지금은 **자리 2·3·4 를 통째로** 채운다(A2·B2 · A3·B3 · A4·B4). 자리 1·5 는 빈다.
-  simOcc = (uint16_t)((1U << 1) | (1U << 6)     // 자리 2 = A2 + B2
+  node.simOcc = (uint16_t)((1U << 1) | (1U << 6)     // 자리 2 = A2 + B2
                     | (1U << 2) | (1U << 7)     // 자리 3 = A3 + B3
                     | (1U << 3) | (1U << 8));   // 자리 4 = A4 + B4
 
@@ -169,7 +170,7 @@ void loop() {
   drainPending();
   // ⚠ 2026-08-17 — `ackqDrain()` 을 뺐다. **보류 ACK 는 이제 슬롯 배치에 실려 나간다**
   //   (`sendSlotBatch`). 여기서 따로 내보내면 슬롯당 1거래 규칙이 깨지고 수신 창을 침범한다.
-  sensorTick();
+  node.readSensors();          // 자리 상태를 훑는다 (옛 sensorTick)
   statusTick(now);
   cntTick(now);                     // ★ DEBUG 밖 — 운영 빌드에서도 관측이 남는다
 #if DEBUG

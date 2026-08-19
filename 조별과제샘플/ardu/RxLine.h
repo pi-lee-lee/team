@@ -192,7 +192,7 @@ static void drainSerial(void) {
 // 그래서 백오프 시간을 **그대로 리셋 유지시간으로 쓴다.** 쉬는 것과 리셋이 한 동작이 된다.
 // static 이 아닌 이유: ESP_RST_WIRED=0 이면 호출자가 전부 사라져 -Wunused-function 이 뜬다.
 // 전역이면 링커의 --gc-sections 가 최종 이미지에서 빼 주므로 플래시도 먹지 않는다
-// (같은 이유로 slotOverrideSet() 등도 전역이다 — 위 "수동 오버라이드" 주석 참조).
+// (같은 이유로 node.slotOverrideSet() 등도 전역이다 — 위 "수동 오버라이드" 주석 참조).
 void espRstAssert(uint16_t holdMs) {
 #if ESP_RST_WIRED
   // 🔴 **조치가 실제로 실행된 횟수.** `[LADDER]` 문구는 DEBUG 안이라 DEBUG=0 이면 사라진다.

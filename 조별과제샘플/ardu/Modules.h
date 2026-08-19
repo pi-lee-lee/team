@@ -12,7 +12,7 @@
 // 🔴 **모듈 표 — 자리 유동화의 단일 원천** (2026-08-18 · 축 3)
 //
 // 왜: 이름·종류·핀이 **세 곳에 흩어져** 있었다. 모듈을 하나 더 달려면 세 곳을 맞춰 고쳐야 하고
-//     **하나만 어긋나도 길이·체크섬은 통과하고 자리만 틀린다** — 오늘 `occMask` 에서 잡은 그 부류다.
+//     **하나만 어긋나도 길이·체크섬은 통과하고 자리만 틀린다** — 오늘 `node.occMask` 에서 잡은 그 부류다.
 //     표로 모으면 **한 줄만 고친다.**
 //
 // ⚠ **이 단계의 기대는 "거동 변화 0"** 이다(PLAN-axes 축 3). 값이 하나라도 달라지면 그것이 결함이다.
@@ -64,7 +64,7 @@ static const ModuleDef MODULE_TABLE[] PROGMEM = {
 };
 static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_TABLE[0]));
 
-// 🔴 **상한을 컴파일 시점에 박는다.** `occMask`·`resMask`·`ovrActive` 가 전부 `uint16_t` 다.
+// 🔴 **상한을 컴파일 시점에 박는다.** `node.occMask`·`node.resMask`·`node.ovrActive` 가 전부 `uint16_t` 다.
 //   표에 17번째가 들어오는 순간 `1u << 16` 이 **아무 일도 안 하고** 그 자리가 조용히 사라진다 —
 //   **길이도 체크섬도 통과한다.** 표를 만든 이득("한 줄만 고치면 된다")이
 //   그대로 결함의 배달 경로가 되는 자리라, 여기서 빌드를 깨는 것이 유일한 방어다.
@@ -75,7 +75,7 @@ static_assert(MODULE_N <= 16,
 //   지키던 것: `SLOT_PIN[]`·`SLOT_SRC_DEFAULT` 가 `SLOT_N` 크기라 표가 그보다 크면 배열 밖을 읽는다.
 //   ✅ 해결: **실물은 앞 `SLOT_N` 개로 고정**하고 `slotPin()` 에 범위 가드를 넣었다.
 //   🔴 **가상 모듈은 반드시 표의 뒤쪽에만** 온다 — 앞에 끼면 실물 인덱스가 밀려
-//     `SLOT_PIN`·`occMask` 비트·서버 자리 결속이 **한꺼번에 어긋난다.**
+//     `SLOT_PIN`·`node.occMask` 비트·서버 자리 결속이 **한꺼번에 어긋난다.**
 static_assert(MODULE_N >= SLOT_N,
               "표는 실물 자리 SLOT_N 개를 **앞쪽에** 전부 포함해야 한다");
 
@@ -244,20 +244,20 @@ static uint8_t buildStatus(char* buf, uint8_t cap) {
   //   ⚠ **같은 비트열인데 의미가 다르다** — 앞은 "차가 있다", 뒤는 "열려 있다". `kind` 로 구분한다.
   //   🔑 **완료 판정이 이 에코로 이뤄진다.** `ACK` 은 "받았다"이지 "됐다"가 아니다 —
   //     서버는 다음 `S` 에서 그 비트가 바뀌는 것으로 조작 성공을 안다.
-  uint16_t occOut = occMask;
+  uint16_t occOut = node.occMask;
 #if VIRTUAL_MODULES
   for (uint8_t k = 0; k + SLOT_N < mn; k++)
     if (vGateOpen(k)) occOut |= (uint16_t)(1u << (SLOT_N + k));
 #endif
   bitsToHex(occOut, mn, occ);
-  bitsToHex(resMask, mn, res);
+  bitsToHex(node.resMask, mn, res);
 
   int n;
-  if (testArmed) {
+  if (node.testArmed) {
     // §2.4 tmask — 무장 중에만 붙는 선택 필드. 각 비트 = 그 칸의 occupied 가 주입된 값인가.
     // occupied 에는 주입값이 이미 반영돼 있고, tmask 는 "그게 진짜인가"만 알려준다.
     char tm[HEX_W_MAX + 1];
-    bitsToHex(ovrActive, mn, tm);                   // ★ 셋째도 같은 변환 — 빠뜨리면 어긋난다
+    bitsToHex(node.ovrActive, mn, tm);                   // ★ 셋째도 같은 변환 — 빠뜨리면 어긋난다
     n = snprintf(buf, cap, "S,%u,%s,%s,%lu,%s,%s,",
                  (unsigned int)seqNo, occ, res,
                  (unsigned long)(millis() / 1000UL), DEVICE_ID, tm);

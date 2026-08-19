@@ -53,11 +53,11 @@ static void processTest(char* f[], char* s0, char* s1, uint8_t* result) {
 
   if (top == 'A' || top == 'D') {
     if (top == 'A') {
-      testArmed = true;
+      node.testArmed = true;
     } else {
       // §12A.2 "현실로 복귀"는 하나의 동작이어야 한다 — 칸마다 따로 풀게 만들지 않는다
-      testArmed = false;
-      slotOverrideClearAll();
+      node.testArmed = false;
+      node.slotOverrideClearAll();
     }
     // ⚠ 무장/해제는 시뮬레이터에 아무 영향이 없다(§12B.3). 시뮬은 자율 전진을 하지 않으므로
     //   멈출 것도 재개할 것도 없다. REQ-0043 의 "무장 중 시뮬 정지"는 여기서 사라졌다.
@@ -84,10 +84,10 @@ static void processTest(char* f[], char* s0, char* s1, uint8_t* result) {
   *s1 = slotRow(idx);
 
   // §12A.2 무장하지 않은 채 S/X 가 오면 조용히 무시하지 않고 result=4 로 거절한다
-  if (!testArmed) { *result = 4; return; }
+  if (!node.testArmed) { *result = 4; return; }
 
-  if (top == 'S') slotOverrideSet(idx, (uint8_t)(tval[0] - '0'));
-  else            slotOverrideClear(idx);
+  if (top == 'S') node.slotOverrideSet(idx, (uint8_t)(tval[0] - '0'));
+  else            node.slotOverrideClear(idx);
   *result = 0;
 }
 
@@ -142,7 +142,7 @@ static void processCommand(char* cand) {
     // §12B.4 시뮬 한 걸음. **무장 여부로 막지 않는다** — 테스트 모드와 별개다(§12B.3).
     // 멱등이 특히 중요하다: 재전송이 새 걸음으로 처리되면 한 번 눌렀는데 두 칸이 바뀐다.
     // (위쪽 `ackQ.find()` 가 이미 걸러 준다 — M 도 R/C/T 와 같은 기계장치를 탄다.)
-    uint8_t idx = simStep();
+    uint8_t idx = node.simStep();
     if (idx == 0xFF) {
       s0 = '?'; s1 = '?'; result = 5;    // 바꿀 시뮬 칸이 없다
 #if DEBUG
@@ -153,7 +153,7 @@ static void processCommand(char* cand) {
 #if DEBUG
       Serial.print(F("[SIM] 한 걸음: ")); Serial.print(s0); Serial.print(s1);
       Serial.print(F(" → occupied="));
-      Serial.println((simOcc >> idx) & 1);
+      Serial.println((node.simOcc >> idx) & 1);
 #endif
     }
     commitAck(rid, s0, s1, result);
@@ -182,18 +182,18 @@ static void processCommand(char* cand) {
     uint16_t bit = (uint16_t)1 << idx;
 
     if (type == 'R') {
-      if (occMask & bit)      result = 1;              // 이미 점유
-      else if (resMask & bit) result = 2;              // 이미 예약
+      if (node.occMask & bit)      result = 1;              // 이미 점유
+      else if (node.resMask & bit) result = 2;              // 이미 예약
       else {
-        resMask |= bit;
+        node.resMask |= bit;
         result = 0;
         // ★ occupied=1,reserved=1 경로(§1.1 마지막 행)는 이제 여기서 만들지 않는다.
         //   예전에는 예약이 잡히면 몇 초 뒤 시뮬이 그 칸에 차를 넣었다(ARRIVE_*).
         //   자율 전진이 없어졌으므로 §12B.2 의 **"예약된 빈칸 우선"** 규칙이 그 일을 한다 —
-        //   다음 시뮬 트리거가 이 칸을 가장 먼저 채운다. simStep() 1순위가 그것이다.
+        //   다음 시뮬 트리거가 이 칸을 가장 먼저 채운다. node.simStep() 1순위가 그것이다.
       }
     } else {                                            // 'C' — 취소
-      resMask &= (uint16_t)~bit;                        // 예약을 끄는 유일한 경로 (§7.4)
+      node.resMask &= (uint16_t)~bit;                        // 예약을 끄는 유일한 경로 (§7.4)
       result = 0;
     }
   }

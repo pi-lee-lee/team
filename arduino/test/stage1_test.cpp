@@ -1050,9 +1050,9 @@ int main() {
   //   🔑 통과 수는 그 경로를 봤다는 뜻이 아니다(원장 §16.4 ③).
   printf("\n[31] S 프레임이 실제로 hex 로 나간다 (형식 전환 확인)\n");
   {
-    occMask = 0x346;            // 슬롯 {1,2,6,8,9} — ★ 비대칭이라 순서를 검증한다
-    resMask = 0;
-    testArmed = false;
+    node.occMask = 0x346;            // 슬롯 {1,2,6,8,9} — ★ 비대칭이라 순서를 검증한다
+    node.resMask = 0;
+    node.testArmed = false;
     // 🔴 가상 차단봉을 **닫힌 상태로 고정**한다 — 안 하면 slotNo 에 따라 값이 흔들려
     //   이 시험이 비결정적이 된다(자율 토글이 slotNo 를 본다).
     vGateManual = true; vGateState = 0;
@@ -1074,7 +1074,7 @@ int main() {
     ok(n < 45,              "★★ S 프레임이 45B 미만이다 (폭 3 유지 — n=12 가 공짜 상한)");
 
     // tmask 갈래도 같은 변환을 타는가 — **셋째 마스크를 빠뜨리기 쉬운 자리다**
-    testArmed = true; ovrActive = 0x346;
+    node.testArmed = true; node.ovrActive = 0x346;
     uint8_t n2 = buildStatus(buf, sizeof buf);
     printf("      S(tmask) = %s   (%u B)\n", buf, (unsigned)n2);
     ok(n2 > 0 && strstr(buf, "0110001011") == NULL,
@@ -1085,7 +1085,7 @@ int main() {
       ok(f != NULL && strstr(f + 1, "62C") != NULL,
                             "★★ occ 와 tmask 가 둘 다 hex 다");
     }
-    testArmed = false; ovrActive = 0; occMask = 0;
+    node.testArmed = false; node.ovrActive = 0; node.occMask = 0;
   }
 
   // ── [32] 🔴 등록(`D`) — 첫 슬롯은 D 만, **ACK 는 잃지 않는다** (명세 §5) ────
@@ -1240,7 +1240,7 @@ int main() {
 
     // ③ 🔴 **전선에 나가는 바이트가 그대로인가** — 이 축의 최종 판정이다
     wifi.refusePrompt = false;
-    occMask = 0x346; resMask = 0; testArmed = false;
+    node.occMask = 0x346; node.resMask = 0; node.testArmed = false;
     seqNo = 3; g_millis = 389000;
     char sbuf[64];
     buildStatus(sbuf, sizeof sbuf);
@@ -1280,7 +1280,7 @@ int main() {
       ok(hexWidthFor((uint8_t)declaredN) == 3,
                             "★ hex 폭도 그 n 에서 나온다 (③)");
     }
-    occMask = 0;
+    node.occMask = 0;
   }
 
   // ── [35] 🔴 **등록 예약이 실제 전이 경로에서 선다** ────────────────────────
@@ -1327,7 +1327,7 @@ int main() {
     wifi.refusePrompt = false;
     vGateManual = false; vGateState = 0;
     ackQ.clearCache(); ackQ.clearQueue();
-    occMask = 0; resMask = 0; testArmed = false;
+    node.occMask = 0; node.resMask = 0; node.testArmed = false;
 
     // ① 등록에 가상 모듈이 실린다 — 이름은 자리 id · kind 에 V 접미
     char rbuf[BATCH_CAP + 1];
@@ -1426,7 +1426,7 @@ int main() {
       { char sk[] = "SEND OK"; handleLine(sk); }
     }
 
-    vGateManual = false; vGateState = 0; occMask = 0;
+    vGateManual = false; vGateState = 0; node.occMask = 0;
   }
 
   // ── [37] 시뮬 점유가 지형과 맞는다 — A_i 와 B_i 는 같은 자리다 (REQ-0270) ──────
@@ -1442,24 +1442,24 @@ int main() {
       return true;
     };
 
-    simOcc = (uint16_t)((1U << 1) | (1U << 6)
+    node.simOcc = (uint16_t)((1U << 1) | (1U << 6)
                       | (1U << 2) | (1U << 7)
                       | (1U << 3) | (1U << 8));      // setup() 과 같은 초기값
-    ok(paired(simOcc),      "★★ 부팅 초기값이 짝 단위다 (A_i == B_i 전부)");
+    ok(paired(node.simOcc),      "★★ 부팅 초기값이 짝 단위다 (A_i == B_i 전부)");
 
     // 🔴 **무작위 토글을 여러 번 돌려도 짝이 유지되는가** — 한 번만 보면 우연히 통과한다
-    resMask = 0; testArmed = false; ovrActive = 0;
+    node.resMask = 0; node.testArmed = false; node.ovrActive = 0;
     randomSeed(12345);                                // 결정적으로 돌린다
     bool held = true;
-    for (int k = 0; k < 200; k++) { simStep(); if (!paired(simOcc)) { held = false; break; } }
+    for (int k = 0; k < 200; k++) { node.simStep(); if (!paired(node.simOcc)) { held = false; break; } }
     ok(held,                "★★ 무작위 토글 200회를 돌려도 짝이 유지된다");
 
     // 예약→점유 경로도 짝을 채우는가 (1순위 분기)
-    simOcc = 0; resMask = (uint16_t)(1U << 0);        // 자리 1 을 예약
-    simStep();
-    ok(((simOcc >> 0) & 1) && ((simOcc >> H) & 1),
+    node.simOcc = 0; node.resMask = (uint16_t)(1U << 0);        // 자리 1 을 예약
+    node.simStep();
+    ok(((node.simOcc >> 0) & 1) && ((node.simOcc >> H) & 1),
                             "★★ 예약→점유도 짝을 함께 채운다 (A1 과 B1 이 같이 선다)");
-    simOcc = 0; resMask = 0;
+    node.simOcc = 0; node.resMask = 0;
   }
 
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
