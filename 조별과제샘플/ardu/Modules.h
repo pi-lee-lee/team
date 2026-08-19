@@ -163,7 +163,9 @@ static void moduleKindOf(uint8_t i, char* out4) {
 //   ⚠ **등록은 이름으로, 전선은 `idx` 로 온다.** 등록할 때 이름→idx 를 여기서 푼다 —
 //     기여자가 `idx`(등록 순서)를 셀 필요가 없다. **표를 고치면 idx 가 밀리는데 이름은 안 밀린다.**
 // ═════════════════════════════════════════════════════════════════════════
-typedef bool (*CommandFn)(uint8_t op);   // 반환 true → ACK `result=0`(성공) · false → `3`(수행 불가)
+// 🔴 **인자는 32비트다** (2026-08-19). 이진 on/off 도, LCD 의 7자리 숫자도 같은 통로로 온다.
+//   ⚠ **값의 뜻은 프로토콜이 모른다.** 서버는 숫자를 나르기만 하고 **뜻은 기여자가 정한다.**
+typedef bool (*CommandFn)(uint32_t arg);   // 반환 true → ACK `result=0`(성공) · false → `3`(수행 불가)
 
 class CommandRouter {
  public:
@@ -177,9 +179,9 @@ class CommandRouter {
     return false;
   }
   // 전선에서 온 `idx` 로 부른다. 등록이 없으면 false → 호출부가 `result=3` 으로 답한다.
-  bool dispatch(uint8_t idx, uint8_t op) const {
+  bool dispatch(uint8_t idx, uint32_t arg) const {
     if (idx >= MODULE_N || fn_[idx] == 0) return false;
-    return fn_[idx](op);
+    return fn_[idx](arg);
   }
   bool has(uint8_t idx) const { return idx < MODULE_N && fn_[idx] != 0; }
  private:

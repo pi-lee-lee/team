@@ -11,16 +11,23 @@
 // ─────────────────────────────────────────────────────────────────────────
 // 자리 (§1)
 // ─────────────────────────────────────────────────────────────────────────
-static const uint8_t SLOT_N = 10;      // 인덱스 0..4 = A1..A5, 5..9 = B1..B5
+// 🔴 **센서 칸 수**(자리 수가 아니다). `A_i` 와 `B_i` 는 **같은 자리의 두 센서**다 —
+//   그래서 자리 수 = `SLOT_N / 2` 다. 표(`MODULE_TABLE`)의 센서 줄 수와 **같아야 한다.**
+//   ⚠ 늘리려면 `SLOT_PIN[]` 과 `MODULE_TABLE` 을 **같이** 늘려라. 셋이 어긋나면 컴파일이 막는다.
+static const uint8_t SLOT_N    = 2;                 // 지금: 자리 하나(A1 + B1)
+static const uint8_t SLOT_ROWS = SLOT_N / 2;        // 자리 수 = 행 수
+static_assert(SLOT_N % 2 == 0, "SLOT_N 은 짝수여야 한다 — 자리마다 센서가 둘이다");
 
-static inline char slotCol(uint8_t i) { return (i < 5) ? 'A' : 'B'; }
-static inline char slotRow(uint8_t i) { return (char)('1' + (i % 5)); }
+// ✏️ 옛 판은 `5`(행 수)를 **세 곳에 박아** 뒀다. `SLOT_ROWS` 로 묶었다 —
+//   안 그러면 칸 수를 바꿀 때 **이름 규칙만 옛 값으로 남아 조용히 어긋난다.**
+static inline char slotCol(uint8_t i) { return (i < SLOT_ROWS) ? 'A' : 'B'; }
+static inline char slotRow(uint8_t i) { return (char)('1' + (i % SLOT_ROWS)); }
 
 // 자리 문자 2개 → 인덱스. 없으면 0xFF
 static uint8_t slotIndexOf(char c0, char c1) {
-  if (c1 < '1' || c1 > '5') return 0xFF;
+  if (c1 < '1' || c1 >= (char)('1' + SLOT_ROWS)) return 0xFF;
   if (c0 == 'A') return (uint8_t)(c1 - '1');
-  if (c0 == 'B') return (uint8_t)(c1 - '1' + 5);
+  if (c0 == 'B') return (uint8_t)(c1 - '1' + SLOT_ROWS);
   return 0xFF;
 }
 
@@ -48,8 +55,10 @@ static uint8_t slotIndexOf(char c0, char c1) {
 // ─────────────────────────────────────────────────────────────────────────
 #define PIN_NONE 0xFF              // 핀 없음(가상 모듈)
 static const uint8_t SLOT_PIN[SLOT_N] PROGMEM = {
-  2,  3,  4,  5,  6,      // 인덱스 0..4 = A1 A2 A3 A4 A5
-  9, 10, 11, 12, A0       // 인덱스 5..9 = B1 B2 B3 B4 B5   (B5 만 아날로그 핀)
+  2,      // 인덱스 0 = A1 (자리 1 의 첫째 센서)
+  9       // 인덱스 1 = B1 (자리 1 의 둘째 센서)
+  // 🔓 늘리려면 여기에 핀을 더하고 `SLOT_N` 과 `MODULE_TABLE` 도 같이 늘려라
+  //    옛 10칸 배선 : A1~A5 = 2,3,4,5,6 · B1~B5 = 9,10,11,12,A0
 };
 // 🔴 **범위 가드** (2026-08-19) — `SLOT_PIN[]` 은 크기가 `SLOT_N`(실물 자리) 인데
 //   `moduleCount()` 는 가상 모듈까지 세므로 **그 값으로 루프를 돌면 배열 밖을 읽는다.**

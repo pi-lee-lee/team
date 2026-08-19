@@ -94,21 +94,38 @@ struct ModuleDef {
 // 🔴 **가상 모듈 스위치** (REQ-0227 · 2026-08-19)
 //   실기에 `O*`(명령 가능) 모듈이 하나도 없어 **조작 사슬이 한 번도 안 돌았다.**
 //   ⚠ **실물 모듈이 생기면 반드시 0 으로 꺼라** — 켜 둔 채 실물을 붙이면 **같은 자리에 둘이 붙는다.**
+// 🔴 **가상 모듈 스위치 — 샘플 기본값은 0(끔)** (2026-08-19)
+//   가상 차단봉은 **시험용**이다. 실물 없이 조작 사슬을 밟아 보려면 1 로 켠다.
+//   ⚠ **실물 모듈이 있으면 반드시 0으로 둬라** — 켠 채 실물을 붙이면 같은 자리에 둘이 붙는다.
+//   🔑 회귀 시험은 이 값을 **1 로 켜서 빌드한다** — 그래야 콜백 경로가 실제로 밟힌다.
 #ifndef VIRTUAL_MODULES
-#define VIRTUAL_MODULES 1
+#define VIRTUAL_MODULES 0
 #endif
 
 static const ModuleDef MODULE_TABLE[] PROGMEM = {
-  {"A1", KIND_PARK_SENSOR,  2}, {"A2", KIND_PARK_SENSOR,  3}, {"A3", KIND_PARK_SENSOR,  4},
-  {"A4", KIND_PARK_SENSOR,  5}, {"A5", KIND_PARK_SENSOR,  6},
-  {"B1", KIND_PARK_SENSOR,  9}, {"B2", KIND_PARK_SENSOR, 10}, {"B3", KIND_PARK_SENSOR, 11},
-  {"B4", KIND_PARK_SENSOR, 12}, {"B5", KIND_PARK_SENSOR, A0},
+  // 🔓 **자리 하나 · 센서 둘** — 서버 샘플과 짝이다:
+  //      lot.spot("A1").sensor("P1","A1").sensor("P1","B1");
+  //   🔴 **서버가 A1 하나만 보는데 장치가 더 보내면 나머지는 "미결속"으로 뜬다.**
+  //     늘릴 때는 **여기 한 줄 + 서버 조립 표 한 줄**, 둘 다다.
+  {"A1", KIND_PARK_SENSOR, 2},    // 자리 A1 의 첫째 센서 — 2번 핀
+  {"B1", KIND_PARK_SENSOR, 9},    // 자리 A1 의 둘째 센서 — 9번 핀
+
+  // 🔓 **늘리려면 주석을 풀고 `SLOT_N`·`SLOT_PIN[]` 도 같이 늘려라**(셋이 어긋나면 컴파일이 막는다)
+  // {"A2", KIND_PARK_SENSOR,  3}, {"B2", KIND_PARK_SENSOR, 10},
+  // {"A3", KIND_PARK_SENSOR,  4}, {"B3", KIND_PARK_SENSOR, 11},
+  // {"A4", KIND_PARK_SENSOR,  5}, {"B4", KIND_PARK_SENSOR, 12},
+  // {"A5", KIND_PARK_SENSOR,  6}, {"B5", KIND_PARK_SENSOR, A0},
+
+  // 🔓 **액추에이터를 붙이려면** — 종류를 `O` 로 시작하는 것으로 하고 아래 `setup()` 에서 등록한다
+  // {"G1", KIND_BARRIER, 7},     // 예: 차단봉. `router.on("G1", myGate);`
+  //
+  // ⚠ **이름이 자리 id 와 같을 필요는 없다.** 서버가 `sensor("KIM01","왼쪽센서")` 로 받는다 —
+  //   **장치의 이름과 서버 조립 표의 이름이 같기만 하면 된다.**
+  // 🔴 **중간에 끼워 넣지 마라.** 전선의 `idx` 는 **이 표의 순서**다 —
+  //   중간 삽입은 뒤의 `idx` 를 전부 밀어 **지금 되는 결속을 조용히 깬다.** 끝에 붙여라.
 #if VIRTUAL_MODULES
-  // 🔴 **끝에만 붙인다. 중간 삽입 금지.**
-  //   `idx` 는 **등록 순서**이고 **서버의 자리 결속과 `G,<rid>,<idx>,<op>` 가 둘 다 그것을 쓴다.**
-  //   중간에 넣으면 **기존 자리의 idx 가 전부 밀려 지금 되는 결속이 조용히 깨진다.**
-  // ⚠ 이름은 **자리 id 와 같아야 한다**(원장 §20) — `E1`·`X1` 말고 다른 이름을 쓰면
-  //   등록은 성공하고 자리에는 아무것도 안 붙는다. **오류가 안 뜬다.**
+  // ⚠ **시험용 가상 차단봉.** 기본값은 꺼져 있다 — `VIRTUAL_MODULES` 를 1 로 켤 때만 실린다.
+  //   회귀 시험이 이것으로 **명령 수신 콜백 경로를 실제로 밟는다.**
   {"E1", KIND_BARRIER_V, PIN_NONE},   // 입구 차단봉 (가상)
   {"X1", KIND_BARRIER_V, PIN_NONE},   // 출구 차단봉 (가상)
 #endif
@@ -136,23 +153,42 @@ static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_T
 // █  🔓  **명령 수신 핸들러 — 자기 액추에이터를 여기 붙인다**                █
 // ██████████████████████████████████████████████████████████████████████████
 //
-//   모양 :  `bool 이름(uint8_t op)`  — `op` 는 0/1 · 반환 **true = 성공**(ACK `result=0`)
-//   예   :  `bool myGate(uint8_t op) { digitalWrite(PIN_GATE, op); return true; }`
+//   모양 :  `bool 이름(uint32_t arg)`   — 반환 **true = 성공**(ACK `result=0`) · false = 수행 불가(3)
 //   등록 :  아래 `setup()` 에서 `router.on("모듈이름", 핸들러);`
 //
+// ██ 🔴 **`arg` 의 뜻은 *네가* 정한다 — 그리고 그 표를 여기 적어라** ██████████████
+//   **서버도 프로토콜도 `arg` 의 뜻을 모른다.** 숫자를 나르기만 한다. 32비트라 7자리도 그대로 온다.
+//   🔴 **그 뜻을 서버 쪽 사람과 맞춰야 한다** — 안 맞으면 **조용히 다른 동작을 한다.**
+//     ⚠ **의미는 값으로 검증되지 않는다.** 프레임은 멀쩡하고 체크섬도 맞는데 동작만 다르다.
+//
+//   ── 세 가지 꼴 (전부 같은 통로다. 다른 것은 **네가 정한 뜻**뿐이다) ──
+//   ① **on/off**   `bool led(uint32_t a) { digitalWrite(PIN_LED, a ? HIGH : LOW); return true; }`
+//   ② **숫자 전달** `bool lcd(uint32_t a) { lcdPrint(a); return true; }`   // 예: 1234567 (7자리)
+//   ③ **동작 명령** — **뜻을 정하는 표를 여기 적는다. 이 표가 곧 "명령 작성 방법"이다**
+//        ```
+//        arg 1 = 열기 · 2 = 닫기 · 3 = 잠금 · 4 = 해제      ← 예시일 뿐이다. 네 것을 적어라
+//        bool door(uint32_t a) {
+//          switch (a) { case 1: open(); break; case 2: close(); break;
+//                       default: return false; }              // 🔴 모르는 값은 false
+//          return true;
+//        }
+//        ```
+//     ⚠ **모르는 값에 `true` 를 돌려주지 마라** — 서버는 성공으로 알고 사람은 왜 안 되는지 모른다.
+// ████████████████████████████████████████████████████████████████████████
+//
 // ⚠ **등록 안 한 모듈에 명령이 오면 `result=3`(수행 불가)로 답한다** — 조용히 성공하지 않는다.
-// 🔑 **이름으로 등록한다.** 전선은 `idx`(등록 순서)로 오는데 표를 고치면 idx 가 밀린다 —
+// 🔑 **이름으로 등록한다.** 전선은 `idx`(표 순서)로 오는데 표를 고치면 idx 가 밀린다 —
 //   **이름은 안 밀린다.** 그 변환은 `CommandRouter` 가 한다.
 #if VIRTUAL_MODULES
 // 🔴 **가상 차단봉도 이제 이 경로로 돈다** — 옛 하드코딩 분기를 지웠다.
 //   그래서 이 경로가 **지금 실제로 돌아가고 검증된다.** 실물이 붙으면 아래 등록 한 줄만 바꾼다.
-static bool virtualGate(uint8_t k, uint8_t op) {
+static bool virtualGate(uint8_t k, uint32_t arg) {
   gates.latch((uint8_t)(moduleCount() - SLOT_N), slotNo);   // 첫 명령이 자율 토글을 영구 정지
-  gates.set(k, op != 0);
+  gates.set(k, arg != 0);
   return true;
 }
-static bool gateE1(uint8_t op) { return virtualGate(0, op); }
-static bool gateX1(uint8_t op) { return virtualGate(1, op); }
+static bool gateE1(uint32_t arg) { return virtualGate(0, arg); }
+static bool gateX1(uint32_t arg) { return virtualGate(1, arg); }
 #endif
 
 void setup() {
@@ -171,10 +207,12 @@ void setup() {
   //   ⚠ 생성자가 아니라 여기다: 전역 생성자는 `main()` 전에 돌아 `pinMode` 를 부를 수 없다.
   node.begin();
 
-  // 🔓 **명령 수신 등록** — 자기 모듈은 여기 붙인다
+  // 🔓 **명령 수신 등록 — 자기 액추에이터를 여기 붙인다**
+  //   예)  `router.on("G1", myGate);`   ← 표에 `{"G1", KIND_BARRIER, 7}` 을 더한 뒤
+  //   ⚠ 등록 안 한 모듈에 명령이 오면 `result=3`(수행 불가)로 답한다. 조용히 성공하지 않는다.
 #if VIRTUAL_MODULES
-  router.on("E1", gateE1);      // 입구 차단봉 (가상) — 실물이 오면 이 줄만 바꾼다
-  router.on("X1", gateX1);      // 출구 차단봉 (가상)
+  router.on("E1", gateE1);      // 시험용 가상 차단봉 — 실물이 오면 이 줄만 바꾼다
+  router.on("X1", gateX1);
 #endif
 
   // §12A.3 재부팅하면 테스트 오버라이드는 사라진다 — 서버가 재하달하지 않는다(예약과 정반대).
@@ -187,9 +225,9 @@ void setup() {
   // 🔴 REQ-0270 — **짝 단위로 채운다.** 옛 값 `A2·A3·B4` 는 지형과 어긋났다:
   //   `A2` 의 짝 `B2` 가 비고 `B4` 의 짝 `A4` 가 비어 **한 자리에서 두 센서가 모순**이었다.
   //   지금은 **자리 2·3·4 를 통째로** 채운다(A2·B2 · A3·B3 · A4·B4). 자리 1·5 는 빈다.
-  node.simOcc = (uint16_t)((1U << 1) | (1U << 6)     // 자리 2 = A2 + B2
-                    | (1U << 2) | (1U << 7)     // 자리 3 = A3 + B3
-                    | (1U << 3) | (1U << 8));   // 자리 4 = A4 + B4
+  node.simOcc = 0;   // 🔓 샘플은 **빈 자리로 시작**한다.
+                     //   채우려면 `(1U<<0) | (1U<<1)` 처럼 **짝으로** 넣어라 —
+                     //   ⚠ 한쪽만 넣으면 한 자리에서 두 센서가 모순된 값을 낸다
 
   // ★ REQ-0071 4단 — 리셋선은 **놓은 상태(하이임피던스)로 시작**한다.
   //   전원 인가 직후 AVR 핀은 원래 INPUT 이라 이미 떠 있지만, "여기서 명시적으로 놓는다"를

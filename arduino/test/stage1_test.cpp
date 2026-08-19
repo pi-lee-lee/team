@@ -36,6 +36,14 @@ static uint8_t MCUSR = 0;
 #endif
 uint8_t __heap_start = 0;
 
+// 🔴 **가상 모듈을 켜서 빌드한다** (2026-08-19).
+//   샘플 기본값은 `0`(꺼짐) — 배포본에는 시험용 가상 차단봉이 안 실린다.
+//   ⚠ 그런데 **명령 수신 콜백 경로는 그것으로 밟는다.** 여기서 켜지 않으면
+//     `CommandRouter` 가 "아무도 안 쓰는 경로"가 되어 **검증이 사라진다.**
+//   🔑 §"시험이 실기가 안 하는 준비를 대신해 주면 실기만 빈다" 의 반대다 —
+//     여기서는 **시험이 실기가 *끄고 나간* 경로를 대신 밟아 준다.** 그 차이를 알고 켠다.
+#define VIRTUAL_MODULES 1
+
 #ifndef SKETCH_PATH
 #define SKETCH_PATH "../../조별과제샘플/ardu/client.ino"
 #endif

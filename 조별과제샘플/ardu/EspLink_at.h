@@ -104,8 +104,9 @@ static void handleFrameLine(char* cand) {
     uint8_t gn = splitFields(cand, gf, 6);
     uint16_t grid = 0;
     if (gn == 0xFF || gn < 4 || !parseU16(gf[1], &grid)) return;   // rid 를 모르면 ACK 를 못 만든다
-    uint16_t gidx = 0, gop = 0;
-    const bool okIdx = parseU16(gf[2], &gidx) && parseU16(gf[3], &gop);
+    uint16_t gidx = 0;
+    uint32_t garg = 0;   // 🔴 **인자는 32비트** — LCD 7자리 같은 값이 온다(§2026-08-19)
+    const bool okIdx = parseU16(gf[2], &gidx) && parseU32(gf[3], &garg);
 
     // §4.2 멱등 — 이미 본 rid 면 같은 ACK 를 다시 보낸다
     int8_t ghit = ackQ.find(grid);
@@ -119,11 +120,11 @@ static void handleFrameLine(char* cand) {
     //   그래서 **기여자가 자기 액추에이터를 붙일 수 있다.** 옛 코드는 가상 차단봉만 알았다.
     //   ⚠ 등록이 없으면 `result=3`(수행 불가) — **조용히 성공으로 답하지 않는다.**
     uint8_t gres = 3;                       // 기본 = 수행할 수 없다(§2.4 result=3)
-    if (okIdx && gidx <= 0xFF && router.dispatch((uint8_t)gidx, (uint8_t)(gop != 0))) gres = 0;
+    if (okIdx && gidx <= 0xFF && router.dispatch((uint8_t)gidx, garg)) gres = 0;
 #if DEBUG
     if (gres != 0) { Serial.print(F("[G] 거절 idx=")); Serial.println(gidx); }
     else           { Serial.print(F("[G] idx=")); Serial.print(gidx);
-                     Serial.print(F(" op=")); Serial.println(gop); }
+                     Serial.print(F(" arg=")); Serial.println(garg); }
 #endif
     // ⚠ 캐시에 넣어야 재전송(같은 rid)이 같은 답을 받는다 — 멱등이 여기서도 성립해야 한다
     commitAck(grid, 'G', (char)('0' + (gidx % 10)), gres);

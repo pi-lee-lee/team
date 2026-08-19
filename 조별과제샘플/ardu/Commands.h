@@ -25,6 +25,23 @@ static bool parseU16(const char* s, uint16_t* out) {
   return true;
 }
 
+// 🔴 **명령 인자용 32비트 파서** (2026-08-19 · 사용자 지시 "LCD 7자리 숫자").
+//   ⚠ `parseU16` 으로는 **7자리가 애초에 안 들어온다** — 65,535 를 넘으면 `false` 를 돌려
+//     `result=3`(수행 불가)이 된다. **전선은 되는데 우리 파서가 막고 있었다.**
+//   🔑 `rid`·`idx` 는 그대로 16비트다. **넓힌 것은 *인자* 하나뿐**이다 — 필요 없는 곳까지
+//     넓히면 AVR 에서 레지스터·코드가 는다.
+static bool parseU32(const char* s, uint32_t* out) {
+  if (!s || !*s) return false;
+  uint32_t v = 0;
+  for (const char* p = s; *p; p++) {
+    if (*p < '0' || *p > '9') return false;
+    if (v > 429496729UL) return false;              // 다음 곱셈이 넘친다
+    v = v * 10UL + (uint32_t)(*p - '0');
+  }
+  *out = v;
+  return true;
+}
+
 // workLine 을 그 자리에서 쪼갠다(쉼표 → NUL)
 static uint8_t splitFields(char* s, char* out[], uint8_t maxF) {
   uint8_t n = 0;
