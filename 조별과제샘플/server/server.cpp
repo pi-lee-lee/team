@@ -4373,6 +4373,13 @@ struct Server {
     //      그리고 그 뜻은 "이 박자를 건너뛴다"가 아니라 **"서버를 멈춘다"** 이다.
     //      ⚠ 옛 코드에서 `continue` 였을 자리에 무심코 `return` 을 쓰면 **서버가 조용히 죽는다.**
     //      → 이 박자를 건너뛰려면 **`return true;`** 다. 멈추는 것은 `g_stop` 이 정한다.
+    //
+    //   🔴 **`false` 를 내는 경로는 지금 *둘* 이고 둘 다 `g_stop` 이 정한다** (2026-08-19 실측):
+    //      ① 들머리 `if (g_stop) return false;`   ② 끝의 `return !g_stop;`
+    //      **`return true` 는 0곳이다** — 아직 아무도 박자를 건너뛰지 않는다.
+    //      🔑 **이 수가 늘면 신호다.** 셋째 `false` 는 `g_stop` 이 아닌 이유로 서버를 멈춘다는 뜻이고,
+    //        그건 **호출자가 모르는 정지 조건**이 생겼다는 것이다. 늘릴 거면 명세 §11.6 에 이유를 적어라.
+
     bool serveOneTick() {
         if (g_stop) return false;
             fd_set rd; FD_ZERO(&rd);
@@ -6210,6 +6217,37 @@ static int selftest() {
 // 🔴 **엔트리 포인트는 `main.cpp` 로 나갔다** (REQ-0272 1단계 · 2026-08-19)
 //   원래 자리에서 그대로 `#include` 한다 — **전처리 결과가 같아야 `.o` 0 차이가 성립한다.**
 //   ⚠ `#include` 위치를 옮기는 순간 그것은 "분리"가 아니라 "변경"이다. 이 자리를 지켜라.
+// ── 🔴 프로세스 초기화 — **호출자가 몰라도 되는 것** (REQ-0272 2단계 · 2026-08-19)
+//
+//   전에는 `main()` 이 `WSAStartup`·`SIGPIPE`·`SIGINT/TERM` 을 직접 챙겼다.
+//   **사용자 요구는 "난이도 높은 설정은 최대한 자동화"** 이고, 이건 그 전형이다 —
+//   Winsock 이 무엇인지 몰라도 주차장을 만들 수 있어야 한다.
+//
+//   🔴 **`ParkingServer` 의 생성자로 옮기지 않았다.** 이유가 있다:
+//     `--selftest` 는 `ParkingServer` 를 만들지 않는데 **소켓쌍에 쓰므로 `SIGPIPE` 가 필요하다.**
+//     생성자로 옮기면 **자가검증 경로에서 그 보호가 조용히 벗겨진다** — 죽어야 알 수 있는 종류다.
+//   ✅ 그래서 **정적 객체**로 둔다. `main` 보다 먼저 돌고 **두 경로를 다 덮는다.**
+//   ⚠ 다른 정적에 의존하지 않는다(시그널 등록과 Winsock 시작뿐) — 초기화 순서 문제가 없다.
+struct ProcessInit {
+    ProcessInit() {
+#ifdef _WIN32
+        WSADATA w;
+        if (WSAStartup(MAKEWORD(2,2), &w) != 0) std::cerr << "Winsock 초기화 실패\n";
+#else
+        signal(SIGPIPE, SIG_IGN);   // 끊긴 소켓에 write 해도 프로세스가 죽지 않게
+#endif
+        // 소크 시험은 Ctrl-C 로 끝난다 — 그때 요약을 남기고 정상 종료한다(REQ-0065)
+        signal(SIGINT,  on_stop_signal);
+        signal(SIGTERM, on_stop_signal);
+    }
+    ~ProcessInit() {
+#ifdef _WIN32
+        WSACleanup();
+#endif
+    }
+};
+static ProcessInit g_process_init;
+
 // ── 🔴 공개 조립 API 구현 (REQ-0272 1단계 · 2026-08-19)
 //
 //   헤더(`parking.h`)에는 **자료구조가 하나도 안 나온다.** 여기 `Impl` 이 `Server` 를 들고 있고

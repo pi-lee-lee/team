@@ -11,15 +11,8 @@
 // ⚠ 그러므로 **이 파일을 단독으로 컴파일하지 마라.** 빌드는 여전히 `c++ … server.cpp` 다.
 
 int main(int argc, char** argv) {
-#ifdef _WIN32
-    WSADATA w;
-    if (WSAStartup(MAKEWORD(2,2), &w) != 0) { std::cerr << "Winsock 초기화 실패\n"; return 1; }
-#else
-    signal(SIGPIPE, SIG_IGN);   // 끊긴 소켓에 write 해도 프로세스가 죽지 않게
-#endif
-    // 소크 시험은 Ctrl-C 로 끝난다 — 그때 요약을 남기고 정상 종료한다(REQ-0065)
-    signal(SIGINT,  on_stop_signal);
-    signal(SIGTERM, on_stop_signal);
+    // 🔑 `WSAStartup`·`SIGPIPE`·`SIGINT/TERM` 은 **여기 없다.** 정적 초기화가 먼저 다 해 뒀다
+    //   (`server.cpp` 의 `ProcessInit`). **Winsock 이 무엇인지 몰라도 주차장을 만들 수 있다.**
     int rc;
     // 로그 경로(REQ-0111 로그 계약 §2.4) — 비워 두면 기본 경로를 쓴다.
     // **셸 리다이렉션에 맡기지 않는 이유**: 08-16 에 나중 뜬 인스턴스가 다른 곳에 쓰는 바람에
@@ -124,8 +117,6 @@ int main(int argc, char** argv) {
         srv.closeDown();
         rc = 0;
     }
-#ifdef _WIN32
-    WSACleanup();
-#endif
-    return rc;
+    return rc;   // 🔑 `WSACleanup` 도 정적 소멸자가 한다
+
 }
