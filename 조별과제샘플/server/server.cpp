@@ -2478,7 +2478,7 @@ struct Server {
                     for (size_t k = 0; k < mn->mods.size(); k++)
                         if (mn->mods[k].first == z.modules[m].second) { mi = (int)k; break; }
                 if (mi < 0) continue;
-                // 🔑 **점유 센서만 센다.** 차단봉(OBV)은 자리 점유를 말하지 않는다(명세 §8.1).
+                // 🔑 **점유 센서만 센다.** 차단봉(OB)은 자리 점유를 말하지 않는다(명세 §8.1).
                 if (!mn || mn->mods[mi].second != "IP") continue;
                 v_total++;
                 if (mi < mn->mod_bits_n) { v_known++; if (mn->mod_bits[mi]) v_ones++; }
@@ -5834,15 +5834,19 @@ static int selftest() {
                 if (socketpair(AF_UNIX, SOCK_STREAM, 0, gs) == 0) {
                     Server t; t.build_default_zones(); t.init_srv_id();
                     t.ard = gs[0]; t.ard_seen = true; t.ard_last_ms = now_ms();
-                    // n=12 : 자리 10(IP) + E1·X1 (OBV = 차단봉 · 가상)
+                    // n=12 : 자리 10(IP) + E1·X1 (**OB** = 차단봉)
+                    // 🔴 옛 값은 `OBV` 였다 — 끝의 `V` 가 "가상"을 뜻했다(REQ-0271 로 없앤다).
+                    //   🔑 **서버는 그 `V` 를 한 번도 읽지 않았다** — `kind_commandable()` 이
+                    //     `k[0]=='O'` 만 본다. 그래서 픽스처를 `OB` 로 바꿔도 아무것도 안 깨진다.
+                    //   ⚠ **이 시험이 그 사실의 증명이다.** 깨지면 내 판독이 틀린 것이다.
                     t.on_ard_line(t_line("D,*,7,12,"));
                     for (int i = 0; i < 10; i++)
                         t.on_ard_line(t_line(std::string("D,") + SLOT_ID[i] + ",IP,"));
-                    t.on_ard_line(t_line("D,E1,OBV,"));
-                    t.on_ard_line(t_line("D,X1,OBV,"));
+                    t.on_ard_line(t_line("D,E1,OB,"));
+                    t.on_ard_line(t_line("D,X1,OB,"));
 
                     bool okG0 = (t.park.reg_done && t.park.reg_n == 12 && t.reg_cmdable() == 2);
-                    std::cout << (okG0 ? "  ✓ " : "  ✗ ") << "OBV 2개가 명령가능으로 세어진다 ("
+                    std::cout << (okG0 ? "  ✓ " : "  ✗ ") << "OB 2개가 명령가능으로 세어진다 ("
                               << t.reg_cmdable() << " · 기대 2 · `V` 접미는 종류를 안 바꾼다)\n";
                     if (!okG0) bad++;
 
@@ -6009,8 +6013,8 @@ static int selftest() {
                     t.on_ard_line(t_line("D,*,7,12,"));
                     for (int i = 0; i < 10; i++)
                         t.on_ard_line(t_line(std::string("D,") + SLOT_ID[i] + ",IP,"));
-                    t.on_ard_line(t_line("D,E1,OBV,"));
-                    t.on_ard_line(t_line("D,X1,OBV,"));
+                    t.on_ard_line(t_line("D,E1,OB,"));
+                    t.on_ard_line(t_line("D,X1,OB,"));
                     t.on_ard_line(t_line("S,1,000,000,5,P1,"));
                     t.on_ws_message(BAD_SOCK, "{\"type\":\"open_gate\",\"slot\":\"E1\",\"rid\":\"z1\"}");
                     size_t pend0 = t.pend.size();
@@ -6021,8 +6025,8 @@ static int selftest() {
                     t.on_ard_line(t_line("D,Z9,IP,"));                 // ← 끼어든 것
                     for (int i = 0; i < 10; i++)
                         t.on_ard_line(t_line(std::string("D,") + SLOT_ID[i] + ",IP,"));
-                    t.on_ard_line(t_line("D,E1,OBV,"));
-                    t.on_ard_line(t_line("D,X1,OBV,"));
+                    t.on_ard_line(t_line("D,E1,OB,"));
+                    t.on_ard_line(t_line("D,X1,OB,"));
 
                     bool okZ1 = (t.mod_order_changed == c0 + 1);
                     std::cout << (okZ1 ? "  ✓ " : "  ✗ ") << "중간 삽입 재등록을 잡는다 (순서변경 "
@@ -6041,8 +6045,8 @@ static int selftest() {
                     t.on_ard_line(t_line("D,Z9,IP,"));
                     for (int i = 0; i < 10; i++)
                         t.on_ard_line(t_line(std::string("D,") + SLOT_ID[i] + ",IP,"));
-                    t.on_ard_line(t_line("D,E1,OBV,"));
-                    t.on_ard_line(t_line("D,X1,OBV,"));
+                    t.on_ard_line(t_line("D,E1,OB,"));
+                    t.on_ard_line(t_line("D,X1,OB,"));
                     bool okZ3 = (t.mod_order_changed == c1);
                     std::cout << (okZ3 ? "  ✓ " : "  ✗ ") << "같은 순서 재등록은 안 걸린다 (거짓 경보 "
                               << (t.mod_order_changed - c1) << " · 기대 0)\n";
