@@ -1399,7 +1399,14 @@ struct Server {
             int ws_n = 0;
             for (std::map<sock_t, Conn>::const_iterator it = conns.begin(); it != conns.end(); ++it)
                 if (it->second.kind == Conn::WS) ws_n++;
-            s += " · 화면 " + std::to_string(ws_n) + "(최대 " + std::to_string(ws_peak) + ")";
+            // 🔴 **이름을 `화면` 에서 `WS접속` 으로 바꿨다** (2026-08-19 · REQ-0248)
+            //   루트가 이 값을 **"화면에 끊김이 표시된 수"** 로 읽어 없는 결함을 사용자에게
+            //   보고할 뻔했다. monitor 가 창 O 실측(주입기 8개를 띄우자 `1→9`)으로 반증해 멈췄다.
+            //   🔑 **`화면` 은 세는 대상이 이름에 없다** — 사람이 보는 화면인지, WS 소켓인지.
+            //     실제로 세는 것은 **`Conn::WS` 소켓 수**이고 탐침·하니스·주입기도 전부 포함된다.
+            //   ⚠ §"두 뜻을 겸한 이름은 값이 갈리기 전까지 안 보인다" 와 같은 자리다 —
+            //     사람이 화면 하나만 열어 두는 동안에는 두 뜻이 같은 값이었다.
+            s += " · WS접속 " + std::to_string(ws_n) + "(최대 " + std::to_string(ws_peak) + ")";
         }
         s += " · 치유 " + std::to_string(heal_fires) + "/" + std::to_string(heal_checks)
            + (heal_checks == 0 ? " 🔴검사0" : "")
@@ -2361,7 +2368,8 @@ struct Server {
     bool map_empty_warned = false;
     // 🔑 `mutable` 을 쓰지 않는다 — **요약을 만드는 함수가 상태를 바꾸면 안 된다.**
     //   갱신은 `ws_upgrade` 에서 하고 여기서는 읽기만 한다.
-    int  ws_peak = 0;      // 이 인스턴스에서 동시에 붙었던 화면 수의 최대
+    int  ws_peak = 0;      // 이 인스턴스에서 동시에 붙었던 **WS 소켓 수**의 최대
+                           //   ⚠ 사람이 보는 화면 수가 아니다 — 탐침·하니스·주입기도 센다
     void push_map() {
         if (zones.empty()) {
             if (!map_empty_warned) {
