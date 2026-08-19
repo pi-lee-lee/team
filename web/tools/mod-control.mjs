@@ -36,12 +36,15 @@ const MAP = {
   zones: [{ id: 'A1', kind: 'parking', cells: [[0, 0]], modules: [
     /* 선언 없음 — 🔴 조작 UI 가 **안 붙어야** 한다 */
     { devid: 'P1', name: 'A1', kind: 'IP', idx: 0 },
-    { devid: 'P1', name: 'LD', kind: 'OG', idx: 2,
-      control: { widget: 'toggle', label: '표시등' } },
+    /* 🔑 **label 있는 것**(기여자 선언) */
+    { devid: 'P1', name: 'LD', kind: 'OG', idx: 2, label: '안내등',
+      control: { widget: 'toggle' } },
+    /* 🔑 **label 없는 것** — MOD_KIND_LABEL 폴백이 돌아야 한다(유도등) */
     { devid: 'P1', name: 'LC', kind: 'OL', idx: 3,
-      control: { widget: 'number', label: '7자리', min: 0, max: 9999999 } },
-    { devid: 'P1', name: 'DR', kind: 'OB', idx: 4,
-      control: { widget: 'choice', label: '차단봉',
+      control: { widget: 'number', min: 0, max: 9999999 } },
+    /* 🔑 **label 없고 kind 도 표에 없는 것** — 마지막 폴백(name)까지 밟는다 */
+    { devid: 'P1', name: 'DR', kind: 'OZ', idx: 4,
+      control: { widget: 'choice',
                  options: [{ value: 1, label: '열기' }, { value: 2, label: '닫기' }] } },
     /* 🔴 이 화면이 모르는 위젯 — **조용히 무시하지 않고 그 사실을 보여야** 한다 */
     { devid: 'P1', name: 'ZZ', kind: 'OG', idx: 6,
@@ -76,6 +79,8 @@ const READ = `(() => {
       nums: ctl ? ctl.querySelectorAll(':scope .zctl__row:not(.zctl__prac .zctl__row) .zctl__num').length : 0,
       prac: ctl ? ctl.querySelectorAll('.zctl__prac').length : 0,
       hint: ctl ? ((ctl.querySelector('.zctl__hint') || {}).textContent || null) : null,
+      ctlLabel: ctl ? ((ctl.querySelector('.zctl__label') || {}).textContent || null) : null,
+      headText: head,
       msgs: ctl ? [...ctl.querySelectorAll('.zctl__msg')].map(m => m.dataset.kind + ':' + m.textContent) : [],
     };
   }
@@ -133,6 +138,22 @@ try {
      v.LC && v.LC.widget === 'number' && v.LC.nums >= 1 && v.LC.hint === '0~9999999', JSON.stringify(v.LC));
   ok('🔴 모르는 위젯을 조용히 무시하지 않고 그 사실을 보인다 (dial)',
      v.ZZ && v.ZZ.hasCtl === true && /모르는 조작 형식/.test(JSON.stringify(v.ZZ)), JSON.stringify(v.ZZ));
+
+  /* ── ②-b 🔴 **표시 이름 폴백 3단** — 셋을 다 밟는다 (socket 2026-08-20)
+     `mod.label` → `MOD_KIND_LABEL[kind]` → `mod.name`
+     🔑 **셋을 다 밟는 재료를 일부러 섞었다.** 전부 label 을 달면 폴백이 한 번도 안 돌고,
+        그건 시험이 아니다(socket 이 샘플에도 같은 이유로 섞어 뒀다).
+     🔴 **어느 단이든 빈칸이면 안 된다** — 이름 없는 줄은 사용자가 무엇을 조작하는지 모른다. */
+  const nameShown = (k) => ((v[k] && v[k].headText) || '');
+  ok('폴백①: label 이 있으면 그것을 쓴다 (LD → "안내등")',
+     /안내등/.test(nameShown('LD')) && v.LD.ctlLabel === '안내등', nameShown('LD') + ' | ctl:' + v.LD.ctlLabel);
+  ok('폴백②: label 이 없으면 MOD_KIND_LABEL (LC · kind=OL → "유도등")',
+     /유도등/.test(nameShown('LC')) && v.LC.ctlLabel === '유도등', nameShown('LC') + ' | ctl:' + v.LC.ctlLabel);
+  ok('폴백③: label 도 kind 표도 없으면 name (DR · kind=OZ → "DR")',
+     /DR/.test(nameShown('DR')) && v.DR.ctlLabel === 'DR', nameShown('DR') + ' | ctl:' + v.DR.ctlLabel);
+  ok('🔴 어느 모듈도 이름이 빈칸이 아니다 (' + declared.length + '개)',
+     declared.every((k) => v[k] && typeof v[k].ctlLabel === 'string' && v[k].ctlLabel.trim() !== ''),
+     JSON.stringify(declared.map((k) => k + ':' + (v[k] && v[k].ctlLabel))));
 
   /* ── ③ 🔴 범위 — **막는 것**과 **거절이 도는 것**은 둘 다 필요하다 ── */
   const clickNum = async (val, practice) => {

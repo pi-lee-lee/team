@@ -57,7 +57,8 @@ let MAP = {
     { id: 'Z3', kind: 'parking', cells: [[0, 2]], modules: [] },
     /* 🔴 **cells 가 둘인 자리** — socket 이 길이 강제를 풀면 실재한다(REQ-0269).
        옛 코드는 이것을 **칸마다 통째로 다시 그려** 예약 버튼이 두 개가 됐다. */
-    { id: 'A1', kind: 'parking', cells: [[1, 0], [1, 1]], modules: [
+    /* 🔑 `label` 이 오면 **내 ZONE_LABEL 표(A1→영역1)를 이겨야** 한다 — 정본은 기여자 선언이다. */
+    { id: 'A1', kind: 'parking', label: '1번 자리', cells: [[1, 0], [1, 1]], modules: [
       { devid: 'P1', name: 'A1', kind: 'IP', idx: 0 } ] },
   ],
 };
@@ -260,9 +261,17 @@ try {
     const wantLabeled = Object.keys(z).filter((zid) => LABELS[zid]);
     ok('🔴 표시 이름이 붙은 자리 집합 == ZONE_LABEL 이 정의한 집합  ' + S(labeled) + ' == ' + S(wantLabeled),
        setEq(labeled, wantLabeled), '그렸다: ' + S(labeled) + ' · 표: ' + S(wantLabeled));
-    const wrong = wantLabeled.filter((zid) => z[zid].name !== LABELS[zid]);
-    ok('표시 이름의 글자가 표와 같다', wrong.length === 0,
-       JSON.stringify(wrong.map((zid) => zid + ': ' + z[zid].name + ' != ' + LABELS[zid])));
+    /* 🔴 `zone.label` 이 온 자리는 **그것이 정본**이고 표를 이긴다. 나머지는 표를 쓴다. */
+    const srvLabel = {};
+    for (const zz of MAP.zones) if (typeof zz.label === 'string' && zz.label) srvLabel[zz.id] = zz.label;
+    const wrong = wantLabeled.filter((zid) => z[zid].name !== (srvLabel[zid] || LABELS[zid]));
+    ok('표시 이름의 글자가 정본과 같다 (zone.label 이 있으면 그것, 없으면 ZONE_LABEL)', wrong.length === 0,
+       JSON.stringify(wrong.map((zid) => zid + ': ' + z[zid].name + ' != ' + (srvLabel[zid] || LABELS[zid]))));
+    if (Object.keys(srvLabel).length) {
+      const zid = Object.keys(srvLabel)[0];
+      ok('🔴 zone.label 이 내 ZONE_LABEL 표를 이긴다 (' + zid + ' → "' + srvLabel[zid] + '", 표는 "' + (LABELS[zid] || '없음') + '")',
+         z[zid] && z[zid].name === srvLabel[zid], z[zid] && z[zid].name);
+    } else skip('zone.label 우선순위', '이 지형에 zone.label 이 없다');
     /* 🔴 id 는 **반드시** 보인다 — 로그와 맞추는 유일한 값이다. */
     const hidden = Object.keys(z).filter((zid) => (z[zid].idText || '').trim() !== zid);
     ok('🔴 모든 자리에서 날 id 가 화면에 그대로 보인다 (' + Object.keys(z).length + '개)',

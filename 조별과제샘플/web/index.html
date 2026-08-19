@@ -2527,9 +2527,32 @@ const ZONE_LABEL = {
   E1: '입구',  X1: '출구'
 };
 /** 표시 이름. 🔑 **없으면 id 를 그대로 준다** — 빈 문자열이나 물음표를 만들지 않는다. */
-function zoneLabel(id) { return ZONE_LABEL[id] || id; }
+/**
+ * 🔴 **모듈 표시 이름 — 폴백 순서를 여기 한 곳에만 둔다** (socket 2026-08-20).
+ *   ① `mod.label`(기여자 선언) → ② `MOD_KIND_LABEL[kind]`(내 표) → ③ `mod.name`(전선 이름)
+ * ⚠ **빈칸이 되면 안 된다** — 이름 없는 줄은 사용자가 무엇을 조작하는지 모른다(루트 지시).
+ * 🔑 규칙을 두 곳(행·조작 UI)에 복사하면 **판정자가 둘**이 된다. 그래서 함수 하나다.
+ */
+function modLabelOf(mod) {
+  if (mod && typeof mod.label === 'string' && mod.label) return mod.label;
+  return (mod && MOD_KIND_LABEL[baseKind(mod.kind)]) || (mod && mod.name) || '(이름 없음)';
+}
+
+/** 🔴 **자리 이름의 정본은 `zone.label`** 이다(socket 2026-08-20 · `lot.spot("A1").label("1번 자리")`).
+    폴백 순서: `zone.label` → 내 `ZONE_LABEL` 표 → `zone.id`.
+    🔑 **이 표가 폴백으로 내려간 것이 예정된 2단계다** — 원장 §5.89 에 *"기여자가 이름을 갖게 되면
+    이 표는 사라진다"* 고 적어 뒀다. 기여자가 전부 선언하면 표를 지운다. */
+function zoneLabel(z) {
+  if (z && typeof z.label === 'string' && z.label) return z.label;
+  const id = (z && z.id) || z;
+  return ZONE_LABEL[id] || id;
+}
 /** 표시 이름이 id 와 다른가(= 부제로 id 를 따로 보여 줘야 하는가). */
-function zoneHasLabel(id) { return !!ZONE_LABEL[id]; }
+function zoneHasLabel(z) {
+  if (z && typeof z.label === 'string' && z.label) return z.label !== z.id;
+  const id = (z && z.id) || z;
+  return !!ZONE_LABEL[id];
+}
 
 /**
  * 🔴 **출력 모듈 판정은 표가 아니라 규칙이다**(socket): **`kind[0] === 'O'`.**
@@ -2543,23 +2566,26 @@ function isOutputKind(kind) {
 }
 
 /**
- * 🔴 **`kind` 는 "2글자 종류 + 선택적 `V` 접미"다** (socket 확정 2026-08-19 · `D,E1,OBV`).
+ * 🔴 **`kind` 계약이 좁아졌다** (socket 확정 2026-08-20):
+ *   **첫 글자만 계약**이다 — `I…` = 관측(입력) · `O…` = 출력(조작 가능).
+ *   **나머지 글자는 기여자 자유**이고 **서버도 화면도 해석하지 않는다.**
  *
- * 🔑 `V` 는 **새 종류가 아니라 직교하는 한 비트**다 — 그래서 종류 표는 다섯 그대로 두고
- * **읽을 때 떼어 낸다.** 종류마다 가상판을 표에 더하면 다섯이 열이 되고, 새 종류가 생길 때
- * **두 줄을 더해야 하는데 한 줄만 더하는 실수**가 반드시 나온다.
+ * 🔴 ~~`V` 접미 = 가상 모듈~~ **제거했다.** 두 각도가 같은 답을 냈다(socket 재조사):
+ *   ① 펌웨어에 kind 로 `V` 를 내보내는 자리가 **없다** · ② 실기 로그가 `OB`·`OG`·`IP` — **접미가 없다**
+ *   → **아무도 안 보내는 규칙을 계약에 새길 뻔했다.** 그 코드는 **한 번도 안 밟히고 있었다.**
  *
- * ⚠ **`isOutputKind` 는 안 고쳐도 됐다** — `kind[0]` 만 보므로 `OBV` 도 출력으로 맞게 읽는다.
- *    깨지는 것은 **라벨과 정렬**뿐이었다(`MOD_KIND_LABEL['OBV']` 없음 → 원문 `"OBV"` 가 그대로
- *    화면에 뜨고, `MOD_KIND_ORDER.indexOf('OBV')` 가 `-1` → 맨 뒤로 밀린다).
- *    🔑 **socket 의 파서는 한 줄도 안 고쳤다. 화면만 규칙이 필요했다** — 계약의 같은 변경이
- *    도메인마다 다른 크기로 온다.
+ * 🔑 그리고 `V` 접미는 **오늘 계속 만난 그 결함**이다 — *한 이름이 두 뜻을 겸한다.*
+ *   `OB`+`V` 는 **종류와 가상 여부를 한 문자열에** 담았고, **값이 갈리기 전까지 안 보인다.**
+ *   내가 든 사례가 그 순간이다: 기여자가 `OV`(출력·밸브)라고 쓰면 화면이 **"가상"이라고 거짓말**한다.
+ *   ⚠ **오류가 아니라 그럴듯한 틀린 표시**라서 더 나쁘다.
+ *
+ * ⏳ **닫는 조건 있는 보류**: 가상 모듈이 다시 필요해지면 **별도 키**로 만든다(socket 합의).
+ *   🔴 **접미 글자로 뜻을 나르지 않는다.**
  */
 function baseKind(kind) {
-  return isVirtualKind(kind) ? kind.slice(0, 2) : kind;
-}
-function isVirtualKind(kind) {
-  return typeof kind === 'string' && kind.length === 3 && kind.charAt(2) === 'V';
+  /* 라벨 폴백표를 찾을 때만 쓴다. 🔑 **뜻을 해석하는 게 아니라 표를 찾는 것**이다 —
+     표에 없으면 그냥 폴백이 다음으로 넘어간다(`mod.name`). */
+  return kind;
 }
 
 /** `blocked_reason` 코드 → 계열. 🔴 계열은 **서버가 코드에 실어 준 것**이고 화면이 짐작하지 않는다. */
@@ -2638,9 +2664,14 @@ function orderedModules(mods) {
     .sort(function (a, b) {
       /* 🔑 `V` 를 떼고 순위를 본다 — 안 떼면 `OBV` 가 `-1` 이 되어 **차단봉이 목록 맨 뒤로 밀린다.**
          가상이든 실물이든 **같은 종류는 같은 자리에 있어야** 사용자가 비교할 수 있다. */
-      const ka = MOD_KIND_ORDER.indexOf(baseKind(a.m && a.m.kind)), kb = MOD_KIND_ORDER.indexOf(baseKind(b.m && b.m.kind));
-      const ra = ka < 0 ? MOD_KIND_ORDER.length : ka, rb = kb < 0 ? MOD_KIND_ORDER.length : kb;
-      return ra !== rb ? ra - rb : a.i - b.i;   // 같은 순위면 도착 순서 유지(안정)
+      /* 🔴 **첫 글자만 본다** (socket 2026-08-20 · kind 계약이 첫 글자로 좁아졌다).
+         `I…`(관측) 먼저, `O…`(출력) 나중 — 위에서 아래로 읽으면 **원인 → 결과**가 된다.
+         🔑 **그룹 안은 `z.modules` 배열 순서**, 곧 **기여자가 `lot.cpp` 에 적은 순서**다.
+            알파벳보다 기여자 의도에 가깝고, 둘째 글자를 해석하지 않는다.
+         ⚠ `idx`(배선 순서)는 여전히 안 쓴다 — 배선을 바꾸면 화면이 조용히 재배열된다. */
+      const rank = (k) => (typeof k === 'string' && k.charAt(0) === 'O') ? 1 : 0;
+      const ra = rank(a.m && a.m.kind), rb = rank(b.m && b.m.kind);
+      return ra !== rb ? ra - rb : a.i - b.i;   // 같은 그룹이면 선언 순서 유지(안정 정렬)
     })
     .map(function (x) { return x.m; });
 }
@@ -2730,7 +2761,7 @@ function renderZoneGrid() {
         /* 이미 그린 자리의 나머지 칸. **자리이긴 한데 여기서 또 그리지 않는다.** */
         li.className = 'zcell--cont';
         li.setAttribute('aria-hidden', 'true');
-        li.title = zoneLabel(z.id) + ' (' + z.id + ') 가 이어지는 칸입니다';
+        li.title = zoneLabel(z) + ' (' + z.id + ') 가 이어지는 칸입니다';
         el.zoneGrid.appendChild(li);
         continue;
       }
@@ -2821,18 +2852,18 @@ function renderZone(li, z, zs) {
      그것이 예약 전선에 나가는 값(`R,<rid>,<id>`)이라 **사람이 로그와 화면을 맞출 수 있어야 한다.**
      🔑 `.zone__id` 의 내용은 **여전히 날 id** 다 — 내 다른 하니스(`live-map`)가 이 칸으로 두 경로를
      대조하기 때문에 여기에 표시 이름을 넣으면 그 대조가 조용히 깨진다. **표시는 새 칸에 담는다.** */
-  if (zoneHasLabel(z.id)) {
+  if (zoneHasLabel(z)) {
     const nameEl = document.createElement('span');
     nameEl.className = 'zone__name';
-    nameEl.textContent = zoneLabel(z.id);
+    nameEl.textContent = zoneLabel(z);
     head.appendChild(nameEl);
   }
   const idEl = document.createElement('span');
   idEl.className = 'zone__id';
   idEl.dataset.raw = z.id;
   idEl.textContent = z.id;
-  idEl.title = zoneHasLabel(z.id)
-    ? (zoneLabel(z.id) + ' — 예약·명령에 쓰이는 자리 id 는 ' + z.id + ' 입니다 (로그와 맞출 때 이 값을 보세요)')
+  idEl.title = zoneHasLabel(z)
+    ? (zoneLabel(z) + ' — 예약·명령에 쓰이는 자리 id 는 ' + z.id + ' 입니다 (로그와 맞출 때 이 값을 보세요)')
     : (z.id + ' — 예약·명령에 쓰이는 자리 id 입니다');
   const sum = document.createElement('span');
   sum.className = 'zone__sum';
@@ -3010,17 +3041,18 @@ function renderModuleRow(mod, smod, zs) {
      아니라 `"장치가 켰다고 보고합니다"` 까지만 말할 수 있다(§5.34.2) — 그 구분을 이 한 글자가 나른다.
      ⚠ 접근 이름에는 기호가 아니라 **문장**으로 적는다(§7.2: 좁은 곳은 기호, 넓은 곳은 문장). */
   const isAct = isOutputKind(mod.kind);
-  /* 🔴 `V` 접미(가상 모듈)를 떼고 라벨을 찾는다 — 안 떼면 표에 없어서 **원문 `"OBV"` 가 그대로
-     화면에 뜬다.** 그리고 **가상이라는 사실을 라벨에 적는다**: 사용자가 없는 장치의 값을
-     실물로 읽으면 안 된다.
-     🔑 **`*`(장치가 보고한 값)와 `(가상)`은 다른 축이다.** `*` 는 *"내가 관측한 게 아니라 되비친 값"*,
-     `(가상)` 은 *"그 장치가 물리적으로 없다"* 다. **둘이 같이 붙을 수 있고 그게 맞다.**
-     🔴 ~~`dupKind`(같은 종류가 둘 이상일 때만 이름을 덧붙인다)~~ **지웠다** (REQ-0268 · 사용자 지시).
-     그 조건은 **1영역:1모듈인 지금 지형에서 항상 거짓**이라 화면에 `주차확인센서` 만 나왔다 —
-     **아두이노 하나에 센서가 10개면 어느 것인지 알 수 없다.** *"인덱스는 늘 노출되어야 한다."* */
-  const virt = isVirtualKind(mod.kind);
-  const label = (MOD_KIND_LABEL[baseKind(mod.kind)] || mod.kind || mod.name || '(이름 없음)')
-              + (virt ? ' (가상)' : '');
+  /* 🔴 **이름의 정본은 `mod.label` 이다** (socket 2026-08-20 · `lot.label("P1","LD","안내등")`).
+     기여자가 `lot.cpp` 에서 선언한 것이고 **화면은 그것을 그대로 쓴다.**
+
+     **폴백 순서 — 이 순서가 계약이다:**
+       ① `mod.label`                  기여자가 선언한 이름
+       ② `MOD_KIND_LABEL[mod.kind]`   종류 표(내 것). **지우지 않는다** — 라벨 없는 모듈이 빈칸이 되면 안 된다
+       ③ `mod.name`                   그것도 없으면 전선 이름 그대로
+
+     ⚠ `label` 은 **선언 안 하면 키가 아예 없다**(빈 문자열을 안 보낸다 · socket 확정).
+        그래서 `''` 를 "이름이 있는데 비었다"로 읽고 폴백을 건너뛸 일이 없다.
+     🔴 ~~`dupKind`~~ · ~~`(가상)`~~ 은 각각 REQ-0268 · 2026-08-20 에 제거됐다(위 `baseKind` 주석). */
+  const label = modLabelOf(mod);
   /* 같은 `kind` 가 그 자리에 둘 이상이면 `name` 으로 가른다. `name` 은 **노드 안에서만 유효한
      명칭**이라 그 자체로는 고유하지 않다(§5.42) — 그래서 기본 표시는 `kind` 라벨이다. */
   /* 🔴 **`idx` 는 그냥 번호가 아니라 *전선 주소* 다** — 하행 `G,<rid>,<idx>,<op>` 가 이 값으로 모듈을 친다.
@@ -3034,19 +3066,15 @@ function renderModuleRow(mod, smod, zs) {
      ⚠ **박스 밖으로 이 문자열을 옮기면 그 조건이 깨진다.** 그때는 `devid` 를 같이 붙여야 한다. */
   const idxText = (typeof mod.idx === 'number' && mod.idx >= 0) ? '#' + mod.idx : '#?';
   nameEl.textContent = label + ' ' + idxText + ' (' + (mod.name || '?') + ')' + (isAct ? '*' : '');
-  /* 🔴 가상 모듈은 **한 층 더 약하다.** 실물 출력은 *"장치가 켰다고 보고한다"* 까지 말할 수 있지만,
-     가상은 **켤 물건이 없다** — 값은 장치가 흉내낸 것이다. 층 표(§5.34.2)에 이 줄이 하나 더 붙는다.
-     ⚠ 이걸 안 갈라 쓰면 시험용 가상 모듈의 값을 **실제 개방으로 읽는다.** */
   /* 🔑 좁은 곳은 기호, 넓은 곳은 문장(§7.2). 화면에는 `#0` 이 붙고 **여기서는 그 뜻을 풀어 쓴다** —
      `#` 하나만 보고 "몇 번째 줄"로 읽으면 안 된다. 이것은 **장치 안의 모듈 번호**다. */
   const idxWord = (typeof mod.idx === 'number' && mod.idx >= 0)
     ? ('모듈 번호 ' + mod.idx + '번')
     : '모듈 번호를 모릅니다';
   const who = label + ' · ' + idxWord + ' · 이름 ' + (mod.name || '(없음)');
-  nameEl.title = virt
-    ? (who + ' — 이 자리에 실제 장치가 없습니다. 장치가 흉내낸 값이며 실제 동작이 아닙니다')
-    : isAct ? (who + ' — 장치가 보고한 값입니다 (실제 점등·개방은 확인할 수 없습니다)')
-            : (who + ' — 장치가 측정한 값입니다');
+  nameEl.title = isAct
+    ? (who + ' — 장치가 보고한 값입니다 (실제 점등·개방은 확인할 수 없습니다)')
+    : (who + ' — 장치가 측정한 값입니다');
   const valEl = document.createElement('span');
 
   let mark = '·', loud = '0';
@@ -3200,7 +3228,10 @@ function renderModuleControl(mod, smod) {
   row.className = 'zctl__row';
   const lab = document.createElement('span');
   lab.className = 'zctl__label';
-  lab.textContent = ctl.label || mod.name;
+  /* 🔴 ~~`ctl.label`~~ **없어졌다**(socket 2026-08-20). 이름의 정본은 `mod.label` 하나다.
+     🔑 근거: 같은 모듈에 이름이 둘이면 **우선순위 규칙**이 생기고, 규칙이 생기면 사람이 틀린다.
+        그리고 `choice` 는 이미 **옵션 라벨**이 버튼 글자라 `control` 의 라벨은 중복이었다. */
+  lab.textContent = modLabelOf(mod);
   row.appendChild(lab);
 
   if (ctl.widget === 'toggle') {
@@ -3222,7 +3253,7 @@ function renderModuleControl(mod, smod) {
        사용자가 헛왕복을 하지 않게 하는 것이 화면의 몫이다. */
     if (lo !== null) inp.min = String(lo);
     if (hi !== null) inp.max = String(hi);
-    inp.setAttribute('aria-label', (ctl.label || mod.name) + ' 값'
+    inp.setAttribute('aria-label', modLabelOf(mod) + ' 값'
       + (lo !== null && hi !== null ? ' (' + lo + '부터 ' + hi + '까지)' : ''));
     const go = document.createElement('button');
     go.type = 'button';
@@ -3270,7 +3301,7 @@ function renderModuleControl(mod, smod) {
   /* ⚠ 연습 칸도 **똑같이 사용자 소유**다. 루트 지적대로 둘 다 지켜야 한다. */
   pin.dataset.modKey = modKey(mod.devid, mod.name);
   pin.dataset.role = 'prac';
-  pin.setAttribute('aria-label', (ctl.label || mod.name) + ' 연습 값 (범위 검사 없음)');
+  pin.setAttribute('aria-label', modLabelOf(mod) + ' 연습 값 (범위 검사 없음)');
   const pgo = document.createElement('button');
   pgo.type = 'button';
   pgo.className = 'zctl__btn zctl__btn--warn';
