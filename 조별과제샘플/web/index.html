@@ -233,9 +233,32 @@
   .znode--empty { border-style: dashed; font-size: 11px; color: var(--ink-dim); }
 
   .zone__mods { list-style: none; margin: 2px 0 0; padding: 0; font-size: 11.5px; }
-  .zmod { display: flex; align-items: center; gap: 6px; }
+  .zmod { display: flex; flex-direction: column; gap: 2px; }
+  .zmod__head { display: flex; align-items: center; gap: 6px; }
   /* 모듈 이름이 남는 자리를 먹고 값(●/○)은 오른쪽 끝에 붙는다 — 등·이름·값 세 칸이 안 흔들린다. */
-  .zmod > :nth-child(2) { flex: 1 1 auto; min-width: 0; }
+  .zmod__head > :nth-child(2) { flex: 1 1 auto; min-width: 0; }
+
+  /* ── 모듈 조작 (SPEC-web-control) ─────────────────────────────
+     🔴 `control` 선언이 있는 모듈에만 이 블록이 존재한다. 없으면 DOM 에도 없다. */
+  .zctl { margin: 1px 0 4px 1.4em; padding: 3px 5px; border-left: 2px solid var(--line); }
+  .zctl__row { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .zctl__label { font-size: 10.5px; opacity: .8; }
+  .zctl__btn { font: inherit; font-size: 11px; padding: 1px 7px; border-radius: 6px; cursor: pointer;
+               border: 1px solid var(--line); background: var(--panel); color: inherit; }
+  .zctl__btn[aria-disabled="true"] { cursor: not-allowed; opacity: .55; }
+  /* 연습 단추 — 범위를 안 보고 보낸다. **눈에 다르게 보여야 실수로 안 쓴다.** */
+  .zctl__btn--warn { border-color: #c9a227; }
+  .zctl__num { font: inherit; font-size: 11px; width: 9ch; padding: 1px 4px;
+               border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: inherit; }
+  .zctl__hint { font-size: 10px; opacity: .65; }
+  .zctl__prac { margin-top: 2px; }
+  .zctl__prac > summary { font-size: 10px; opacity: .65; cursor: pointer; }
+  /* 🔴 상태 줄 — 색만으로 뜻을 나르지 않는다. 문구가 이미 뜻을 말하고 색은 거드는 것이다. */
+  .zctl__msg { font-size: 10.5px; margin-top: 2px; }
+  .zctl__msg[data-kind="ok"]   { color: #1a8f3c; }
+  .zctl__msg[data-kind="bad"]  { color: #c62828; }
+  .zctl__msg[data-kind="warn"] { color: #a06800; }
+  .zctl__msg[data-kind="wait"] { color: var(--ink-dim); }
 
   /* 🔴 **동작 상태등 — 셋.** 색만으로 뜻을 나르지 않는다(색각 이상·스크린리더):
      도형이 다르고(● ▲ ○) `aria-label` 에 문장이 붙는다. **모름을 녹/적으로 칠하지 않는다.** */
@@ -3012,12 +3035,202 @@ function renderModuleRow(mod, smod, zs) {
   lampEl.setAttribute('aria-label', '동작 상태: ' + (lamp === 'ok' ? '정상' : lamp === 'bad' ? '이상' : '모름') + ' — ' + lampWhy);
   lampEl.title = lampEl.getAttribute('aria-label');
 
-  li.appendChild(lampEl); li.appendChild(nameEl); li.appendChild(valEl);
+  const head = document.createElement('div');
+  head.className = 'zmod__head';
+  head.appendChild(lampEl); head.appendChild(nameEl); head.appendChild(valEl);
+  li.appendChild(head);
+
+  /* 🔴 조작 UI 는 **`control` 선언이 있을 때만** 붙는다(§3.1). 없으면 이 아래가 통째로 없다. */
+  const ctl = renderModuleControl(mod, smod);
+  if (ctl) li.appendChild(ctl);
   return li;
 }
 
 /** 이 자리의 조작 중 하나라도 **고장 계열로** 막혔나. 🔴 화면이 규칙을 만들지 않는다 —
     서버가 준 `reason` 의 계열만 읽는다(`zoneBlockedByUnknown` 의 짝). */
+/* ────────────────────────────────────────────────────────────────
+   모듈 조작 UI — 정본 `docs/net/SPEC-web-control.md` §3.1·§3.2·§4
+   🔴 **화면은 `kind` 를 해석하지 않는다.** 무엇을 그릴지는 서버가 `control` 로 선언한다.
+      그래서 kind 가 늘어도 이 코드가 안 바뀐다. **뜻은 기여자가 `lot.cpp` 에서 정한다.**
+   ──────────────────────────────────────────────────────────────── */
+
+/**
+ * 🔴 `confirmed` **하나만** 읽는다 (§3.2 · 루트 지시).
+ * ⚠ `value` 와 `requested` 를 화면이 비교하면 **판정자가 둘이 된다** — 서버와 화면이 다른 답을 내는 날이 온다.
+ * 🔑 *"두 키를 읽어야 안전한 계약은 언젠가 한 키만 읽힌다."*
+ *
+ * 🔴 `partial` 을 `settled` 처럼 그리지 않는 것이 이 함수의 존재 이유다.
+ * 지금 상행 에코는 **비트**라 숫자를 못 나른다 — *"1234567 로 설정됨"* 은 **거짓 완료**다(2단계에서 닫힌다).
+ */
+function moduleConfirmText(smod) {
+  if (!smod) return null;
+  const c = smod.confirmed;
+  if (c === undefined || c === null || c === 'unknown') return null;   /* 아무 주장도 하지 않는다 */
+  const req = ('requested' in smod) ? String(smod.requested) : null;   /* 없으면 키가 없다(§3.2) */
+  const echo = smod.known === true ? (smod.value ? '켜짐' : '꺼짐') : '모름';
+  if (c === 'pending')  return { cls: 'wait', text: (req !== null ? req + ' 보냄 — ' : '') + '장치 응답을 기다리는 중' };
+  if (c === 'settled')  return { cls: 'ok',   text: '장치가 요청대로 보고합니다' + (req !== null ? ' (' + req + ')' : '') };
+  /* 🔴 숫자 모듈. 에코 비트는 "0이 아니다"만 말한다 — **값이 맞는지는 확인되지 않았다.** */
+  if (c === 'partial')  return { cls: 'warn', text: (req !== null ? req + ' 보냄' : '보냄') + ' · 장치 에코 ' + echo + ' · ⚠ 값 확인 불가' };
+  if (c === 'mismatch') return { cls: 'bad',  text: '⚠ 장치가 요청과 다르게 보고합니다' + (req !== null ? ' (' + req + ' 보냄 · 에코 ' + echo + ')' : '') };
+  /* 모르는 값은 조용히 정상으로 떨어뜨리지 않는다(§5.66 의 그 규칙). */
+  return { cls: 'bad', text: '⚠ 알 수 없는 상태 (' + String(c) + ')' };
+}
+
+/**
+ * 🔴 명령 **결말** — 셋이 갈려 보여야 한다(§3.3). **뭉치면 고칠 곳을 못 가른다:**
+ *   ok        — 없음
+ *   rejected  — 값·등록을 고쳐라. **재시도는 뜻이 없다**
+ *   no_answer — 장치·링크다. **화면 로직을 고쳐도 안 낫는다**
+ */
+function moduleCmdText(rec) {
+  if (!rec) return null;
+  if (rec.phase === 'sending') return { cls: 'wait', text: '보내는 중…' };
+  if (rec.outcome === 'ok')        return { cls: 'ok',   text: '✅ ' + (rec.message || '명령이 적용되었습니다') };
+  if (rec.outcome === 'rejected')  return { cls: 'bad',  text: '🔴 거절 — ' + (REASON_TEXT[rec.reason] || rec.message || '값을 확인해 주세요') + '  (다시 눌러도 같습니다)' };
+  if (rec.outcome === 'no_answer') return { cls: 'bad',  text: '⏱ 장치가 응답하지 않았습니다 — 장치·연결 문제입니다 (값을 바꿔도 안 낫습니다)' };
+  return { cls: 'warn', text: '⚠ 알 수 없는 결말 (' + String(rec.outcome) + ')' };
+}
+
+/** 작은 상태 줄 하나. */
+function statusLine(o) {
+  const d = document.createElement('div');
+  d.className = 'zctl__msg';
+  d.dataset.kind = o.cls;
+  d.textContent = o.text;
+  return d;
+}
+
+/**
+ * 🔴 **`control` 선언이 있는 모듈에만** 조작 UI 를 그린다 (§3.1 · 존재/부재 규칙).
+ * 없으면 **아무것도 안 그린다** — "막힌 버튼"으로도 그리지 않는다. 없는 것과 막힌 것은 다르다.
+ */
+function renderModuleControl(mod, smod) {
+  const ctl = mod && mod.control;
+  if (!ctl || !ctl.widget) return null;
+
+  const box = document.createElement('div');
+  box.className = 'zctl';
+  box.dataset.widget = ctl.widget;
+  box.dataset.module = mod.name;
+
+  /* 지금 보낼 수 있나 — **서버가 준 `cmd.ok` 만 본다**(§3.2). 화면이 규칙을 만들지 않는다. */
+  const cmdOk = !(smod && smod.cmd && smod.cmd.ok === false);
+  const cmdWhy = (smod && smod.cmd && smod.cmd.reason) || null;
+  const lo = (typeof ctl.min === 'number') ? ctl.min : null;
+  const hi = (typeof ctl.max === 'number') ? ctl.max : null;
+
+  const send = function (v) { sendModuleCmd(mod.devid, mod.name, v); };
+  const mkBtn = function (label, v, extraCls) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'zctl__btn' + (extraCls ? ' ' + extraCls : '');
+    b.textContent = label;
+    b.dataset.value = String(v);
+    if (!cmdOk) {
+      /* 🔑 진짜 `disabled` 대신 `aria-disabled` — 키보드·스크린리더가 닿아서 **왜 못 누르는지**를 듣는다. */
+      b.setAttribute('aria-disabled', 'true');
+      b.title = REASON_TEXT[cmdWhy] || '지금 보낼 수 없습니다';
+    }
+    b.addEventListener('click', function () {
+      if (!cmdOk) { showMessage(REASON_TEXT[cmdWhy] || '지금 보낼 수 없습니다', 'err'); return; }
+      send(v);
+    });
+    return b;
+  };
+
+  const row = document.createElement('div');
+  row.className = 'zctl__row';
+  const lab = document.createElement('span');
+  lab.className = 'zctl__label';
+  lab.textContent = ctl.label || mod.name;
+  row.appendChild(lab);
+
+  if (ctl.widget === 'toggle') {
+    row.appendChild(mkBtn('켬', 1));
+    row.appendChild(mkBtn('끔', 0));
+  } else if (ctl.widget === 'choice') {
+    /* 🔑 **`options` 가 곧 명령표다.** `label` 을 그리고 `value` 를 보낸다 — 화면은 뜻을 모른다. */
+    const opts = Array.isArray(ctl.options) ? ctl.options : [];
+    for (const o of opts) row.appendChild(mkBtn(String(o.label), o.value));
+  } else if (ctl.widget === 'number') {
+    const inp = document.createElement('input');
+    inp.type = 'number';
+    inp.className = 'zctl__num';
+    /* 🔴 **범위가 오면 화면이 먼저 막는다**(§3.1). 서버도 막지만(`out_of_range`),
+       사용자가 헛왕복을 하지 않게 하는 것이 화면의 몫이다. */
+    if (lo !== null) inp.min = String(lo);
+    if (hi !== null) inp.max = String(hi);
+    inp.setAttribute('aria-label', (ctl.label || mod.name) + ' 값'
+      + (lo !== null && hi !== null ? ' (' + lo + '부터 ' + hi + '까지)' : ''));
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'zctl__btn';
+    go.textContent = '보내기';
+    go.addEventListener('click', function () {
+      if (!cmdOk) { showMessage(REASON_TEXT[cmdWhy] || '지금 보낼 수 없습니다', 'err'); return; }
+      const v = Number(inp.value);
+      if (inp.value === '' || !Number.isFinite(v)) { showMessage('숫자를 입력해 주세요', 'err'); return; }
+      if (lo !== null && v < lo) { showMessage('최소 ' + lo + ' 이상이어야 합니다 (보내지 않았습니다)', 'err'); return; }
+      if (hi !== null && hi < v) { showMessage('최대 ' + hi + ' 이하여야 합니다 (보내지 않았습니다)', 'err'); return; }
+      send(v);
+    });
+    row.appendChild(inp);
+    row.appendChild(go);
+    if (lo !== null && hi !== null) {
+      const hint = document.createElement('span');
+      hint.className = 'zctl__hint';
+      hint.textContent = lo + '~' + hi;
+      row.appendChild(hint);
+    }
+  } else {
+    /* 🔴 모르는 위젯은 **조용히 무시하지 않고 그 사실을 보인다.** 계약이 늘어난 것이다. */
+    const un = document.createElement('span');
+    un.className = 'zctl__hint';
+    un.textContent = '⚠ 이 화면이 모르는 조작 형식입니다 (' + String(ctl.widget) + ')';
+    row.appendChild(un);
+  }
+  box.appendChild(row);
+
+  /* ── 🔑 연습 칸 — **범위를 무시하고 보낸다** (루트 지시)
+     위의 `number` 는 범위를 막는다. 그런데 **거절이 실제로 도는지 배우려면 넘겨 봐야 한다.**
+     🔑 **막는 것과 거절이 도는 것은 둘 다 필요하다** — 하나만 두면 반쪽만 배운다.
+     ⚠ 그래서 이 칸은 **일부러 검사하지 않는다.** 접어 두어 실수로 쓰지 않게 한다. */
+  const prac = document.createElement('details');
+  prac.className = 'zctl__prac';
+  const sum = document.createElement('summary');
+  sum.textContent = '연습 — 범위를 무시하고 보내기';
+  prac.appendChild(sum);
+  const prow = document.createElement('div');
+  prow.className = 'zctl__row';
+  const pin = document.createElement('input');
+  pin.type = 'number';
+  pin.className = 'zctl__num';
+  pin.setAttribute('aria-label', (ctl.label || mod.name) + ' 연습 값 (범위 검사 없음)');
+  const pgo = document.createElement('button');
+  pgo.type = 'button';
+  pgo.className = 'zctl__btn zctl__btn--warn';
+  pgo.textContent = '그대로 보내기';
+  pgo.title = '범위를 확인하지 않고 보냅니다 — 서버가 어떻게 거절하는지 보기 위한 것입니다';
+  pgo.addEventListener('click', function () {
+    const v = Number(pin.value);
+    if (pin.value === '' || !Number.isFinite(v)) { showMessage('숫자를 입력해 주세요', 'err'); return; }
+    send(v);        /* 🔴 일부러 범위를 안 본다 */
+  });
+  prow.appendChild(pin); prow.appendChild(pgo);
+  prac.appendChild(prow);
+  box.appendChild(prac);
+
+  /* ── 상태 두 줄 — **서로 다른 것을 말한다. 뭉치지 않는다** */
+  const conf = moduleConfirmText(smod);          /* 지금 값이 어떤가 (§4) */
+  if (conf) box.appendChild(statusLine(conf));
+  const rec = state.modCmd.get(modKey(mod.devid, mod.name));
+  const res = moduleCmdText(rec);                /* 마지막 명령이 어떻게 끝났나 (§3.3) */
+  if (res) box.appendChild(statusLine(res));
+
+  return box;
+}
+
 function zoneBlockedByFault(zs) {
   const map = zs && zs.actions;
   if (!map) return false;
