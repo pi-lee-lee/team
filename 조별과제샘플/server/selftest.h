@@ -1288,37 +1288,70 @@ static int selftest() {
             // ㉟ 🔴🔴 **전선 봉투의 키 이름을 단언한다** (REQ-0276 · 2026-08-19)
             //
             //   내가 `zones` → `lot.zones()` 정규식 치환을 하면서 **문자열 리터럴 안까지 바꿨다.**
-            //   `map`·`state` 가 `"lot.zones()"` 라는 키를 내보냈고 **화면 격자가 통째로 안 보였다.**
-            //   🔴 **자가검증 114개가 전부 통과했다** — 서버가 자기 JSON 을 자기가 파싱하지 않기 때문이다.
-            //   ⚠ 잡은 것은 web 이 **전선 프레임 원문을 뜬 것**이었다. **받는 쪽만 볼 수 있었다.**
-            //   🔑 그러면 **받는 쪽이 없어도 볼 수 있게** 만든다 — 봉투의 키를 여기서 단언한다.
-            //     이건 "JSON 이 맞나"가 아니라 **"계약이 약속한 이름이 그대로 나가나"** 를 묻는다.
+            //   `map`·`state` 가 `"lot.zones()"` 라는 키를 냈고 **화면 격자가 10분 27초 동안 안 보였다.**
+            //
+            //   🔴 **자가검증 114개가 전부 통과했다. 못 잡은 게 아니라 *같이 틀렸다*** —
+            //     ㉗ 의 기대값(`"zones":[]`)도 **같은 정규식이** 바꿨기 때문에 대조가 성립했다.
+            //     > **기대값을 코드와 같은 도구로 만들면, 그 도구의 실수는 시험을 통과한다.**
+            //     ⚠ web 이 같은 부류를 다른 경로로 밟았다 — **기대 표를 피검체에서 읽어** `[] == []` 공허 통과.
+            //       **도구가 같아서 / 출처가 같아서. 둘 다 "기대값이 피검체와 독립인가"를 안 물었다.**
+            //
+            //   🔑 그래서 여기서는 **계약 이름을 손으로 박은 리터럴로** 둔다. 치환이 같이 못 바꾸도록.
+            //
+            //   ⚠ **이 시험의 분모는 "web 이 실제로 읽는 키"다**(2026-08-19 web 이 값으로 준 목록).
+            //     **봉투 계약이 늘면 이 시험은 자동으로 안 는다.** 갱신 경로는 web 의 통보다 —
+            //     화면이 읽는 키가 바뀌면 알려 주기로 했다. **안 오면 이 목록은 조용히 낡는다.**
             {
                 Server t; t.build_default_zones(); t.init_srv_id();
-                const std::string m = t.map_json();
+                // 🔑 모듈이 결속돼야 `modules[]` 하위 키가 봉투에 나온다.
+                //    빈 배열로 재면 **하위 키를 하나도 안 밟는다** — 통과 수만 늘고 분모는 0 이다.
+                t.park.devid = "P1";
+                t.park.mods.push_back(std::make_pair(std::string("A1"), std::string("IP")));
+                t.bind_modules(t.park);
+                const std::string m  = t.map_json();
                 const std::string st = t.state_json();
-                struct K { const char* key; };
-                static const char* mapKeys[]   = { "\"type\":\"map\"", "\"epoch\":", "\"grid\":", "\"zones\":[" };
-                static const char* stateKeys[] = { "\"type\":\"state\"", "\"epoch\":", "\"ts_ms\":", "\"zones\":[" };
+
+                // ── web 이 실제로 파싱하는 키 (그쪽이 값으로 준 목록) ────────────────
+                static const char* mapKeys[] = {
+                    "\"type\":\"map\"", "\"srv_id\":", "\"epoch\":",
+                    "\"grid\":", "\"rows\":", "\"cols\":",
+                    "\"zones\":[", "\"id\":", "\"kind\":", "\"cells\":", "\"modules\":[",
+                    "\"devid\":", "\"name\":", "\"idx\":"
+                };
+                static const char* stateKeys[] = {
+                    "\"type\":\"state\"", "\"srv_id\":", "\"epoch\":", "\"ts_ms\":",
+                    "\"zones\":[", "\"id\":", "\"occupied\":", "\"reserved\":",
+                    "\"actions\":", "\"completion\":", "\"modules\":[",
+                    "\"devid\":", "\"name\":", "\"idx\":", "\"value\":", "\"known\":"
+                };
                 bool ok35 = true; std::string missing;
                 for (size_t i = 0; i < sizeof(mapKeys)/sizeof(mapKeys[0]); i++)
                     if (m.find(mapKeys[i]) == std::string::npos) { ok35 = false; missing += std::string(" map:") + mapKeys[i]; }
                 for (size_t i = 0; i < sizeof(stateKeys)/sizeof(stateKeys[0]); i++)
                     if (st.find(stateKeys[i]) == std::string::npos) { ok35 = false; missing += std::string(" state:") + stateKeys[i]; }
-                // 🔴 그리고 **키에 `.`·`(` 가 들어간 것이 하나라도 있으면 실패다** —
-                //   이번 사고의 서명이 정확히 그것이었다(`"lot.zones()"`).
-                for (size_t q = m.find("\":"); q != std::string::npos; q = m.find("\":", q + 1)) {
-                    size_t b = m.rfind('"', q - 1);
-                    if (b == std::string::npos) continue;
-                    std::string k = m.substr(b + 1, q - b - 1);
-                    if (k.find('.') != std::string::npos || k.find('(') != std::string::npos) {
-                        ok35 = false; missing += " 이상한키:" + k; break;
+
+                // 🔴 **서명 검사** — 키에 `.` 나 `(` 가 하나라도 있으면 실패.
+                //    이번 사고의 서명이 정확히 그것이었다(C++ 표현식이 키 자리에 들어갔다).
+                //    🔑 위 목록은 **아는 키만** 지키고, 이 검사는 **모르는 키까지** 잡는다.
+                const std::string* both[2]; both[0] = &m; both[1] = &st;
+                for (int w = 0; w < 2 && ok35; w++) {
+                    const std::string& j = *both[w];
+                    for (size_t q = j.find("\":"); q != std::string::npos; q = j.find("\":", q + 1)) {
+                        size_t b = j.rfind('"', q - 1);
+                        if (b == std::string::npos) continue;
+                        std::string k = j.substr(b + 1, q - b - 1);
+                        if (k.find('.') != std::string::npos || k.find('(') != std::string::npos) {
+                            ok35 = false; missing += std::string(w ? " state이상한키:" : " map이상한키:") + k; break;
+                        }
                     }
                 }
-                std::cout << (ok35 ? "  ✓ " : "  ✗ ") << "전선 봉투의 키 이름이 계약대로다"
-                          << (ok35 ? "" : (" — 빠지거나 이상함:" + missing)) << "\n";
+                std::cout << (ok35 ? "  ✓ " : "  ✗ ") << "전선 봉투의 키가 계약대로다 (map "
+                          << sizeof(mapKeys)/sizeof(mapKeys[0]) << "종 · state "
+                          << sizeof(stateKeys)/sizeof(stateKeys[0]) << "종 + 서명검사)"
+                          << (ok35 ? "" : (" — 🔴" + missing)) << "\n";
                 if (!ok35) bad++;
             }
+
 
             // ㉞ 🔴 **`known:false` 의 사유가 갈린다** (명세 §8.10)
             //    ⚠ `ws_probe` 는 메시지를 잘라 찍어 `state` 전문을 못 읽는다 —
