@@ -175,7 +175,7 @@
                 // 🔴 **여기가 기여자가 갈아끼우는 자리다.** 지금은 자리 전부가 기본 구현을 쓴다.
                 //   ⚠ 반환값 `false` 는 *"비었다"* 가 아닐 수 있다 — 전부 모르는 경우도 `false` 다.
                 //     그 구분은 아래 `value_state` 가 나른다. **2단계에서 `Tri` 로 합친다.**
-                const bool occ = default_spot_.occupied(readings);
+                const bool occ = behavior_for(z.id).occupied(readings);
                 const char* vs = (v_total == 0 || v_known == 0) ? "unknown"
                                : (v_known == v_total ? "known" : "partial");
                 // 🔴 `value_state` 는 **모든 자리에 항상 싣는다.** 선택적이면 화면이 안 본다.

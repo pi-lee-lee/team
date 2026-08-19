@@ -242,6 +242,11 @@ Spot& Spot::actuator(const std::string& devid, const std::string& name) {
     return *this;
 }
 
+Spot& Spot::behavior(SpotBehavior& b) {
+    lot_->areas_[idx_].behavior = &b;      // 🔑 참조를 주소로 든다. 사본이 아니다
+    return *this;
+}
+
 Spot ParkingLot::spot(const std::string& id) {
     for (size_t i = 0; i < areas_.size(); i++)
         if (areas_[i].id == id) return Spot(this, i);      // 같은 자리를 두 번 불러도 안전하다

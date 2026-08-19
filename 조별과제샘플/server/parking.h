@@ -32,6 +32,7 @@
 #include <string>
 #include <vector>
 #include <cstddef>
+#include "spot.h"      // SpotBehavior — 자리의 동작 방식(기여자가 구현한다)
 
 class ParkingLot;
 
@@ -65,6 +66,23 @@ public:
     // 🔑 센서와 갈라 두는 이유: `occupied()` 가 받는 것은 **센서뿐**이어야 한다.
     //   섞이면 차단봉 상태가 자리 점유로 새어 들어간다(명세 §8.1).
     Spot& actuator(const std::string& devid, const std::string& name);
+
+    // 🔴🔴 **이 자리의 판정 방식을 갈아끼운다** (2026-08-19)
+    //
+    //   ```
+    //   struct 내판정 : SpotBehavior {
+    //       virtual bool occupied(const std::vector<SensorReading>& s) const {
+    //           return s.size() >= 2 && s[0].known && s[1].known && s[0].value && s[1].value;  // AND
+    //       }
+    //   };
+    //   static 내판정 g_내판정;                       // 🔴 **서버보다 오래 살아야 한다**
+    //   lot.spot("A1").sensor("P1","A1").behavior(g_내판정);
+    //   ```
+    //   안 부르면 **기본(OR)** 이 쓰인다 — 지금 모든 자리가 그 경우다.
+    //
+    // ⚠ **참조를 든다. 사본이 아니다.** 지역 변수를 넘기면 그 함수가 끝나는 순간 죽는다 —
+    //   `static` 이나 전역으로 둬라. **그래서 인자가 `&` 다**(포인터였으면 `new` 를 부르게 된다).
+    Spot& behavior(SpotBehavior& b);
 private:
     friend class ParkingLot;
     Spot(ParkingLot* lot, std::size_t idx) : lot_(lot), idx_(idx) {}
@@ -94,6 +112,10 @@ public:
         // ⚠ 이름이 `sensors` 였다. **센서만 담지 않게 됐으므로 바꿨다** —
         //   담는 것이 바뀌었는데 이름이 그대로면 다음 사람이 센서만 있다고 읽는다.
         std::vector<Attach> modules;
+        // 🔑 `0` 이면 **서버의 기본 판정**을 쓴다. 자리마다 다른 것을 꽂을 수 있다.
+        //   ⚠ 소유하지 않는다 — 호출자가 준 것이 살아 있어야 한다(위 `behavior()` 주석).
+        SpotBehavior* behavior;
+        Area() : behavior(0) {}
     };
     const std::vector<Area>& areas() const { return areas_; }
     bool empty() const { return areas_.empty(); }

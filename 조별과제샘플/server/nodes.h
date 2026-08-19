@@ -323,6 +323,17 @@
         }
     }
 
+    // 🔑 이 자리의 판정 방식. 조립 표가 안 정했으면 **서버 기본(OR)**.
+    //   ⚠ 자리 id 로 찾는다 — 지형 `Zone` 과 조립 표 `Area` 가 같은 id 를 쓴다.
+    const SpotBehavior& behavior_for(const std::string& zoneId) const {
+        if (lot_) {
+            const std::vector<ParkingLot::Area>& as = lot_->areas();
+            for (size_t i = 0; i < as.size(); i++)
+                if (as[i].id == zoneId && as[i].behavior) return *as[i].behavior;
+        }
+        return default_spot_;
+    }
+
     void bind_modules(Node& n) {
         Lot::BindResult r = lot.bind(n.devid, n.mods, lot_);
         mod_seen_ += (long long)n.mods.size();   // 🔑 분모 — 시도한 만큼 센다

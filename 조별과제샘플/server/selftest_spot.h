@@ -85,6 +85,44 @@
                     if (!ok) bad++;
                 }
 
+                // ⓵ 🔴🔴 **자리에 꽂은 판정이 실제로 쓰이는가** — 이게 "콜백"의 전부다
+                //   ⚠ 꽂았는데 안 불리면 **기본이 조용히 계속 쓰인다.** 기여자 입장에서는
+                //     *"내가 쓴 코드가 아무 일도 안 한다"* 이고, **오류도 안 난다.**
+                //   🔑 그래서 **같은 입력에 두 자리가 다른 답을 내는 것**으로 잰다.
+                {
+                    struct AndRule : SpotBehavior {
+                        virtual bool occupied(const std::vector<SensorReading>& r) const {
+                            int k = 0, v = 0;
+                            for (size_t i = 0; i < r.size(); i++)
+                                if (r[i].known) { k++; if (r[i].value) v++; }
+                            return k > 0 && v == k;      // 모두 찼을 때만
+                        }
+                    };
+                    static AndRule g_and;
+                    ParkingLot lt;
+                    lt.spot("A1").sensor("P1", "A1").sensor("P1", "B1");            // 기본(OR)
+                    lt.spot("A2").sensor("P1", "A2").sensor("P1", "B2").behavior(g_and);
+                    Server t; t.lot_ = &lt;
+                    t.build_default_zones();
+
+                    bool got = (&t.behavior_for("A2") == &g_and)       // 꽂힌 것이 나오나
+                            && (&t.behavior_for("A1") == &t.default_spot_)  // 안 꽂은 곳은 기본
+                            && (&t.behavior_for("없는자리") == &t.default_spot_);
+
+                    // 🔑 **같은 입력에 답이 갈리는가** — 참조 비교만으로는 "쓰인다"를 못 본다
+                    std::vector<SensorReading> split;
+                    split.push_back(SensorReading(true, true));
+                    split.push_back(SensorReading(true, false));
+                    bool differs = (t.behavior_for("A1").occupied(split) == true)
+                                && (t.behavior_for("A2").occupied(split) == false);
+
+                    bool ok = got && differs;
+                    std::cout << (ok ? "  ✓ " : "  ✗ ") << "자리별 판정 — 꽂힌 자리와 기본 자리가 "
+                              << "**같은 입력에 다른 답**(" << (differs ? "갈린다" : "🔴같다")
+                              << ") · 안 꽂은 자리는 기본(" << (got ? "맞다" : "🔴아니다") << ")\n";
+                    if (!ok) bad++;
+                }
+
                 // ㊿ 🔴🔴 **발행 API 가 전선 바이트까지 가는가** — 코드 판독이 아니라 바이트로
                 //   ⚠ `socketpair` 로 실제 `send()` 를 태워 **나간 줄을 읽는다.**
                 //   🔑 7자리가 그대로 실리는지가 이 시험의 요점이다 — 전에는 0/1 밖에 못 보냈다.
@@ -109,11 +147,17 @@
                         //     🔑 발행이 틀린 게 아니라 **시험이 조건을 안 만든 것**이었다.
                         t.flush_downq("selftest 발행", false);
 
+                        // 🔴 **줄이 다 올 때까지 읽는다.** 처음엔 `MSG_DONTWAIT` 를 네 번 돌고
+                        //   끝냈는데 **그게 흔들렸다** — 한 번은 빈 손으로 나와 ✗ 가 떴다.
+                        //   🔑 **부분 읽기도 지연도 정상이다. TCP 는 스트림이지 메시지가 아니다** —
+                        //     내 도메인 제1규칙인데 내 시험이 그것을 어겼다.
+                        //   ⚠ 흔들리는 시험은 "가끔 실패"가 아니라 **결함이다.** 배포 관문에서 걸린다.
                         char rb[512]; std::string got;
-                        for (int i = 0; i < 4; i++) {
+                        for (int i = 0; i < 200 && got.find('\n') == std::string::npos; i++) {
                             int n = (int)recv(sv[1], rb, sizeof(rb), MSG_DONTWAIT);
-                            if (n <= 0) break;
-                            got.append(rb, rb + n);
+                            if (n > 0) { got.append(rb, rb + n); continue; }
+                            struct timeval tv; tv.tv_sec = 0; tv.tv_usec = 1000;   // 1ms
+                            select(0, 0, 0, 0, &tv);
                         }
                         const bool wire7 = got.find("G,") != std::string::npos
                                         && got.find(",1234567,") != std::string::npos;
