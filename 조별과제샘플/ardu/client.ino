@@ -95,7 +95,9 @@ struct ModuleDef {
 #define SAMPLE_ACTUATORS 1
 #endif
 // 샘플 액추에이터의 핀. 🔴 D7·D8 은 ESP 가 쓴다 — 겹치면 통신이 죽는다.
-#define PIN_SAMPLE_LED   5
+// 🔓 **LED 는 보드에 이미 달려 있는 13번**(`LED_BUILTIN`). **아무것도 안 사도 된다.**
+//   🔑 보드가 바뀌어도 `LED_BUILTIN` 이 따라간다 — 숫자를 박지 않는 이유다.
+#define PIN_SAMPLE_LED   LED_BUILTIN
 #define PIN_SAMPLE_DOOR  6
 
 static const ModuleDef MODULE_TABLE[] PROGMEM = {
@@ -294,6 +296,20 @@ static bool ultrasonicRead(uint8_t pin) {
   return lastVal;
 }
 
+// ── 🔓 하드웨어 없이 왕복을 보는 예시 — **LED 를 되읽어 자리 값으로 쓴다** ────────
+//   🔴 **이건 "되읽기(피드백) 센서" 라는 실제 패턴이다.** 차단봉에 리밋 스위치를 달아
+//     *"정말 열렸는가"* 를 읽는 것과 같은 모양이고, 여기서는 그것을 **내장 LED** 로 한다.
+//     `ACK` 은 *"콜백이 true 를 냈다"* 이지 *"물리적으로 그렇게 됐다"* 가 아니기 때문이다.
+//
+//   ⚠ **자리에 진짜 센서를 달면 이 등록을 지우고 네 핸들러를 넣어라.**
+//   🔑 이 예시 덕분에 **아무것도 안 사고** 왕복 전부를 눈으로 볼 수 있다:
+//        srv.send("P1","LD",1)  →  **LED 켜짐(눈)**  →  이 훅이 1 을 읽음
+//                               →  **자리 A1 이 "찼다"로 화면에 뜸**  →  에코 비트도 섬
+static bool readLedBack(uint8_t pin) {
+  (void)pin;                       // 이 훅은 자리 핀이 아니라 **LED 핀**을 본다
+  return digitalRead(PIN_SAMPLE_LED) == HIGH;
+}
+
 #if VIRTUAL_MODULES
 // 시험용 가상 차단봉의 핸들러. **실물 액추에이터도 똑같은 모양으로 쓴다** —
 //   실물이 붙으면 아래 `setup()` 의 등록 한 줄만 바꾸면 된다.
@@ -326,6 +342,10 @@ void setup() {
   //   안 붙이면 `digitalRead(핀)` 이 기본값이다. **지금 되는 것은 그대로 된다.**
   // sensors.on("A1", ultrasonicRead);
   // pinMode(PIN_US_TRIG, OUTPUT);  pinMode(PIN_US_ECHO, INPUT);   // ← 같이 풀어라
+
+  // 🔓 **하드웨어가 없어도 왕복이 보이게** — 자리 A1 의 둘째 센서(B1)가 LED 를 되읽는다.
+  //   ⚠ **진짜 센서를 달면 이 줄을 지워라.** 그러면 `digitalRead(핀 9)` 기본 경로로 돌아간다.
+  sensors.on("B1", readLedBack);
 
   // 🔓 **명령 수신 등록 — 자기 액추에이터를 여기 붙인다**
   //   예)  `router.on("G1", myGate);`   ← 표에 `{"G1", KIND_BARRIER, 7}` 을 더한 뒤

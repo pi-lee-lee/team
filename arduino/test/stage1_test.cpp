@@ -1966,6 +1966,66 @@ int main() {
     Serial.echoToStdout = true;
   }
 
+  // ── [42] 🔴 **하드웨어 없이 왕복 전부** — 명령 → LED → 되읽기 훅 → 자리 값 ──────
+  //   🔑 사용자 지시: *"13번 led 로 하자 · 해당 led on/off 체크를 콜백으로 하자."*
+  //   이 사슬이 **`sensors.on` 을 실기에서 밟는 유일한 길**이다(보드에 센서가 없다).
+  //   그리고 이건 흉내가 아니라 **되읽기(피드백) 센서**라는 실제 패턴이다 —
+  //   `ACK` 은 "콜백이 true 를 냈다"이지 "물리적으로 그렇게 됐다"가 아니기 때문이다.
+  printf("\n[42] 명령 → LED → 되읽기 훅 → 자리 값 (하드웨어 0)\n");
+  {
+    Serial.echoToStdout = false;
+    arm(nullptr);
+    node.begin();                                  // 소스를 표에서 파생시킨다
+    ok(sensors.on("B1", readLedBack),
+                            "★★ 되읽기 훅이 B1 에 붙는다 (`setup()` 과 같은 등록)");
+    ok(sensors.at(1) == readLedBack, "★ 그 칸에 걸렸다");
+    // A1(핀 2)은 훅이 없다 → 기본 경로. 미배선이면 INPUT_PULLUP 이라 HIGH → ACTIVE_LOW 로 0
+    g_pinLevel[slotPin(0)] = HIGH;
+
+    char gg[28];
+    // ① LED 끄기 → 자리는 비어 있어야 한다
+    ackQ.clearCache(); ackQ.clearQueue();
+    snprintf(gg, sizeof gg, "G,950,2,0,"); appendChecksum(gg, (uint8_t)strlen(gg));
+    handleFrameLine(gg);
+    ok(g_pinLevel[PIN_SAMPLE_LED] == LOW, "★ LD 0 → 핀 13 이 LOW (눈으로 보는 표지)");
+    node.readSensors();
+    ok((node.occMask & 0x3) == 0,
+                            "★★ 자리 A1 의 두 센서가 다 0 이다 (LED 꺼짐 · 핀2 미배선)");
+
+    // ② 🔴 **LED 켜기 → 되읽기 훅이 1 을 읽어 자리가 찬다**
+    ackQ.clearCache(); ackQ.clearQueue();
+    snprintf(gg, sizeof gg, "G,951,2,1,"); appendChecksum(gg, (uint8_t)strlen(gg));
+    handleFrameLine(gg);
+    ok(g_pinLevel[PIN_SAMPLE_LED] == HIGH, "★ LD 1 → 핀 13 이 HIGH");
+    node.readSensors();
+    ok((node.occMask & (1u << 1)) != 0,
+                            "★★★ **B1 이 LED 를 되읽어 1 이 됐다** — 입력 훅이 실물 경로로 돌았다");
+    ok((node.occMask & (1u << 0)) == 0,
+                            "★★ A1(핀2)은 그대로 0 — **훅이 등록된 칸만 바뀐다**");
+
+    // ③ 전선에 나가는가 — 서버가 이 자리를 "찼다"로 본다
+    { char sb[64]; buildStatus(sb, sizeof sb);
+      printf("      S = %s\n", sb);
+      char f[24];
+      ok(sField(sb, 2, f, sizeof f) && strcmp(f, "00") != 0,
+                            "★★★ 자리 비트가 `S` 로 나간다 — **화면까지 닿는 사슬이 닫힌다**"); }
+
+    // ④ 🔴 에코도 같은 사건을 말한다 — 계측기 셋(눈·자리값·에코)이 만난다
+    ok((router.echoMask() & (1u << 2)) != 0,
+                            "★★★ LD 의 에코 비트도 서 있다 — **눈·자리값·에코가 한 사건이다**");
+
+    // ⑤ 훅을 떼면 기본 경로로 — 되돌릴 수 있다는 것까지 본다
+    sensors.on("B1", 0);
+    g_pinLevel[slotPin(1)] = HIGH;                 // 미배선 = 풀업 = HIGH (앞 시험이 바꿨을 수 있다)
+    node.readSensors();
+    ok((node.occMask & (1u << 1)) == 0,
+                            "★★ 훅을 떼면 B1 이 핀 9(미배선 → 0)로 돌아간다");
+
+    ackQ.clearCache(); ackQ.clearQueue();
+    node.occMask = 0; Serial.out.clear();
+    Serial.echoToStdout = true;
+  }
+
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }

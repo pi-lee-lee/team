@@ -43,6 +43,9 @@ inline unsigned long millis() {
 inline unsigned long micros() { return g_millis * 1000UL; }
 
 // ── 가상 핀 ────────────────────────────────────────────────────────────
+// 보드 내장 LED. 실기 Uno 와 같은 값이어야 한다 — 다르면 시험이 다른 핀을 본다.
+#define LED_BUILTIN 13
+
 extern uint8_t g_pinLevel[24];    // 테스트가 직접 세팅한다 (기본 HIGH = 풀업, 차 없음)
 extern uint8_t g_pinMode[24];
 
