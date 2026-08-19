@@ -122,6 +122,10 @@ struct Pending {             // 아두이노에 내려보내고 ACK 를 기다�
     //   다른 것이고(§5), 섞으면 재등록으로 순서가 바뀔 때 무엇이 틀렸는지 못 가린다.
     int  mod_idx;
     char top;                // kind=='T' 일 때의 op: 'A'|'D'|'S'|'X'
+    // 🔴 `G` 의 **인자**. 전에는 `top` 에 '0'/'1' 로 실었다(차단봉 전용이라 두 값뿐이었다).
+    //   LCD 7자리 같은 값이 오면서 **칸을 따로 뒀다** — `top` 은 `T` 의 op 로 남긴다.
+    //   ⚠ 한 칸에 두 뜻을 담으면 값이 갈릴 때까지 아무도 모른다(오늘 `n` 이 그랬다).
+    long g_arg;              // kind=='G' 일 때 장치로 보낼 인자
     long long sent_ms;
     int tries;
     // 🔴 **큐에 있는 동안은 ACK 시계를 돌리지 않는다.** 하행이 창을 기다리는 사이에
@@ -132,7 +136,7 @@ struct Pending {             // 아두이노에 내려보내고 ACK 를 기다�
     // 🔴 ctor 가 없어서 `dispatch` 가 `top`·`queued` 를 안 세운 채 복사해 왔다.
     // 지금은 모든 경로가 곧바로 덮으므로 실동작은 맞지만 **`-Wall -Wextra` 가 이걸 안 잡는다** —
     // `Server` 의 여섯 칸이 무경고로 통과했던 것과 같은 이유다. 여기서 닫는다.
-    Pending() : wire_rid(0), ws_fd(BAD_SOCK), kind(0), mod_idx(-1), top(0), sent_ms(0), tries(0), queued(false) {}
+    Pending() : wire_rid(0), ws_fd(BAD_SOCK), kind(0), mod_idx(-1), top(0), g_arg(0), sent_ms(0), tries(0), queued(false) {}
 };
 
 struct Conn {
@@ -261,6 +265,9 @@ struct ParkingServer::Impl {
 ParkingServer::ParkingServer(const ParkingLot& lot) : p_(new Impl) {
     p_->lot = lot;
     p_->srv.lot_ = &p_->lot;
+}
+bool ParkingServer::send(const std::string& devid, const std::string& moduleName, long value) {
+    return p_->srv.send_to_module(devid, moduleName, value);
 }
 ParkingServer::~ParkingServer() { delete p_; }
 

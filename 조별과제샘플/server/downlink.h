@@ -78,7 +78,11 @@
     //   ACK 은 *"명령이 도착해 적용됐다"* 까지이고, **실제로 열렸는지는 장치가 매 슬롯 에코한다.**
     static std::string gate_prefix(const Pending& p) {
         char buf[64];
-        snprintf(buf, sizeof(buf), "G,%u,%d,%d,", p.wire_rid, p.mod_idx, (p.top == '1') ? 1 : 0);
+        // 🔴 **인자를 그대로 싣는다** (2026-08-19). 전에는 `(p.top=='1') ? 1 : 0` 이라
+        //   **0/1 밖에 못 보냈다** — 차단봉 전용 경로였기 때문이다.
+        //   장치는 이미 `parseU32` 로 받는다(`EspLink_at.h`) → **전선 개정이 아니라 API 확장이다.**
+        // ⚠ 최악 길이 실측: `G,999,255,4294967295,` + 체크섬 = **23B** (MAX_LINE 64 · 여유 충분)
+        snprintf(buf, sizeof(buf), "G,%u,%d,%ld,", p.wire_rid, p.mod_idx, p.g_arg);
         return std::string(buf);
     }
     // 자리에 붙은 **명령 가능한 모듈**의 인덱스. 없으면 -1.
@@ -112,6 +116,53 @@
         }
         return -1;
     }
+    // 🔴🔴 **모듈에 값을 보낸다** — 공개 API `ParkingServer::send()` 의 실물 (2026-08-19)
+    //
+    //   전에는 하행 경로가 **차단봉 전용**이었다(`dispatch_gate`, 0/1). 기여자가 자기 모듈에
+    //   값을 보낼 방법이 없었다. 사용자 요구가 그것이다 —
+    //   *"on/off 형태, LCD 에 전달하는 7자리 숫자 구조, 특정 동작을 수행할 수 있는 명령 구조"*
+    //
+    // 🔑 **`arg` 의 뜻을 서버는 모른다.** 켜기/끄기인지, 표시할 숫자인지, 동작 번호인지는
+    //   **기여자가 정하고 양쪽(서버 호출부·장치 콜백)에 적는다.**
+    //   🔴 **그 표가 어긋나면 조용히 다른 동작을 한다** — 값으로는 검증되지 않는다.
+    //
+    //   반환: 전선 큐에 들어갔으면 true. **`true` 는 "보냈다"이지 "됐다"가 아니다** —
+    //   실제 수행 여부는 장치의 ACK(`result`)와 다음 `S` 의 에코가 답한다.
+    bool send_to_module(const std::string& devid, const std::string& name, long arg) {
+        const Node* n = node_by_devid(devid);
+        if (!n) {
+            logf("!", "발행 실패 — 노드 `" + devid + "` 를 모른다 "
+                      "(아직 안 붙었거나 devid 가 다르다)");
+            return false;
+        }
+        int idx = -1;
+        for (size_t k = 0; k < n->mods.size(); k++)
+            if (n->mods[k].first == name) { idx = (int)k; break; }
+        if (idx < 0) {
+            logf("!", "발행 실패 — 노드 `" + devid + "` 에 모듈 `" + name + "` 이 없다. "
+                      "**그 장치가 등록한 이름과 맞춰라**(대소문자까지)");
+            return false;
+        }
+        // ⚠ 장치 파서가 `gidx <= 0xFF` 로 막는다. 넘으면 **보내도 거절된다** — 여기서 미리 말한다.
+        if (idx > 255) {
+            logf("!", "발행 실패 — 모듈 idx " + std::to_string(idx) + " 가 255 를 넘는다(장치 한계)");
+            return false;
+        }
+        uint16_t rid = alloc_rid();
+        if (rid == RID_NONE) { logf("!", "rid 공간 고갈 — 발행 포기"); return false; }
+        Pending p;
+        p.wire_rid = rid; p.ws_fd = BAD_SOCK;      // 🔑 화면이 시킨 것이 아니다 — 답할 곳이 없다
+        p.slot = name; p.kind = 'G'; p.mod_idx = idx; p.g_arg = arg;
+        p.sent_ms = now_ms(); p.tries = 1;
+        pend[rid] = p;
+        if (!enqueue_down(pend[rid], build_line(gate_prefix(p)), true, false)) {
+            pend.erase(rid); rid_release(rid);
+            return false;
+        }
+        gate_q++;
+        return true;
+    }
+
     void dispatch_gate(sock_t ws_fd, const std::string& brid,
                        const std::string& slot, int idx, bool open) {
         uint16_t rid = alloc_rid();
@@ -120,6 +171,7 @@
         p.wire_rid = rid; p.ws_fd = ws_fd; p.browser_rid = brid;
         p.slot = slot; p.kind = 'G'; p.mod_idx = idx;
         p.top = open ? '1' : '0';
+        p.g_arg = open ? 1 : 0;      // 차단봉은 0/1 만 쓴다 — 새 칸에 같은 값을 담는다
         p.sent_ms = now_ms(); p.tries = 1;
         pend[rid] = p;
         gate_want[idx] = open ? 1 : 0;      // 🔑 **대조할 값을 여기서 남긴다**(ACK 이 지우기 전에)

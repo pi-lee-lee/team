@@ -85,6 +85,49 @@
                     if (!ok) bad++;
                 }
 
+                // ㊿ 🔴🔴 **발행 API 가 전선 바이트까지 가는가** — 코드 판독이 아니라 바이트로
+                //   ⚠ `socketpair` 로 실제 `send()` 를 태워 **나간 줄을 읽는다.**
+                //   🔑 7자리가 그대로 실리는지가 이 시험의 요점이다 — 전에는 0/1 밖에 못 보냈다.
+                {
+                    int sv[2];
+                    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) != 0) {
+                        std::cout << "  ! socketpair 실패 — 건너뛴다\n";
+                    } else {
+                        Server t; t.no_disk = true;
+                        t.ard = sv[0]; t.park_dev = "P1";
+                        t.ard_seen = true; t.ard_last_ms = now_ms();
+                        t.park.devid = "P1";
+                        t.park.mods.push_back(std::make_pair(std::string("LCD1"), std::string("OG")));
+                        t.park.reg_done = true;
+
+                        bool okKnown   = t.send_to_module("P1", "LCD1", 1234567L);
+                        bool okNoNode  = t.send_to_module("P9", "LCD1", 1L);      // 없는 노드
+                        bool okNoMod   = t.send_to_module("P1", "없음", 1L);      // 없는 모듈
+                        // 🔑 하행은 **슬롯 창이 열려야** 나간다. 시험은 창을 직접 연다.
+                        //   ⚠ 처음엔 `tick()` 을 불렀는데 그건 장치의 `S` 를 기다리므로
+                        //     이 시험에서는 아무것도 안 나갔다 — **빈 전선을 보고 "안 실렸다"가 나왔다.**
+                        //     🔑 발행이 틀린 게 아니라 **시험이 조건을 안 만든 것**이었다.
+                        t.flush_downq("selftest 발행", false);
+
+                        char rb[512]; std::string got;
+                        for (int i = 0; i < 4; i++) {
+                            int n = (int)recv(sv[1], rb, sizeof(rb), MSG_DONTWAIT);
+                            if (n <= 0) break;
+                            got.append(rb, rb + n);
+                        }
+                        const bool wire7 = got.find("G,") != std::string::npos
+                                        && got.find(",1234567,") != std::string::npos;
+                        bool ok = okKnown && !okNoNode && !okNoMod && wire7;
+                        std::cout << (ok ? "  ✓ " : "  ✗ ") << "발행 API — 7자리가 전선에 그대로("
+                                  << (wire7 ? "실렸다" : "🔴안 실렸다")
+                                  << ") · 없는 노드/모듈은 거절("
+                                  << (!okNoNode && !okNoMod ? "거절" : "🔴통과") << ")\n";
+                        if (!ok) bad++;
+                        t.ard = BAD_SOCK;
+                        closesock(sv[0]); closesock(sv[1]);
+                    }
+                }
+
                 // ㊾ 🔴 **예시 `devid` 를 잡는가** — 그리고 **다른 값에는 안 뜨는가**
                 //   ⚠ 음성 대조가 없으면 **"늘 뜨는 줄"** 이 되고, 늘 뜨는 경고는 아무 말도 안 하는 것과 같다.
                 {

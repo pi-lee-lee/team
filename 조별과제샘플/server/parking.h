@@ -109,6 +109,17 @@ public:
     explicit ParkingServer(const ParkingLot& lot);
     ~ParkingServer();
 
+    // 🔴 **모듈에 값을 보낸다** (2026-08-19)
+    //   `srv.send("P1", "LCD1", 1234567);`   ← 7자리 숫자
+    //   `srv.send("P1", "LED1", 1);`         ← on/off
+    //   `srv.send("P1", "DOOR", 2);`         ← 동작 — **뜻은 기여자가 정한 표**
+    //
+    // 🔑 **`value` 의 뜻을 서버는 모른다.** 장치의 콜백이 그것을 해석한다.
+    //   **그 표를 양쪽 주석에 적어라** — 어긋나면 **조용히 다른 동작을 한다.**
+    // ⚠ 반환 `true` 는 **"전선 큐에 넣었다"** 이지 "수행됐다"가 아니다.
+    //   실제 수행은 장치 ACK 과 다음 상태 프레임이 답한다.
+    bool send(const std::string& devid, const std::string& moduleName, long value);
+
     bool openPorts();        // 포트를 연다. 실패하면 false (이유는 로그에 남는다)
     bool serveOneTick();     // 한 박자: 수신 → 자리 판정 → 하행 송신 → 화면 방송
     void closeDown();        // 요약을 남기고 닫는다
