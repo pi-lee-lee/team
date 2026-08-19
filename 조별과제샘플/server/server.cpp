@@ -436,7 +436,8 @@ static const size_t MAX_UNKNOWN_SOCKS = MAX_ARD_NODES;   // id 없는 소켓이 
 static const char* SLOT_ID[10] = {"A1","A2","A3","A4","A5","B1","B2","B3","B4","B5"};
 #include "server_device.h"   // 디바이스 계층 잎 유틸 (REQ-0096 A): SHA-1·base64·ws_accept·체크섬
 #include "server_seam.h"
-#include "parking.h"     // 🔴 **공개 조립 API** — 사용 코드가 읽는 유일한 헤더     // 이음매 계약 (REQ-0096 B→C): DeviceEvent / DeviceCommand
+#include "parking.h"     // 🔴 **공개 조립 API** — 사용 코드가 읽는 유일한 헤더
+#include "ridpool.h"     // rid 발행·격리·영속 — 전선에 안 닿는 축     // 이음매 계약 (REQ-0096 B→C): DeviceEvent / DeviceCommand
 
 // 타이머 전용 — 상대 시각 (윈도우: 부팅 후 경과)
 static long long now_ms() {
@@ -698,6 +699,54 @@ static void logf(const char* mark, const std::string& msg) {
     // ⚠ **날짜를 빼지 마라.** 이 줄에서 날짜가 빠져 있던 탓에 08-16 에 오독이 두 번 났다.
     char ts[32]; strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", localtime(&tt));
     std::cout << ts << "  " << mark << " " << msg << std::endl;
+}
+
+// ── 🔴 `RidPool` 의 본문 — 로그·디렉터리 도우미가 여기 있으므로 여기에 둔다 (REQ-0272 3단계)
+void RidPool::reserveBlock() {
+    reserved_to_ = cursor_ + RID_PERSIST_BLOCK;
+    if (!persist_on_ || file_.empty() || no_disk_) return;
+    ensure_parent_dir(file_);
+    std::ofstream o(file_.c_str(), std::ios::out | std::ios::trunc);
+    if (!o) {
+        persist_on_ = false;   // 🔴 한 번 실패하면 끈다. 매 발행마다 실패 로그를 쏟지 않는다
+        logf("!", "🔴 rid 커서를 못 쓴다 — " + file_
+                  + " · **재시작 보호가 꺼졌다.** 다음 재시작이 장치 멱등 캐시와 겹칠 수 있다");
+        return;
+    }
+    o << reserved_to_ << "\n";
+}
+
+void RidPool::loadCursor(const std::string& path, long long seed_when_missing, bool no_disk) {
+    file_ = path;
+    no_disk_ = no_disk;
+    if (file_.empty()) {
+        persist_on_ = false;
+        cursor_ = seed_when_missing % RID_SPACE;      // 🔴 1 에서 시작하지 않는다
+        reserved_to_ = cursor_;
+        logf("!", "🔴 rid 커서를 영속할 수 없다 — 경로가 없다. 임의 지점 "
+                  + std::to_string(cursor_ % RID_SPACE)
+                  + " 에서 시작한다. **이 기동은 장치 멱등 캐시와 겹칠 수 있다**");
+        return;
+    }
+    persist_on_ = true;
+    std::ifstream f(file_.c_str());
+    long long v = -1;
+    if (f && (f >> v) && v >= 0) {
+        cursor_ = v; reserved_to_ = v;
+        reserveBlock();          // 기동 때 곧바로 적는다 — 하행이 없던 기동에서도 파일이 생긴다
+        logf("=", "rid 커서 이어받음 — " + std::to_string(v)
+                  + " (전선값 " + std::to_string(v % RID_SPACE) + ") · 예약 "
+                  + std::to_string(reserved_to_) + " · " + file_);
+        return;
+    }
+    cursor_ = seed_when_missing % RID_SPACE;
+    reserved_to_ = cursor_;
+    reserveBlock();
+    logf("!", "🔴 rid 커서 파일을 못 읽었다(" + file_
+              + ") — 임의 지점 " + std::to_string(cursor_ % RID_SPACE)
+              + " 에서 시작한다. ⚠ **이 기동만 장치 멱등 캐시와 겹칠 수 있다(약 "
+              + std::to_string(DEV_RID_CACHE_N) + "/" + std::to_string((int)RID_SPACE)
+              + "). 정상 기동과 구별해서 읽어라**");
 }
 // prev_up < 0 = 기준선 없음(첫 프레임·새 연결 직후) → 판정하지 않는다.
 static bool uptime_says_reboot(long long prev_up, long long up) {
@@ -1416,15 +1465,15 @@ struct Server {
         //   요약에 안 내보내 **monitor 에게 없는 칸을 보라고 한** 사고가 있었다. 같은 것을 반복하지 않는다.
         //   🔑 **분모를 같이 낸다** — `발행` 이 없으면 `건너뜀 0` 은 건강이 아니라 **표본 0** 이다.
         //   각 칸이 낮아지는 *다른* 이유는 `docs/net/DESIGN-rid-width-and-quarantine.md` §5 표에 있다.
-        s += " · rid 발행 " + std::to_string(rid_alloc_n)
-           + "(다음 " + std::to_string((unsigned)(rid_cursor % RID_SPACE))
+        s += " · rid 발행 " + std::to_string(ridpool_.allocN())
+           + "(다음 " + std::to_string(ridpool_.nextWire())
            + "/" + std::to_string((unsigned)RID_SPACE)
-           + (rid_persist_on ? " 영속" : " 🔴영속꺼짐") + ")"
-           + " 격리 " + std::to_string((long long)rid_quar.size())
-           + " 건너뜀 " + std::to_string(rid_skips)
-           + " 강제 " + std::to_string(rid_forced)
-           + (rid_forced > 0 ? " 🔴" : "")
-           + (rid_exhausted > 0 ? (" 고갈 " + std::to_string(rid_exhausted) + " 🔴") : "")
+           + (ridpool_.persistOn() ? " 영속" : " 🔴영속꺼짐") + ")"
+           + " 격리 " + std::to_string((long long)ridpool_.quarSize())
+           + " 건너뜀 " + std::to_string(ridpool_.skips())
+           + " 강제 " + std::to_string(ridpool_.forced())
+           + (ridpool_.forced() > 0 ? " 🔴" : "")
+           + (ridpool_.exhausted() > 0 ? (" 고갈 " + std::to_string(ridpool_.exhausted()) + " 🔴") : "")
            + " · ACK 미상rid " + std::to_string(ack_unknown_rid)
            + " 자리불일치 " + std::to_string(ack_slot_mismatch)
            + (ack_slot_mismatch > 0 ? " 🔴" : "");
@@ -2892,119 +2941,27 @@ struct Server {
     // ⚠ **기본은 꺼져 있다**(`rid_persist_on = false`). 자가검증이 만드는 수십 개의 `Server` 가
     //   실기 커서 파일을 덮어쓰는 것을 **구조적으로** 막는다 — 시험이 운영 상태를 건드리면
     //   그건 시험이 아니라 사고다. **실기 기동 경로만 `rid_cursor_load()` 를 부른다.**
-    void rid_reserve_block() {
-        rid_reserved_to = rid_cursor + RID_PERSIST_BLOCK;
-        if (!rid_persist_on || rid_cursor_file.empty() || no_disk) return;
-        ensure_parent_dir(rid_cursor_file);
-        std::ofstream o(rid_cursor_file.c_str(), std::ios::out | std::ios::trunc);
-        if (!o) {
-            rid_persist_on = false;    // 🔴 한 번 실패하면 끈다. 매 발행마다 실패 로그를 쏟지 않는다
-            logf("!", "🔴 rid 커서를 못 쓴다 — " + rid_cursor_file
-                      + " · **재시작 보호가 꺼졌다.** 다음 재시작이 장치 멱등 캐시와 겹칠 수 있다");
-            return;
-        }
-        o << rid_reserved_to << "\n";
-    }
-
-    // 기동 때 한 번. 🔴 **읽은 값을 로그에 찍는다** — 못 읽은 것은 사고인데
-    //   값이 안 찍히면 정상 기동과 구별이 안 된다(루트 지시 REQ-0246 ②·③).
-    void rid_cursor_load() {
-        rid_cursor_file = rid_cursor_path();
-        if (rid_cursor_file.empty()) {
-            rid_persist_on = false;
-            rid_cursor = (long long)(epoch_ms() % RID_SPACE);      // 🔴 1 에서 시작하지 않는다
-            rid_reserved_to = rid_cursor;
-            logf("!", "🔴 rid 커서를 영속할 수 없다 — HOME 이 없다. 임의 지점 "
-                      + std::to_string(rid_cursor % RID_SPACE)
-                      + " 에서 시작한다. **이 기동은 장치 멱등 캐시와 겹칠 수 있다**");
-            return;
-        }
-        rid_persist_on = true;
-        std::ifstream f(rid_cursor_file.c_str());
-        long long v = -1;
-        if (f && (f >> v) && v >= 0) {
-            rid_cursor = v;
-            rid_reserved_to = v;
-            // 🔴 **기동 때 곧바로 한 블록을 예약해 적는다.** 첫 발행까지 미루면
-            //   **하행이 한 건도 없던 기동에서는 파일이 안 생기고**, 다음 재시작이
-            //   "못 읽었다" 갈래로 빠져 **거짓 경보**가 된다. 그리고 그 경보가 반복되면
-            //   진짜 사고가 났을 때 아무도 안 본다.
-            rid_reserve_block();
-            logf("=", "rid 커서 이어받음 — " + std::to_string(v)
-                      + " (전선값 " + std::to_string(v % RID_SPACE) + ") · 예약 "
-                      + std::to_string(rid_reserved_to) + " · " + rid_cursor_file);
-            return;
-        }
-        // 🔴 없거나 깨졌다. **1부터 시작하지 않는다**(루트 지시 ④).
-        //   임의 지점이 겹칠 확률과 1에서 시작할 때 겹칠 확률은 다르다 —
-        //   1은 **직전 인스턴스가 방금 지나온 자리**일 수 있고 임의 지점은 그 편향이 없다.
-        //   ⚠ 그래도 **보장이 아니다.** 그래서 이 줄을 크게 남긴다.
-        rid_cursor = (long long)(epoch_ms() % RID_SPACE);
-        rid_reserved_to = rid_cursor;
-        rid_reserve_block();              // 곧바로 파일을 만든다 — 다음 기동은 이 갈래로 안 온다
-        logf("!", "🔴 rid 커서 파일을 못 읽었다(" + rid_cursor_file
-                  + ") — 임의 지점 " + std::to_string(rid_cursor % RID_SPACE)
-                  + " 에서 시작한다. ⚠ **이 기동만 장치 멱등 캐시와 겹칠 수 있다(약 "
-                  + std::to_string(DEV_RID_CACHE_N) + "/" + std::to_string((int)RID_SPACE)
-                  + "). 정상 기동과 구별해서 읽어라**");
-    }
-
-    // ── 🔴 A[1] `rid` 발행 — 정본 `docs/net/DESIGN-rid-width-and-quarantine.md`
+    // ── 🔴 `rid` 는 이제 `RidPool` 의 책임이다 (REQ-0272 3단계 · 2026-08-19)
     //
-    // **하드 규칙 ①**: `pend` 에 있는 rid 는 **절대** 발행하지 않는다. 어기면 ACK 이 엉뚱한
-    //   명령에 붙어 **자료를 조용히 오염시킨다.** 압력이 아무리 높아도 이 규칙은 안 푼다.
-    // **소프트 규칙 ②**: 해제된 rid 는 `RID_QUARANTINE_MS` 묵힌다(늦은 ACK 보호).
-    //   공간이 차면 **가장 오래 묵은 것부터 조기 해제**하고 `rid_forced` 를 올린다.
-    //   🔑 거절 경로를 새로 만들지 않는 이유: 화면 계약(`blocked_reason`)에 사유가 하나 늘면
-    //   **이 배포가 재려는 `>=64B` 진입률 축에 다른 축이 섞인다**(설계 §3.3).
+    //   전에는 상태 열 개와 함수 넷이 이 구조체 안에 흩어져 있었다. **자료가 아니라 책임을 옮겼다** —
+    //   커서·격리표·해제 순번·블록 예약·디스크 경로가 전부 `ridpool.h` 뒤로 갔다.
+    //   🔑 **여기 남는 것은 "무엇이 못 쓰는 rid 인가" 하나다.** 그건 `pend` 를 가진 이쪽만 안다.
+    //   ⚠ 계수는 그대로 요약에 낸다 — **감출 것은 복잡함이고 드러낼 것은 상태다.**
+    RidPool ridpool_;
+    struct PendHas {
+        const std::map<uint16_t, Pending>* m;
+        bool operator()(uint16_t r) const { return m->count(r) != 0; }
+    };
     uint16_t alloc_rid() {
-        const long long t = now_ms();
-        // 1차 — 커서에서 한 바퀴. `pend` 도 아니고 격리도 안 걸린 첫 값.
-        for (uint16_t i = 0; i < RID_SPACE; i++) {
-            uint16_t cand = (uint16_t)(rid_cursor % RID_SPACE);
-            rid_cursor++;
-            // 🔴 **커서가 예약 범위를 넘으면 디스크에 다음 블록을 적는다.**
-            //   건너뛴 칸도 커서를 먹는다 — 그래야 크래시 뒤에 그 칸들도 안 되밟는다.
-            if (rid_cursor >= rid_reserved_to) rid_reserve_block();
-            if (pend.count(cand)) { rid_skips++; continue; }
-            std::map<uint16_t, RidQ>::iterator q = rid_quar.find(cand);
-            if (q != rid_quar.end()) {
-                if (t < q->second.until_ms) { rid_skips++; continue; }
-                rid_quar.erase(q);                  // 격리 기간이 지났다
-            }
-            rid_alloc_n++;
-            return cand;
-        }
-        // 2차 — 한 바퀴가 다 막혔다. **격리만 조기 해제한다. `pend` 는 안 건드린다.**
-        // 🔴 **해제 *순번* 이 가장 작은 것을 고른다. 시각이 아니다.**
-        //   시각으로 고르면 같은 밀리초에 해제된 것들이 동률이 되어 **같은 칸이 반복해서 뽑히고**
-        //   재사용 간격이 1까지 떨어진다 — 자가검증 ㉜(a)가 실제로 그것을 잡았다.
-        uint16_t best = RID_NONE; long long best_seq = 0;
-        for (std::map<uint16_t, RidQ>::iterator it = rid_quar.begin();
-             it != rid_quar.end(); ++it) {
-            if (pend.count(it->first)) continue;    // 하드 규칙 ①
-            if (best == RID_NONE || it->second.seq < best_seq) { best = it->first; best_seq = it->second.seq; }
-        }
-        if (best == RID_NONE) {
-            // `pend` 가 1000칸을 다 먹은 극단. **여기서만 발행을 포기한다.**
-            rid_exhausted++;
-            return RID_NONE;
-        }
-        rid_quar.erase(best);
-        rid_forced++; rid_alloc_n++;
-        return best;
+        PendHas in; in.m = &pend;
+        return ridpool_.alloc(in, now_ms());
+    }
+    void rid_release(uint16_t rid) { ridpool_.release(rid, now_ms()); }
+    void rid_cursor_load() {
+        // 🔑 **경로를 만드는 것은 서버의 일이다**(오프셋에 따라 갈린다). 풀은 경로를 받기만 한다.
+        ridpool_.loadCursor(rid_cursor_path(), epoch_ms(), no_disk);
     }
 
-    // `pend` 를 떠난 rid 를 격리에 넣는다. 🔴 **모든 해제 지점에서 부른다** —
-    // 한 곳이라도 빠지면 그 rid 는 격리 없이 재사용되어 이 변경 이전 거동으로 되돌아간다.
-    // ⚠ 그리고 그 누락은 **아무 증상도 안 낸다.** 늦은 ACK 이 와야 드러난다.
-    void rid_release(uint16_t rid) {
-        if (rid >= RID_SPACE) return;   // 옛 판이 남긴 큰 값 — 순환 공간 밖이라 격리 대상이 아니다
-        RidQ q;
-        q.until_ms = now_ms() + RID_QUARANTINE_MS;
-        q.seq      = ++rid_rel_seq;     // 🔑 시계 해상도와 무관한 **순서**
-        rid_quar[rid] = q;
-    }
 
     // ---------- 아두이노로 요청 내리기
     void dispatch(char kind, sock_t ws_fd, const std::string& brid,
@@ -6120,21 +6077,28 @@ static int selftest() {
             //   · 늦은 ACK 의 실제 최대 지연 — 격리 값(§3.1)은 **가정이고 잰 적이 없다**
             //   · 재시작 충돌(§4) — 확률 1.6% 사건이라 시험으로 재현할 수 없다
             //   **그러므로 이 항목이 전부 ✓ 라도 "안전이 증명됐다"가 아니다.**
+            struct NoneInUse { bool operator()(uint16_t) const { return false; } };
+            struct AllButOne { uint16_t keep;
+                               bool operator()(uint16_t r) const { return r != keep; } };
+            // 🔴 **은닉 뒤로 옮기고 시험을 다시 썼다** (REQ-0272 3단계 · 2026-08-19)
+            //   전에는 `t.rid_quar[321].until_ms = …` 처럼 **내부를 직접 만졌다.**
+            //   `RidPool` 이 그것을 감추면서 그 시험이 못 쓰게 됐다 — **은닉의 대가다.**
+            //   ✅ 대신 **시계를 인자로 받게 만든 덕에 시간을 통제해 계약으로 시험한다.**
+            //   🔑 내부를 만지는 시험은 내부가 바뀌면 깨지고, **계약을 만지는 시험은 계약이 바뀔 때만 깨진다.**
             {
-                // (a)(d) 2000회 발행 — **폭 상한**과 **재사용 간격**을 같이 본다.
-                //   🔑 (d)가 핵심이다: 폭을 줄이면 재사용 주기가 짧아지고, 그것이
-                //   장치 멱등창(16) 안에 들어가면 **명령이 조용히 삼켜진다**(arduino §25.3).
-                Server t;
+                // (a)(d) 폭 상한과 **재사용 간격** — 발행하고 곧바로 해제한다(같은 시각)
+                RidPool pool; NoneInUse none;
                 std::vector<int> last_at(RID_SPACE, -1);
                 int minDist = 1 << 30; bool inRange = true; size_t maxDigits = 0;
+                const long long T = 1000000;
                 for (int i = 0; i < 2000; i++) {
-                    uint16_t r = t.alloc_rid();
+                    uint16_t r = pool.alloc(none, T);
                     if (r == RID_NONE || r >= RID_SPACE) { inRange = false; break; }
                     size_t dg = std::to_string((unsigned)r).size();
                     if (dg > maxDigits) maxDigits = dg;
                     if (last_at[r] >= 0 && i - last_at[r] < minDist) minDist = i - last_at[r];
                     last_at[r] = i;
-                    t.rid_release(r);          // 곧바로 해제 → 격리에 들어간다
+                    pool.release(r, T);
                 }
                 bool okA = inRange && maxDigits <= 3 && minDist >= DEV_RID_CACHE_N;
                 std::cout << (okA ? "  ✓ " : "  ✗ ") << "rid 폭 ≤3자리(실측 " << maxDigits
@@ -6143,68 +6107,71 @@ static int selftest() {
                 if (!okA) bad++;
             }
             {
-                // (b) 🔴 **하드 규칙 — `pend` 에 있는 rid 는 절대 발행하지 않는다.**
-                //     999칸을 `pend` 로 막고 한 칸만 비워 둔다. 그 칸이 나와야 한다.
-                Server t;
-                for (uint16_t r = 0; r < RID_SPACE; r++) if (r != 500) t.pend[r] = Pending();
-                uint16_t got = t.alloc_rid();
-                bool okB = (got == 500 && t.rid_skips > 0 && t.rid_forced == 0);
-                std::cout << (okB ? "  ✓ " : "  ✗ ") << "pend 를 피해 유일한 빈 칸을 고른다 (got "
-                          << got << " · 기대 500 · 건너뜀 " << t.rid_skips << ")\n";
+                // (b) 🔴 **하드 규칙** — 쓰이는 중인 rid 는 절대 발행하지 않는다.
+                //     하나만 빼고 전부 "쓰는 중"이라고 답하면 **그 하나가 나와야 한다.**
+                RidPool pool; AllButOne only; only.keep = 500;
+                uint16_t got = pool.alloc(only, 1000000);
+                bool okB = (got == 500 && pool.skips() > 0 && pool.forced() == 0);
+                std::cout << (okB ? "  ✓ " : "  ✗ ") << "쓰이는 중인 rid 를 피해 빈 칸을 고른다 (got "
+                          << got << " · 기대 500 · 건너뜀 " << pool.skips() << ")\n";
                 if (!okB) bad++;
-                t.pend.clear();
             }
             {
-                // (c) 격리 시간 안에는 안 나온다 — **한 칸만 시간이 지난 상태로 둔다.**
-                Server t;
-                for (uint16_t r = 0; r < RID_SPACE; r++) t.rid_release(r);
-                t.rid_quar[321].until_ms = now_ms() - 1;        // 이 칸만 격리가 풀렸다
-                uint16_t got = t.alloc_rid();
-                bool okC = (got == 321 && t.rid_forced == 0);
-                std::cout << (okC ? "  ✓ " : "  ✗ ") << "격리 중인 rid 를 건너뛴다 (got " << got
-                          << " · 기대 321 · 강제 " << t.rid_forced << " 기대 0)\n";
+                // (c) 격리는 **시간이 지나야** 풀린다 — 시계를 통제해 그것만 본다.
+                RidPool pool; NoneInUse none;
+                const long long T = 5000000;
+                uint16_t first = pool.alloc(none, T);
+                pool.release(first, T);
+                bool blocked = true;                       // 같은 시각에 한 바퀴 — 그 값이 안 나와야 한다
+                for (int i = 0; i < (int)RID_SPACE - 1; i++)
+                    if (pool.alloc(none, T) == first) { blocked = false; break; }
+                bool freed = false;                        // 격리가 지난 뒤에는 나와야 한다
+                for (int i = 0; i < (int)RID_SPACE; i++)
+                    if (pool.alloc(none, T + RID_QUARANTINE_MS + 1) == first) { freed = true; break; }
+                bool okC = blocked && freed;
+                std::cout << (okC ? "  ✓ " : "  ✗ ") << "격리 중에는 안 나오고(" << (blocked ? "예" : "🔴아니오")
+                          << ") 지나면 나온다(" << (freed ? "예" : "🔴아니오") << ")\n";
                 if (!okC) bad++;
             }
             {
-                // (e) 전부 격리 중이면 **가장 오래 묵은 것**을 강제 해제한다(§3.3).
-                //     ⚠ 거절 경로를 새로 만들지 않는다 — 화면 계약에 축이 늘면 이 배포의 측정이 흐려진다.
-                //     🔴 **순번 FIFO 로 고른다**(시각이 아니다 — 같은 밀리초 동률이 순서를 무너뜨린다).
-                //        654 를 **가장 먼저** 해제해 두면 나머지 999개가 뒤에 쌓여도 그것이 나와야 한다.
-                Server t;
-                t.rid_release(654);                            // 가장 먼저 해제 = 순번 1
-                for (uint16_t r = 0; r < RID_SPACE; r++) if (r != 654) t.rid_release(r);
-                uint16_t got = t.alloc_rid();
-                bool okE = (got == 654 && t.rid_forced == 1);
-                std::cout << (okE ? "  ✓ " : "  ✗ ") << "공간이 차면 **가장 먼저 해제된** 격리를 내준다 (got "
-                          << got << " · 기대 654 · 강제 " << t.rid_forced << ")\n";
+                // (e) 전부 격리면 **가장 먼저 해제된 것**을 강제로 내준다(순번 FIFO).
+                //     ⚠ **시각이 전부 같아도** 순번으로 갈리는지를 본다 — 그게 이 설계의 요점이다.
+                RidPool pool; NoneInUse none;
+                const long long T = 9000000;
+                std::vector<uint16_t> order;
+                for (int i = 0; i < (int)RID_SPACE; i++) {
+                    uint16_t r = pool.alloc(none, T);
+                    order.push_back(r);
+                    pool.release(r, T);
+                }
+                uint16_t forced = pool.alloc(none, T);
+                bool okE = (!order.empty() && forced == order[0] && pool.forced() == 1);
+                std::cout << (okE ? "  ✓ " : "  ✗ ") << "전부 격리면 **가장 먼저 해제된 것**을 내준다 (got "
+                          << forced << " · 기대 " << (order.empty() ? 0 : order[0])
+                          << " · 강제 " << pool.forced() << ")\n";
                 if (!okE) bad++;
             }
             {
-                // (f) 🔴 **실기 호출 지점이 `alloc_rid()` 를 타는가.**
-                //     ⚠ 위 (a)~(e)는 `alloc_rid()` 를 직접 부른다 — **네 발행 지점 중 하나가
-                //     옛 `next_rid++` 로 남아 있어도 전부 통과한다.** 그 구멍을 여기서 막는다.
-                //     (CLAUDE.md §"자기 시험의 분모를 아는 것은 자기뿐이다")
+                // (f) 🔴 **실기 발행 지점이 이 풀을 타는가.** (a)~(e)는 풀을 직접 부른다 —
+                //     서버가 옛 경로로 남아 있어도 전부 통과한다. 그 구멍을 여기서 막는다.
                 Server t; t.ard = BAD_SOCK;
-                long long n0 = t.rid_alloc_n;
+                long long n0 = t.ridpool_.allocN();
                 t.dispatch_sim(BAD_SOCK, "selftest-M");
-                bool okF = (t.rid_alloc_n == n0 + 1);
-                std::cout << (okF ? "  ✓ " : "  ✗ ") << "dispatch_sim 이 alloc_rid 를 탄다 (발행 "
-                          << (t.rid_alloc_n - n0) << " · 기대 1)\n";
+                bool okF = (t.ridpool_.allocN() == n0 + 1);
+                std::cout << (okF ? "  ✓ " : "  ✗ ") << "dispatch_sim 이 RidPool 을 탄다 (발행 "
+                          << (t.ridpool_.allocN() - n0) << " · 기대 1)\n";
                 if (!okF) bad++;
             }
             {
-                // (g) 🔴 **커서 영속은 기본이 꺼져 있다 — 시험이 실기 커서를 덮어쓰지 못하게.**
-                //     ⚠ 이 검사가 지키는 것은 서버의 성질이 아니라 **자가검증의 안전**이다.
-                //     여기가 켜져 있으면 위 (a)의 2000회 발행이 운영 커서를 앞으로 밀어 버린다.
-                //     🔑 그리고 **예약값은 커서보다 항상 앞서 있어야 한다** — 그게 (B)의 전부다.
-                //        뒤에 있으면 크래시 뒤에 **방금 쓴 값을 다시 내준다.**
+                // (g) 🔴 **커서 영속은 기본이 꺼져 있다** — 시험이 실기 커서를 덮어쓰지 못하게.
+                //     그리고 **예약값은 커서보다 항상 앞서 있어야 한다** — 그게 영속의 전부다.
                 Server t;
-                bool offByDefault = (t.rid_persist_on == false);
+                bool offByDefault = (t.ridpool_.persistOn() == false);
                 for (int i = 0; i < 700; i++) t.alloc_rid();
-                bool ahead = (t.rid_reserved_to >= t.rid_cursor);
+                bool ahead = (t.ridpool_.reservedTo() >= t.ridpool_.cursor());
                 bool okG = offByDefault && ahead;
                 std::cout << (okG ? "  ✓ " : "  ✗ ") << "커서 영속 기본 꺼짐(" << (offByDefault ? "예" : "🔴아니오")
-                          << ") · 예약 " << t.rid_reserved_to << " ≥ 커서 " << t.rid_cursor << "\n";
+                          << ") · 예약 " << t.ridpool_.reservedTo() << " ≥ 커서 " << t.ridpool_.cursor() << "\n";
                 if (!okG) bad++;
             }
 
