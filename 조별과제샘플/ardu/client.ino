@@ -145,6 +145,8 @@ static const ModuleDef MODULE_TABLE[] PROGMEM = {
   {"LD", KIND_GUIDE_LIGHT, PIN_SAMPLE_LED},    // ① on/off
   {"LC", KIND_LEAD_LIGHT,  PIN_NONE},          // ② 7자리 숫자 (표시기 — 핀은 라이브러리가 잡는다)
   {"DR", KIND_BARRIER,     PIN_SAMPLE_DOOR},   // ③ 동작 명령
+  {"L2", KIND_LEAD_LIGHT,  PIN_NONE},          // ② 둘째 표시기 — 같은 종류를 여럿 붙이는 모양
+  // 🔑 명령 모듈이 **넷**인 것은 서버의 묶음 상한(4건)과 같은 수다. 그 상한을 눈으로 보라고 넷이다.
 #endif
 #if VIRTUAL_MODULES
   // ⚠ **시험용 가상 차단봉.** 기본값은 꺼져 있다 — `VIRTUAL_MODULES` 를 1 로 켤 때만 실린다.
@@ -179,6 +181,12 @@ static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_T
 //
 //   모양 :  `bool 이름(uint32_t arg)`   — 반환 **true = 성공**(ACK `result=0`) · false = 수행 불가(3)
 //   등록 :  아래 `setup()` 에서 `router.on("모듈이름", 핸들러);`
+//
+// 🔑 **여기 넷이 있는 것이 우연이 아니다** — 서버가 한 번에 묶어 보낼 수 있는 하행이 **4건**이다.
+//   `LD`(on/off) · `LC`·`L2`(숫자) · `DR`(동작) 넷이 **그 상한을 그대로 보여 준다.**
+//   ⚠ 5건을 보내면 서버가 거절한다. **나눠 보내는 것은 서버가 안 해 준다.**
+//   ⚠ 그리고 묶음은 **수신 창(슬롯 뒷 600ms)** 안에 와야 한다 — 장치가 송신 중이면
+//     **첫 줄만 남고 나머지가 버려진다**(`penddrop` 이 그때 오른다).
 //
 // ██ 🔴 **`arg` 의 뜻은 *네가* 정한다 — 그리고 그 표를 여기 적어라** ██████████████
 //   **서버도 프로토콜도 `arg` 의 뜻을 모른다.** 숫자를 나르기만 한다. 32비트라 7자리도 그대로 온다.
@@ -252,6 +260,24 @@ static bool cmdLcd(uint32_t arg) {
 #endif
   return true;
 }
+
+// ── ② 둘째 표시기 — **같은 종류 모듈을 여럿 붙이는 모양** ─────────────────────
+//   ⚠ **핸들러는 자기가 어느 모듈인지 모른다.** 서명이 `bool f(uint32_t)` 뿐이라
+//     `arg` 밖에 안 온다. 그래서 **모듈마다 함수를 하나씩** 둔다.
+//   🔑 공통 로직이 길면 아래처럼 **한 함수로 빼고 껍데기만 여럿** 두면 된다.
+static bool showNumber(const char* tag, uint32_t arg) {
+  if (arg > 9999999UL) {
+#if DEBUG
+    Serial.print(tag); Serial.print(F(" 거절 — 7자리 초과: ")); Serial.println(arg);
+#endif
+    return false;
+  }
+#if DEBUG
+  Serial.print(tag); Serial.print(' '); Serial.println(arg);
+#endif
+  return true;
+}
+static bool cmdLcd2(uint32_t arg) { return showNumber("[L2]", arg); }
 
 // ── ③ 동작 명령 — **뜻을 정하는 표를 여기 적는다. 이 표가 곧 '명령 작성 방법'이다** ──
 //
@@ -378,6 +404,7 @@ void setup() {
   router.on("LD", cmdLed);      // ① on/off
   router.on("LC", cmdLcd);      // ② 7자리 숫자
   router.on("DR", cmdDoor);     // ③ 동작 명령
+  router.on("L2", cmdLcd2);     // ② 둘째 표시기 — 같은 종류를 여럿 붙인 예
 #endif
 #if VIRTUAL_MODULES
   router.on("E1", gateE1);      // 시험용 가상 차단봉 — 실물이 오면 이 줄만 바꾼다

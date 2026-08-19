@@ -1119,18 +1119,18 @@ int main() {
     printf("      S = %s   (%u B)\n", buf, (unsigned)n);
     ok(n > 0,                                  "★ 프레임이 만들어진다");
     // 🔴 손으로 재계산한 값이다 — 슬롯 i → 비트 (n−1−i), n=4:
-    //   occ: 모듈 0 → 비트 6 → 0b1000000 = 0x40 → 폭 2 → **"40"**  (뒤집기를 검증한다)
-    //   res: 모듈 1 → 비트 5 → 0b0100000 = 0x20 → **"20"** (occ 와 달라 맞바꿈도 잡는다)
-    ok(sFieldIs(buf, 2, "40"),
-                            "★★ 자리 필드가 hex '40' 이다 (n=7 에서 재계산)");
+    //   occ: 모듈 0 → 비트 7 → 0b10000000 = 0x80 → 폭 2 → **"80"** (뒤집기를 검증한다)
+    //   res: 모듈 1 → 비트 6 → 0b01000000 = 0x40 → **"40"** (occ 와 달라 맞바꿈도 잡는다)
+    ok(sFieldIs(buf, 2, "80"),
+                            "★★ 자리 필드가 hex '80' 이다 (n=8 에서 재계산)");
     ok(strstr(buf, "0110001011") == NULL,
                             "★★ 옛 10진 표기가 남아 있지 않다");
-    ok(sFieldIs(buf, 3, "20"),
+    ok(sFieldIs(buf, 3, "40"),
                             "★ res 도 같이 hex 로 바뀌었다 (하나만 바뀌면 어긋난다)");
 
     // 폭이 실제로 `n` 을 따라가나 — n=4 는 폭 1 이다
     ok(hexWidthFor(MODULE_N) == 2,
-                            "★★ 시험 구성의 hex 폭은 2 다 (n=7 · 기본 샘플은 n=2 라 폭 1)");
+                            "★★ 시험 구성의 hex 폭은 2 다 (n=8 — 9 를 넘어야 폭 3 이 된다)");
     ok(n < 26,              "★★ S 프레임이 26B 미만이다 (폭 2)");
 
     // tmask 갈래도 같은 변환을 타는가 — **셋째 마스크를 빠뜨리기 쉬운 자리다**
@@ -1142,7 +1142,7 @@ int main() {
     {
       // 같은 마스크를 넣었으므로 occ 와 tmask 가 같은 값이어야 한다
       // 칸 2 = occ · 칸 6 = tmask (S,up,occ,res,slot,dev,tmask,ck)
-      ok(sFieldIs(buf, 2, "40") && sFieldIs(buf, 6, "40"),
+      ok(sFieldIs(buf, 2, "80") && sFieldIs(buf, 6, "80"),
                             "★★ occ 와 tmask 가 둘 다 hex 다");
     }
     node.testArmed = false; node.ovrActive = 0; node.occMask = 0;
@@ -1304,7 +1304,7 @@ int main() {
     // ✏️ 2026-08-19 — 가상 모듈이 들어와 `moduleCount() > SENSOR_N` 이 됐다
     ok(moduleCount() >= SENSOR_N,
                             "★★ 표가 실물 자리를 전부 포함한다");
-    ok(MODULE_N == 7,       "★ 표 길이가 7 이다 (센서 A1·B1 + 샘플 LD·LC·DR + 가상 E1·X1)");
+    ok(MODULE_N == 8,       "★ 표 길이가 8 이다 (센서 2 + 명령 4 + 가상 2)");
 
     // ① 🔴 **이름 열 개가 서버의 자리 id 와 같아야 한다** (socket 통보 2026-08-18)
     //   서버는 `D,<name>,<kind>` 의 **name 이 자리 id 와 같으면** 그 자리에 붙인다.
@@ -1344,9 +1344,9 @@ int main() {
     // ✏️ 2026-08-19 — 가상 모듈로 n 이 12 가 되어 이 리터럴이 바뀌었다. **의도한 변경이다.**
     //   🔑 이 시험의 원래 목적(표 도입이 무해했다)은 이미 달성됐고(커밋 021e16e),
     //     지금은 **"n 이 바뀌면 자리 필드가 이동한다"를 못 박는 자리**로 성격이 바뀌었다.
-    // n=7 : 0x346 의 하위 7비트 = 0b1000110 (비트 1·2·6) → 뒤집어 비트 5·4·0 = 0x31
-    ok(sFieldIs(sbuf, 2, "31"),
-                            "★★ n=7 에서 자리 필드가 31 이다 (n 이 바뀌면 자리 필드가 이동한다)");
+    // n=8 : 0x346 의 하위 8비트 = 0b01000110 (비트 1·2·6) → 뒤집어 비트 6·5·1 = 0x62
+    ok(sFieldIs(sbuf, 2, "62"),
+                            "★★ n=8 에서 자리 필드가 62 다 (n 이 바뀌면 자리 필드가 이동한다)");
 
     char rbuf[BATCH_CAP + 1];
     uint16_t rn = buildRegistration(rbuf, sizeof rbuf);
@@ -1358,12 +1358,12 @@ int main() {
     //   🔑 **시험이 이 변경을 잡았다** — 145 를 리터럴로 못 박아 뒀기 때문이다. 그게 이 줄의 목적이다.
     //   ⚠ 새 값도 리터럴로 박는다. 다음에 kind 가 또 바뀌면 여기가 다시 깨져야 한다.
     //   여유: BATCH_CAP 160 − 143 = **17B** (모듈 한 줄이 10~11B 이므로 여전히 더 못 넣는다)
-    // 등록 크기는 **모듈 수에 정비례한다.** 시험 구성은 모듈 7 (센서 2 + 샘플 3 + 가상 2):
-    //   머리 `D,*,7,7,`+ck = 10B · 모듈 줄 7 × 11B = 77B → **87B**
+    // 등록 크기는 **모듈 수에 정비례한다.** 시험 구성은 모듈 8 (센서 2 + 명령 4 + 가상 2):
+    //   머리 `D,*,7,8,`+ck = 10B · 모듈 줄 8 × 11B = 88B → **98B**
     //   ⚠ 모듈을 늘리면 이 값이 깨지는 것이 **맞다.** 한 줄 약 11B 씩 는다.
-    //   🔴 상한은 `BATCH_CAP` 160B — 여유 73B ≈ 모듈 6개 더. **그 위는 등록이 잘린다.**
-    ok(rn == 87,            "★★ 등록이 87B — 모듈 7. BATCH_CAP 160 까지 여유 73B(≈6개)");
-    ok(strncmp(rbuf, "D,*,7,7,", 8) == 0,
+    //   🔴 상한은 `BATCH_CAP` 160B — 여유 62B ≈ 모듈 5개 더. **그 위는 등록이 잘린다.**
+    ok(rn == 98,            "★★ 등록이 98B — 모듈 8. BATCH_CAP 160 까지 여유 62B(≈5개)");
+    ok(strncmp(rbuf, "D,*,7,8,", 8) == 0,
                             "★★ 머리가 D,*,<drain>,<n>, 이다 (drain=7 · **n=12**)");
     // 🔴 **①선언 n · ②실제 D 줄 수 · ③hex 폭 — 셋이 서로를 정확히 못 박는다**
     {
@@ -1456,6 +1456,27 @@ int main() {
       ok(router.on("LD", cmdLed),  "★★ LD 등록 (① on/off)");
       ok(router.on("LC", cmdLcd),  "★★ LC 등록 (② 7자리 숫자)");
       ok(router.on("DR", cmdDoor), "★★ DR 등록 (③ 동작 명령)");
+      ok(router.on("L2", cmdLcd2), "★★ L2 등록 (② 둘째 표시기 — 같은 종류가 둘이다)");
+
+      // 🔴🔴 **이 시험이 `setup()` 과 갈라지지 않게 하는 단언이다.**
+      //   시험은 `setup()` 을 안 부르고 **여기서 직접 등록**한다. 그래서 `setup()` 에
+      //   `router.on` 을 하나 빠뜨려도 시험은 통과한다 — §"시험 경로 ≠ 실기 경로".
+      //   ⚠ 실제로 그렇게 됐다: `L2` 를 표에 넣고 `setup()` 에만 등록했더니
+      //     묶음 시험에서 **`등록 없음`** 으로 거절됐다.
+      //   🔑 그래서 **"명령 가능한 모듈은 전부 핸들러가 있다"** 를 불변식으로 건다.
+      //     새 `O*` 모듈을 표에 넣고 등록을 잊으면 **여기가 깨진다.**
+      {
+        bool everyOhasFn = true;
+        for (uint8_t i = 0; i < MODULE_N; i++) {
+          char k4[4]; moduleKindOf(i, k4);
+          if (k4[0] == 'O' && !router.has(i)) {
+            everyOhasFn = false;
+            char n4[4]; moduleNameOf(i, n4);
+            printf("      🔴 %s(idx %u · kind %s) 에 핸들러가 없다\n", n4, i, k4);
+          }
+        }
+        ok(everyOhasFn,     "★★★ **명령 가능한(O*) 모듈은 전부 핸들러가 있다**");
+      }
 
       char gg[28];
       // ① on/off — 핀이 실제로 바뀌는가
@@ -1556,15 +1577,15 @@ int main() {
     slotNo = 0;
     ok(gates.isOpen(0, slotNo) == e0,  "★ 같은 slotNo 면 같은 값이다 (결정적 · 재현 가능)");
 
-    // ③ 🔴 `G` 명령 — idx 5 = E1. 표 순서: A1(0) B1(1) LD(2) LC(3) DR(4) E1(5) X1(6)
-    char g[24]; snprintf(g, sizeof g, "G,301,5,0,"); appendChecksum(g, (uint8_t)strlen(g));
+    // ③ 🔴 `G` 명령 — idx 6 = E1. 표 순서: A1(0) B1(1) LD(2) LC(3) DR(4) L2(5) E1(6) X1(7)
+    char g[24]; snprintf(g, sizeof g, "G,301,6,0,"); appendChecksum(g, (uint8_t)strlen(g));
     handleFrameLine(g);
     ok(gates.manual,         "★★ 첫 명령이 자율 토글을 **영구 정지**시킨다");
     ok(!gates.isOpen(0, slotNo),       "★★ op=0 이면 닫힌다");
     slotNo = 0;
     ok(!gates.isOpen(0, slotNo),       "★★ 자율 주기가 와도 안 열린다 — **명령이 되돌려지지 않는다**");
 
-    snprintf(g, sizeof g, "G,302,5,1,"); appendChecksum(g, (uint8_t)strlen(g));
+    snprintf(g, sizeof g, "G,302,6,1,"); appendChecksum(g, (uint8_t)strlen(g));
     handleFrameLine(g);
     ok(gates.isOpen(0, slotNo),        "★★ op=1 이면 열린다");
 
@@ -1575,11 +1596,11 @@ int main() {
       // ✏️ 기대가 "002" 였는데 실제는 "003" 이다. **코드가 맞고 시험이 틀렸다:**
       //   자율을 굳힌 시점이 `slotNo=0` 이라 **X1 도 열린 상태로 굳었다.**
       //   슬롯10 → 비트 1 · 슬롯11 → 비트 0 → 둘 다 열림 = 0b…011 = "003"
-      // n=7 : E1(idx5) → 비트 1 · X1(idx6) → 비트 0 → 둘 다 열림 = 0b0000011 = "03"
+      // n=8 : E1(idx6) → 비트 1 · X1(idx7) → 비트 0 → 둘 다 열림 = 0b00000011 = "03"
       ok(sFieldIs(sbuf, 2, "03"),
                             "★★ E1·X1 이 열린 것이 occ 칸으로 나간다 (에코가 완료를 말한다)");
       // 🔴 X1 만 닫아서 **비트가 따로 움직이는지** 본다 — 하나로 뭉쳐 있으면 못 가른다
-      char g2[24]; snprintf(g2, sizeof g2, "G,305,6,0,"); appendChecksum(g2, (uint8_t)strlen(g2));
+      char g2[24]; snprintf(g2, sizeof g2, "G,305,7,0,"); appendChecksum(g2, (uint8_t)strlen(g2));
       handleFrameLine(g2);
       char sb2[64]; buildStatus(sb2, sizeof sb2);
       printf("      S(E1 열림·X1 닫힘) = %s\n", sb2);
@@ -1605,7 +1626,7 @@ int main() {
 
     // ⑦ 멱등 — 같은 rid 를 다시 받으면 같은 답
     ackQ.clearQueue();
-    snprintf(g, sizeof g, "G,302,5,0,"); appendChecksum(g, (uint8_t)strlen(g));
+    snprintf(g, sizeof g, "G,302,6,0,"); appendChecksum(g, (uint8_t)strlen(g));
     handleFrameLine(g);
     ok(gates.isOpen(0, slotNo),        "★★ 같은 rid 는 상태를 다시 안 바꾼다 (열린 채 유지)");
     ok(ackQ.pending() == 1,      "★ 그래도 ACK 는 다시 보낸다");
@@ -1786,6 +1807,89 @@ int main() {
                             "★★ ⑤ 성공 갈래에는 '거절'이 **한 번도** 안 나온다");
     ackQ.clearCache(); ackQ.clearQueue();
     Serial.out.clear();
+    Serial.echoToStdout = true;
+  }
+
+  // ── [40] 🔴🔴 **묶음 하행** — 한 번의 수신에 `G` 넷이 오면 넷 다 처리되는가 ────────
+  //   사용자 물음: *"LCD 4개에 동시에 문자 전송이 가능한 구조인가?"*
+  //   🔑 **계산이 아니라 실제 수신 경로로 답한다** — `wifi.deliver()` → `espRead()` →
+  //     줄 조립 → `+IPD` 벗기기 → 평문 경로 → 콜백. 실기와 같은 사슬이다.
+  printf("\n[40] 묶음 하행 — 한 수신에 G 넷\n");
+  {
+    Serial.echoToStdout = false;
+    arm(nullptr);
+    ackQ.clearCache(); ackQ.clearQueue();
+    ssOverflows = 0; pendDrops = 0;
+    Serial.out.clear();
+
+    // 표 순서: A1(0) B1(1) LD(2) LC(3) DR(4) L2(5) E1(6) X1(7)
+    char f1[24], f2[24], f3[24], f4[24];
+    snprintf(f1, sizeof f1, "G,921,2,1,");        appendChecksum(f1, (uint8_t)strlen(f1));
+    snprintf(f2, sizeof f2, "G,922,3,1234567,");  appendChecksum(f2, (uint8_t)strlen(f2));
+    snprintf(f3, sizeof f3, "G,923,5,7654321,");  appendChecksum(f3, (uint8_t)strlen(f3));
+    snprintf(f4, sizeof f4, "G,924,4,1,");        appendChecksum(f4, (uint8_t)strlen(f4));
+
+    std::string payload = std::string(f1) + "\n" + f2 + "\n" + f3 + "\n" + f4 + "\n";
+    printf("      묶음 페이로드 %u B (프레임 넷)\n", (unsigned)payload.size());
+    // 🔴 우리가 계산한 값(7자리 19B × 4 = 76B)과 가까운지 눈으로 확인한다
+    ok(payload.size() >= 60 && payload.size() <= 90,
+                            "★ 묶음이 60~90B 다 (계산한 76B 근처 — 링 64B 와 견줄 크기)");
+
+    // 🔴 **한 번에 밀어 넣는다.** 실기에서 한 TCP 세그먼트로 오는 그 모양이다.
+    //   `+IPD,<len>:` 는 **첫 줄에만** 붙는다 — 둘째 줄부터는 평문 경로로 들어간다.
+    char ipd[16]; snprintf(ipd, sizeof ipd, "+IPD,%u:", (unsigned)payload.size());
+    wifi.deliver(std::string(ipd) + payload);
+    espRead();                                    // ← 실기의 loop 한 바퀴와 같다
+
+    // ① 🔴 **넷이 다 도착했는가** — 하나라도 없으면 그게 답이다
+    size_t hits = 0, pos = 0;
+    while ((pos = Serial.out.find("[G] idx=", pos)) != std::string::npos) { hits++; pos += 8; }
+    printf("      [G] 줄 %u 개\n", (unsigned)hits);
+    ok(hits == 4,           "★★★ `[G]` 넷이 다 찍힌다 — **한 수신에 네 명령이 처리된다**");
+
+    // ② 콜백이 넷 다 불렸는가 — 모듈별 표지로 확인한다
+    ok(Serial.out.find("[LC] 1234567") != std::string::npos, "★★ LC 콜백이 7자리를 받았다");
+    ok(Serial.out.find("[L2] 7654321") != std::string::npos, "★★ L2 콜백이 7자리를 받았다");
+    ok(Serial.out.find("[DR] arg=1")   != std::string::npos, "★★ DR 콜백이 불렸다");
+    ok(Serial.out.find("거절") == std::string::npos,         "★★ 거절이 하나도 없다");
+
+    // ③ ACK 넷이 다 큐에 있는가 — `result=0`
+    ok(ackQ.pending() == 4, "★★★ ACK 가 **넷** 큐에 있다 (하나도 안 잃었다)");
+    bool allOk = true;
+    for (uint16_t rid = 921; rid <= 924; rid++) {
+      int8_t h = ackQ.find(rid);
+      if (h < 0 || ackQ.at(h).result != 0) { allOk = false; printf("      🔴 rid=%u 실패\n", rid); }
+    }
+    ok(allOk,               "★★★ 넷 다 result=0 — **4건 동시 전송이 성립한다**");
+
+    // ④ 계수기 — 링도 안 넘치고 버린 줄도 없다
+    ok(ssOverflows == 0,    "★★ `ssovf` 0 — 링(64B)이 안 넘쳤다 (매 espRead 가 다 비운다)");
+    ok(pendDrops == 0,      "★★ `penddrop` 0 — 버린 줄이 없다 (송신 중이 아니었다)");
+
+    // ⑤ 에코 — 넷이 다 섰나 (DR 은 arg=1 이라 열림)
+    const uint16_t em = router.echoMask();
+    ok((em & (1u << 2)) && (em & (1u << 3)) && (em & (1u << 4)) && (em & (1u << 5)),
+                            "★★ 네 모듈의 에코 비트가 다 섰다");
+
+    // ── ⑥ 🔴🔴 **묶음의 위험** — 송신 중에 오면 몇 개를 잃는가 ──────────────────
+    //   여기가 이 시험의 진짜 소득이다. **확률이 아니라 크기가 N배가 된다**를 값으로 보인다.
+    //   `pendLine` 은 **깊이 1** 이라 첫 줄만 미루고 나머지는 버린다.
+    ackQ.clearCache(); ackQ.clearQueue();
+    ssOverflows = 0; pendDrops = 0; Serial.out.clear();
+    inSend = true;                                // 우리가 CIPSEND 중이다
+    wifi.deliver(std::string(ipd) + payload);
+    espRead();
+    inSend = false;
+    printf("      송신 중 수신 → penddrop=%u\n", (unsigned)pendDrops);
+    ok(pendDrops == 3,      "★★★ 송신과 겹치면 **넷 중 셋을 버린다** (pendLine 깊이 1)");
+    ok(ackQ.pending() == 0, "★★ 그 순간 처리된 것이 없다 — 미룬 한 줄은 drainPending 이 낸다");
+
+    drainPending();                               // 미뤄 둔 한 줄이 이제 처리된다
+    ok(ackQ.pending() == 1,
+                            "★★★ **한 줄만 살아남는다** — 묶으면 한 번의 겹침이 N−1 건 손실이다");
+
+    ackQ.clearCache(); ackQ.clearQueue();
+    pendDrops = 0; Serial.out.clear();
     Serial.echoToStdout = true;
   }
 
