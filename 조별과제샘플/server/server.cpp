@@ -297,7 +297,8 @@ bool ParkingServer::openPorts()    { return p_->srv.openPorts(); }
 bool ParkingServer::serveOneTick() { return p_->srv.serveOneTick(); }
 void ParkingServer::closeDown()    { p_->srv.closeDown(); }
 
-#include "main.cpp"
+#include "lot.cpp"      // 🔴 **기여자가 여는 유일한 파일** — buildLot / onTick / onCmdResult
+#include "entry.h"      // 엔진 진입점 — `main()` 은 여기 있다(기여자는 안 연다)
 
 
 
