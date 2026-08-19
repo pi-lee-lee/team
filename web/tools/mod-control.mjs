@@ -221,14 +221,34 @@ try {
      /장치가 거절/.test(postMsg) && /장치가 이 명령을 거절/.test(postMsg), postMsg);
   ok('🔴 두 거절의 문구가 서로 다르다 — 뭉치면 고칠 곳을 못 가른다', preMsg !== postMsg);
 
-  /* ── ⑦ 🔴 `settled` 규칙 — socket 이 정정했다: **조건은 모듈이 아니라 값이다** ──
-     초안: *"숫자 모듈은 settled 를 안 낸다"* → 부정확.
-     정정: **요청 값이 0 이나 1 이 아니면** settled 가 안 나온다. `number` 에 1 을 보내면
-           비트가 그 값을 증명하므로 `settled` 가 맞다. */
-  await evaluate(client, inject(ST(withConf('LC', 'settled', { requested: 1, value: true }))));
-  await sleep(100); v = await evaluate(client, READ);
-  ok('요청 값이 1 이면 number 위젯에서도 settled 를 그대로 그린다 (모듈이 아니라 값이 조건이다)',
-     /요청대로/.test((v.LC.msgs || []).join(' ')), JSON.stringify(v.LC.msgs));
+  /* ── ⑦ 🔴 `settled` 규칙이 **두 번 정정됐다.** 지금 정본(socket 2026-08-20 · build 3e20389):
+       ❌ 초안   "숫자 모듈은 settled 를 안 낸다"
+       ❌ 1차정정 "요청 값이 0/1 이면 settled 가 가능하다"
+       ✅ 지금   **`toggle` 위젯만** settled/mismatch 를 낸다. **`number`·`choice` 는 언제나 `partial`**
+
+     🔑 왜 1차 정정이 틀렸나 — 실측이 답했다:
+        `DR 1`(열기) → 에코 비트 1 · `DR 2`(닫기) → 에코 비트 **0**
+        **에코 비트는 장치의 *상태*이지 우리가 보낸 *인자*가 아니다.**
+        옛 규칙이면 `DR 2` + 비트 0 이 `mismatch` → **정확히 성공한 명령을 실패라고 부른다.**
+
+     🔴 **화면은 이 규칙을 몰라도 된다** — `confirmed` 를 **해석하지 않고 그대로 그리기** 때문이다.
+        그게 "판정자를 하나로 둔다"의 값어치다. 규칙이 두 번 바뀌는 동안 화면 코드는 안 바뀌었다.
+        아래는 그 성질을 단언한다: **서버가 무엇을 주든 화면은 그 말만 옮긴다.** */
+  /* ⚠ **한 봉투에 둘을 같이 넣는다.** `state` 는 매번 **전체를 갈아 끼우므로**, 따로 쏘면
+     앞의 것이 `unknown` 으로 돌아간다 — 그걸 모르고 두 번에 나눠 쏴서 빨강을 한 번 냈다.
+     🔑 계측기가 계약의 성질(전체 교체)을 안 따르면 제품이 아니라 계측기가 틀린다. */
+  const both = BASE.map((m) => (
+    m.name === 'LD' ? Object.assign({}, m, { confirmed: 'settled', requested: 1, value: true }) :
+    m.name === 'DR' ? Object.assign({}, m, { confirmed: 'partial', requested: 2, value: false }) : m));
+  await evaluate(client, inject(ST(both)));
+  await sleep(120); v = await evaluate(client, READ);
+  const ldMsg = (v.LD.msgs || []).join(' ');
+  const drMsg = (v.DR.msgs || []).join(' ');
+  ok('toggle 이 settled 면 "요청대로 보고" 로 그린다', /요청대로/.test(ldMsg), ldMsg);
+  ok('🔴 choice 가 partial 이면 "2 보냄 · 에코 꺼짐 · 값 확인 불가" 로 그린다 (닫기=2 인데 비트 0 인 그 자리)',
+     /2 보냄/.test(drMsg) && /값 확인 불가/.test(drMsg) && !/요청대로/.test(drMsg), drMsg);
+  ok('🔑 화면이 confirmed 를 해석하지 않는다 — 같은 봉투의 두 모듈을 서버 말대로 다르게 그린다',
+     /2 보냄/.test(drMsg) && /요청대로/.test(ldMsg), 'LD: ' + ldMsg + ' || DR: ' + drMsg);
 
   /* ── ⑧ 🔴 **입력 칸은 사용자 소유다** — 주기 갱신이 치던 값을 덮으면 안 된다
      사용자 실측(2026-08-20): *"LC 에 입력을 하는 중간에 글자가 없어진다."*
@@ -269,8 +289,12 @@ try {
      (await evaluate(client, `document.activeElement && document.activeElement.classList.contains('zctl__num')`)) === true);
 
   skip('실기에서 control 이 온다', '화면이 **미배포**다 — 서빙본은 옛 판이라 지금 실기로 재면 남의 판을 잰다');
-  skip('🔴 요청 2 이상에서 settled 가 한 번도 안 온다 (§6)',
-       '실기 관측 항목이다. 주입으로는 "서버가 안 낸다"를 못 잰다 — 배포 뒤 --live 로 재라');
+  /* 🔴 §6 확인 항목을 **정본으로 고쳤다**(socket 2026-08-20 · 두 번째 정정):
+     ❌ ~~"요청 2 이상에서 settled 가 안 온다"~~  (판별자를 **값**으로 봤다)
+     ✅ **"`number`·`choice` 모듈에서 `settled` 가 한 번도 안 온다"**  (판별자는 **선언**이다)
+     🔑 `toggle` 을 선언한 사람만 *"이 모듈은 값이 곧 상태다"* 라고 말한 것이다. */
+  skip('🔴 number·choice 모듈에서 settled 가 한 번도 안 온다 (§6)',
+       '실기 관측 항목이다 — 주입으로는 "서버가 안 낸다"를 못 잰다. --live 로 재라');
   skip('no_answer 갈래', '아직 아무도 못 밟았다(장치가 살아 있다) — socket 도 미측정으로 뒀다');
 
 } catch (e) {
