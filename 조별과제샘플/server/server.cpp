@@ -4359,6 +4359,20 @@ struct Server {
     }
 
     // 한 박자 : 수신 → 자리 판정 → 하행 송신 → 화면 방송. **false 면 그만 돈다**
+    //
+    // 🔴 **여기에 코드를 더할 때 알아야 할 것** (REQ-0272 · 2026-08-19)
+    //   이 본문은 원래 `while (!g_stop) { … }` 의 몸통이었다. 기계적으로 옮겼고,
+    //   옮기기 전에 **최상위 `continue`/`break`/`return` 이 하나도 없는 것**을 확인했다.
+    //   그 확인이 이 분할의 안전망 전부였다.
+    //
+    //   ✅ **그런데 옮긴 뒤로 둘은 *구조적으로* 막혔다** — 실험으로 확인했다:
+    //      최상위 `continue;` → `error: 'continue' statement not in loop statement` (컴파일 실패)
+    //      `break;` 도 같다. **루프가 아니므로 컴파일러가 잡는다.**
+    //
+    //   🔴 **남는 위험은 `return` 하나다.** 최상위에 `return false;` 를 쓰면 **컴파일된다.**
+    //      그리고 그 뜻은 "이 박자를 건너뛴다"가 아니라 **"서버를 멈춘다"** 이다.
+    //      ⚠ 옛 코드에서 `continue` 였을 자리에 무심코 `return` 을 쓰면 **서버가 조용히 죽는다.**
+    //      → 이 박자를 건너뛰려면 **`return true;`** 다. 멈추는 것은 `g_stop` 이 정한다.
     bool serveOneTick() {
         if (g_stop) return false;
             fd_set rd; FD_ZERO(&rd);
