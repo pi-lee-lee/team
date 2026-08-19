@@ -43,7 +43,7 @@
 #include <csignal>      // sig_atomic_t / SIGINT — 윈도우에도 있어야 하므로 공통 블록에 둔다
 #include <string>
 #include <vector>
-#include <algorithm>    // 복구시간 중앙값(REQ-0072) — nth_element
+#include <algorithm>    // 복구시간 중앙값 — nth_element
 #include <map>
 #include <fstream>
 #include <sstream>
@@ -61,7 +61,7 @@
   #include <winsock2.h>
   #include <ws2tcpip.h>
   #include <windows.h>
-  #include <direct.h>     // _mkdir — 로그 디렉터리 생성 (REQ-0111 로그 계약)
+  #include <direct.h>     // _mkdir — 로그 디렉터리 생성
   #pragma comment(lib, "ws2_32.lib")
   typedef SOCKET sock_t;
   #define BAD_SOCK INVALID_SOCKET
@@ -71,7 +71,7 @@
   #include <sys/socket.h>
   #include <sys/select.h>
   #include <sys/time.h>
-  #include <sys/stat.h>   // mkdir — 로그 디렉터리 생성 (REQ-0111 로그 계약)
+  #include <sys/stat.h>   // mkdir — 로그 디렉터리 생성
   #include <sys/file.h>   // flock — 한 로그 파일에 두 인스턴스가 붙는 것을 막는다
   #include <fcntl.h>      // open  — 위 잠금용 fd
   #include <netinet/in.h>
@@ -90,17 +90,17 @@
 #endif
 
 #include "config.h"      // 손잡이 — 포트·타이밍·상한·유도값과 그 근거
-#include "server_device.h"   // 디바이스 계층 잎 유틸 (REQ-0096 A): SHA-1·base64·ws_accept·체크섬
+#include "server_device.h"   // 디바이스 계층 잎 유틸 — SHA-1·base64·ws_accept·체크섬
 #include "server_seam.h"
 #include "parking.h"     // 🔴 **공개 조립 API** — 사용 코드가 읽는 유일한 헤더
 #include "ridpool.h"
 #include "ledger.h"     // 노드 대장 — 재기동을 건너 "누가 있었나"를 기억한다
 #include "spot.h"       // 자리의 동작 방식 — 기여자가 구현하는 콜백     // rid 발행·격리·영속 — 전선에 안 닿는 축
-// ⚠ `lot.h` 는 `Zone`·`ParkingLot` 을 쓰므로 **그 뒤에** include 한다(아래 zone.h 다음).     // 이음매 계약 (REQ-0096 B→C): DeviceEvent / DeviceCommand
+// ⚠ `lot.h` 는 `Zone`·`ParkingLot` 을 쓰므로 **그 뒤에** include 한다(아래 zone.h 다음).     // 이음매 계약 — DeviceEvent / DeviceCommand
 
 #include "runtime.h"     // 프로세스 바닥 — 시각·시그널·로그·경로·pid
 
-// 🔴🔴 **`Node` — 통신 단위 하나**(REQ-0203 1단계 · 설계 `docs/net/DESIGN-bridge-node-module-zone.md` §1)
+// 🔴🔴 **`Node` — 통신 단위 하나.** 설계: `docs/net/DESIGN-bridge-node-module-zone.md`
 // 지금은 **주차 노드 하나뿐**이라 `Server` 안에 `park` 로 한 벌만 산다. 나중에 `map<devid,Node>` 가 된다.
 //
 // 🔑 **이 단계의 목적은 "그릇"만 바꾸는 것이다. 거동이 바뀔 자리가 없어야 한다.**
@@ -122,9 +122,8 @@ struct Pending {             // 아두이노에 내려보내고 ACK 를 기다�
     //   다른 것이고(§5), 섞으면 재등록으로 순서가 바뀔 때 무엇이 틀렸는지 못 가린다.
     int  mod_idx;
     char top;                // kind=='T' 일 때의 op: 'A'|'D'|'S'|'X'
-    // 🔴 `G` 의 **인자**. 전에는 `top` 에 '0'/'1' 로 실었다(차단봉 전용이라 두 값뿐이었다).
-    //   LCD 7자리 같은 값이 오면서 **칸을 따로 뒀다** — `top` 은 `T` 의 op 로 남긴다.
-    //   ⚠ 한 칸에 두 뜻을 담으면 값이 갈릴 때까지 아무도 모른다(오늘 `n` 이 그랬다).
+    // 🔴 `G` 의 **인자**(LCD 7자리 같은 값). `top` 과 **칸이 따로다** — `top` 은 `T` 의 op 다.
+    //   ⚠ 한 칸에 두 뜻을 담지 마라. **값이 갈리기 전까지 아무도 모른다.**
     long g_arg;              // kind=='G' 일 때 장치로 보낼 인자
     long long sent_ms;
     int tries;
@@ -142,7 +141,7 @@ struct Pending {             // 아두이노에 내려보내고 ACK 를 기다�
 struct Conn {
     enum Kind { HTTP, WS } kind;
     std::string inbuf;
-    // 🔴 **`get_map` 상한을 연결별로 둔다** (2026-08-19).
+    // 🔴 **`get_map` 상한은 연결별이다.**
     //   전역 창이면 **화면 여섯이 재접속하는 것만으로 상한을 넘긴다** — 각자 한 번씩 물었는데
     //   누군가는 거절당한다. 서버 재기동 직후가 정확히 그 상황이고, **거절당한 화면은
     //   지형을 못 받아 빈 채로 남는다.**
@@ -156,16 +155,16 @@ struct Server {
     // ─── 목차 ─────────────────────────────────────────────────────────
     //  🔑 **이 구조체는 29줄이고 그중 대부분이 아래 목차다.**
     //    각 줄은 `struct Server` 의 **몸통 조각**이고 그 자리에 펼쳐진다.
-    //    6,321줄을 이 형태로 옮겼고 매 단계 **`.o` 가 바이트 동일**했다(REQ-0272).
+    //    `.o` 바이트 동일로 이 형태가 거동을 안 바꾼다는 것이 증명돼 있다.
     //  🔴 **순서가 문법이다** — 뒤엣것이 앞엣것을 쓴다. 함부로 바꾸면 컴파일이 깨진다.
     //  🔒 표시는 `.claude/protected.json` 잠금 — 장치 쪽과 한 계약의 양끝이다.
     // ──────────────────────────────────────────────────────────────────
 #include "state.h"         // 무엇을 기억하는가 — 필드·계수기·중첩 타입 전부
-#include "metrics.h"       // 소크 관측 · 복구 계측 · 지표 문장 (REQ-0065/0072)
-#include "nodes.h"         // 다중 노드 — 등록·승격·결속·라우팅 (REQ-0083)
+#include "metrics.h"       // 소크 관측 · 복구 계측 · 지표 문장
+#include "nodes.h"         // 다중 노드 — 등록·승격·결속·라우팅
 #include "wire.h"          // 송신 helper · WebSocket 프레임 (§5.2)
 #include "wsjson.h"        // 봉투 만들기 — map / state / snapshot JSON
-#include "seam.h"          // 이음매: 디바이스 → 도메인 (REQ-0096 C)
+#include "seam.h"          // 이음매: 디바이스 → 도메인
 #include "persist.h"       // data_log.json 읽기·쓰기 (§9)
 #include "downlink.h"      // 🔒 하행 — 발행·재전송·회수 (전선 계약. 잠금)
 #include "uplink.h"        // 🔒 상행 — 장치 프레임 파서 (전선 계약. 잠금)
@@ -182,18 +181,17 @@ struct Server {
     }
 };
 
-// 🔴 자가검증은 `selftest.h` 로 나갔다 (REQ-0272 · 이동만 · `.o` 0 차이로 증명)
+// 🔴 자가검증은 `selftest.h` 에 있다.
 //   ⚠ **이 자리를 옮기지 마라** — 전처리 결과가 같아야 그 증명이 성립한다.
 #include "selftest.h"
 
-// 🔴 **엔트리 포인트는 `main.cpp` 로 나갔다** (REQ-0272 1단계 · 2026-08-19)
+// 🔴 **엔트리 포인트는 `main.cpp` 에 있다** — 기여자가 여는 파일이다
 //   원래 자리에서 그대로 `#include` 한다 — **전처리 결과가 같아야 `.o` 0 차이가 성립한다.**
 //   ⚠ `#include` 위치를 옮기는 순간 그것은 "분리"가 아니라 "변경"이다. 이 자리를 지켜라.
-// ── 🔴 프로세스 초기화 — **호출자가 몰라도 되는 것** (REQ-0272 2단계 · 2026-08-19)
+// ── 🔴 프로세스 초기화 — **호출자가 몰라도 되는 것**
 //
-//   전에는 `main()` 이 `WSAStartup`·`SIGPIPE`·`SIGINT/TERM` 을 직접 챙겼다.
-//   **사용자 요구는 "난이도 높은 설정은 최대한 자동화"** 이고, 이건 그 전형이다 —
-//   Winsock 이 무엇인지 몰라도 주차장을 만들 수 있어야 한다.
+//   `WSAStartup`·`SIGPIPE`·`SIGINT/TERM` 을 여기서 챙긴다.
+//   🔑 **Winsock 이 무엇인지 몰라도 주차장을 만들 수 있어야 한다** — 설정은 자동화한다.
 //
 //   🔴 **`ParkingServer` 의 생성자로 옮기지 않았다.** 이유가 있다:
 //     `--selftest` 는 `ParkingServer` 를 만들지 않는데 **소켓쌍에 쓰므로 `SIGPIPE` 가 필요하다.**
@@ -208,7 +206,7 @@ struct ProcessInit {
 #else
         signal(SIGPIPE, SIG_IGN);   // 끊긴 소켓에 write 해도 프로세스가 죽지 않게
 #endif
-        // 소크 시험은 Ctrl-C 로 끝난다 — 그때 요약을 남기고 정상 종료한다(REQ-0065)
+        // 소크 시험은 Ctrl-C 로 끝난다 — 그때 요약을 남기고 정상 종료한다
         signal(SIGINT,  on_stop_signal);
         signal(SIGTERM, on_stop_signal);
     }
@@ -220,7 +218,7 @@ struct ProcessInit {
 };
 static ProcessInit g_process_init;
 
-// ── 🔴 공개 조립 API 구현 (REQ-0272 1단계 · 2026-08-19)
+// ── 🔴 공개 조립 API 구현
 //
 //   헤더(`parking.h`)에는 **자료구조가 하나도 안 나온다.** 여기 `Impl` 이 `Server` 를 들고 있고
 //   호출자는 그 존재를 모른다 — 그것이 은닉이다.
