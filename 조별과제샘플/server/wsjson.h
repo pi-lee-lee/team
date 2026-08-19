@@ -145,6 +145,12 @@
             // ── 🔴 `occupied` 를 **그 자리의 센서들에서 유도한다** (명세 §9.2)
             //   한 자리에 센서가 둘이므로 두 값에서 하나를 만들어야 한다. **서버가 계산한다** —
             //   화면이 조합하게 두면 규칙이 두 곳에 생긴다(§"파생 값은 원본을 가진 쪽이 계산한다").
+            // 🔴 **서버는 값을 모으기만 하고, 무엇으로 읽을지는 자리가 정한다** (`spot.h` · 1단계)
+            //   전에는 이 자리에서 바로 `occ = (v_ones > 0)` 을 계산했다.
+            //   이제 **판단은 `SpotBehavior::occupied()`** 가 하고 여기서는 **입력만 만든다.**
+            //   🔑 그래야 기여자가 자기 자리의 판정을 갈아끼울 수 있다(2단계).
+            //   ⚠ 지금은 모든 자리가 기본 구현(=지금과 같은 OR)을 쓰므로 **거동 변화가 0 이다.**
+            std::vector<SensorReading> readings;
             int v_known = 0, v_total = 0, v_ones = 0;
             for (size_t m = 0; m < z.modules.size(); m++) {
                 const Node* mn = node_by_devid(z.modules[m].first);
@@ -156,14 +162,20 @@
                 // 🔑 **점유 센서만 센다.** 차단봉(OB)은 자리 점유를 말하지 않는다(명세 §8.1).
                 if (!mn || mn->mods[mi].second != "IP") continue;
                 v_total++;
-                if (mi < mn->mod_bits_n) { v_known++; if (mn->mod_bits[mi]) v_ones++; }
+                const bool known = (mi < mn->mod_bits_n);
+                const bool val   = known && mn->mod_bits[mi];
+                readings.push_back(SensorReading(known, val));
+                if (known) { v_known++; if (val) v_ones++; }
             }
             if (z.kind == "parking") {
                 // 🔴 **OR 다.** 두 오류의 대가가 대칭이 아니다 —
                 //   빈 자리를 "찼다"고 하면 손해는 자리 하나이고,
                 //   찬 자리를 "비었다"고 하면 **운전자가 가서 못 댄다.**
                 //   ⚠ AND 로 하면 센서 하나가 죽었을 때 그 자리가 영영 "비었다"로 보인다.
-                const bool occ = (v_ones > 0);
+                // 🔴 **여기가 기여자가 갈아끼우는 자리다.** 지금은 자리 전부가 기본 구현을 쓴다.
+                //   ⚠ 반환값 `false` 는 *"비었다"* 가 아닐 수 있다 — 전부 모르는 경우도 `false` 다.
+                //     그 구분은 아래 `value_state` 가 나른다. **2단계에서 `Tri` 로 합친다.**
+                const bool occ = default_spot_.occupied(readings);
                 const char* vs = (v_total == 0 || v_known == 0) ? "unknown"
                                : (v_known == v_total ? "known" : "partial");
                 // 🔴 `value_state` 는 **모든 자리에 항상 싣는다.** 선택적이면 화면이 안 본다.

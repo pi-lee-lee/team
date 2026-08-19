@@ -94,7 +94,8 @@
 #include "server_seam.h"
 #include "parking.h"     // 🔴 **공개 조립 API** — 사용 코드가 읽는 유일한 헤더
 #include "ridpool.h"
-#include "ledger.h"     // 노드 대장 — 재기동을 건너 "누가 있었나"를 기억한다     // rid 발행·격리·영속 — 전선에 안 닿는 축
+#include "ledger.h"     // 노드 대장 — 재기동을 건너 "누가 있었나"를 기억한다
+#include "spot.h"       // 자리의 동작 방식 — 기여자가 구현하는 콜백     // rid 발행·격리·영속 — 전선에 안 닿는 축
 // ⚠ `lot.h` 는 `Zone`·`ParkingLot` 을 쓰므로 **그 뒤에** include 한다(아래 zone.h 다음).     // 이음매 계약 (REQ-0096 B→C): DeviceEvent / DeviceCommand
 
 #include "runtime.h"     // 프로세스 바닥 — 시각·시그널·로그·경로·pid
