@@ -98,15 +98,23 @@ arduino-cli board list
 
 **빌드 → 업로드** (폴더명 == 스케치명 규칙 때문에 사본이 필요하다 · 원장 §4.2):
 
+> ### 🔴 **2026-08-19 (REQ-0264) — 굽기 입력이 파일 하나가 아니다**
+> 링크 계층이 **`조별과제샘플/EspLink_*.h` 넷**으로 분리됐다. **스케치만 복사하면 낡은 헤더로 굽는다.**
+> **아래는 전부 `client.ino` 와 `EspLink_*.h` 를 같이 다룬다.**
+
 ```bash
 mkdir -p arduino/.burn/client
-cp 조별과제샘플/client.ino arduino/.burn/client/client.ino
-cmp arduino/.burn/client/client.ino 조별과제샘플/client.ino   # 🔴 0 이 아니면 멈춰라
-git log -1 --format='굽는 판본 %h %s' -- 조별과제샘플/client.ino
-git status --short -- 조별과제샘플/client.ino                 # 비어야 한다. 아니면 미커밋 채로 굽는 것이다
+cp 조별과제샘플/client.ino 조별과제샘플/EspLink_*.h arduino/.burn/client/
+for f in 조별과제샘플/client.ino 조별과제샘플/EspLink_*.h; do \
+  cmp "$f" "arduino/.burn/client/$(basename "$f")" || echo "🔴 불일치: $f"; done   # 🔴 한 줄이라도 뜨면 멈춰라
+git log -1 --format='굽는 판본 %h %s' -- 조별과제샘플/client.ino 조별과제샘플/EspLink_*.h
+git status --short -- 조별과제샘플/client.ino 조별과제샘플/EspLink_*.h   # 비어야 한다. 아니면 미커밋 채로 굽는 것이다
 arduino-cli compile --fqbn arduino:avr:uno --output-dir arduino/.burn/out arduino/.burn/client
 arduino-cli upload -p "$PORT" --fqbn arduino:avr:uno --input-dir arduino/.burn/out
 ```
+
+> ⚠ **`cp` 뒤 스테이징에 남아 있는 옛 파일은 안 지워진다.** 헤더 이름이 바뀌거나 줄면
+> **스테이징에 유령 파일이 남아 컴파일에 섞일 수 있다.** 이름을 바꿀 때는 `arduino/.burn/client` 를 비우고 시작해라.
 
 > ### 🔴 **`cmp` 를 빼지 마라 — `cp` 를 건너뛰면 낡은 스테이징이 조용히 컴파일된다.**
 > **`.burn/client/` 는 2026-08-19 부로 git 추적에서 뺐다**(원장 §24). 저장소에 사본이 없으므로
