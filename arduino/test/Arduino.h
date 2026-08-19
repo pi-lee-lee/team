@@ -48,6 +48,17 @@ extern uint8_t g_pinMode[24];
 
 inline void pinMode(uint8_t p, uint8_t m) { if (p < 24) g_pinMode[p] = m; }
 inline int  digitalRead(uint8_t p)        { return (p < 24) ? g_pinLevel[p] : HIGH; }
+
+// 🔓 초음파 예시가 쓰는 것들. **없으면 샘플 코드가 시험에서 컴파일조차 안 된다** —
+//   그러면 샘플이 조용히 썩는다(오타·타입 오류를 아무도 못 본다).
+inline void delayMicroseconds(unsigned int us) { (void)us; }
+// `pulseIn` 은 시험이 값을 **주입**한다. 0 = 반향 없음(범위 밖).
+//   왕복 µs → cm 은 /58 이므로 예: 2900 ≈ 50cm · 5800 ≈ 100cm
+extern unsigned long g_pulseIn;
+inline unsigned long pulseIn(uint8_t p, uint8_t v, unsigned long timeout) {
+  (void)p; (void)v;
+  return (g_pulseIn > timeout) ? 0UL : g_pulseIn;   // 타임아웃을 넘으면 0 — 실물과 같은 규약
+}
 inline void digitalWrite(uint8_t p, uint8_t v) { if (p < 24) g_pinLevel[p] = v; }
 inline int  analogRead(uint8_t)           { return 512; }
 

@@ -193,6 +193,37 @@ class CommandRouter {
 
 static CommandRouter router;
 
+// ═════════════════════════════════════════════════════════════════════════
+// 🔓 **센서 읽기 등록표** — `CommandRouter` 의 입력 쪽 짝
+//
+//   `router.on("LD", cmdLed)`    ← 명령을 **받는다**
+//   `sensors.on("A1", myRead)`   ← 값을 **읽는다**
+//   🔑 **이름·인자·반환의 규약이 같다.** 한 번만 배우면 양쪽에 쓴다.
+//
+// ⚠ 생성자 없음 · NSDMI 없음 — 전역은 `.bss` 로 0(=미등록) 시작이다.
+// ⚠ 비용: 함수 포인터 `MODULE_N` 개 = 2B × 모듈 수. 지금 구성(5)에서 **10B**.
+// ═════════════════════════════════════════════════════════════════════════
+class SensorRouter {
+ public:
+  // 이름으로 등록한다 — **전선의 `idx`(표 순서)가 아니라 이름이다.**
+  //   표를 고치면 idx 는 밀리지만 이름은 안 밀린다.
+  // 반환 false = **표에 그 이름이 없다.** 조용히 무시하지 않는다.
+  bool on(const char* name, SensorFn fn) {
+    for (uint8_t i = 0; i < MODULE_N; i++) {
+      char n4[4]; moduleNameOf(i, n4);
+      if (strcmp(n4, name) == 0) { fn_[i] = fn; return true; }
+    }
+    return false;
+  }
+  SensorFn at(uint8_t idx) const { return (idx < MODULE_N) ? fn_[idx] : (SensorFn)0; }
+ private:
+  SensorFn fn_[MODULE_N];
+};
+static SensorRouter sensors;
+
+// `Slots.h` 가 선언만 해 둔 것의 **정의**. 자리 인덱스 = 모듈 인덱스다(센서가 표 앞쪽에 온다).
+static SensorFn sensorFnOf(uint8_t idx) { return sensors.at(idx); }
+
 // 등록 배치를 만든다. 성공하면 길이, 실패하면 0.
 //   ⚠ **`D` 여러 줄 + `S` 는 상한을 넘는다.** 그래서 명세가 *"첫 슬롯은 `D` 만"* 으로 정했다.
 //     여기서도 `BATCH_CAP` 을 넘으면 **만들다 말고 0 을 돌려준다** — 잘린 등록을 내보내지 않는다.

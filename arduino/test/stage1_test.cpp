@@ -47,6 +47,7 @@
 #include <cstdio>
 
 unsigned long g_millis = 0;
+unsigned long g_pulseIn = 0;      // 초음파 예시가 읽는 왕복 시간(µs). 0 = 반향 없음
 bool          g_clockAutoAdvance = true;
 uint8_t       g_pinLevel[24];
 uint8_t       g_pinMode[24];
@@ -1640,6 +1641,59 @@ int main() {
     ok(((node.simOcc >> 0) & 1) && ((node.simOcc >> H) & 1),
                             "★★ 예약→점유도 짝을 함께 채운다 (A1 과 B1 이 같이 선다)");
     node.simOcc = 0; node.resMask = 0;
+  }
+
+  // ── [38] 🔓 센서 읽기 훅 — **샘플 초음파 예시를 실제로 부른다** ──────────────
+  //   🔴 컴파일만 되는 것으로는 부족하다. 샘플 코드는 **아무도 안 돌려 보면 조용히 썩는다.**
+  //   여기서 등록 → 읽기 → 문턱 판정 → 캐시까지 밟는다.
+  printf("\n[38] 센서 읽기 훅 (sensors.on) + 초음파 샘플\n");
+  {
+    node.srcReal = 0xFFFF;                 // 실물 경로를 타게 한다
+    ok(!sensors.at(0),      "★ 등록 전에는 훅이 없다 (기본 digitalRead 경로)");
+    ok(sensors.on("A1", ultrasonicRead),
+                            "★★ 이름으로 등록된다 (router.on 과 같은 모양)");
+    ok(!sensors.on("ZZ", ultrasonicRead),
+                            "★★ 표에 없는 이름은 **false** — 조용히 무시하지 않는다");
+    ok(sensors.at(0) == ultrasonicRead, "★ 등록된 것이 그 칸에 걸린다");
+
+    // 🔴 **문턱 판정을 핸들러가 한다** — US_OCCUPIED_CM = 60cm
+    g_millis += 1000;  g_pulseIn = 2900;   // 왕복 2900µs / 58 ≈ **50cm** → 60 미만 = 찼다
+    ok(node.readRealSensor(0) == 1,
+                            "★★ 50cm → 찼다 (핸들러가 cm 로 바꿔 문턱과 견준다)");
+    g_millis += 1000;  g_pulseIn = 5800;   // ≈ **100cm** → 60 초과 = 비었다
+    ok(node.readRealSensor(0) == 0,        "★★ 100cm → 비었다");
+    g_millis += 1000;  g_pulseIn = 0;      // 반향 없음
+    ok(node.readRealSensor(0) == 0,        "★★ 반향 없음(0) → 비었다 — 범위 밖이다");
+
+    // 🔴 **타임아웃 규약** — 6000µs 를 넘는 왕복은 `pulseIn` 이 0 을 낸다(실물과 같다)
+    g_millis += 1000;  g_pulseIn = 7000;
+    ok(node.readRealSensor(0) == 0,
+                            "★★ 타임아웃(6000µs) 밖은 0 으로 온다 → 비었다");
+
+    // 🔴 **캐시가 실제로 도는가** — 200ms 안에서는 새 값을 무시해야 한다.
+    //   이게 없으면 매 loop 마다 pulseIn 이 돌아 슬롯이 밀린다.
+    g_millis += 1000;  g_pulseIn = 2900;
+    ok(node.readRealSensor(0) == 1,        "★ 캐시 기준점: 지금은 찼다");
+    g_pulseIn = 5800;                      // 값만 바꾸고 **시간은 안 민다**
+    ok(node.readRealSensor(0) == 1,
+                            "★★ 200ms 안이면 **옛 값을 그대로** 낸다 (캐시가 돈다)");
+    g_millis += 250;                       // 캐시 만료
+    ok(node.readRealSensor(0) == 0,
+                            "★★ 200ms 가 지나면 새로 잰다 — **영구 고착이 아니다**");
+
+    // 🔴 등록된 칸은 기본 핀 모드를 **안 건드린다** (초음파는 trig/echo 가 갈린다)
+    g_pinMode[slotPin(0)] = 0xEE;          // 표지를 박아 둔다
+    node.applySlotPinMode(0);
+    ok(g_pinMode[slotPin(0)] == 0xEE,
+                            "★★ 훅이 있는 칸에는 INPUT_PULLUP 을 안 건다 (기여자 몫이다)");
+
+    // 뒤 시험에 영향이 없도록 되돌린다 — 0 을 넣으면 기본 경로로 돌아간다
+    sensors.on("A1", 0);
+    ok(!sensors.at(0),      "★ 0 을 등록하면 기본 경로로 돌아간다");
+    node.applySlotPinMode(0);
+    ok(g_pinMode[slotPin(0)] == INPUT_PULLUP,
+                            "★★ 훅을 떼면 기본 INPUT_PULLUP 이 다시 걸린다");
+    node.srcReal = SLOT_SRC_DEFAULT;
   }
 
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);

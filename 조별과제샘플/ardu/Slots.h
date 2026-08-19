@@ -83,7 +83,30 @@ static inline uint8_t slotPin(uint8_t i) {
 static inline uint8_t simPair(uint8_t i) { return (uint8_t)((i + SLOT_N / 2) % SLOT_N); }
 
 // ═════════════════════════════════════════════════════════════════════════
-// 🔴 `ParkingNode` — **자리의 상태를 한 캡슐로** (REQ-0275 B단계 · 2026-08-19)
+// ═════════════════════════════════════════════════════════════════════════
+// 🔓 **센서 읽기 훅** — 기여자가 자기 센서를 붙이는 자리
+//
+//   모양 :  `bool 이름(uint8_t pin)`   — 반환 **true = 찼다** · false = 비었다
+//   등록 :  `client.ino` 의 `setup()` 에서 `sensors.on("모듈이름", 핸들러);`
+//   🔑 **명령 쪽 `router.on` 과 같은 모양이다.** 한 번만 배우면 양쪽에 쓴다.
+//
+// 🔴 **문턱 판정은 핸들러가 한다.** 초음파는 거리(숫자)를 내는데 자리 상태는 참/거짓이다 —
+//   *"몇 cm 아래면 찼다고 볼 것인가"* 는 **장치를 단 사람만 안다.** 그래서 여기서 정한다.
+//   ⚠ 이 자리를 비워 두면 그 판정이 서버나 화면으로 새어 나가 **두 곳에 생긴다.**
+//
+// ⚠ **핸들러를 등록하면 `pinMode` 도 네가 잡아라.** 기본 경로는 `INPUT_PULLUP` 을 거는데
+//   초음파처럼 trig(OUTPUT)/echo(INPUT)가 갈린 센서에는 그것이 틀리기 때문이다.
+//   등록된 칸은 `applySlotPinMode()` 가 **손대지 않는다.**
+//
+// ⚠ **이 함수는 매 `loop()` 마다 불린다.** 오래 걸리는 측정을 그대로 넣으면 슬롯이 밀린다 —
+//   `pulseIn` 은 최악 타임아웃만큼 **블로킹**한다. **간격을 두고 값을 캐시해라**(아래 예시).
+// ═════════════════════════════════════════════════════════════════════════
+typedef bool (*SensorFn)(uint8_t pin);
+// 🔴 선언만 여기 있고 **정의는 `Modules.h`** 다 — 등록표가 `MODULE_N` 을 알아야 하는데
+//   그 값은 `client.ino` 의 모듈 표에서 나오고, 그 표는 이 파일보다 **뒤에** 온다.
+static SensorFn sensorFnOf(uint8_t idx);
+
+// 🔴 `ParkingNode` — **자리의 상태를 한 캡슐로**
 //   위의 것들은 **일부러 밖에 뒀다**: `SLOT_N`·`slotCol/Row/IndexOf`·`SLOT_PIN`·`slotPin`·`simPair` 는
 //   **상태를 안 만지는 순수·표 함수**다. 클래스에 넣으면 `this` 를 얻는 대신 아무것도 안 준다.
 //   ★ **클래스는 상태를 가진 것만 가져간다.**
@@ -131,6 +154,9 @@ class ParkingNode {
   uint16_t srcReal;
 
   uint8_t readRealSensor(uint8_t i) {
+    // 🔓 기여자 핸들러가 등록돼 있으면 **그것이 답이다.** 없으면 아래 기본 경로로 간다.
+    SensorFn f = sensorFnOf(i);
+    if (f) return f(slotPin(i)) ? 1 : 0;
     uint8_t raw = digitalRead(slotPin(i));
   #if SENSOR_ACTIVE_LOW
     return (raw == LOW) ? 1 : 0;
@@ -141,6 +167,8 @@ class ParkingNode {
 
   // 그 칸을 실물로 돌리기로 했으면 입력 모드를 잡아 준다. setup() 과 소스 변경 시에 부른다.
   void applySlotPinMode(uint8_t i) {
+    // 🔴 기여자 핸들러가 있는 칸은 **건드리지 않는다.** 그 센서에 맞는 핀 모드는 그쪽이 안다.
+    if (sensorFnOf(i)) return;
     if (srcReal & ((uint16_t)1 << i)) pinMode(slotPin(i), INPUT_PULLUP);
   }
 

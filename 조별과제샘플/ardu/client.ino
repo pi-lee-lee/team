@@ -262,6 +262,51 @@ static bool cmdDoor(uint32_t arg) {
 }
 #endif  // SAMPLE_ACTUATORS
 
+// ██████████████████████████████████████████████████████████████████████████
+// █  🔓  **센서 읽기 핸들러 — 자기 센서를 여기 붙인다**                      █
+// ██████████████████████████████████████████████████████████████████████████
+//
+//   모양 :  `bool 이름(uint8_t pin)`   — 반환 **true = 찼다**
+//   등록 :  아래 `setup()` 에서 `sensors.on("모듈이름", 핸들러);`
+//   🔑 **명령 쪽 `router.on` 과 같은 모양이다.** 한 번만 배우면 양쪽에 쓴다.
+//
+//   안 붙이면 기본값은 `digitalRead(핀)` 이다 — 리드 스위치·적외선 모듈처럼
+//   **켜짐/꺼짐을 그대로 내는 센서**는 아무것도 안 해도 된다.
+//
+// ── 예시: HC-SR04 초음파 거리 센서 ─────────────────────────────────────────
+//   🔴 **이 예시가 여기 있는 이유**: 초음파는 **거리(숫자)** 를 내는데 자리 상태는 참/거짓이다.
+//     *"몇 cm 아래면 찼다고 볼 것인가"* 를 **장치를 단 사람이** 정해야 한다.
+//     그 판정을 비워 두면 서버나 화면이 대신 정하게 되고 **규칙이 두 곳에 생긴다.**
+//
+//   쓰려면: ① 아래 핀 두 개를 자기 배선에 맞추고
+//           ② `setup()` 의 `sensors.on("A1", ultrasonicRead);` 주석을 풀고
+//           ③ `setup()` 에서 `pinMode(PIN_US_TRIG, OUTPUT); pinMode(PIN_US_ECHO, INPUT);`
+//              🔴 **등록한 칸은 기본 `INPUT_PULLUP` 을 안 걸어 준다** — 네가 잡아라
+#define PIN_US_TRIG 3
+#define PIN_US_ECHO 4
+static const uint16_t US_OCCUPIED_CM = 60;   // 🔓 이보다 가까우면 "찼다" — **네가 정하는 문턱**
+
+static bool ultrasonicRead(uint8_t pin) {
+  (void)pin;                      // 이 센서는 핀을 둘 쓴다 — 모듈 표의 핀은 안 쓴다
+  // 🔴 **이 함수는 매 `loop()` 마다 불린다.** 매번 재면 `pulseIn` 의 블로킹이 슬롯을 민다.
+  //   그래서 **간격을 두고 값을 캐시한다.** 200ms 면 차가 들어오는 속도에 충분하다.
+  static unsigned long lastAt  = 0;
+  static bool          lastVal = false;
+  const unsigned long now = millis();
+  if (now - lastAt < 200UL) return lastVal;
+  lastAt = now;
+
+  digitalWrite(PIN_US_TRIG, LOW);  delayMicroseconds(2);
+  digitalWrite(PIN_US_TRIG, HIGH); delayMicroseconds(10);
+  digitalWrite(PIN_US_TRIG, LOW);
+  // ⚠ **타임아웃을 반드시 줘라.** 안 주면 기본값이 1초라 반향이 없을 때 장치가 1초 멈춘다.
+  //   6,000µs ≈ 100cm. 이 값이 곧 **최악 블로킹 시간(6ms)** 이다 — 슬롯 600ms 의 1%.
+  const unsigned long us = pulseIn(PIN_US_ECHO, HIGH, 6000UL);
+  if (us == 0) { lastVal = false; return false; }   // 반향 없음 = 범위 밖 = 비었다
+  lastVal = (us / 58UL) < US_OCCUPIED_CM;           // 왕복이라 58 로 나누면 cm
+  return lastVal;
+}
+
 #if VIRTUAL_MODULES
 // 시험용 가상 차단봉의 핸들러. **실물 액추에이터도 똑같은 모양으로 쓴다** —
 //   실물이 붙으면 아래 `setup()` 의 등록 한 줄만 바꾸면 된다.
@@ -289,6 +334,11 @@ void setup() {
   // 자리 초기화 — 실물로 지정된 칸의 입력 모드까지 **`node` 가 스스로 잡는다**.
   //   ⚠ 생성자가 아니라 여기다: 전역 생성자는 `main()` 전에 돌아 `pinMode` 를 부를 수 없다.
   node.begin();
+
+  // 🔓 **센서 읽기 등록 — 자기 센서를 여기 붙인다**
+  //   안 붙이면 `digitalRead(핀)` 이 기본값이다. **지금 되는 것은 그대로 된다.**
+  // sensors.on("A1", ultrasonicRead);
+  // pinMode(PIN_US_TRIG, OUTPUT);  pinMode(PIN_US_ECHO, INPUT);   // ← 같이 풀어라
 
   // 🔓 **명령 수신 등록 — 자기 액추에이터를 여기 붙인다**
   //   예)  `router.on("G1", myGate);`   ← 표에 `{"G1", KIND_BARRIER, 7}` 을 더한 뒤
@@ -324,10 +374,14 @@ void setup() {
 #endif
 
 #if DEBUG
-  // 🔴 **자리 수와 모듈 수는 다른 값이다.** `D,*,<drain>,<n>` 의 `n` 은 **모듈 수**다.
-  //   그래서 둘을 **따로** 찍는다 — 하나만 찍으면 어느 쪽인지 못 가린다.
+  // 🔴 **셋이 서로 다른 값이다. 하나만 찍으면 반드시 오독된다.**
+  //     `SLOT_ROWS`  = **자리 수**   — 서버 지형의 `spot` 수와 비교할 값
+  //     `SLOT_N`     = **센서 수**   — 자리마다 둘이므로 자리 수의 2배다
+  //     `moduleCount()` = **모듈 수** — 센서 + 액추에이터. `D,*,<drain>,<n>` 의 `n` 이 이것이다
+  //   ⚠ 옛 판은 `SLOT_N` 하나만 `slots` 로 찍었다 — **센서 수를 자리 수로 읽게 만들었다.**
   Serial.print(F("\n[PARKING NODE] proto v1 / "));
-  Serial.print(SLOT_N);            Serial.print(F(" slots / "));
+  Serial.print(SLOT_ROWS);         Serial.print(F(" spots / "));
+  Serial.print(SLOT_N);            Serial.print(F(" sensors / "));
   Serial.print(moduleCount());     Serial.println(F(" modules / dev=" DEVICE_ID));
 
   // ── 부팅 원인 — **추측을 사실로 바꾸는 한 줄**. 왜 재부팅했는지는 여기서만 알 수 있다 ──
