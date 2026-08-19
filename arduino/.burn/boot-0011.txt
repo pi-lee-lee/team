@@ -1,0 +1,120 @@
+����������������������������]�����-ت�אh
+[SENS] A1=훅 B1=훅  ⚠ 샘플 훅 = 시뮬/LED되읽기 (배선 없음)
+
+[PARKING NODE] proto v1 / 1 spots / 2 sensors / 6 modules / dev=P1
+[BOOT] 리셋 원인: 불명 (부트로더가 MCUSR 을 지우고 넘어왔다)
+[BOOT] 사다리 4단(ESP 하드리셋선) 미배선 — A2 를 ESP RST 에 물리고 ESP_RST_WIRED=1 · 6단(워치독) 끔
+[NET] 0 RST
+[AT] "" (0)
+[AT] "OK" (2)
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "no change" (9)
+[DIAG] offline step=2 사다리=0/0 rx=39 lines=4 up=3s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="SK_WiFiGIGA50DC_2.4G","2011050796"" (44)
+[DIAG] offline step=2 사다리=0/0 rx=86 lines=5 up=6s
+[AT] "OK" (2)
+[NET] CWJAP OK — 결합됐다. IP 를 실제로 받았는지 CIFSR 로 확인한다
+[DIAG] offline step=3 사다리=0/0 rx=92 lines=6 up=9s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.35.79" (13)
+[NET] ★ IP 확보: 192.168.35.79
+[AT] "OK" (2)
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 적용됨 → CIPSTART
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+[AT] "OK" (2)
+[AT] "Linked" (6)
+[NET] online (CONNECT) + 캐시 비움
+[TX] S,0,20,00,9,P1,39
+[SLOT] n=8 tx=17 ack=0 due=369 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,0,20,00,9,P1,39" (18)
+[AT] "SEND OK" (7)
+[TX] D,*,7,6,6F
+D,A1,IP,01
+D,B1,IP,02
+D,LD,OG,68
+D,LC,OL,64
+D,DR,OB,73
+D,L2,OL,15
+[REG] 등록 전송 76B
+[SLOT] n=9 tx=76 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=77" (13)
+[AT] " D,*,7,6,6FD,A1,IP,01D,B1,IP,02D,LD,OG,68D,LC,OL,64D,DR,OB,73D,L2,OL,15" (71)
+[AT] "SEND OK" (7)
+[TX] S,2,20,00,12,P1,01
+[SLOT] n=10 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19\x1A" (14)
+[AT] " S,2,20,00,12,P1,01" (19)
+[AT] "SEND OK" (7)
+[TX] S,3,00,00,13,P1,03
+[SLOT] n=11 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19" (13)
+[AT] " S,3,00,00,13,P1,03" (19)
+[AT] "SEND OK" (7)
+[TX] S,4,00,00,14,P1,03
+[SLOT] n=12 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19" (13)
+[AT] " S,4,00,00,14,P1,03" (19)
+[AT] "SEND OK" (7)
+[TX] S,5,00,00,15,P1,03
+[SLOT] n=13 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19" (13)
+[AT] " S,5,00,00,15,P1,03" (19)
+[AT] "SEND OK" (7)
+[TX] S,6,00,00,16,P1,03
+[SLOT] n=14 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19" (13)
+[AT] " S,6,00,00,16,P1,03" (19)
+[AT] "SEND OK" (7)
+[TX] S,7,00,00,18,P1,0C
+[SLOT] n=15 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19" (13)
+[AT] " S,7,00,00,18,P1,0C" (19)
+[AT] "SEND OK" (7)
+[TX] S,8,00,00,19,P1,02
+[SLOT] n=16 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19" (13)
+[AT] " S,8,00,00,19,P1,02" (19)
+[AT] "SEND OK" (7)
+[TX] S,9,00,00,20,P1,09
+[SLOT] n=17 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19" (13)
+[AT] " S,9,00,00,20,P1,09" (19)
+[AT] "SEND OK" (7)
+[TX] S,10,00,00,21,P1,30
+[SLOT] n=18 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,10,00,00,21,P1,30" (20)
+[AT] "SEND OK" (7)
+[TX] S,11,00,00,22,P1,32
+[SLOT] n=19 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,11,00,00,22,P1,32" (20)
+[AT] "SEND OK" (7)
+[TX] S,12,00,00,24,P1,37
+[SLOT] n=20 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,12,00,00,24,P1,37" (20)
+[AT] "SEND OK" (7)
+[TX] S,13,20,00,25,P1,35
+[SLOT] n=21 tx=19 ack=0 due=0 r=1
+[AT] "\x81T+CIPSEND=20" (13)
+[AT] " S,13,20,00,25,P1,35" (20)
+[AT] "SEND OK" (7)
+[TX] S,14,20,00,26,P1,31
+[SLOT] n=22 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,14,20,00,26,P1,31" (20)
+[AT] "SEND OK" (7)
+[TX] S,15,20,00,27,P1,31
+[SLOT] n=23 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,15,20,00,27,P1,31" (20)
+[AT] "SEND OK" (7)
