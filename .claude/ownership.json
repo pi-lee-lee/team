@@ -162,6 +162,21 @@
       "note": "펌웨어 ESP/WiFi 링크 계층을 스케치에서 뺀 헤더(REQ-0264). .h 라서 ext_rules 로는 cpp-engineer 가 되는데 툴체인·수명주기가 아두이노다 — 바로 위 server* 규칙과 같은 이유다. 접두어로 좁혀 socket 의 server*·web 의 index.html 을 안 건드린다"
     },
     {
+      "glob": "조별과제샘플/server/**",
+      "owner": "socket-engineer",
+      "note": "서버 소스를 폴더로 가른다(사용자 지시 2026-08-19). 폴더 전체를 주는 것이 안전하다 — 여기엔 서버 소스만 들어간다. 옛 평면 경로 규칙(server*)은 이사 중에 남겨 두고, 이사가 끝나면 지운다"
+    },
+    {
+      "glob": "조별과제샘플/ardu/**",
+      "owner": "arduino-engineer",
+      "note": "펌웨어 소스를 폴더로 가른다(사용자 지시 2026-08-19). client.ino 와 EspLink_*.h 가 같이 들어간다 — 🔴 함께 움직여야 #include 가 풀리고 hex 0 이 유지된다"
+    },
+    {
+      "glob": "조별과제샘플/web/**",
+      "owner": "web-engineer",
+      "note": "화면 소스를 폴더로 가른다(사용자 지시 2026-08-19). 🔑 처음엔 server/ 안에 두려 했는데 그러면 server/** 와 겹쳐 예외 규칙이 필요했고, 옛 평면 규칙 server* 가 fnmatch 의 `*`(=/ 도 먹는다)로 폴더 전체를 삼켜 순서가 꼬였다. **형제 폴더로 가르니 규칙이 하나로 끝난다** — 겹치는 규칙을 순서로 푸는 것보다 안 겹치게 나누는 쪽이 낫다"
+    },
+    {
       "glob": "조별과제샘플/server*",
       "owner": "socket-engineer",
       "note": "서버를 OS별/계층별 파일로 쪼갤 때 확장자 규칙에 걸려 cpp-engineer 로 새는 것을 막는다"
