@@ -138,7 +138,7 @@ def main():
                     help="시험 인스턴스의 HTTP/WS 포트. **기본값 없음** — "
                          "운영 포트를 실수로 집지 않게 하려는 것이다")
     ap.add_argument("--allow-production", action="store_true",
-                    help="운영 포트(9900/9991/5500)에 붙는 것을 허용한다. **관측 전용** — "
+                    help="운영 포트(9990/8888/8911)에 붙는 것을 허용한다. **관측 전용** — "
                          "상태를 바꾸는 요청은 이것만으로 안 열린다(--allow-state-change 가 더 필요하다)")
     # 🔴 운영 상태 변경 — **둘째 열쇠**. 하나로 안 열리게 한 것이 요점이다.
     #
@@ -178,6 +178,11 @@ def main():
     ap.add_argument("--test-clear", metavar="SLOT", help="§12A 오버라이드 해제(T,X)")
     ap.add_argument("--occupied", default="1", choices=["0", "1"],
                     help="--test-set 이 넣을 값")
+    # 🔴 **임의 봉투 발사** (2026-08-20) — 새 타입을 시험할 때마다 이 파일을 고치지 않으려고 뒀다.
+    #   ⚠ **상태를 바꾸는 요청으로 취급한다**(아래 운영 포트 방어). 무엇이 들었는지 도구가 모르므로
+    #     **모른다면 위험한 쪽으로 판정하는 것이 맞다.**
+    ap.add_argument("--send-json", metavar="JSON",
+                    help='임의 JSON 봉투를 그대로 보낸다. 예: \'{"type":"open_gate","slot":"E1","rid":"t1"}\'')
     ap.add_argument("--user", default="u17")
     ap.add_argument("--rid", default="probe-1")
     ap.add_argument("--delay", type=float, default=0.4, help="접속 후 요청까지 대기")
@@ -195,6 +200,7 @@ def main():
         if a.test_set:    return {"type": "test_set", "slot": a.test_set,
                                   "occupied": a.occupied, "rid": a.rid}
         if a.test_clear:  return {"type": "test_clear", "slot": a.test_clear, "rid": a.rid}
+        if a.send_json:   return json.loads(a.send_json)
         return None
 
     # ── 🔴 운영 포트 방어 (원장 §8.2)
@@ -207,7 +213,11 @@ def main():
     #
     # 관측까지 전면 금지하지 않는 이유: 새벽에 운영을 들여다볼 정당한 이유가 실제로 생기는데,
     # 그때 도구가 무조건 거부하면 **사람이 압박 속에서 이 파일을 고치게 된다.** 그게 더 나쁘다.
-    PRODUCTION_PORTS = (9900, 9991, 5500)
+    # 🔴 **운영 포트** (2026-08-20 변경 · 웹 9990 · 아두이노 8888 · 카메라 8911)
+    #   ⚠ **옛 값(9900·9991·5500)은 이제 `dev_server` 의 포트다** — 거기서는 상태를 바꿔도 된다.
+    #     그래서 옛 값을 여기 남기지 않는다. **남기면 개발용 시험이 막힌다.**
+    #   🔑 포트를 가른 덕에 이 방어가 **정확해졌다** — 전에는 "시험인지 운영인지"를 오프셋으로만 알았다.
+    PRODUCTION_PORTS = (9990, 8888, 8911)
     if a.port in PRODUCTION_PORTS:
         if request() is not None and not (a.allow_production and a.allow_state_change):
             print("🔴 %d 는 운영 포트이고 이 요청은 **상태를 바꾼다**\n"
@@ -215,7 +225,7 @@ def main():
                   "   열려면 **둘 다** 필요하다: --allow-production --allow-state-change\n"
                   "   하나로 안 열리게 한 이유: 관측 창이 도는 동안 **예약 한 번이 기준선을 깬다**\n"
                   "   — 실제로 그럴 뻔했다(web REQ-0129).\n"
-                  "   그냥 시험이면 시험 인스턴스를 띄워라(--port-offset)." % a.port,
+                  "   그냥 시험이면 시험 인스턴스를 띄워라(--port-web=/--port-ardu=/--port-cam=)." % a.port,
                   file=sys.stderr)
             return 2
         if request() is not None:

@@ -12,9 +12,12 @@
 //   상위 값이 움직여도 따라오지 않고, 그 어긋남은 조용하다.
 // ═══════════════════════════════════════════════════════════════════
 // ---------------------------------------------------------------- 상수 (명세대로)
-static const int  PORT_ARDUINO   = 9991;
-static const int  PORT_HTTP      = 9900;
-static const int  PORT_PHONE     = 5500;    // digitcam 폰 수신 (docs/net/digitcam-protocol.md)
+// 🔴 **운영 기본 포트** (사용자 확정 2026-08-20). 옛 값: 아두이노 9991 · 웹 9900 · 폰 5500
+//   ⚠ `dev_server` 는 **옛 값을 그대로 쓴다** — 그래야 손잡이 없이도 둘이 동시에 돈다.
+//   ⚠ 장치(`조별과제샘플/ardu/Config.h` 의 `SERVER_PORT`)도 같이 바뀌어야 한다. **굽기가 필요하다.**
+static const int  PORT_ARDUINO   = 8888;
+static const int  PORT_HTTP      = 9990;
+static const int  PORT_PHONE     = 8911;    // digitcam 폰(카메라) 수신
 // 폰 프레임은 JSON 이라 아두이노 라인(64B)보다 길다. digitcam 명세 §9 가 권하는 방어적 상한.
 static const size_t MAX_PHONE_LINE = 1024;
 static const size_t MAX_PLATE_BYTES = 32;   // 번호판 저장 상한(신형 10B, 여유 포함)

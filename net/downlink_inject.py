@@ -47,7 +47,11 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ws_probe import handshake, frames, send_text          # noqa: E402
 
-PRODUCTION_PORTS = (9900, 9991, 5500)
+# 🔴 **운영 포트** (2026-08-20 변경 · 웹 9990 · 아두이노 8888 · 카메라 8911)
+# ⚠ **옛 값(9900·9991·5500)은 이제 `dev_server` 의 포트다** — 거기서는 상태를 바꿔도 된다.
+#   그래서 옛 값을 여기 남기지 않는다. **남기면 개발용 시험이 막힌다.**
+# 🔑 포트를 가른 덕에 이 방어가 **정확해졌다** — 전에는 시험/운영을 오프셋으로만 알았다.
+PRODUCTION_PORTS = (9990, 8888, 8911)
 
 
 def stamp():

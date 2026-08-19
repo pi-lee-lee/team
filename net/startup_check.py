@@ -15,7 +15,7 @@
   이 도구가 그 "미리 정해 둔 것"이다. 2026-08-19 까지는 사람이 눈으로 했다 —
   **눈으로 한 것은 다음 사람이 안 한다.**
 
-⚠ **이 도구는 시험 인스턴스만 띄운다.** 운영 포트를 절대 안 잡는다(`--port-offset` 필수).
+⚠ **이 도구는 시험 인스턴스만 띄운다.** 운영 포트를 절대 안 잡는다(`--offset` 이 세 포트에 더해진다).
 
 사용:
     python3 net/startup_check.py --bin 조별과제샘플/server/server_test --offset 300
@@ -96,7 +96,13 @@ def main():
     log = "%s/parking-logs/parking-server.test+%d.log" % (home, a.offset)
     before = os.path.getsize(log) if os.path.exists(log) else 0
 
-    proc = subprocess.Popen([a.bin, "--port-offset=%d" % a.offset],
+    # 🔴 `--port-offset` 이 없어졌다(2026-08-20). **포트를 하나씩 준다.**
+    #   ⚠ 옛 코드를 그대로 뒀으면 손잡이가 **무시되어 운영 포트를 잡으려 들었다** —
+    #     운영이 떠 있으면 bind 실패, 안 떠 있으면 **이 도구가 운영이 된다.** 뒤가 더 나쁘다.
+    proc = subprocess.Popen([a.bin,
+                             "--port-web=%d"  % (9990 + a.offset),
+                             "--port-ardu=%d" % (8888 + a.offset),
+                             "--port-cam=%d"  % (8911 + a.offset)],
                             stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
     try:
         time.sleep(a.wait)

@@ -33,9 +33,9 @@ if [ ! -x "$BIN" ]; then echo "🔴 $BIN 이 없다. 먼저 빌드해라"; exit 
 
 # 🔑 대장을 지우고 시작한다 — **앞 회차의 상태가 남으면 두 회차가 다른 조건이 된다.**
 rm -f "$HOME/parking-logs/parking-nodes.test+300.txt"
-pkill -f "port-offset=300" 2>/dev/null || true
+pkill -f "port-web=10290" 2>/dev/null || true
 sleep 1
-"$BIN" --port-offset=300 >/dev/null 2>&1 &
+"$BIN" --port-web=10290 --port-ardu=9188 --port-cam=9211 >/dev/null 2>&1 &
 sleep 2
 
 # 🔴 **갈린 센서를 일부러 만든다.** A1 자리는 센서 둘(A1·B1)인데 A1 만 점유로 준다 —
@@ -53,7 +53,7 @@ python3 net/ws_probe.py --port 10200 --raw --listen 4 2>&1 \
   | sort -u > "$OUT"
 
 sleep 1
-pkill -f "port-offset=300" 2>/dev/null || true
+pkill -f "port-web=10290" 2>/dev/null || true
 pkill -f mock_node 2>/dev/null || true
 
 LINES=$(wc -l < "$OUT" | tr -d ' ')

@@ -53,20 +53,43 @@
                       << "슬롯 규율이 꺼진 상태다(시험 전용) ***\n";
         }
     }
-    // 시험용 포트 이동(REQ-0072) — 운영 인스턴스를 안 죽이고 두 번째를 띄우기 위한 이음매
+    // ── 🔴 포트를 **하나씩** 준다 (사용자 확정 2026-08-20 · `--port-offset` 은 없앴다)
+    //   `--port-web=` 웹/WS · `--port-ardu=` 아두이노 · `--port-cam=` 카메라(폰)
     for (int i = 1; i < argc; i++) {
         std::string a(argv[i]);
-        if (a.compare(0, 14, "--port-offset=") != 0) continue;
-        int off = atoi(a.c_str() + 14);
-        // ⚠ **범위를 안 보면 조용히 엉뚱한 포트에 붙는다.** 음수면 0번 포트로, 큰 값이면
-        // htons 에서 잘려 아무 포트로 간다 — 그리고 그건 나중에 "서버가 이상하다"로 보고된다.
-        // 시험용 이음매가 그런 식으로 사람을 속이면 안 되므로 **의심스러우면 안 뜬다.**
-        if (off <= 0 || PORT_ARDUINO + off > 65535) {
-            std::cerr << "--port-offset 은 1 ~ " << (65535 - PORT_ARDUINO)
-                      << " 사이여야 한다 (받은 값: " << off << ")\n";
-            return 1;
+        const char* keys[3] = { "--port-web=", "--port-ardu=", "--port-cam=" };
+        int* dst[3] = { &g_port_web, &g_port_ardu, &g_port_cam };
+        for (int k = 0; k < 3; k++) {
+            const size_t kl = strlen(keys[k]);
+            if (a.size() <= kl || a.compare(0, kl, keys[k]) != 0) continue;
+            const int v = atoi(a.c_str() + kl);
+            // ⚠ **범위를 안 보면 조용히 엉뚱한 포트에 붙는다.** 음수는 0번으로, 큰 값은
+            //   htons 에서 잘려 아무 데나 간다 — 그리고 그건 나중에 "서버가 이상하다"로 보고된다.
+            //   **의심스러우면 안 뜬다.**
+            if (v < 1 || v > 65535) {
+                std::cerr << keys[k] << " 는 1 ~ 65535 여야 한다 (받은 값: " << v << ")\n";
+                return 1;
+            }
+            *dst[k] = v;
         }
-        g_port_offset = off;
+    }
+    // 🔴 **자기들끼리 겹치는지 본다.** 겹치면 한 포트가 안 뜨는 게 아니라
+    //   **엉뚱한 대상이 그 소켓을 받는다**(아두이노가 카메라 자리에 붙는다). 증상이 안 보인다.
+    //   🔑 우리 규칙: **증상이 보이면 말하고, 안 보이면 막아라.** 이건 안 보인다.
+    //   ⚠ **어느 둘이 겹치는지 이름으로 말한다** — "충돌"만 찍으면 사람이 헤맨다.
+    {
+        const char* nm[3] = { "--port-web", "--port-ardu", "--port-cam" };
+        const int   pv[3] = { g_port_web, g_port_ardu, g_port_cam };
+        for (int i2 = 0; i2 < 3; i2++)
+            for (int j2 = i2 + 1; j2 < 3; j2++)
+                if (pv[i2] == pv[j2]) {
+                    std::cerr << "🔴 포트가 겹친다 — " << nm[i2] << " 와 " << nm[j2]
+                              << " 가 둘 다 " << pv[i2] << " 다.\n"
+                              << "   같은 포트를 둘이 쓰면 **엉뚱한 대상이 그 소켓을 받는다.**\n"
+                              << "   기본값: 웹 " << PORT_HTTP << " · 아두이노 " << PORT_ARDUINO
+                              << " · 카메라 " << PORT_PHONE << "\n";
+                    return 1;
+                }
     }
     for (int i = 1; i < argc; i++) {
         std::string a(argv[i]);

@@ -27,10 +27,15 @@
     //   한 박자 **안**의 순서는 못 바꾸므로 안에 남는다 — 우리 판별자 그대로다.
     //   ⚠ 기계적 분할이다. 루프 몸통에 최상위 `continue`/`break`/`return` 이 **하나도 없는 것**을
     //     먼저 확인하고 옮겼다 — 있으면 의미가 조용히 바뀐다.
+    // 🔑 **`offset=` 을 대신한다** — monitor 가 보던 것은 *"이게 시험 인스턴스인가"* 였다.
+    //   포트를 손으로 지정했는지로 그것을 답한다.
+    static bool ports_are_default() {
+        return g_port_ardu == PORT_ARDUINO && g_port_web == PORT_HTTP && g_port_cam == PORT_PHONE;
+    }
     bool openPorts() {
-        lsn_ard   = listen_on(PORT_ARDUINO + g_port_offset);
-        lsn_http  = listen_on(PORT_HTTP    + g_port_offset);
-        lsn_phone = listen_on(PORT_PHONE   + g_port_offset);
+        lsn_ard   = listen_on(g_port_ardu);
+        lsn_http  = listen_on(g_port_web);
+        lsn_phone = listen_on(g_port_cam);
         // 🔴 포트를 못 잡았으면 **그 사실을 로그에 남기고** 죽는다.
         // 08-16 에 `프레임 0` 짜리 짧은 인스턴스가 여럿 있었는데, 관측자가 그것이
         // "장치가 안 붙은 것"인지 "포트를 못 잡은 것"인지 **가를 수 없어서** 한참 헤맸다.
@@ -42,10 +47,8 @@
                       << " start=" << iso8601(epoch_ms())
                       << " bin=" << exe_path()
                       << " build=" << BUILD_ID
-                      << " ports=" << (PORT_ARDUINO + g_port_offset)
-                      << ","      << (PORT_HTTP    + g_port_offset)
-                      << ","      << (PORT_PHONE   + g_port_offset)
-                      << " offset=" << g_port_offset
+                      << " ports=" << g_port_ardu << "," << g_port_web << "," << g_port_cam
+                      << " default=" << (ports_are_default() ? "yes" : "no")
                       << " cwd=" << cur_cwd()
                       << " log=" << (g_log_path.empty() ? std::string("(화면만)") : g_log_path)
                       << " ===" << std::endl;
@@ -68,20 +71,19 @@
                   << " start=" << iso8601(epoch_ms())
                   << " bin=" << exe_path()
                   << " build=" << BUILD_ID
-                  << " ports=" << (PORT_ARDUINO + g_port_offset)
-                  << ","      << (PORT_HTTP    + g_port_offset)
-                  << ","      << (PORT_PHONE   + g_port_offset)
-                  << " offset=" << g_port_offset
+                  << " ports=" << g_port_ardu << "," << g_port_web << "," << g_port_cam
+                  << " default=" << (ports_are_default() ? "yes" : "no")
                   << " cwd=" << cur_cwd()
                   << " log=" << (g_log_path.empty() ? std::string("(화면만)") : g_log_path)
                   << " ===" << std::endl;
 
-        if (g_port_offset)
-            std::cout << "*** 시험 인스턴스 — 포트 +" << g_port_offset
-                      << " 이동됨. 운영이 아니다(REQ-0072 이음매) ***\n";
-        std::cout << "주차 관제 서버 — 아두이노 TCP " << (PORT_ARDUINO + g_port_offset)
-                  << " · HTTP/WS " << (PORT_HTTP + g_port_offset)
-                  << " · 폰(digitcam) " << (PORT_PHONE + g_port_offset) << "\n"
+        if (!ports_are_default())
+            std::cout << "*** 시험 인스턴스 — 포트를 손으로 지정했다. 운영이 아니다 ***\n"
+                      << "    (운영 기본값: 웹 " << PORT_HTTP << " · 아두이노 " << PORT_ARDUINO
+                      << " · 카메라 " << PORT_PHONE << ")\n";
+        std::cout << "주차 관제 서버 — 아두이노 TCP " << g_port_ardu
+                  << " · HTTP/WS " << g_port_web
+                  << " · 폰(카메라) " << g_port_cam << "\n"
                   << "명세: docs/net/parking-protocol.md\n"
                   << "-----------------------------------------------------------\n";
         std::cout.flush();

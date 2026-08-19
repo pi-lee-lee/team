@@ -43,7 +43,30 @@ static void on_stop_signal(int) { g_stop = 1; }
 // 그래서 세 포트를 한꺼번에 옮기는 이음매를 둔다. **판정에는 전혀 관여하지 않는다**
 // (--selftest 의 no_disk 와 같은 성격의 이음매다).
 // 0 이 아니면 기동 배너에 크게 찍어 시험 인스턴스를 운영으로 착각할 수 없게 한다.
-static int g_port_offset = 0;
+// 🔴 **`g_port_offset` 을 없앴다** (사용자 확정 2026-08-20):
+//   *"일반적으로 오프셋방식은 잘 안쓴다. 차라리 `--port-web`, `--port-ardu`, `--port-cam` 으로"*
+//   🔑 근거가 관용만이 아니다 — **오프셋은 "포트가 고정 간격으로 놓여 있다"를 전제**하는데
+//     새 기본값(9990 · 8888 · 8911)에는 그 전제가 없다. `offset=23` 이면 8888+23 = **8911**,
+//     곧 아두이노가 카메라 포트를 잡는다. **오프셋이 원래 주던 보장이 이미 깨졌다.**
+//   ⚠ 호환용으로 남기지 않았다 — **깨진 기능을 남기면 되는 줄 알고 쓴다.**
+static int g_port_web  = PORT_HTTP;
+static int g_port_ardu = PORT_ARDUINO;
+static int g_port_cam  = PORT_PHONE;
+
+// 🔴 **영속 파일 경로를 가르는 꼬리표.** 기본 포트면 빈 문자열, 아니면 `.test+<웹포트>`.
+//
+//   전에는 `.test+<오프셋>` 이었다. 오프셋을 없앴으므로 **인스턴스를 구별하는 값**이 필요하다 —
+//   웹 포트를 쓴다(사람이 브라우저에 치는 값이라 로그와 대조하기 쉽다).
+//
+// 🔴 **이 갈래가 없으면 시험 인스턴스가 운영의 rid 커서·노드 대장·로그를 덮어쓴다.**
+//   그러면 운영을 재시작했을 때 **시험이 쓴 자리로 되돌아간다.** 규칙으로 부탁하지 않고
+//   경로를 갈라서 **불가능**으로 만든다(monitor 요구).
+//   ⚠ 오프셋을 없애면서 이 보호가 같이 사라질 뻔했다 — 컴파일러가 잡았다.
+static std::string instance_tag() {
+    if (g_port_web == PORT_HTTP && g_port_ardu == PORT_ARDUINO && g_port_cam == PORT_PHONE)
+        return std::string();
+    return ".test+" + std::to_string(g_port_web);
+}
 // 🔴 **주차 노드 잠금**(REQ-0217 ④). 빈 문자열 = 잠금 없음 = 종전 `first-S-wins` 그대로.
 // ⚠ **`first-S-wins` 를 없애지 않는다.** 이건 관측 환경용 잠금장치이지 프로토콜 변경이 아니다.
 // 왜 필요한가: 우리가 devid 를 바꿔도 **조원 보드는 여전히 `P1` 로 붙고 서버는 그것을 받는다.**
@@ -119,7 +142,7 @@ static std::string default_log_path() {
     // monitor 의 요구: 한 파일에 두 인스턴스가 쓰는 것을 "탐지"가 아니라 "불가능"으로 만들 것.
     // 오늘 그 가능성 때문에 관측자가 "두 프로세스가 동시에 썼다"고 의심할 수밖에 없었고,
     // 실제로 그 의심이 잘못된 발표로 이어졌다. 규칙으로 부탁하지 않고 경로를 갈라 버린다.
-    if (g_port_offset != 0) base += ".test+" + std::to_string(g_port_offset);
+    base += instance_tag();     // 🔑 기본 포트가 아니면 경로가 갈린다 (아래 주석)
     return base + ".log";
 }
 
@@ -142,7 +165,7 @@ static std::string node_ledger_path() {
 #endif
     if (!home || !*home) return std::string();   // 빈 값 = 영속 불가. 호출자가 크게 남긴다
     std::string base = std::string(home) + "/parking-logs/parking-nodes";
-    if (g_port_offset != 0) base += ".test+" + std::to_string(g_port_offset);
+    base += instance_tag();     // 🔑 기본 포트가 아니면 경로가 갈린다 (아래 주석)
     return base + ".txt";
 }
 
@@ -153,7 +176,7 @@ static std::string rid_cursor_path() {
 #endif
     if (!home || !*home) return std::string();   // 빈 값 = 영속 불가. 호출자가 크게 남긴다
     std::string base = std::string(home) + "/parking-logs/parking-rid-cursor";
-    if (g_port_offset != 0) base += ".test+" + std::to_string(g_port_offset);
+    base += instance_tag();     // 🔑 기본 포트가 아니면 경로가 갈린다 (아래 주석)
     return base + ".txt";
 }
 
