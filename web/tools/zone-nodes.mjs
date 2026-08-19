@@ -144,8 +144,13 @@ try {
        '받은 것: ' + JSON.stringify(live));
     if (!live || !live.zones || !live.zones.length) throw new Error('map 없음');
     MAP = live;                                   /* 🔑 계약은 **서버가 보낸 것**이다 */
-    console.log('  · 실기 map: srv_id=' + live.srv_id + ' epoch=' + live.epoch
-              + ' 영역 ' + live.zones.length + '개\n');
+    /* 🔴 `srv_id` 는 **화면의 `state.srvId`** 에서 읽는다. `state.map` 객체에는 안 담긴다 —
+       여기서 `live.srv_id` 를 찍었더니 `undefined` 가 나와 **서버가 안 보낸다고 오해할 뻔했다.**
+       전선 프레임에는 멀쩡히 있다(확인함). **계측기가 못 본 것을 서버가 안 한 것으로 읽는 형태**(§5.30). */
+    const srvId = await evaluate(client, `state.srvId`).catch(() => null);
+    console.log('  · 실기 map: srv_id=' + srvId + ' epoch=' + live.epoch
+              + ' 영역 ' + live.zones.length + '개 · 모듈 '
+              + live.zones.reduce((a, zz) => a + (zz.modules || []).length, 0) + '개\n');
   } else {
     await evaluate(client, inject(MAP));
     await evaluate(client, inject(ST));
@@ -292,24 +297,31 @@ try {
     const liveSt = await evaluate(client, `(() => {
       const out = {};
       const zs = state.zoneState && state.zoneState.zones;
-      if (Array.isArray(zs)) for (const zz of zs) out[zz.id] = (zz.modules || []).map(m => ({ devid: m.devid, known: m.known, value: m.value }));
+      if (Array.isArray(zs)) for (const zz of zs) out[zz.id] = (zz.modules || []).map(m => ({ devid: m.devid, name: m.name, known: m.known, value: m.value }));
       return out;
     })()`).catch(() => null);
-    let n = 0, mism = [];
+    let n = 0, mism = [], noRow = [];
     for (const zid of Object.keys(liveSt || {})) {
       for (const sm of liveSt[zid]) {
         const b = z[zid] && z[zid].nodes.find((x) => x.devid === sm.devid);
         if (!b) continue;
-        for (const row of b.mods) {
-          if (row.lamp === null) continue;
-          n += 1;
-          const want = sm.known === true ? 'ok' : null;   /* known:false → ok 이면 안 된다 */
-          if (want === 'ok' && row.lamp !== 'ok') mism.push(zid + '/' + sm.devid + ' known=true 인데 등=' + row.lamp);
-          if (sm.known !== true && row.lamp === 'ok') mism.push(zid + '/' + sm.devid + ' known=false 인데 등=ok');
-        }
+        /* 🔴 **그 모듈의 행 하나**와 맞춘다. 예전에는 박스 안 **모든 행**과 맞춰서
+           자리당 모듈이 둘이면 검사 수가 제곱으로 불었다(모듈 12개인데 22행이 나왔다) —
+           그리고 **A 의 known 을 B 의 등과 비교**하므로 둘의 known 이 다르면 거짓 실패가 난다.
+           🔑 분모를 세 보고 잡았다: **통과 수는 밟은 것의 수이지 분모가 아니다**(원장 §5.40). */
+        const row = b.mods.find((t) => (t.text || '').includes('(' + sm.name + ')'));
+        if (!row || row.lamp === null) { noRow.push(zid + '/' + sm.devid + '/' + sm.name); continue; }
+        n += 1;
+        if (sm.known === true && row.lamp !== 'ok') mism.push(zid + '/' + sm.name + ' known=true 인데 등=' + row.lamp);
+        if (sm.known !== true && row.lamp === 'ok') mism.push(zid + '/' + sm.name + ' known=false 인데 등=ok');
       }
     }
-    ok('🔴 실기: 모든 모듈의 등이 서버 `known` 과 일치한다 (' + n + '행 검사)', mism.length === 0, JSON.stringify(mism));
+    /* 🔴 **분모를 같이 단언한다** — 검사한 행 수가 서버가 준 모듈 수와 같아야 한다.
+       같지 않으면 어떤 모듈은 아예 안 밟힌 것이고, 그 초록은 그만큼 거짓이다. */
+    const totalMods = Object.values(liveSt || {}).reduce((a, v) => a + v.length, 0);
+    ok('🔴 실기: 모든 모듈의 등이 서버 `known` 과 일치한다 (' + n + '행)', mism.length === 0, JSON.stringify(mism));
+    ok('🔴 검사한 행 수 == 서버가 준 모듈 수 (' + n + ' == ' + totalMods + ')', n === totalMods,
+       '못 찾은 행: ' + JSON.stringify(noRow) + ' — 분모가 안 맞으면 위 초록은 그만큼 거짓이다');
     if (!n) skip('실기 등 대조', '상태 모듈이 0행이다 — 장치가 안 붙었거나 state 가 비었다');
   }
   if (!LIVE) ok('🔴 known:true 인 모듈의 등이 🟢 정상이다 (Z1/P1)', lampOf('Z1', 'P1', 0) === 'ok', '등: ' + lampOf('Z1', 'P1', 0));
