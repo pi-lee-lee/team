@@ -1620,6 +1620,12 @@ struct Server {
                          + std::to_string(it->second.frames) + ")");
         }
         AuxNode& a = aux[dev];
+        // 🔴 **자기 `devid` 를 채운다** (2026-08-19 · ②-b 가 드러냈다).
+        //   맵의 **키**에만 id 가 있고 노드 자신의 필드는 비어 있었다. 아무도 안 읽어서 안 보였다 —
+        //   ②-b 로 보조 노드의 `D` 가 파서에 들어가자 `bind_modules(n)` 이 그 빈 값을 썼고
+        //   **지형에 `("", "A1")` 같은 결속이 생겼다.** 로그도 `노드  등록 결속` 으로 나왔다.
+        //   🔑 **읽는 사람이 없던 필드는 틀려도 안 보인다.** 새 독자가 생기는 순간 드러난다.
+        a.devid = dev;
         a.fd = c; a.buf.clear();
         a.connected_ms = now_ms();
         a.last_ms = now_ms();               // 유휴 마감 기준선. 0 이면 즉시 회수 대상이 된다
@@ -4467,6 +4473,22 @@ struct Server {
                             std::vector<std::string> f;
                             if (!verify_line(line, f)) { a.drops++; continue; }
                             a.frames++; a.last_ms = now_ms(); a.last_epoch_ms = epoch_ms();
+                            // ── 🔴 ②-b — **보조 노드의 등록(`D`)을 파서에 넣는다** (REQ-0262/0263)
+                            //
+                            // 전에는 이 줄들이 **계수만 되고 버려졌다.** 그래서 보조 노드의 모듈은
+                            // `map`/`state` 에 값이 없었고 `state_json()` 이 `known:false` 로 냈다.
+                            //
+                            // 🔴 **`D` 만 넣는다. `S` 는 아직 아니다.** 이유가 구조적이다:
+                            //   `S` 분기는 `n.mod_bits`(노드별 ✅) 말고도 **`slots[]`·`base_occ`·
+                            //   `resync_reservations`·하행 flush** 를 건드리는데 **그건 전부 서버 공유다.**
+                            //   보조 노드의 `S` 를 넣으면 **그 노드의 점유가 주차 자리를 덮는다** —
+                            //   ②-c 로 비트열은 갈랐지만 **자리는 아직 안 갈렸다.**
+                            //   🔑 ①→② 에서 막았던 것과 같은 형태다: **값 경로가 없는데 값을 만들어 낸다.**
+                            //   → `S` 는 효과를 이음매(`DEV_SENSORS`)로 뺀 뒤에(설계 §8.13.2) 넣는다.
+                            //
+                            // ⚠ `D` 는 안전하다 — 그 분기는 `n.mods`·`n.reg_*` 와 `bind_modules(n)` 만
+                            //   건드리고 **전부 그 노드의 것**이다(②-a 로 인자화됐다).
+                            if (f[0] == "D") { on_ard_line(a, line); continue; }
                             // 🔴 보조 노드가 `S` 를 보낸다 = **주차 노드가 둘이라는 뜻**이다.
                             // first-S-wins 가정이 깨지는 순간이므로 조용히 넘기지 않는다.
                             // (조용히 둘 중 하나를 고르면 "예약이 가끔 엉뚱한 데로 간다"가 되고,
