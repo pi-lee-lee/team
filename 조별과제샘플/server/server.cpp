@@ -437,7 +437,8 @@ static const char* SLOT_ID[10] = {"A1","A2","A3","A4","A5","B1","B2","B3","B4","
 #include "server_device.h"   // 디바이스 계층 잎 유틸 (REQ-0096 A): SHA-1·base64·ws_accept·체크섬
 #include "server_seam.h"
 #include "parking.h"     // 🔴 **공개 조립 API** — 사용 코드가 읽는 유일한 헤더
-#include "ridpool.h"     // rid 발행·격리·영속 — 전선에 안 닿는 축     // 이음매 계약 (REQ-0096 B→C): DeviceEvent / DeviceCommand
+#include "ridpool.h"     // rid 발행·격리·영속 — 전선에 안 닿는 축
+// ⚠ `lot.h` 는 `Zone`·`ParkingLot` 을 쓰므로 **그 뒤에** include 한다(아래 zone.h 다음).     // 이음매 계약 (REQ-0096 B→C): DeviceEvent / DeviceCommand
 
 // 타이머 전용 — 상대 시각 (윈도우: 부팅 후 경과)
 static long long now_ms() {
@@ -809,6 +810,7 @@ static std::string peer_host(const std::string& hp) {
 //     (선언 13곳 전부 생성이고 대입 0곳).
 #include "node.h"
 #include "zone.h"
+#include "lot.h"         // 🔴 주차장 지형이 스스로 답한다 — 전선에 안 닿는 축
 struct Pending {             // 아두이노에 내려보내고 ACK 를 기다리는 요청
     uint16_t wire_rid;
     sock_t   ws_fd;          // 요청한 브라우저 (BAD_SOCK = 서버 자체 재동기화)
@@ -853,11 +855,11 @@ struct Server {
     // ── 지형 (REQ-0203 4a) ──────────────────────────────────────────────────────
     // 🔴 **`5` 를 코드에 박지 않는다.** 기본값이고 설정에서 온다(설계 §0).
     int grid_rows, grid_cols;
-    std::vector<Zone> zones;
-    // 🔑 **판(`epoch`)은 서버만 올리고, 지형을 바꾸는 함수 안에서 그 줄 옆에서 올린다**(설계 §6.8).
-    //   떨어뜨리면 **"바꿨는데 안 올린 경로"** 가 생기고, 그건 **탐지 장치가 있는데 안 울리는 것**이라
-    //   아예 없는 것보다 나쁘다.
-    long long map_epoch;
+    // 🔴 **지형과 판은 `Lot` 의 것이다**(REQ-0272 3단계). 여기서는 그것을 들고만 있다.
+    //   🔑 **판(`epoch`)은 지형을 바꾸는 함수 안에서 그 줄 옆에서 올린다**(설계 §6.8).
+    //     떨어뜨리면 **"바꿨는데 안 올린 경로"** 가 생기고, 그건 **탐지 장치가 있는데 안 울리는 것**이라
+    //     아예 없는 것보다 나쁘다. → `bump_epoch()` 하나만 그 일을 한다.
+    Lot lot;
     // 🔴🔴 **`epoch` 는 *이 서버 인스턴스 안에서만* 단조다**(설계 §6.8).
     //   재기동하면 0 부터 다시 시작하므로, 화면이 옛 판을 들고 있으면 **새 서버의 판 1 을
     //   "늦게 온 옛 프레임"으로 무시한다** — 그러면 화면이 영영 새 맵을 안 받고 **오류도 안 뜬다.**
@@ -1161,7 +1163,7 @@ struct Server {
 
     // 🔑 `park` 의 필드들은 **`Node` 의 생성자가 초기화한다.** 여기 목록에 다시 적지 않는다 —
     //   적으면 참조에 임시값을 묶으려는 것이 되어 컴파일이 안 된다(그게 이 설계의 안전장치다).
-    Server() : grid_rows(5), grid_cols(5), map_epoch(0),   // 선언 순서(-Wreorder)
+    Server() : grid_rows(5), grid_cols(5),   // 선언 순서(-Wreorder)
                getmap_win_ms(0), getmap_in_win(0), getmap_rejects(0),
                lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK),
                reg_ok(0), reg_bad(0), reg_qsent(0), reg_giveups(0), reg_widthbad(0),
@@ -1684,8 +1686,7 @@ struct Server {
     // ── REQ-0203 4a: 지형 ───────────────────────────────────────────────────────
     // 🔴 **`epoch` 를 올리는 곳은 여기 셋뿐이다.** 지형을 바꾸는 줄 바로 옆이다.
     void bump_epoch(const std::string& why) {
-        map_epoch++;
-        logf("=", "지형 판 " + std::to_string(map_epoch) + " (" + why + ")");
+        logf("=", "지형 판 " + std::to_string(lot.bumpEpoch()) + " (" + why + ")");
         // 🔑 **판이 오르면 곧바로 보낸다.** 안 보내면 화면은 `state.epoch` 불일치를 보고
         //   `get_map` 을 물어야 하고, **그 사이 "모른다"로 그리는 창이 생긴다.**
         //   보내는 쪽이 먼저 움직이면 그 창이 없다.
@@ -1698,113 +1699,60 @@ struct Server {
     const ParkingLot* lot_ = 0;   // 🔑 선언 자리에서 초기화한다 — 초기화 목록에 넣으면
                               //   선언 순서와 어긋나 `-Wreorder` 가 난다(실제로 났다)
     void build_default_zones() {
-        zones.clear();
+        lot.clear();
+        // 🔴 **주차 자리는 5개다** (사용자 확정 (A) · 명세 §9). 각 자리에 센서 둘(이중화).
+        //   조립 표가 있으면 **그것이 지형이다**. 없으면 기본 지형(자가검증은 표 없이 돈다).
         if (lot_ && !lot_->empty()) {
             const std::vector<ParkingLot::Area>& as = lot_->areas();
             for (size_t i = 0; i < as.size(); i++) {
                 Zone z; z.id = as[i].id; z.kind = as[i].kind;
                 z.cells.push_back(std::make_pair((int)(i / grid_cols), (int)(i % grid_cols)));
-                zones.push_back(z);
+                lot.add(z);
             }
             bump_epoch("조립 표에서 지형 구성");
             return;
         }
-        // 🔴 **주차 자리는 5개다. 10개가 아니다** (사용자 확정 (A) · 2026-08-19 · 명세 §9)
-        //   각 자리에 **주차확인센서가 둘**이다 — 영역1 ← 센서 A1(#0) · B1(#5). 이중화다.
-        //   ⚠ 옛 지형은 10개를 만들었고 **그것이 화면의 "10자리"였다.**
-        //   🔑 `Zone.id` 는 **A1~A5 를 유지한다** — 전선 `R,<rid>,A1,<user>` 과 `slots[]` 색인이
-        //     그 이름을 쓰므로 바꾸면 **arduino 축까지 움직인다.** 화면 라벨은 web 이 붙인다.
-        //   ⏳ id 개명(영역1~5)은 별건 — 굽기와 같은 경계에서 나중에.
         for (int i = 0; i < 5; i++) {
             Zone z; z.id = SLOT_ID[i]; z.kind = "parking";
-            // ⚠ 칸은 **하나로 둔다.** 두 센서를 격자에서 한 칸으로 그릴지 두 칸으로 그릴지는
-            //   **표현이고 web 의 몫**이다. 물리 배치를 서버가 지어내지 않는다(명세 §9.1).
             z.cells.push_back(std::make_pair(i / grid_cols, i % grid_cols));
-            zones.push_back(z);
+            lot.add(z);
         }
         Zone e; e.id = "E1"; e.kind = "entrance";
         e.cells.push_back(std::make_pair(grid_rows - 1, 0));
-        zones.push_back(e);
+        lot.add(e);
         Zone x; x.id = "X1"; x.kind = "exit";
         x.cells.push_back(std::make_pair(grid_rows - 1, grid_cols - 1));
-        zones.push_back(x);
-        // ~~🔴 길이 1 을 여기서 강제한다~~ → **강제를 푼다**(2026-08-19 · 명세 §9.1).
-        //   ⚠ **지금 정의는 여전히 전부 길이 1 이다.** 강제를 푼 것은 web 이 여러 칸을 필요로 할 때
-        //   **서버가 조용히 잘라 버리지 않게** 하려는 것이다 — 전에는 `resize(1)` 로 말없이 깎았다.
-        //   🔴 대신 **길이가 1 이 아니면 로그에 남긴다.** 깎지는 않는다.
-        for (size_t i = 0; i < zones.size(); i++)
-            if (zones[i].cells.size() != 1)
-                logf("=", "자리 " + zones[i].id + " 의 칸 수 "
-                          + std::to_string(zones[i].cells.size()) + " — 1이 아니다(허용한다. 화면이 순회한다)");
+        lot.add(x);
+        // ⚠ 길이 1 **강제는 풀었다**(명세 §9.1). 다르면 로그에 남기고 **깎지는 않는다** —
+        //   전에는 `resize(1)` 로 말없이 깎았다.
+        for (size_t i = 0; i < lot.zones().size(); i++)
+            if (lot.zones()[i].cells.size() != 1)
+                logf("=", "자리 " + lot.zones()[i].id + " 의 칸 수 "
+                          + std::to_string(lot.zones()[i].cells.size())
+                          + " — 1이 아니다(허용한다. 화면이 순회한다)");
         bump_epoch("기본 지형 구성");
     }
 
-    Zone* zone_find(const std::string& id) {
-        for (size_t i = 0; i < zones.size(); i++) if (zones[i].id == id) return &zones[i];
-        return NULL;
-    }
+    // 🔴 아래 셋은 **위임**이다 — 실물은 `lot.h` 에 있다.
+    Zone* zone_find(const std::string& id) { return lot.find(id); }
+    std::string zone_of_module_tbl(const std::string& nm) const { return lot.zoneOfModule(nm, lot_); }
+    static std::string zone_of_module(const std::string& nm) { return Lot::nameRule(nm); }
 
-    // 등록이 끝난 노드의 모듈을 자리에 붙인다.
-    // ⚠ **결속 규칙은 지금 부트스트랩이다**: 모듈 `name` 이 자리 `id` 와 같으면 그 자리에 붙는다.
-    //   지금 펌웨어가 `D,A1,IP` 처럼 자리 이름을 그대로 쓰기 때문에 성립한다.
-    //   🔴 **설정이 생기면 이 규칙을 설정이 대체한다** — 그때까지 이름이 곧 결속이라는 것을 적어 둔다.
-    // ── 🔴 센서 이름 → 자리 id (사용자 확정 (A) · 명세 §9)
-    //   한 자리에 센서가 둘이다: 영역1 ← `A1`(#0) · `B1`(#5).
-    //   ⚠ 전에는 `zone_find(name)` 으로 **이름이 곧 자리**였고 그래서 자리가 10개였다.
-    //   🔑 이 함수가 그 결합을 끊는다 — **자리는 5개, 센서는 10개.**
-    // 🔴 표가 있으면 **표가 답한다** — 추측이 사라진다(명세 §10.2).
-    std::string zone_of_module_tbl(const std::string& nm) const {
-        if (lot_ && !lot_->empty()) {
-            const std::vector<ParkingLot::Area>& as = lot_->areas();
-            for (size_t i = 0; i < as.size(); i++)
-                for (size_t k = 0; k < as[i].sensors.size(); k++)
-                    if (as[i].sensors[k] == nm) return as[i].id;
-            return nm;              // 표에 없는 이름 — 자기 이름으로 찾아본다(종전과 같다)
-        }
-        return zone_of_module(nm);
-    }
-    static std::string zone_of_module(const std::string& nm) {
-        if (nm.size() == 2 && nm[0] == 'B' && nm[1] >= '1' && nm[1] <= '5')
-            return std::string("A") + nm[1];      // B3 → 자리 A3 의 둘째 센서
-        return nm;                                  // A1..A5 · E1 · X1 은 그대로
-    }
-
+    // 결속. 🔴 **규칙은 `Lot` 이 안다. 여기 남는 것은 "얼마나 크게 알리나" 뿐이다.**
+    //   전에는 충돌 로그를 결속 안에서 찍었다 — 그러면 지형이 로그 형식을 알게 된다.
     void bind_modules(Node& n) {
-        bool changed = false;
-        for (size_t i = 0; i < n.mods.size(); i++) {
-            Zone* z = zone_find(zone_of_module_tbl(n.mods[i].first));
-            if (!z) continue;
-            std::pair<std::string,std::string> key(n.devid, n.mods[i].first);
-            bool dup = false;
-            // 🔴 **다른 노드가 같은 *이름* 을 주장하면 결속하지 않는다** (2026-08-19 · 모의 노드로 잡았다)
-            //
-            // 결속은 `zone_find(name)` 으로 **이름만 보고** 자리를 찾는다. 그래서 두 노드가
-            // 둘 다 `A1` 을 선언하면 **자리 A1 에 모듈이 둘** 붙었다 — 실측으로 그렇게 됐다.
-            // 🔑 설계는 *"전역 신원은 `(devid,name)` 복합 키"* 인데 **자리 결속에서 그게 안 지켜졌다.**
-            //
-            // ⚠ 여기서 **둘 다 받아들이면** 그 자리의 값이 어느 노드 것인지 화면이 못 가른다.
-            //   ⚠ **조용히 덮으면** 나중에 붙은 노드가 앞엣것을 지워 원인을 못 찾는다.
-            //   → **먼저 잡은 노드가 유지되고, 뒤엣것은 거절하고 센다.** first-S-wins 와 같은 규율이다.
-            // 🔴 이것은 지형이 자리마다 어느 모듈을 갖는지 **명시하기 전까지의 규칙**이다.
-            //   지형이 그것을 말하게 되면(REQ-0260) 이 추측은 사라진다.
-            bool taken_by_other = false;
-            for (size_t k = 0; k < z->modules.size(); k++) {
-                if (z->modules[k] == key) dup = true;
-                else if (z->modules[k].second == key.second) taken_by_other = true;
-            }
-            if (taken_by_other) {
-                mod_name_conflict++;
-                if (mod_name_conflict <= 3 || mod_name_conflict % 100 == 0)
-                    logf("🔴", "모듈 이름 충돌 — 자리 " + z->id + " 의 이름 '" + key.second
-                               + "' 을 노드 " + (n.devid.empty() ? std::string("(미승격)") : n.devid)
-                               + " 가 다시 주장한다. **먼저 잡은 노드를 유지하고 이것은 결속하지 않는다.**"
-                               " 누적 " + std::to_string(mod_name_conflict)
-                               + " · 자리 결속이 아직 이름 기반이라 생기는 한계다(REQ-0260)");
-                continue;
-            }
-            if (!dup) { z->modules.push_back(key); changed = true; }
+        Lot::BindResult r = lot.bind(n.devid, n.mods, lot_);
+        for (size_t i = 0; i < r.conflicts.size(); i++) {
+            mod_name_conflict++;
+            if (mod_name_conflict <= 3 || mod_name_conflict % 100 == 0)
+                logf("🔴", "모듈 이름 충돌 — 자리 " + r.conflicts[i].first + " 의 이름 '"
+                           + r.conflicts[i].second + "' 을 노드 "
+                           + (n.devid.empty() ? std::string("(미승격)") : n.devid)
+                           + " 가 다시 주장한다. **먼저 잡은 노드를 유지하고 이것은 결속하지 않는다.**"
+                             " 누적 " + std::to_string(mod_name_conflict)
+                           + " · 자리 결속이 아직 이름 기반이라 생기는 한계다(REQ-0260)");
         }
-        if (changed) bump_epoch("노드 " + n.devid + " 등록 결속");
+        if (r.changed) bump_epoch("노드 " + n.devid + " 등록 결속");
     }
 
     // ── REQ-0203 3a: **노드를 하나로 훑는 길** ──────────────────────────────────
@@ -2398,11 +2346,11 @@ struct Server {
     // ⚠ **한 번에 완결해서 보낸다. 조각내지 않는다** — 화면이 "모른다"로 그리는 창을 짧게 하려는 것이다.
     std::string map_json() {
         std::ostringstream o;
-        o << "{\"type\":\"map\",\"srv_id\":" << jstr(srv_id) << ",\"epoch\":" << map_epoch
+        o << "{\"type\":\"map\",\"srv_id\":" << jstr(srv_id) << ",\"epoch\":" << lot.epoch()
           << ",\"grid\":{\"rows\":" << grid_rows << ",\"cols\":" << grid_cols << "}"
-          << ",\"zones\":[";
-        for (size_t i = 0; i < zones.size(); i++) {
-            const Zone& z = zones[i];
+          << ",\"lot.zones()\":[";
+        for (size_t i = 0; i < lot.zones().size(); i++) {
+            const Zone& z = lot.zones()[i];
             if (i) o << ",";
             o << "{\"id\":" << jstr(z.id) << ",\"kind\":" << jstr(z.kind) << ",\"cells\":[";
             for (size_t c = 0; c < z.cells.size(); c++) {
@@ -2431,7 +2379,7 @@ struct Server {
         return o.str();
     }
     // 🔴 **빈 지형을 `map` 으로 내보내지 않는다** (2026-08-19).
-    //   첫 배포에서 `build_default_zones()` 가 기동 경로에 없어 `zones` 가 빈 채 나갔다.
+    //   첫 배포에서 `build_default_zones()` 가 기동 경로에 없어 `lot.zones()` 가 빈 채 나갔다.
     //   그때 화면은 **"자리가 0개인 주차장"** 을 정상 상태로 그렸다 —
     //   🔑 **빈 지형은 답이 아니라 고장이다. 답인 척하면 아무도 안 본다.**
     //   ⚠ 그래서 **안 보내고 시끄럽게 남긴다.** 화면은 지형이 없으면 옛 것을 유지하거나
@@ -2446,7 +2394,7 @@ struct Server {
     int  ws_peak = 0;      // 이 인스턴스에서 동시에 붙었던 **WS 소켓 수**의 최대
                            //   ⚠ 사람이 보는 화면 수가 아니다 — 탐침·하니스·주입기도 센다
     void push_map() {
-        if (zones.empty()) {
+        if (lot.zones().empty()) {
             if (!map_empty_warned) {
                 map_empty_warned = true;
                 logf("!", "🔴 지형이 비어 있다 — `map` 을 보내지 않는다. "
@@ -2509,9 +2457,9 @@ struct Server {
         std::ostringstream o;
         int split_now = 0;                     // 이번 판의 갈린 자리 수 — 끝에서 계기에 옮긴다
         o << "{\"type\":\"state\",\"srv_id\":" << jstr(srv_id)
-          << ",\"epoch\":" << map_epoch << ",\"ts_ms\":" << epoch_ms() << ",\"zones\":[";
-        for (size_t i = 0; i < zones.size(); i++) {
-            const Zone& z = zones[i];
+          << ",\"epoch\":" << lot.epoch() << ",\"ts_ms\":" << epoch_ms() << ",\"lot.zones()\":[";
+        for (size_t i = 0; i < lot.zones().size(); i++) {
+            const Zone& z = lot.zones()[i];
             if (i) o << ",";
             const std::string blk = zone_block_reason(z);
             int si = slot_index(z.id);                 // 예약 상태는 여전히 slots[] 가 원본이다
@@ -5368,13 +5316,13 @@ static int selftest() {
                 //   ⚠ 이 시험이 옛 계약을 들고 있어서 지형을 바꾸자 곧바로 빨간불이 됐다. **그게 제 일이다.**
                 Zone* a1 = t.zone_find("A1"); Zone* e1 = t.zone_find("E1");
                 Zone* b1 = t.zone_find("B1");        // 🔴 이제 자리가 아니라 **센서 이름**이다
-                bool ok22 = (t.zones.size() == 7 && a1 && e1
+                bool ok22 = (t.lot.zones().size() == 7 && a1 && e1
                              && a1->kind == "parking" && e1->kind == "entrance"
-                             && a1->cells.size() == 1 && t.map_epoch == 1
+                             && a1->cells.size() == 1 && t.lot.epoch() == 1
                              && b1 == 0);            // **B1 은 자리로 존재하지 않아야 한다**
-                std::cout << (ok22 ? "  ✓ " : "  ✗ ") << "지형: 자리 " << t.zones.size()
+                std::cout << (ok22 ? "  ✓ " : "  ✗ ") << "지형: 자리 " << t.lot.zones().size()
                           << " · A1 칸수 " << (a1 ? a1->cells.size() : 0)
-                          << " · 판 " << t.map_epoch
+                          << " · 판 " << t.lot.epoch()
                           << " · B1 자리없음 " << (b1 == 0 ? "예" : "🔴아니오")
                           << " (기대 7 · 1 · 1 · 예)\n";
                 if (!ok22) bad++;
@@ -5384,25 +5332,25 @@ static int selftest() {
                 t.park.mods.push_back(std::make_pair(std::string("A1"), std::string("IP")));
                 t.park.mods.push_back(std::make_pair(std::string("A2"), std::string("OG")));
                 t.bind_modules(t.park);
-                bool ok23 = (t.map_epoch == 2 && a1->modules.size() == 1
+                bool ok23 = (t.lot.epoch() == 2 && a1->modules.size() == 1
                              && a1->modules[0].first == "P1" && a1->modules[0].second == "A1");
                 std::cout << (ok23 ? "  ✓ " : "  ✗ ") << "결속: A1 모듈 "
                           << a1->modules.size() << "개 (devid=" << (a1->modules.empty() ? "" : a1->modules[0].first)
-                          << ") · 판 " << t.map_epoch << " (기대 1 · P1 · 2)\n";
+                          << ") · 판 " << t.lot.epoch() << " (기대 1 · P1 · 2)\n";
                 if (!ok23) bad++;
 
                 // 🔴 **같은 등록을 다시 받아도 판이 안 오른다** — 안 그러면 재접속마다 화면이 맵을 다시 받는다
                 t.bind_modules(t.park);
-                bool ok24 = (t.map_epoch == 2 && a1->modules.size() == 1);
-                std::cout << (ok24 ? "  ✓ " : "  ✗ ") << "같은 결속 반복 → 판 " << t.map_epoch
+                bool ok24 = (t.lot.epoch() == 2 && a1->modules.size() == 1);
+                std::cout << (ok24 ? "  ✓ " : "  ✗ ") << "같은 결속 반복 → 판 " << t.lot.epoch()
                           << " · 모듈 " << a1->modules.size() << " (기대 2 · 1 — 안 오른다)\n";
                 if (!ok24) bad++;
 
                 // 🔴 **상태만 바뀌는 것은 판을 안 올린다** — 올리면 봉투를 가른 이유가 사라진다
-                long long e0 = t.map_epoch;
+                long long e0 = t.lot.epoch();
                 t.slots[0].occupied = 1; t.slots[0].reserved = 1;
-                bool ok25 = (t.map_epoch == e0);
-                std::cout << (ok25 ? "  ✓ " : "  ✗ ") << "점유·예약 변경 → 판 " << t.map_epoch
+                bool ok25 = (t.lot.epoch() == e0);
+                std::cout << (ok25 ? "  ✓ " : "  ✗ ") << "점유·예약 변경 → 판 " << t.lot.epoch()
                           << " (기대 " << e0 << " — 상태는 판을 안 올린다)\n";
                 if (!ok25) bad++;
             }
@@ -5507,7 +5455,7 @@ static int selftest() {
                     t.push_map();
                     char b2[256];
                     int r = (int)recv(p3[1], b2, sizeof(b2), MSG_DONTWAIT);
-                    bool ok28d = (t.zones.empty() && r <= 0);
+                    bool ok28d = (t.lot.zones().empty() && r <= 0);
                     std::cout << (ok28d ? "  ✓ " : "  ✗ ") << "빈 지형 → map 미송신 (전선 "
                               << (r > 0 ? r : 0) << "B · 기대 0)\n";
                     if (!ok28d) bad++;
@@ -5611,15 +5559,15 @@ static int selftest() {
             }
 
             // ㉗ 🔴 **기동 경로가 지형을 만드는가** — 시험이 자기 지형을 만들면 이걸 못 잡는다
-            //    실제로 첫 배포에서 `zones` 가 빈 채 나갔고 **시험은 전부 통과했다.**
+            //    실제로 첫 배포에서 `lot.zones()` 가 빈 채 나갔고 **시험은 전부 통과했다.**
             {
                 Server t;                                   // 🔑 **아무것도 안 부른 상태**
-                bool empty0 = t.zones.empty() && t.map_epoch == 0;
+                bool empty0 = t.lot.zones().empty() && t.lot.epoch() == 0;
                 std::string j = t.map_json();
-                bool ok31 = (empty0 && j.find("\"zones\":[]") != std::string::npos);
+                bool ok31 = (empty0 && j.find("\"lot.zones()\":[]") != std::string::npos);
                 std::cout << (ok31 ? "  ✓ " : "  ✗ ") << "새 Server 는 지형이 비어 있다 — "
                           << "**기동 경로가 build_default_zones() 를 불러야 한다**"
-                          << " (map 의 zones=" << (j.find("\"zones\":[]") != std::string::npos ? "빈 배열" : "채워짐")
+                          << " (map 의 lot.zones()=" << (j.find("\"lot.zones()\":[]") != std::string::npos ? "빈 배열" : "채워짐")
                           << ")\n";
                 if (!ok31) bad++;
             }
