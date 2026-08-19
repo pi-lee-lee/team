@@ -286,6 +286,10 @@ ParkingServer::BatchResult ParkingServer::Batch::send() {
 }
 int ParkingServer::maxPerBatch() const { return p_->srv.max_per_batch(); }
 void ParkingServer::onCommandResult(CmdResultFn fn) { p_->srv.cmd_cb_ = fn; }
+bool ParkingServer::deviceReady(const std::string& devid) const {
+    const Node* n = p_->srv.node_by_devid(devid);
+    return n && n->reg_done;
+}
 
 ParkingServer::~ParkingServer() { delete p_; }
 
