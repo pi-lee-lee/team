@@ -623,11 +623,14 @@ static void applyRung(void) {
       // ⚠ 문구를 약하게 쓰지 마라. 20분치 로그를 훑는 사람이 바로 위의 `↑↑ 단 상승 → 4단`
       //   만 보고 "하드웨어 리셋까지 해 봤는데 안 되더라"는 **틀린 결론**을 얻으면 안 된다.
       //   그래서 실제로 조치하지 못한 단은 전부 `미실행` 을 달아 둔다 — `grep 미실행` 한 번에 걸린다.
-      Serial.println(F("[LADDER] ⚠4단 미실행: 하드웨어 리셋선이 배선되지 않았다(ESP_RST_WIRED=0)"));
-      Serial.println(F("[LADDER]   → Uno A2 를 ESP 의 RST 에 물리고 ESP_RST_WIRED 를 1 로 바꿔 다시 구워라"));
-      Serial.print(F("[LADDER]   지금은 "));
+      // 🔴 문구를 고쳤다 (2026-08-19) — 옛 문구는 **"물려라"고 시켰고 그것이 틀린 지시였다.**
+      //   실제로 그 문장을 읽고 배선을 전제한 사고가 났다(원장 §36).
+      Serial.println(F("[LADDER] 4단 건너뜀: 하드웨어 리셋은 **설계상 배제**다(미배선이 아니다)"));
+      Serial.println(F("[LADDER]   전원·EN·RST-LOW 상태면 RST 핀을 흔들어도 동일하고,"));
+      Serial.println(F("[LADDER]   유일하게 풀리는 펌웨어 hang 은 송수신 로직 재설계로 제거했다"));
+      Serial.print(F("[LADDER]   → "));
       Serial.print(back / 1000U);
-      Serial.println(F("초 쉬고 AT+RST 만 되풀이한다"));
+      Serial.println(F("초 쉬고 AT+RST 를 되풀이한다 (이것이 정상 경로다)"));
 #endif
       netHasIp = false;
       netAdvance(NET_RST, back);
@@ -640,7 +643,9 @@ static void applyRung(void) {
       //   로그가 거짓말을 하게 된다. 그래서 **단은 이름과 전이만 남기고 조치는 4단을
       //   최장 백오프로 되풀이하는 것**으로 정직하게 대체한다.
 #if DEBUG
-      Serial.println(F("[LADDER] ⚠5단 미실행: 전원 재투입은 **부품 미보유로 미구현**이다"));
+      // ⚠ **5단은 4단과 성격이 다르다** — 배제가 아니라 **미구현**이다.
+      //   전원·EN 계열 고장에서는 전원 재투입이 **실제로 듣는다**(2026-08-19 실측: 그것만 풀었다).
+      Serial.println(F("[LADDER] ⚠5단 미실행: 전원 재투입은 **부품 미보유로 미구현**이다(배제가 아니다)"));
       Serial.println(F("[LADDER]   필요 부품: 로우사이드 MOSFET 스위치(예: 2N7000/AO3400 + 10k)"));
       Serial.print(F("[LADDER]   대신 4단 조치를 "));
       Serial.print(back / 1000U);
