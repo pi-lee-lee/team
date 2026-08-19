@@ -31,6 +31,14 @@ else:
         if len(rec) > 3: changed.add(rec[3:])
     label = "작업 트리 대 HEAD"
 
+# 🔴 **목록의 경로가 실재하는가** — 없으면 통과가 아니라 경보다.
+#   파일이 옮겨지면 목록이 낡고, 낡은 목록은 "변화 없음"으로 조용히 통과한다.
+#   (2026-08-19 실제로 그렇게 됐다 — ardu/ 이사 뒤 다섯 경로가 전부 사라졌는데 검사는 초록이었다)
+missing = []
+for a in cfg["areas"]:
+    for p in a["paths"] + ([a["include_host"]] if a.get("include_host") else []):
+        if not os.path.exists(p): missing.append((a["concern"], p))
+
 hits, ok = [], []
 for a in cfg["areas"]:
     got = [p for p in a["paths"] if p in changed]
@@ -40,6 +48,13 @@ for a in cfg["areas"]:
 
 print(f"══ 잠긴 영역 검사 ({label}) ══")
 print(f"   기준선: {cfg['baseline_note']}\n")
+
+if missing:
+    print("  🔴🔴 **목록이 낡았다 — 이 검사는 지금 아무것도 지키지 않는다**")
+    for c, p in missing:
+        print(f"     · {c}: 경로 없음 {p}")
+    print("     → .claude/protected.json 의 paths 를 실제 위치로 고쳐라.")
+    print("     🔑 파일이 옮겨졌는데 목록을 안 고치면 **영원히 초록**이다.\n")
 
 for a, got, host_hit in ok:
     print(f"  ✅ {a['concern']:22s} 변화 없음  ({len(a['paths'])}개 파일)")

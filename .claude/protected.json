@@ -9,7 +9,10 @@
     "  → 통과는 '이 축에서 신호가 없다'는 뜻뿐이고 안전 보증이 아니다.",
     "",
     "면제: 커밋 메시지나 작업 노트에 아래 concern 의 REQ 를 참조하면 정상 작업이다.",
-    "  슬롯/링크 자체를 고치는 일은 잠금 대상이 아니다 — 막으려는 것은 '무관한 변경'이다."
+    "  슬롯/링크 자체를 고치는 일은 잠금 대상이 아니다 — 막으려는 것은 '무관한 변경'이다.",
+    "",
+    "🔴 경로가 실재하는지 검사 자신이 확인한다 — 없으면 통과가 아니라 **경보**다.",
+    "   파일이 옮겨지면 목록이 낡고, 낡은 목록은 '변화 없음'으로 조용히 통과한다."
   ],
   "baseline_note": "2026-08-19 창 P 실적으로 확인됨 — T2 0/451 · ACK 100.0% · 주입 중 절단 0",
   "areas": [
@@ -18,13 +21,13 @@
       "owner": "arduino-engineer",
       "req": "REQ-0264",
       "paths": [
-        "조별과제샘플/EspLink_state.h",
-        "조별과제샘플/EspLink_gate.h",
-        "조별과제샘플/EspLink_tx.h",
-        "조별과제샘플/EspLink_ladder.h"
+        "조별과제샘플/ardu/EspLink_state.h",
+        "조별과제샘플/ardu/EspLink_gate.h",
+        "조별과제샘플/ardu/EspLink_tx.h",
+        "조별과제샘플/ardu/EspLink_ladder.h"
       ],
-      "include_host": "조별과제샘플/client.ino",
-      "note": "🔴 이 분리의 안전성은 파일이 아니라 **위치**에 있다 — client.ino 안 #include 줄을 옮기거나 순서를 바꾸면 그 순간 hex 가 달라진다(arduino §31). 그래서 include 줄 순서도 같이 본다."
+      "include_host": "조별과제샘플/ardu/client.ino",
+      "note": "🔴 이 분리의 안전성은 파일이 아니라 **위치**에 있다 — client.ino 안 #include 줄을 옮기거나 순서를 바꾸면 그 순간 hex 가 달라진다(arduino §31). 그래서 include 줄 순서도 같이 본다. ⚠ 2026-08-19 이사: 조별과제샘플/ → 조별과제샘플/ardu/. **경로가 바뀌면 이 목록도 같이 바꿔야 한다** — 안 바꾸면 대상이 사라져 검사가 영원히 초록이다(arduino 가 잡았다)."
     }
   ],
   "_pending": [
