@@ -183,7 +183,16 @@ static bool simCandidate(uint8_t i) {
   return true;
 }
 
+// 🔴 **짝 센서 인덱스** (REQ-0270 · 지형 확정 2026-08-19)
+//   `A_i` 와 `B_i` 는 **같은 자리의 두 센서**다(이중화). A1..A5 = bit0..4 · B1..B5 = bit5..9.
+//   ⚠ **한쪽만 움직이면 서버가 한 자리에서 모순된 두 값을 본다** — `센서갈림` 이 그 표지다.
+//   그래서 시뮬은 **항상 짝을 함께** 바꾼다. 실물 센서가 오면 그쪽은 각자 값을 내므로
+//   이 규칙은 **시뮬에만** 적용된다(`simCandidate` 로 걸러진다).
+static inline uint8_t simPair(uint8_t i) { return (uint8_t)((i + SLOT_N / 2) % SLOT_N); }
+
 // 바뀐 칸 인덱스를 돌려준다. 바꿀 칸이 없으면 0xFF.
+//   ⚠ 반환값은 **대표 칸 하나**다. 짝도 같이 바뀌었다는 것은 이 함수만 안다 —
+//     호출부는 "무엇이 바뀌었나"를 `occMask` 전체로 다시 읽으므로 문제가 없다.
 static uint8_t simStep(void) {
   // 1순위: 예약됐지만 비어 있는 시뮬 칸을 채운다
   for (uint8_t i = 0; i < SLOT_N; i++) {
@@ -191,6 +200,8 @@ static uint8_t simStep(void) {
     if (!simCandidate(i)) continue;
     if ((resMask & bit) && !(simOcc & bit)) {
       simOcc |= bit;
+      const uint8_t j = simPair(i);                      // 🔴 짝을 함께 채운다(REQ-0270)
+      if (simCandidate(j)) simOcc |= (uint16_t)1 << j;
       return i;
     }
   }
@@ -203,6 +214,8 @@ static uint8_t simStep(void) {
     if (!simCandidate(i)) continue;
     if (pick-- == 0) {
       simOcc ^= (uint16_t)1 << i;
+      const uint8_t j = simPair(i);                      // 🔴 짝을 함께 뒤집는다(REQ-0270)
+      if (simCandidate(j)) simOcc ^= (uint16_t)1 << j;   //   ⚠ 짝이 이미 같은 값이므로 둘이 계속 일치한다
       return i;
     }
   }

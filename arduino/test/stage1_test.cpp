@@ -1258,9 +1258,11 @@ int main() {
     // ✏️ 118B → 121B · drain 6 → 7 : **둘 다 의도한 변경이다**
     //   +3B = `n`(모듈 수) 필드. drain 은 hex 전환으로 S_worst 가 줄어 재계산했다.
     //   🔑 **시험이 이 둘을 잡은 것이 맞다** — 값이 바뀌면 시험이 반응해야 한다.
-    // ✏️ 145B 다(143 이 아니라). **`OBV` 가 3글자라 가상 줄이 1B씩 더 길다** —
-    //   내 예산 계산이 2글자 kind 기준이었다. **여유는 15B 로 줄었다.**
-    ok(rn == 145,           "★★ 등록이 145B — 가상 둘(OBV 3글자) 포함. BATCH_CAP 160 까지 여유 15B");
+    // ✏️ ~~145B~~ → **143B** (REQ-0271 · 2026-08-19). `OBV` → `OB` 로 **가상 줄이 1B씩 짧아졌다.**
+    //   🔑 **시험이 이 변경을 잡았다** — 145 를 리터럴로 못 박아 뒀기 때문이다. 그게 이 줄의 목적이다.
+    //   ⚠ 새 값도 리터럴로 박는다. 다음에 kind 가 또 바뀌면 여기가 다시 깨져야 한다.
+    //   여유: BATCH_CAP 160 − 143 = **17B** (모듈 한 줄이 10~11B 이므로 여전히 더 못 넣는다)
+    ok(rn == 143,           "★★ 등록이 143B — REQ-0271 로 OB(2글자). BATCH_CAP 160 까지 여유 17B");
     ok(strncmp(rbuf, "D,*,7,12,", 9) == 0,
                             "★★ 머리가 D,*,<drain>,<n>, 이다 (drain=7 · **n=12**)");
     // 🔴 **①선언 n · ②실제 D 줄 수 · ③hex 폭 — 셋이 서로를 정확히 못 박는다**
@@ -1331,8 +1333,11 @@ int main() {
     // ① 등록에 가상 모듈이 실린다 — 이름은 자리 id · kind 에 V 접미
     char rbuf[BATCH_CAP + 1];
     buildRegistration(rbuf, sizeof rbuf);
-    ok(strstr(rbuf, "D,E1,OBV,") != NULL, "★★ E1 이 OBV(가상 차단봉)로 선언된다");
-    ok(strstr(rbuf, "D,X1,OBV,") != NULL, "★★ X1 도 선언된다");
+    // 🔴 REQ-0271 — `OBV` → `OB`. **모의/실물 구분을 전선에서 없앴다**(사용자 확정).
+    //   ⚠ **`OBV` 가 안 나오는 것**도 같이 단언한다 — 긍정형만 두면 옛 값이 남아도 통과한다.
+    ok(strstr(rbuf, "D,E1,OB,")  != NULL, "★★ E1 이 OB(차단봉)로 선언된다");
+    ok(strstr(rbuf, "D,X1,OB,")  != NULL, "★★ X1 도 선언된다");
+    ok(strstr(rbuf, "OBV")       == NULL, "★★ 전선에 OBV 가 하나도 없다 (V 접미 제거 확인)");
     ok(strstr(rbuf, "D,A1,IP,")  != NULL, "★ 실물 모듈은 그대로다 (V 없음)");
 
     // ② 자율 모드 — slotNo 로 결정적으로 토글한다. **무작위가 아니다**
@@ -1423,6 +1428,39 @@ int main() {
     }
 
     vGateManual = false; vGateState = 0; occMask = 0;
+  }
+
+  // ── [37] 시뮬 점유가 지형과 맞는다 — A_i 와 B_i 는 같은 자리다 (REQ-0270) ──────
+  //   🔴 **한쪽만 움직이면 서버가 한 자리에서 모순된 두 값을 본다.** socket 의 `센서갈림` 이
+  //     그 표지인데 **그건 서버 쪽 계측기**다. 장치 쪽에도 감시를 둔다 —
+  //     §"조건을 적었으면 그것을 보는 감시를 **같은 자리에** 만들어라".
+  {
+    printf("\n[37] 시뮬 점유의 지형 정렬 (A_i · B_i 짝)\n");
+    const uint8_t H = SLOT_N / 2;
+    auto paired = [&](uint16_t m) {
+      for (uint8_t i = 0; i < H; i++)
+        if (((m >> i) & 1) != ((m >> (i + H)) & 1)) return false;
+      return true;
+    };
+
+    simOcc = (uint16_t)((1U << 1) | (1U << 6)
+                      | (1U << 2) | (1U << 7)
+                      | (1U << 3) | (1U << 8));      // setup() 과 같은 초기값
+    ok(paired(simOcc),      "★★ 부팅 초기값이 짝 단위다 (A_i == B_i 전부)");
+
+    // 🔴 **무작위 토글을 여러 번 돌려도 짝이 유지되는가** — 한 번만 보면 우연히 통과한다
+    resMask = 0; testArmed = false; ovrActive = 0;
+    randomSeed(12345);                                // 결정적으로 돌린다
+    bool held = true;
+    for (int k = 0; k < 200; k++) { simStep(); if (!paired(simOcc)) { held = false; break; } }
+    ok(held,                "★★ 무작위 토글 200회를 돌려도 짝이 유지된다");
+
+    // 예약→점유 경로도 짝을 채우는가 (1순위 분기)
+    simOcc = 0; resMask = (uint16_t)(1U << 0);        // 자리 1 을 예약
+    simStep();
+    ok(((simOcc >> 0) & 1) && ((simOcc >> H) & 1),
+                            "★★ 예약→점유도 짝을 함께 채운다 (A1 과 B1 이 같이 선다)");
+    simOcc = 0; resMask = 0;
   }
 
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);

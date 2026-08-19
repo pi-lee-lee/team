@@ -1117,13 +1117,16 @@ static uint8_t moduleCount(void);   // ★ 표가 원천이다 — 정의는 MOD
 #define KIND_GUIDE_LIGHT  "OG"   // 명령 받음 · 안내등
 #define KIND_LEAD_LIGHT   "OL"   // 명령 받음 · 유도등
 #define KIND_BARRIER      "OB"   // 명령 받음 · 차단봉
-// 🔴 **`V` 는 종류가 아니라 접미다** (socket 정의 2026-08-19):
-//   `kind[0]` = 명령 가능 여부 · `kind[0..1]` = 종류 · **길이 3 이고 끝이 `V` 면 가상**
-//   ⚠ "3글자 종류"로 정의하면 `OBV`·`OGV`·`OLV`·`IPV`… 로 **표가 두 배**가 된다.
-//     **접미로 두면 표는 다섯 그대로이고 `V` 는 직교하는 한 비트다.**
-//   ⚠ `tmask` 를 못 쓴 이유: 그건 **조건부 존재**(무장 중에만)이고 가상성은 **영구 속성**이다.
-//     **영구 속성을 사라지는 필드에 실을 수 없다.**
-#define KIND_BARRIER_V    "OBV"  // 명령 받음 · 차단봉 · **가상**
+// ~~🔴 `V` 는 종류가 아니라 접미다~~ 🔴 **폐기 (REQ-0271 · 사용자 확정 2026-08-19)**
+//   사용자: *"모의값에 의미는 없다. 모두 실물로 처리하자. 실물도 센서 데이터가 그대로 들어오지
+//   않는다. **아두이노 코드로 정제되어서 값만 서버로 전송된다.**"* → **모의/실물 구분을 없앤다.**
+//   **경계가 아두이노**라서 성립한다 — 전선 밖에서 보면 둘은 같은 것이다.
+//
+//   🔑 **되돌리기가 공짜였다**: 서버는 `kind[0]=='O'` 만 읽어 **`OB` 든 `OBV` 든 같은 값**이었다.
+//     socket 이 픽스처를 `OB` 로 바꿔 114 전부 통과를 확인했다 — **순서 제약이 없다.**
+//   ⚠ 그러므로 **가상 여부는 이제 전선에 안 실린다.** 알아야 하면 다른 수단이 필요하다
+//     (지금은 아무도 안 쓴다 — 쓰게 되면 그때 `tmask` 가 아닌 **영구 속성 필드**로 만들어라).
+#define KIND_BARRIER_V    "OB"   // ← REQ-0271: `OBV` 에서 `V` 를 뺐다. 이름은 호출부 때문에 유지
 
 // 🔴 **배출률 선언값.** 이 노드가 한 주기에 배출할 수 있는 ACK 개수의 **보장 하한**이다.
 //   ⚠ **관측 최대가 아니다.** 2026-08-18 실측 `8` 은 `S` 가 짧고 rid 3자리일 때만 성립하는
@@ -1203,6 +1206,18 @@ static bool sendAck(uint16_t rid, char s0, char s1, uint8_t result) {
   (void)s0; (void)s1; (void)result;
   ackqPush(rid);
   return true;          // "보냈다"가 아니라 **"담았다"**. 호출부 5곳 모두 반환값을 안 쓴다(확인함)
+}
+
+// 🔴 **멱등 커밋 + ACK 예약을 한 번에** (REQ-0273 ②).
+//   ⚠ 둘을 따로 부르면 **캐시를 빠뜨린 재전송이 *다른 답*을 받는다**(§4.2 멱등 파손) — 조용히 틀린다.
+//   주석으로만 지키던 순서를 **함수로** 지킨다. 호출부(5곳)는 이것만 부른다.
+//   🔑 캐시에서 되보내는 재전송 경로(2곳)는 `sendAck` 을 그대로 쓴다 — 그건 이미 캐시에 있다.
+//   ★ **거동 근거**: 5곳 전부 `cachePut(x)` 바로 뒤 `sendAck(x)` 이고 **인자가 동일**했다.
+//     이 함수는 그 쌍을 **그 순서 그대로** 감싼 것뿐이다. ⚠ 다만 `hex` 는 달라진다(+6B) —
+//     **"거동 변화 0"을 hex 로 증명할 수는 없고, 소스 대조로만 주장한다.**
+static void commitAck(uint16_t rid, char s0, char s1, uint8_t result) {
+  cachePut(rid, s0, s1, result);
+  sendAck(rid, s0, s1, result);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1436,15 +1451,13 @@ static void processCommand(char* cand) {
 #if DEBUG
     Serial.print(F("[BAD FIELDS] rid=")); Serial.println(rid);
 #endif
-    cachePut(rid, s0, s1, result);
-    sendAck(rid, s0, s1, result);
+    commitAck(rid, s0, s1, result);
     return;
   }
 
   if (type == 'T') {
     processTest(f, &s0, &s1, &result);
-    cachePut(rid, s0, s1, result);       // §4.2 멱등은 T 에도 그대로 적용된다
-    sendAck(rid, s0, s1, result);
+    commitAck(rid, s0, s1, result);      // §4.2 멱등은 T 에도 그대로 적용된다
     return;
   }
 
@@ -1466,8 +1479,7 @@ static void processCommand(char* cand) {
       Serial.println((simOcc >> idx) & 1);
 #endif
     }
-    cachePut(rid, s0, s1, result);
-    sendAck(rid, s0, s1, result);
+    commitAck(rid, s0, s1, result);
     return;
   }
 
@@ -1509,8 +1521,7 @@ static void processCommand(char* cand) {
     }
   }
 
-  cachePut(rid, s0, s1, result);
-  sendAck(rid, s0, s1, result);
+  commitAck(rid, s0, s1, result);
 }
 
 #include "EspLink_at.h"   // ← AT 응답 어휘 해석 (REQ-0273). **위치를 옮기지 마라**
@@ -1683,7 +1694,12 @@ void setup() {
 
   // 시작 시 몇 칸은 차 있는 편이 주차장답다: A2, A3, B4
   // 이 값은 **트리거를 받기 전까지 그대로 유지된다**(§12B.1 — 자율 전진 없음).
-  simOcc = (uint16_t)((1U << 1) | (1U << 2) | (1U << 8));
+  // 🔴 REQ-0270 — **짝 단위로 채운다.** 옛 값 `A2·A3·B4` 는 지형과 어긋났다:
+  //   `A2` 의 짝 `B2` 가 비고 `B4` 의 짝 `A4` 가 비어 **한 자리에서 두 센서가 모순**이었다.
+  //   지금은 **자리 2·3·4 를 통째로** 채운다(A2·B2 · A3·B3 · A4·B4). 자리 1·5 는 빈다.
+  simOcc = (uint16_t)((1U << 1) | (1U << 6)     // 자리 2 = A2 + B2
+                    | (1U << 2) | (1U << 7)     // 자리 3 = A3 + B3
+                    | (1U << 3) | (1U << 8));   // 자리 4 = A4 + B4
 
   // ★ REQ-0071 4단 — 리셋선은 **놓은 상태(하이임피던스)로 시작**한다.
   //   전원 인가 직후 AVR 핀은 원래 INPUT 이라 이미 떠 있지만, "여기서 명시적으로 놓는다"를
