@@ -54,9 +54,13 @@ def bits_to_hex(bits, n):
     return ("%0*X" % ((n + 3) // 4, v))
 
 
-def build_reg(drain, n, gate_names, gate_kind):
+def build_reg(drain, n, gate_names, gate_kind, custom=None):
     """등록 묶음. 🔴 **자리 먼저, 차단봉은 끝에** — 명세 §7.4 의 약속이고 서버가 대조한다."""
     pkt = line("D,*,%d,%d," % (drain, n))
+    if custom:
+        for nm, kd in custom:
+            pkt += line("D,%s,%s," % (nm, kd))
+        return pkt
     for sl in SLOTS:
         pkt += line("D,%s,IP," % sl)
     for g in gate_names:
@@ -73,6 +77,12 @@ def main():
     ap.add_argument("--slot-ms", type=int, default=1200, help="S 주기(ms)")
     ap.add_argument("--seconds", type=float, default=120.0)
     ap.add_argument("--occupied", default="", help="점유로 둘 자리 목록(쉼표) 예: A1,B2")
+    # 🔴 **장치의 모듈 표를 그대로 흉내 낸다** — 굽기 전에 판정 기준을 미리 검증하려면 필요하다.
+    #   형식 : "이름:종류,이름:종류,…"   예) "A1:IP,B1:IP,LD:OG,LC:OL,DR:OB"
+    #   ⚠ **이름은 2글자다**(장치가 `char name[3]`). 어기면 실기에서 못 붙는다 — 여기서도 막는다.
+    #   ⚠ 순서가 곧 `idx` 다. 장치 표와 **같은 순서**로 줘라.
+    ap.add_argument("--modules", default="",
+                    help="모듈 표를 직접 준다(이름:종류 쉼표). 주면 --gates 와 기본 10자리를 무시한다")
     ap.add_argument("--gates", type=int, default=0,
                     help="차단봉 모듈 수. 자리 뒤에 붙는다 — **끝에만 붙인다**(명세 §7.4)")
     # 🔴🔴 **기본값이 `OB` 다 — 펌웨어와 맞춘 것이다** (2026-08-19 정정)
@@ -88,11 +98,20 @@ def main():
                     help="`G` 에 돌려줄 result. **3 = 장치가 수행 불가** — 실물로는 밟기 어려운 갈래다")
     a = ap.parse_args()
 
-    occ_set = set(x.strip() for x in a.occupied.split(",") if x.strip())
+    custom = []
+    if a.modules:
+        for tok in a.modules.split(","):
+            tok = tok.strip()
+            if not tok: continue
+            nm, _, kd = tok.partition(":")
+            if len(nm) != 2:
+                print("🔴 모듈 이름 `%s` 은 2글자가 아니다 — 장치가 못 보낸다" % nm); return 2
+            custom.append((nm, kd or "IP"))
+        occ_set = set(x.strip() for x in a.occupied.split(",") if x.strip())
     # 🔴 **차단봉은 자리 뒤에 온다.** 명세 §7.4 의 "끝에만 붙인다" 를 이 도구도 지킨다 —
     #    여기서 순서를 다르게 만들면 **서버의 순서 대조 검사가 거짓 경보를 낸다.**
     gate_names = ["E1", "X1", "G3", "G4"][:max(0, a.gates)]
-    names = SLOTS + gate_names
+    names = [nm for nm, _ in custom] if custom else (SLOTS + gate_names)
     n = len(names)
     gate_state = [0] * len(gate_names)      # 장치가 들고 있는 차단봉 상태 — `S` 에 에코된다
     s = socket.create_connection((a.host, a.port), timeout=5)
@@ -116,7 +135,7 @@ def main():
 
             # 🔑 **둘째 슬롯부터 `D`**(명세 §5). 첫 슬롯은 `S` 만 — 그것이 승격을 만든다.
             if not sent_reg and seq == 1:
-                pkt = build_reg(a.drain, n, gate_names, a.gate_kind)
+                pkt = build_reg(a.drain, n, gate_names, a.gate_kind, custom)
                 s.sendall(pkt.encode())
                 sent_reg = True
                 print("[mock] 등록 %d줄 · %dB 보냄" % (n + 1, len(pkt)), flush=True)
