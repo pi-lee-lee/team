@@ -73,6 +73,25 @@ def main():
         print("🔴 --offset 은 1 이상이어야 한다. 이 도구는 운영 포트를 잡지 않는다.")
         return 2
 
+    # 🔴 **기여자 파일이 혼자서도 문법 검사를 통과하는가** (2026-08-19 신설)
+    #
+    #   `lot.cpp` 는 `server.cpp` 안에서 include 되지만, **편집기는 그것을 모른다.**
+    #   그 파일만 열면 `ParkingLot` 미정의로 **전부 빨간 줄**이고,
+    #   초급자가 `c++ lot.cpp` 를 치면 **오류 벽**이 첫 시도가 된다.
+    #   ⚠ 주석에 "단독으로 컴파일하지 마라"라고 적어 뒀지만 **IDE 는 글을 안 읽는다.**
+    #   🔑 §"조건을 확인하는 것보다 조건이 성립할 수밖에 없게 만드는 쪽이 낫다".
+    #
+    # ⚠ **문법 검사**이지 링크가 아니다 — `main()` 도 엔진도 거기 없다. 두 문장은 다르다.
+    lotcpp = os.path.join(os.path.dirname(os.path.abspath(a.bin)), "lot.cpp")
+    if os.path.exists(lotcpp):
+        rc = subprocess.call(["c++", "-std=c++11", "-fsyntax-only", lotcpp],
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if rc != 0:
+            print("🔴 `lot.cpp` 단독 문법 검사 실패 — 기여자가 그 파일을 열면 빨간 줄이 뜬다.")
+            print("   `#include \"parking.h\"` 가 빠졌는지 봐라.")
+            return 1
+        print("  ✓ lot.cpp 단독 문법 검사 (기여자가 열어도 빨간 줄이 없다)")
+
     home = os.path.expanduser("~")
     log = "%s/parking-logs/parking-server.test+%d.log" % (home, a.offset)
     before = os.path.getsize(log) if os.path.exists(log) else 0

@@ -13,7 +13,13 @@
 //   이 파일은 **따라 치는 것**이고 그 문서는 **읽는 것**이다.
 //   틀린 것은 서버가 말해 준다(문구와 뜻은 `docs/net/GUIDE-server-says.md`).
 //
-// ⚠ 이 파일은 단독으로 컴파일하지 마라. 빌드는 `c++ … server.cpp` 다.
+// ⚠ **단독으로 *링크* 하지 마라.** 빌드는 `c++ … server.cpp` 다 — 여기엔 `main()` 도 엔진도 없다.
+//   다만 **문법 검사는 혼자서도 통과한다**(`c++ -fsyntax-only lot.cpp`) —
+//   그래야 편집기가 타입을 알고 빨간 줄이 안 뜬다.
+
+// 🔑 **이 한 줄이 조립 API 전부를 들인다** — `ParkingLot` · `ParkingServer` · `CmdResult` · `SpotBehavior`.
+//   include 를 둘로 만들지 않는다. "이 파일만 읽으면 된다"가 깨진다.
+#include "parking.h"
 
 // ① 주차장을 조립한다 — 🔴 **이것만 채우면 돌아간다**       자세히: GUIDE-sample.md §조립
 void buildLot(ParkingLot& lot) {
