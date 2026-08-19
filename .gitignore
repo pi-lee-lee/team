@@ -124,3 +124,6 @@ requests/.body-*.md
 조별과제샘플/server/server_test*
 *.dSYM/
 data_log.json
+
+# 화면 흐름 포착 — 계속 자란다. 맨이름 금지(§디렉터리가 되면 뜻이 뒤집힌다)
+.claude/limit/*.raw
