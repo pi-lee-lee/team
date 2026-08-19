@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+RAW = False   # --raw 로 켠다(§ 위 주석)
 """WebSocket 탐침 — 브라우저 없이 주차 관제 서버의 WS 경로를 검증한다.
 
 명세: docs/net/parking-protocol.md §5
@@ -154,6 +155,11 @@ def main():
                     help="운영에서 **상태를 바꾸는** 요청(--reserve/--cancel/--sim/--test-*)을 허용한다. "
                          "⚠ --allow-production 과 **함께** 줘야 한다. "
                          "관측 창이 도는 중이면 반드시 monitor 에 시각을 통보해라")
+    # 🔴 --raw : 메시지를 **자르지 않고** 찍는다.
+    #   기본값이 200/300자 잘림이라 `state` 전문(zones·modules·reason)을 못 읽었다 —
+    #   2026-08-19 에 그 잘림이 검증을 세 번 막았고 "도구가 안 된다"로 읽힐 뻔했다.
+    #   ⚠ 기본값은 그대로 둔다. 사람이 볼 때는 잘린 쪽이 읽기 좋다.
+    ap.add_argument("--raw", action="store_true", help="메시지를 자르지 않고 전문을 찍는다")
     ap.add_argument("--listen", type=float, default=3.0, help="이 시간(초)만큼 수신하고 끝낸다")
     ap.add_argument("--reserve", metavar="SLOT")
     ap.add_argument("--cancel", metavar="SLOT")
@@ -176,6 +182,8 @@ def main():
     ap.add_argument("--rid", default="probe-1")
     ap.add_argument("--delay", type=float, default=0.4, help="접속 후 요청까지 대기")
     a = ap.parse_args()
+    global RAW
+    RAW = a.raw
 
     # 보낼 요청을 한 곳에서 만든다 — 세 군데에 흩어 두면 종류를 늘릴 때 하나를 빠뜨린다.
     def request():
@@ -252,7 +260,7 @@ def main():
             keys_ok = all("user_id" in x and "reserved_at" in x for x in o.get("slots", []))
             print("   user_id/reserved_at 키 존재: %s · 자리 수 %d" % (keys_ok, len(o.get("slots", []))))
         else:
-            print("   %s" % text[:200])
+            print("   %s" % (text if RAW else text[:200]))
 
         if not sent and request() and time.time() - (deadline - a.listen) >= a.delay:
             send_text(s, request())
@@ -262,7 +270,7 @@ def main():
         # 스냅샷이 안 와도 요청은 보내 본다
         send_text(s, request())
         for op, body, desc, _m in frames(s, buf, time.time() + 6):
-            print("← %d바이트 길이필드: %s\n   %s" % (len(body), desc, body.decode("utf-8", "replace")[:300]))
+            print("← %d바이트 길이필드: %s\n   %s" % (len(body), desc, (body.decode("utf-8","replace") if RAW else body.decode("utf-8","replace")[:300])))
     s.close()
 
 
