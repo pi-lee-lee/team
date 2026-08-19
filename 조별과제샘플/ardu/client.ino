@@ -3,7 +3,7 @@
  *
  * 🔴 **기여자가 여는 파일은 이것 하나다.** 고칠 자리에 🔓 표시가 있다:
  *      DEVICE_ID · 망 설정(Config.h) · MODULE_TABLE · 명령/센서 핸들러 · setup() 의 등록
- * 📖 설명서 : docs/arduino/GUIDE-contributor.md   ·  프로토콜 : docs/net/parking-protocol.md
+ * 📖 설명서 : **같은 폴더의 `GUIDE.md`** (프로토콜 정본은 docs/net/parking-protocol.md)
  *
  * 보드 : Arduino Uno (`arduino:avr:uno`) · ESP-01 AT 펌웨어 · SoftwareSerial 9600bps
  * 배선 : D7 = ESP TX → Uno / D8 = Uno → ESP RX
@@ -31,7 +31,7 @@
 //   규격 : **1~8자** · 영문자·숫자·`_`·`-` 만 · 예: "P1" "kim" "lab-3"
 //
 // 🔴 **안 바꿔도 로컬에서는 잘 된다. 여럿을 한 서버에 모으는 순간 서로를 쫓아낸다.**
-//   증상이 "내 자리가 가끔 사라진다"라 원인을 찾기 매우 어렵다 → `docs/arduino/GUIDE-contributor.md` §1
+//   증상이 "내 자리가 가끔 사라진다"라 원인을 찾기 매우 어렵다 → `GUIDE.md` §1
 // ⚠ 값을 바꾸면 **다시 구워야** 한다(컴파일 상수다).
 // ██████████████████████████████████████████████████████████████████████████
 #define DEVICE_ID    "P1"        // ← 🔴 **여기를 바꿔라**
@@ -68,15 +68,16 @@ static_assert(sizeof(DEVICE_ID) > 1 && sizeof(DEVICE_ID) <= 9,
 //
 //   한 줄 = 모듈 하나 :  {"이름", 종류, 핀}
 //     이름 : **자리 id 와 같아야 한다**(2자 + NUL). `A1`·`B3`·`E1` …
-//     종류 : KIND_PARK_SENSOR(`IP` 관측) · KIND_GATE_SENSOR(`IX`) · KIND_BARRIER(`OB` 명령)
+//     종류 : "IP"(`IP` 관측) · "IX"(`IX`) · "OB"(`OB` 명령)
 //     핀   : 실물이면 핀 번호, 가상이면 `PIN_NONE`
 //
 // ⚠ **이 표는 `FrameCodec.h` 와 `Modules.h` 사이에 있어야 한다** —
-//   앞에서 `KIND_*` 가 정의되고, 뒤에서 이 표를 읽는 코드가 온다.
+//   뒤에서 이 표를 읽는 코드가 온다.
 // ██████████████████████████████████████████████████████████████████████████
 struct ModuleDef {
   char    name[3];      // "A1" + NUL — 명칭이자 **지금은 자리 결속 키다**(위 경고)
-  char    kind[4];      // KIND_* 2글자 + 선택적 `V` 접미(가상) + NUL
+  char    kind[4];      // 🔴 **첫 글자만 뜻이 있다**: `I`=관측 전용 · `O`=명령 받음
+                        //   둘째 글자부터는 자유다(서버는 안 본다). 2~3글자 + NUL
   uint8_t pin;
 };
 // 🔴 **가상 모듈 스위치 — 기본값 0(끔)**
@@ -96,28 +97,28 @@ static const ModuleDef MODULE_TABLE[] PROGMEM = {
   //      lot.spot("A1").sensor("P1","A1").sensor("P1","B1");
   //   🔴 **서버가 A1 하나만 보는데 장치가 더 보내면 나머지는 "미결속"으로 뜬다.**
   //     늘릴 때는 **여기 한 줄 + 서버 조립 표 한 줄**, 둘 다다.
-  {"A1", KIND_PARK_SENSOR, 2},    // 자리 A1 의 첫째 센서 — 2번 핀
-  {"B1", KIND_PARK_SENSOR, 9},    // 자리 A1 의 둘째 센서 — 9번 핀
+  {"A1", "IP", 2},    // 자리 A1 의 첫째 센서 — 2번 핀
+  {"B1", "IP", 9},    // 자리 A1 의 둘째 센서 — 9번 핀
 
   // 🔓 **늘리려면 주석을 풀고 `SENSOR_N`·`SLOT_PIN[]` 도 같이 늘려라**(셋이 어긋나면 컴파일이 막는다)
-  // {"A2", KIND_PARK_SENSOR,  3}, {"B2", KIND_PARK_SENSOR, 10},
-  // {"A3", KIND_PARK_SENSOR,  4}, {"B3", KIND_PARK_SENSOR, 11},
-  // {"A4", KIND_PARK_SENSOR,  5}, {"B4", KIND_PARK_SENSOR, 12},
-  // {"A5", KIND_PARK_SENSOR,  6}, {"B5", KIND_PARK_SENSOR, A0},
+  // {"A2", "IP",  3}, {"B2", "IP", 10},
+  // {"A3", "IP",  4}, {"B3", "IP", 11},
+  // {"A4", "IP",  5}, {"B4", "IP", 12},
+  // {"A5", "IP",  6}, {"B5", "IP", A0},
 
-  // 🔓 **액추에이터** — 종류는 `O` 로 시작(`KIND_GUIDE_LIGHT`·`KIND_LEAD_LIGHT`·`KIND_BARRIER`).
+  // 🔓 **액추에이터** — 종류를 **`O` 로 시작**하게 적으면 명령을 받는다.
   //   🔑 첫 글자 `O` 가 "명령을 받는다"를 뜻한다. 아래 `setup()` 에서 `router.on()` 으로 붙인다.
   // 🔴🔴 **이름은 정확히 2글자다.** 3글자 이상은 컴파일이 막는다.
   //   ⚠ 서버 조립 표(`main.cpp`)의 이름과 **글자 그대로** 같아야 붙는다.
   // 🔴 **중간에 끼워 넣지 마라. 끝에 붙여라** — 전선의 `idx` 가 이 표의 순서라
   //   중간 삽입은 뒤의 idx 를 전부 밀어 **지금 되는 결속을 조용히 깬다.**
-  {"LD", KIND_GUIDE_LIGHT, PIN_SAMPLE_LED},   // 🔓 보드 내장 LED. **아무것도 안 사도 된다**
+  {"LD", "OG", PIN_SAMPLE_LED},   // 🔓 보드 내장 LED. **아무것도 안 사도 된다**
   SAMPLE_EXTRA_MODULES                        // 회귀 시험만 쓴다. 평소엔 비어 있다
 #if VIRTUAL_MODULES
   // ⚠ **시험용 가상 차단봉.** 기본값은 꺼져 있다 — `VIRTUAL_MODULES` 를 1 로 켤 때만 실린다.
   //   회귀 시험이 이것으로 **명령 수신 콜백 경로를 실제로 밟는다.**
-  {"E1", KIND_BARRIER_V, PIN_NONE},   // 입구 차단봉 (가상)
-  {"X1", KIND_BARRIER_V, PIN_NONE},   // 출구 차단봉 (가상)
+  {"E1", "OB", PIN_NONE},   // 입구 차단봉 (가상)
+  {"X1", "OB", PIN_NONE},   // 출구 차단봉 (가상)
 #endif
 };
 static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_TABLE[0]));
@@ -127,7 +128,7 @@ static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_T
 //
 // 🔴 **금지가 아니다.** 아래(와 🔒 헤더들)는 **링크 안정성이 걸린 코드**다 —
 //   ESP 가 꼬였을 때 자력으로 돌아오는 경로가 여기서 나온다.
-//   고치면 **안정성 기준선을 다시 재야 한다.** 기준선 수치는 `GUIDE-contributor.md` §5.
+//   고치면 **안정성 기준선을 다시 재야 한다.** 기준선 수치는 `GUIDE.md` §5.
 // 🔑 **"만지지 마라"가 아니라 "만지면 그 비용을 안다"이다.** 고쳤으면 **알려라.**
 // ██████████████████████████████████████████████████████████████████████████
 #include "Modules.h"           // 모듈 표를 쓰는 코드 · 명령 라우터
@@ -149,7 +150,7 @@ static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_T
 // ⚠ 등록 안 한 모듈에 명령이 오면 `result=3` — 조용히 성공하지 않는다.
 //
 //
-// 📖 세 가지 꼴의 본보기 · 에코 규약과 한계 · 묶음 하행 → `docs/arduino/GUIDE-contributor.md` §3
+// 📖 세 가지 꼴의 본보기 · 에코 규약과 한계 · 묶음 하행 → `GUIDE.md` §3
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 🔓 **샘플 — 명령 왕복 세 꼴.** 서버 쪽 `srv.send(devid, 모듈이름, 값)` 과 짝이다.
@@ -167,16 +168,21 @@ static bool cmdLed(uint32_t arg) {
 }
 
 // ══ 🔓 **다른 모듈을 붙이려면 — 아래 꼴로 쓴다** ═══════════════════════════
-//   📖 자세한 것은 `docs/arduino/GUIDE-contributor.md` §3·§4
+//   📖 자세한 것은 `GUIDE.md` §3·§4
+//
+// 🔴 **화면에 뜰 이름은 장치가 안 정한다.** 서버의 `lot.label(...)` 이 정한다:
+//     lot.label("P1", "A1", "왼쪽 센서");     lot.label("A1", "1번 자리");
+//   🔑 그래서 `kind` 에 "주차확인센서" 같은 뜻을 담지 마라 — **정본이 둘이 된다.**
+//     `kind` 는 **첫 글자**(`I`/`O`)만 서버가 본다. 나머지는 네 메모다.
 //
 // ── 센서 하나 더 (모듈 표 한 줄 + setup 한 줄) ─────────────────────────────
-//   표 :  {"A2", KIND_PARK_SENSOR, 3},          ← 이름 2글자 · 자기 핀
+//   표 :  {"A2", "IP", 3},               ← 이름 2글자 · `I`=관측 · 자기 핀
 //   훅 :  static bool readA2(uint8_t pin) { return digitalRead(pin) == LOW; }
 //   등록:  sensors.on("A2", readA2);            ← setup() 에서
 //   ⚠ 훅을 안 붙이면 `digitalRead(핀)` 이 기본이다. **켜짐/꺼짐 센서는 그대로 된다**
 //
 // ── 7자리 숫자를 받는 표시기 ───────────────────────────────────────────────
-//   표 :  {"LC", KIND_LEAD_LIGHT, PIN_NONE},
+//   표 :  {"LC", "OL", PIN_NONE},        ← `O`=명령 받음
 //   static bool cmdLcd(uint32_t arg) {
 //     if (arg > 9999999UL) { Serial.print(F("[LC] 거절: ")); Serial.println(arg); return false; }
 //     lcdPrint(arg); return true;               // 네 LCD 라이브러리를 여기에
@@ -184,7 +190,7 @@ static bool cmdLed(uint32_t arg) {
 //   ⚠ **거절할 때도 한 줄 남겨라** — 안 남기면 "안 불렸다"와 구분이 안 된다
 //
 // ── 동작 명령 (열기/닫기 같은 것) ──────────────────────────────────────────
-//   표 :  {"DR", KIND_BARRIER, 6},
+//   표 :  {"DR", "OB", 6},              ← `O`=명령 받음
 //   // [DR 명령표] 1=열기 2=닫기   ← 🔴 **같은 표를 서버 호출부에도 적어라**
 //   static bool cmdDoor(uint32_t arg) {
 //     router.echoIs(arg == 1);                  // 🔴 켜진 상태가 0 이 아닌 값이면 **반드시** 부른다
@@ -226,7 +232,7 @@ void setup() {
   //   sensors.on("A1", readA1);       ← 자기 센서를 붙일 때. 위 주석 블록 참조
 
   // 🔓 **명령 수신 등록 — 자기 액추에이터를 여기 붙인다**
-  //   예)  `router.on("G1", myGate);`   ← 표에 `{"G1", KIND_BARRIER, 7}` 을 더한 뒤
+  //   예)  `router.on("G1", myGate);`   ← 표에 `{"G1", "OB", 7}` 을 더한 뒤
   //   ⚠ 등록 안 한 모듈에 명령이 오면 `result=3`(수행 불가)로 답한다. 조용히 성공하지 않는다.
   pinMode(PIN_SAMPLE_LED,  OUTPUT);
   router.on("LD", cmdLed);      // 🔓 명령 등록. 모듈마다 한 줄

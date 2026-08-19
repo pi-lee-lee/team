@@ -74,11 +74,6 @@ static uint8_t moduleCount(void);   // ★ 표가 원천이다 — 정의는 MOD
 #define SAMPLE_EXTRA_MODULES
 #endif
 
-#define KIND_PARK_SENSOR  "IP"   // 관측 전용 · 주차확인센서
-#define KIND_GATE_SENSOR  "IX"   // 관측 전용 · 입출차센서
-#define KIND_GUIDE_LIGHT  "OG"   // 명령 받음 · 안내등
-#define KIND_LEAD_LIGHT   "OL"   // 명령 받음 · 유도등
-#define KIND_BARRIER      "OB"   // 명령 받음 · 차단봉
 // ~~🔴 `V` 는 종류가 아니라 접미다~~ 🔴 **폐기 (REQ-0271 · 사용자 확정 2026-08-19)**
 //   사용자: *"모의값에 의미는 없다. 모두 실물로 처리하자. 실물도 센서 데이터가 그대로 들어오지
 //   않는다. **아두이노 코드로 정제되어서 값만 서버로 전송된다.**"* → **모의/실물 구분을 없앤다.**
@@ -88,7 +83,6 @@ static uint8_t moduleCount(void);   // ★ 표가 원천이다 — 정의는 MOD
 //     socket 이 픽스처를 `OB` 로 바꿔 114 전부 통과를 확인했다 — **순서 제약이 없다.**
 //   ⚠ 그러므로 **가상 여부는 이제 전선에 안 실린다.** 알아야 하면 다른 수단이 필요하다
 //     (지금은 아무도 안 쓴다 — 쓰게 되면 그때 `tmask` 가 아닌 **영구 속성 필드**로 만들어라).
-#define KIND_BARRIER_V    "OB"   // ← REQ-0271: `OBV` 에서 `V` 를 뺐다. 이름은 호출부 때문에 유지
 
 // 🔴 **배출률 선언값.** 이 노드가 한 주기에 배출할 수 있는 ACK 개수의 **보장 하한**이다.
 //   ⚠ **관측 최대가 아니다.** 2026-08-18 실측 `8` 은 `S` 가 짧고 rid 3자리일 때만 성립하는

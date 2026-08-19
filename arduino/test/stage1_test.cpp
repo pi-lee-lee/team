@@ -76,9 +76,9 @@ uint8_t __heap_start = 0;
 //   사용자 지시로 샘플은 **LED 하나**만 남았는데, 그러면 명령 경로(거절 로그·에코·묶음 하행)를
 //   밟을 대상이 사라진다. 그 경로들은 **오늘 실제로 결함을 잡은** 시험이라 버릴 수 없다.
 //   🔑 그래서 표는 여기서 늘리고 **핸들러도 여기서 정의한다.** 샘플은 안 건드린다.
-#define SAMPLE_EXTRA_MODULES  {"LC", KIND_LEAD_LIGHT, PIN_NONE}, \
-                              {"DR", KIND_BARRIER,    6},        \
-                              {"L2", KIND_LEAD_LIGHT, PIN_NONE},
+#define SAMPLE_EXTRA_MODULES  {"LC", "OL", PIN_NONE}, \
+                              {"DR", "OB",    6},        \
+                              {"L2", "OL", PIN_NONE},
 #define PIN_SAMPLE_DOOR 6
 // 🔓 **샘플 액추에이터도 켜서 빌드한다** — 안 켜면 `cmdLed`/`cmdLcd`/`cmdDoor` 가
 //   **한 번도 컴파일되지 않는다.** 샘플 코드는 아무도 안 돌려 보면 조용히 썩는다.

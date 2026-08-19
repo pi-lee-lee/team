@@ -110,7 +110,9 @@ arduino-cli board list
 
 ```bash
 mkdir -p arduino/.burn/client
-cp 조별과제샘플/ardu/* arduino/.burn/client/
+cp 조별과제샘플/ardu/*.ino 조별과제샘플/ardu/*.h arduino/.burn/client/
+# ⚠ `*` 가 아니라 `*.ino *.h` 다 — 그 폴더에 `GUIDE.md` 가 같이 산다(압축 배포 단위라서).
+#   문서까지 복사해도 컴파일은 되지만, **굽기 입력에 소스가 아닌 것을 넣지 않는다.**
 for f in 조별과제샘플/ardu/*; do \
   cmp "$f" "arduino/.burn/client/$(basename "$f")" || echo "🔴 불일치: $f"; done   # 🔴 한 줄이라도 뜨면 멈춰라
 git log -1 --format='굽는 판본 %h %s' -- 조별과제샘플/ardu/*
