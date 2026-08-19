@@ -2109,8 +2109,8 @@ const CMD_LABEL = {
   sim_step:     '시뮬레이션 한 걸음',
   /* 개정 조작(socket 명세 §6.8). 요청 `type` 이 `actions` 키와 **같은 이름**이라
      이 표에 이름을 더하는 것만으로 문구가 붙는다 — 조작이 늘어도 분기가 안 는다. */
-  open_gate:    '차단봉 열기',
-  close_gate:   '차단봉 닫기'
+  /* 🔴 ~~`open_gate` · `close_gate`~~ **제거했다**(2026-08-20). 화면이 그 명령을 안 보내므로
+     `cmdPending` 에 그 `kind` 가 들어올 일이 없다. 근거는 `ACTION_LABEL` 주석에 있다. */
 };
 
 /** §12B.4 — M 프레임의 result. 5 는 실패가 아니라 "바꿀 대상이 없다"이다. */
@@ -2302,7 +2302,9 @@ el.zoneGrid.addEventListener('click', function (event) {
   if (act === 'reserve') { requestReserve(zoneId); return; }
   if (act === 'cancel')  { requestCancel(zoneId);  return; }
 
-  if (act === 'open_gate' || act === 'close_gate') { requestZoneAction(zoneId, act); return; }
+  /* 🔴 ~~`open_gate`/`close_gate` 분기~~ **제거했다** — `ACTION_LABEL` 의 주석에 근거가 있다.
+     ⚠ 여기 오는 일 자체가 없어야 정상이다(버튼이 안 그려지므로). 그래도 **분기를 되살리지 마라** —
+     아래 문구가 *"화면이 이 조작을 보낼 줄 모른다"* 라고 정확히 말한다. 그게 지금 참이다. */
 
   /* 🔴 닫힌 집합 밖은 애초에 버튼이 안 그려진다. 여기 오면 **내 표가 어긋난 것**이다 —
      조용히 넘기지 않고 말한다(다음 사람이 코드에서 원인을 찾지 않게). */
@@ -2310,33 +2312,15 @@ el.zoneGrid.addEventListener('click', function (event) {
     + ' — 화면이 이 조작을 보낼 줄 모릅니다 (표가 어긋났습니다)', 'err');
 });
 
-/**
- * 자리 단위 조작(차단봉). 🔴 **낙관적 UI 를 쓰지 않는다.**
- *
- * 예약은 화면을 미리 바꾸고 실패 시 되돌리지만, 차단봉은 **물리 동작**이다.
- * 미리 "열렸다"로 그리면 그것이 **거짓 완료**다(§5.34.2: 화면은 *"장치가 켰다고 보고합니다"* 까지).
- * → **진짜 상태는 에코로 온다.** 화면은 "보냈다"만 말하고 기다린다.
- *
- * 🔑 그래서 `state.cmdPending` 경로를 쓴다 — 그쪽은 **화면 상태를 안 바꾸고**,
- * REQ-0202 로 **`queued` 를 받아 `expires_ms + ack_budget_ms` 로 타이머를 다시 건다.**
- * ⚠ 응답 갈래도 새로 만들지 않는다: `ack`·`queued`·`error` 를 `reserve` 와 같은 처리로 받는다(socket ③).
- */
-async function requestZoneAction(zoneId, act) {
-  const label = ACTION_LABEL[act] || act;
-  if (!canAct()) { showMessage(label + ' — ' + actionBlockedReason(), 'err'); return; }
-  const yes = await confirmDialog(zoneId + ' · ' + label,
-    label + ' 명령을 장치로 보냅니다. 실제로 움직였는지는 장치가 보고하는 값으로 확인합니다.');
-  if (!yes) return;
-  const rid = newRid();
-  state.cmdPending.set(rid, {
-    rid: rid, kind: act, slot: zoneId,
-    timer: window.setTimeout(function () { clearCmdPending(rid, true); }, ACK_TIMEOUT)
-  });
-  /* 대상은 **자리 하나**다. 🔴 모듈을 지목하지 않는다 — 지목하면 *"어느 모듈이 이 조작을 맡나"* 가
-     화면에도 생기고, 서버 라우팅과 **같은 규칙이 두 곳**이 된다(socket ②). 라우팅은 서버 것이다. */
-  transport.send({ type: act, slot: zoneId, rid: rid });
-  render();
-}
+/* 🔴 ~~`requestZoneAction()` — 자리 단위 차단봉 조작~~ **제거했다**
+   (사용자 확정 2026-08-20: *"특정 모듈 gate 같은 기능은 제거하라. control 로 통일한다."*)
+
+   부르는 곳이 없어져서 지운다 — **남겨 두면 다음 사람이 "이 경로는 왜 안 쓰이나"를 쫓는다**(루트 지시).
+   근거와 기전은 `ACTION_LABEL` 의 주석에 있다(서버는 닫기=0, 장치는 닫기=2 로 갈렸다).
+
+   ✅ **여기 있던 판단 하나는 `control` 경로에 그대로 살아 있다**:
+   *"차단봉은 물리 동작이라 낙관적 UI 를 쓰지 않는다. 화면은 보냈다만 말하고 진짜 상태는 에코로 온다."*
+   → `sendModuleCmd()` 도 값을 미리 안 바꾸고 `confirmed`/`cmd_result` 를 기다린다. **원칙이 옮겨졌다.** */
 
 /* ────────────────────────────────────────────────────────────────
    7. 서버 메시지 처리 (§5.3)
@@ -2484,9 +2468,25 @@ function applyZoneState(msg) {
     서버가 조작을 추가해도 옛 화면이 안 깨진다(§5.13 성질을 `actions` 안에서도 갖는 것). */
 const ACTION_LABEL = {
   reserve:    '예약',
-  cancel:     '예약 취소',
-  open_gate:  '차단봉 열기',
-  close_gate: '차단봉 닫기'
+  cancel:     '예약 취소'
+  /* 🔴 ~~`open_gate` · `close_gate`~~ **제거했다** (사용자 확정 2026-08-20: *"특정 모듈 gate 같은
+     기능은 제거하라. control 로 통일한다."*).
+
+     **왜 없앴나 — 실기에서 갈렸다:**
+       서버 게이트 경로: 닫기 = **0**   ·   장치 명령표: 닫기 = **2**
+       → `close_gate` 가 `G,…,4,0` 을 보냈고 장치가 **result=3** 으로 거절했다.
+       🔑 **열기(=1)가 우연히 같아서 안 보였고 닫기에서 갈렸다.**
+
+     > **값의 뜻을 아는 것은 기여자뿐이다. 서버가 "차단봉은 1/0"이라고 정하는 순간
+     >  그 가정은 다음 기여자에게서 깨진다.**
+
+     🔑 **이 표가 버튼을 그리는 유일한 문지기다**(`renderZone` 이 `if (!ACTION_LABEL[key]) continue`).
+     그래서 여기서 지우면 서버가 그 키를 계속 보내도 **버튼이 안 그려진다.**
+     ⚠ **지우지 않고 이 주석을 남기는 이유**: 없앴다는 사실과 그 근거가 같이 사라지면
+     다음 사람이 *"차단봉 버튼이 왜 없지"* 를 결함으로 읽고 되살린다.
+     → 지금 유일한 조작 경로는 **`mod.control` → `send_cmd`** 다. 차단봉을 조작하려면
+     기여자가 `lot.control("P1","DR").choice(...)` 로 **선언**해야 한다.
+     **선언 안 한 모듈은 꺼진 것이고, 그게 맞는 동작이다.** */
 };
 
 /**
@@ -3461,7 +3461,13 @@ function handleServerMessage(msg) {
          🔑 **거절 사유의 원본을 가진 쪽은 서버다** → 서버 `message` 를 먼저 쓰고 내 표는 **없을 때만**
          쓴다(§"파생 값은 원본을 가진 쪽이 계산한다"). 표를 둘 다 두면 판정자가 둘이 된다.
          ⚠ 테스트 모드·시뮬은 그대로 둔다 — 그쪽 `result` 는 뜻이 다르고 그 표가 정본이다. */
-      const isGate = tp.kind === 'open_gate' || tp.kind === 'close_gate';
+      /* 🔴 ~~`isGate` — 차단봉 명령의 응답 갈래~~ **죽은 갈래가 됐다**(2026-08-20 게이트 제거).
+         화면이 `open_gate`/`close_gate` 를 더는 보내지 않으므로 `tp.kind` 가 그 값일 수 없다.
+         **`false` 로 고정해 아래 구조를 그대로 둔다** — 지우면 테스트 모드 갈래까지 손대게 되고,
+         그건 이 변경의 범위가 아니다(§"하는 김에" 를 막는다).
+         ✅ **여기서 배운 것은 `control` 경로에 옮겨 놨다**: *"거절 사유의 원본을 가진 쪽은 서버다 —
+         서버 문구를 먼저 쓰고 내 표는 없을 때만 쓴다."* `moduleCmdText()` 가 그 순서를 지킨다. */
+      const isGate = false;
       /* 🔑 **서버 문구는 조작 이름을 이미 담고 있다**(`"차단봉을 닫았습니다"`). 그 앞에 내 라벨을
          또 붙이면 `"차단봉 닫기 — 차단봉을 닫았습니다"` 가 된다.
          → **서버 문구를 쓸 때는 라벨을 뺀다.** 내 대비 문구를 쓸 때는 이름이 없으니 **붙인다.**

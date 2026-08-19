@@ -617,7 +617,15 @@ try {
     })();
     if (!gate) {
       const why = await evaluate(client, `[...document.querySelectorAll('#zone-grid .zbtn')].filter(x => x.dataset.act && x.dataset.act.indexOf('gate') >= 0).map(x => x.dataset.zone + '/' + x.dataset.act + ':' + x.title.slice(0, 40))`).catch(() => null);
-      skip('⑦ 차단봉 조작 왕복', '누를 수 있는 차단봉 버튼이 없다 → ' + JSON.stringify(why));
+      /* 🔴 **2026-08-20 부터는 이것이 정상이다.** 게이트 내장 조작(`open_gate`/`close_gate`)이
+         **제거됐다** — 사용자 확정: *"특정 모듈 gate 같은 기능은 제거하라. control 로 통일한다."*
+         기전: 서버 게이트 경로는 닫기=**0**, 장치 명령표는 닫기=**2** 라 `close_gate` 가 `result=3` 으로
+         거절됐다(열기=1 이 우연히 같아 안 보였다). **값의 뜻은 기여자만 안다.**
+         🔑 **이 검사를 지우지 않는다** — 그 경로가 있었다는 사실과 왜 없앴는지가 같이 사라진다.
+         → 차단봉 조작은 이제 `mod.control` 선언으로 하고, 그 왕복은 `web/tools/mod-control.mjs` 가 잰다. */
+      skip('⑦ 차단봉 조작 왕복(옛 게이트 경로)',
+        '게이트 조작은 제거됐다(control 로 통일) — 버튼이 없는 것이 정상이다. '
+        + '차단봉 조작은 mod-control.mjs 로 재라. 참고로 남은 게이트 버튼: ' + JSON.stringify(why));
     } else {
       const before = await evaluate(client, `(() => { try { return cooldownLeftMs(); } catch (e) { return -1; } })()`);
       for (let i = 0; i < 30 && before > 0; i++) await sleep(100);   // 아이들이 남았으면 기다린다

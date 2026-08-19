@@ -336,6 +336,32 @@ try {
   if (!LIVE) ok('등이 색만으로 뜻을 나르지 않는다 (접근 이름에 문장이 있다)',
      typeof lbl === 'string' && lbl.includes('모름'), '접근 이름: ' + lbl);
 
+  /* ── ⑤ 🔴 게이트 조작은 **제거됐다**(사용자 확정 2026-08-20 · control 로 통일)
+     ⚠ **"차단봉 버튼이 없다"로 쓰지 않는다** — 부정형은 자리 자체가 없어도 참이 된다.
+     ✅ **그려진 버튼 집합 == 서버 actions 중 화면이 아는 것** 으로 쓴다(동일성).
+        서버가 `open_gate` 를 계속 보내도 화면이 모르는 조작이므로 집합에서 빠진다.
+     🔑 이렇게 쓰면 **누가 실수로 되살리면 곧바로 빨강**이 된다. 그게 이 검사의 목적이다. */
+  if (!LIVE) {
+    const GATE = {
+      type: 'state', srv_id: 'T-1', epoch: 3, ts_ms: 1787200000001,
+      zones: [{ id: 'Z2', occupied: false, reserved: false, completion: 'unknown',
+        actions: { reserve: { ok: true, reason: null },
+                   open_gate: { ok: true, reason: null },
+                   close_gate: { ok: true, reason: null } },
+        modules: [{ devid: 'P1', name: 'D1', idx: 3, value: true, known: true }] }],
+    };
+    await evaluate(client, inject(GATE));
+    await sleep(120);
+    const acts = await evaluate(client, `(() => {
+      const z = [...document.querySelectorAll('#zone-grid .zone')].find(e => e.dataset.zone === 'Z2');
+      return z ? [...z.querySelectorAll('.zbtn')].map(b => b.dataset.act) : null;
+    })()`);
+    ok('🔴 서버가 open_gate/close_gate 를 보내도 그려지는 버튼 집합은 {reserve} 뿐이다  ' + S(acts || []),
+       Array.isArray(acts) && setEq(acts, ['reserve']),
+       '그렸다: ' + S(acts || []) + ' — 게이트 조작은 제거됐다(control 로 통일). '
+       + '되살아났으면 ACTION_LABEL 주석을 읽어라: 서버는 닫기=0, 장치는 닫기=2 로 갈렸다');
+  }
+
   if (!LIVE) {
     skip('실기에서 이 지형이 그렇게 온다', '주입 모드다 — 이 초록은 "그 자료가 오면 그렇게 그린다"이지 '
        + '"실기에서 그렇게 나온다"가 아니다. `--live <포트>` 로 따로 재라');
