@@ -156,11 +156,11 @@ static int selftest() {
         //    (`s` 는 하나이고 조각들이 그것을 차례로 만진다. 독립이 아니다.)
         //  ⚠ 조각을 새로 더하면 **여기에 한 줄 적어라.** 안 적으면 목차가 낡는다.
         // ──────────────────────────────────────────────────────────────
-#include "st_downq.h"      // ①~⑬  하행 슬롯 큐 — 창·FIFO·상한·재전송·우선순위
-#include "st_nodes.h"      // ⑬~㉑  자리 인수 · 노드 잠금 · 등록 `D` · `Q` 상한
-#include "st_zones.h"      // ㉒~㉖  지형과 판 · map/state 봉투 · 조작 라우팅
-#include "st_wire.h"       // ㉘~㉛  자리 비트열 · 자가 치유 · `G` 전선 왕복
-#include "st_contract.h"   // ㉟~㉜  봉투 키 계약 · known 사유 · rid 폭과 격리
+#include "selftest_downq.h"      // ①~⑬  하행 슬롯 큐 — 창·FIFO·상한·재전송·우선순위
+#include "selftest_nodes.h"      // ⑬~㉑  자리 인수 · 노드 잠금 · 등록 `D` · `Q` 상한
+#include "selftest_zones.h"      // ㉒~㉖  지형과 판 · map/state 봉투 · 조작 라우팅
+#include "selftest_wire.h"       // ㉘~㉛  자리 비트열 · 자가 치유 · `G` 전선 왕복
+#include "selftest_contract.h"   // ㉟~㉜  봉투 키 계약 · known 사유 · rid 폭과 격리
 
             s.ard = BAD_SOCK;              // 소멸자가 이 fd 를 건드리지 않게
             closesock(sv[0]); closesock(sv[1]);
