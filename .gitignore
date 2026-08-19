@@ -106,3 +106,13 @@ net/data_log.json
 net/index.html
 # req.sh 의 --body-file 임시 산출물
 requests/.body-*.md
+
+# ── 빌드 산출물 (2026-08-19) ─────────────────────────────────────────
+# 🔴 이미 추적 중인 것은 이 줄만으로 안 빠진다 — 각 도메인이 `git rm -f` 로 뺀다.
+#    ⚠ `git rm --cached` + 경로 명시 커밋은 **되살아난다**(arduino 실측). safe form 을 써라.
+조별과제샘플/server
+조별과제샘플/server_test
+조별과제샘플/server_test2
+조별과제샘플/tesssss
+*.dSYM/
+data_log.json
