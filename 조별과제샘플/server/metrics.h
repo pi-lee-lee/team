@@ -101,7 +101,7 @@
                rid_cursor(1), rid_reserved_to(0), rid_persist_on(false),
                rid_rel_seq(0),
                rid_alloc_n(0), rid_skips(0), rid_forced(0), rid_exhausted(0),
-               ack_unknown_rid(0), ack_slot_mismatch(0), mod_name_conflict(0), mod_dup_name(0), mod_unbound(0), sensor_split_now(0), not_reservable_n(0),
+               ack_unknown_rid(0), ack_slot_mismatch(0), mod_name_conflict(0), mod_dup_name(0), mod_unbound(0), asm_warn_(0), sensor_split_now(0), not_reservable_n(0),
                base_valid(false), test_armed(false),
                ledger_new_(0), ledger_review_(0),
                resync_count(0), no_disk(false),
@@ -357,6 +357,8 @@
            + (mod_dup_name > 0 ? " 🔴" : "");
         s += " · 미결속모듈 " + std::to_string(mod_unbound)
            + (mod_unbound > 0 ? " 🔴" : "");
+        s += " · 조립표문제 " + std::to_string(asm_warn_)
+           + (asm_warn_ > 0 ? " 🔴" : "");
         s += " · 이름충돌 " + std::to_string(mod_name_conflict)
            + (mod_name_conflict > 0 ? " 🔴" : "");
         // 🔴 **화면 수를 찍는다** (2026-08-19). `S` 처리 안에서 `push_snapshot`·`state` 방송이 돌고

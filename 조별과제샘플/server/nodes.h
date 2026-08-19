@@ -165,6 +165,54 @@
     //   ⚠ 표는 `ParkingServer` 가 넣어 준다 — 자가검증은 표 없이 돌므로 기본값이 남아야 한다.
     const ParkingLot* lot_ = 0;   // 🔑 선언 자리에서 초기화한다 — 초기화 목록에 넣으면
                               //   선언 순서와 어긋나 `-Wreorder` 가 난다(실제로 났다)
+    // 🔴🔴 **조립 표(사용 코드)가 말이 되는가** — 기동 때 한 번, 값으로 말한다 (2026-08-19)
+    //
+    //   사용자 요구: *"이 프로젝트가 나 혼자 진행하는 것이 아니다. 다른 인원의 작업을 반영하고 싶다.
+    //   그러면 **작업 방식을 가이드해야 한다.**"*
+    //   🔑 기여자가 만지는 면이 `main.cpp` 의 조립 표다. **거기서 틀리면 여기서 말해야 한다.**
+    //
+    //   ⚠ **거절하지 않는다. 말만 한다.** 어느 것도 서버를 못 뜨게 할 만큼은 아니고,
+    //     기동을 막으면 기여자가 *"내 것 때문에 서버가 안 뜬다"* 로 겁을 먹는다.
+    //     🔑 **막는 것보다 보이는 것이 낫다** — 우리가 `--max-line` 범위 검사에서 반대로 한 것과
+    //       다른 판단이고, 그건 **틀린 값이 조용히 엉뚱한 포트를 잡기 때문**이었다. 여기는 안 그렇다.
+    void validate_assembly() {
+        if (!lot_ || lot_->empty()) return;
+        const std::vector<ParkingLot::Area>& as = lot_->areas();
+
+        // ① **같은 센서 이름이 두 자리에** — `zoneOfModule` 은 **첫 자리를 돌려준다.**
+        //    🔴 그래서 뒤엣 자리는 그 센서를 **영영 못 받는다.** 아무 오류도 안 난다.
+        for (size_t i = 0; i < as.size(); i++)
+            for (size_t k = 0; k < as[i].sensors.size(); k++)
+                for (size_t j = i; j < as.size(); j++)
+                    for (size_t m = (j == i ? k + 1 : 0); m < as[j].sensors.size(); m++)
+                        if (as[i].sensors[k] == as[j].sensors[m]) {
+                            asm_warn_++;
+                            logf("🔴", "조립 표 — 센서 이름 `" + as[i].sensors[k]
+                                       + "` 이 자리 " + as[i].id + " 와 " + as[j].id
+                                       + " 에 둘 다 적혀 있다. **앞엣 자리(" + as[i].id
+                                       + ")가 이기고 " + as[j].id + " 는 이 센서를 영영 못 받는다.** "
+                                         "`main.cpp` 의 조립 표에서 한쪽을 고쳐라");
+                        }
+
+        // ② **센서가 하나도 없는 주차 자리** — 점유를 영원히 모른다(`value_state: unknown` 고정).
+        //    ⚠ 화면에는 자리가 보이는데 값이 안 채워진다 → *"센서가 고장났나"* 를 쫓게 된다
+        for (size_t i = 0; i < as.size(); i++) {
+            if (as[i].kind != "parking") continue;      // 입출구는 센서가 없어도 된다
+            if (!as[i].sensors.empty()) continue;
+            asm_warn_++;
+            logf("🔴", "조립 표 — 자리 " + as[i].id + " 에 **센서가 하나도 없다.** "
+                       "화면에는 자리가 보이지만 점유는 **영원히 `unknown`** 이다 "
+                       "(고장이 아니라 선언이 빈 것이다). "
+                       "`lot.spot(\"" + as[i].id + "\").sensor(\"...\")` 로 붙여라");
+        }
+
+        if (asm_warn_ == 0)
+            logf("=", "조립 표 검사 — 자리 " + std::to_string(as.size()) + "개 · 문제 없음");
+        else
+            logf("!", "조립 표 검사 — **문제 " + std::to_string(asm_warn_)
+                      + "건**. 서버는 뜬다(위 줄들을 봐라)");
+    }
+
     void build_default_zones() {
         lot.clear();
         // 🔴 **주차 자리는 5개다** (사용자 확정 (A) · 명세 §9). 각 자리에 센서 둘(이중화).
@@ -176,6 +224,7 @@
                 z.cells.push_back(std::make_pair((int)(i / grid_cols), (int)(i % grid_cols)));
                 lot.add(z);
             }
+            validate_assembly();      // 🔴 선언이 틀렸으면 **여기서 말한다**
             bump_epoch("조립 표에서 지형 구성");
             return;
         }

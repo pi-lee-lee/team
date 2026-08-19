@@ -207,6 +207,33 @@
                     if (!ok) bad++;
                 }
 
+                // ㊹ 🔴🔴 **조립 표가 틀렸을 때 말하는가** — 사용 코드가 기여자의 면이다
+                //   🔑 **일부러 틀린 표를 만들어 발화를 확인한다.** 안 하면 "검사가 있다"만 참이다
+                {
+                    // ① 같은 센서 이름이 두 자리에 · ② 센서 없는 자리
+                    ParkingLot badlot;   // ⚠ `bad` 는 바깥의 실패 계수기다. 가리면 안 된다
+                    badlot.spot("A1").sensor("S1");
+                    badlot.spot("A2").sensor("S1");      // 🔴 같은 이름 — A1 이 이기고 A2 는 못 받는다
+                    badlot.spot("A3");                   // 🔴 센서가 없다
+                    Server t; t.lot_ = &badlot;
+                    t.build_default_zones();
+                    long long dirty = t.asm_warn_;
+
+                    ParkingLot goodlot;
+                    goodlot.spot("A1").sensor("S1");
+                    goodlot.spot("A2").sensor("S2");
+                    goodlot.gate("E1", Gate::IN);        // 입출구는 센서가 없어도 정상이다
+                    Server u; u.lot_ = &goodlot;
+                    u.build_default_zones();
+                    long long clean = u.asm_warn_;
+
+                    bool ok = (dirty == 2) && (clean == 0);
+                    std::cout << (ok ? "  ✓ " : "  ✗ ") << "조립 표 검사 — 틀린 표 "
+                              << dirty << "건 · 바른 표 " << clean
+                              << "건 (기대 2 · 0 — 입출구는 센서 없어도 정상)\n";
+                    if (!ok) bad++;
+                }
+
                 // ㊷ 🔴 **자가검증은 대장 파일을 안 건드린다** — `no_disk` 가 그 약속이다
                 //    ⚠ 안 지키면 자가검증을 한 번 돌릴 때마다 **운영 대장이 덮인다.**
                 //      §"시험이 실기 자료를 오염시킨다"의 자리다
