@@ -81,14 +81,6 @@ static inline uint8_t slotPin(uint8_t i) {
 // **실제 설치는 10칸이 한꺼번에 되지 않는다.** 배선이 끝난 칸만 1 로 올리면
 // 나머지는 그대로 시뮬로 돈다. 예) A1·A2·B3 만 배선했다면 → 0x0083
 //   (A1=bit0, A2=bit1, A3=bit2, A4=bit3, A5=bit4, B1=bit5 … B5=bit9)
-// 🔓 **샘플 센서 훅이 시뮬 값을 낼 것인가** (기본 1 — 배선이 없어도 화면이 움직인다).
-//   🔴 **이건 "자리를 시뮬로 돌린다"가 아니다.** 자리는 늘 실물 경로로 돌고
-//     `sensors.on()` 으로 등록한 훅이 **실제로 불린다** — **그 훅 본문이 시뮬일 뿐**이다.
-//     ⚠ 옛 판은 자리 자체를 시뮬로 돌려서 **훅이 아예 안 불렸다.** 그게 결함이었다.
-//   실물을 붙이면 **이 값을 0 으로** 바꾼다. 그러면 훅이 `digitalRead` 를 탄다.
-#ifndef SAMPLE_SIM_SENSORS
-#define SAMPLE_SIM_SENSORS 1
-#endif
 static inline uint8_t simPair(uint8_t i) { return (uint8_t)((i + SENSOR_N / 2) % SENSOR_N); }
 
 // ═════════════════════════════════════════════════════════════════════════

@@ -66,6 +66,14 @@ static uint8_t moduleCount(void);   // ★ 표가 원천이다 — 정의는 MOD
 //     **모르는 장치에 명령을 보내는 것이 안 보내는 것보다 위험하다.**
 //   ⚠ 그래도 **모르는 `kind` 를 거절하지는 않는다** — 거절하면 새 모듈 하나가 옛 서버에서
 //     **노드 전체를 미등록으로** 만든다.
+// 🔴 **회귀 시험만 쓰는 확장점.** 기본은 **비어 있다** — 샘플에는 아무 영향이 없다.
+//   시험 하네스가 이것을 정의해서 자기 모듈을 더 넣는다. 그래야 `client.ino` 에
+//   시험용 `#if` 를 두지 않고도 명령 경로(거절 로그·에코·묶음 하행)를 계속 밟을 수 있다.
+//   ⚠ **샘플 코드에서는 이 이름을 쓰지 마라.** 자기 모듈은 표에 직접 적는다.
+#ifndef SAMPLE_EXTRA_MODULES
+#define SAMPLE_EXTRA_MODULES
+#endif
+
 #define KIND_PARK_SENSOR  "IP"   // 관측 전용 · 주차확인센서
 #define KIND_GATE_SENSOR  "IX"   // 관측 전용 · 입출차센서
 #define KIND_GUIDE_LIGHT  "OG"   // 명령 받음 · 안내등

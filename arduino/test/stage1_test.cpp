@@ -72,14 +72,89 @@ uint8_t __heap_start = 0;
 //   🔑 §"시험이 실기가 안 하는 준비를 대신해 주면 실기만 빈다" 의 반대다 —
 //     여기서는 **시험이 실기가 *끄고 나간* 경로를 대신 밟아 준다.** 그 차이를 알고 켠다.
 #define VIRTUAL_MODULES 1
+// 🔴 **시험 하네스가 자기 모듈을 가진다** — `client.ino` 에 시험용 `#if` 를 두지 않으려고.
+//   사용자 지시로 샘플은 **LED 하나**만 남았는데, 그러면 명령 경로(거절 로그·에코·묶음 하행)를
+//   밟을 대상이 사라진다. 그 경로들은 **오늘 실제로 결함을 잡은** 시험이라 버릴 수 없다.
+//   🔑 그래서 표는 여기서 늘리고 **핸들러도 여기서 정의한다.** 샘플은 안 건드린다.
+#define SAMPLE_EXTRA_MODULES  {"LC", KIND_LEAD_LIGHT, PIN_NONE}, \
+                              {"DR", KIND_BARRIER,    6},        \
+                              {"L2", KIND_LEAD_LIGHT, PIN_NONE},
+#define PIN_SAMPLE_DOOR 6
 // 🔓 **샘플 액추에이터도 켜서 빌드한다** — 안 켜면 `cmdLed`/`cmdLcd`/`cmdDoor` 가
 //   **한 번도 컴파일되지 않는다.** 샘플 코드는 아무도 안 돌려 보면 조용히 썩는다.
-#define SAMPLE_ACTUATORS 1
 
 #ifndef SKETCH_PATH
 #define SKETCH_PATH "../../조별과제샘플/ardu/client.ino"
 #endif
 #include SKETCH_PATH
+
+// ═════════════════════════════════════════════════════════════════════════
+// 🔴 **시험용 핸들러** — 샘플에서 뺀 것들이 여기 산다.
+//   샘플(`client.ino`)은 사용자 지시로 **LED 하나**만 든다. 그런데 아래 경로들은
+//   **오늘 실제로 결함을 잡았다** — `echoIs`(닫기에 에코가 안 내려감) · 거절 로그 ·
+//   묶음 하행 4건 · 등록 불변식. 버리면 그 결함이 신호 없이 돌아온다.
+//   🔑 그래서 **모듈 표(SAMPLE_EXTRA_MODULES)와 핸들러를 둘 다 여기에** 둔다.
+//
+// ⚠ **이건 §"시험이 실기가 안 하는 준비를 대신한다" 의 경계다.** 그래서 못 박아 둔다:
+//   · 이 핸들러들은 **샘플의 주석 코드와 같은 모양**이어야 한다. 갈리면 시험이 헛돈다
+//   · 🔴 **`cmdLed`(샘플 본문)는 여기 없다** — 그건 `client.ino` 것이고 시험이 그것을 본다
+// ═════════════════════════════════════════════════════════════════════════
+static bool cmdLcd(uint32_t arg) {
+  if (arg > 9999999UL) {
+    Serial.print(F("[LC] 거절 — 7자리 초과: ")); Serial.println(arg);
+    return false;
+  }
+  Serial.print(F("[LC] "));  Serial.println(arg);
+  return true;
+}
+static bool showNumber(const char* tag, uint32_t arg) {
+  if (arg > 9999999UL) {
+    Serial.print(tag); Serial.print(F(" 거절 — 7자리 초과: ")); Serial.println(arg);
+    return false;
+  }
+  Serial.print(tag); Serial.print(' '); Serial.println(arg);
+  return true;
+}
+static bool cmdLcd2(uint32_t arg) { return showNumber("[L2]", arg); }
+
+static bool cmdDoor(uint32_t arg) {
+  router.echoIs(arg == 1);                  // 🔴 켜진 상태 = 열기(1) 뿐이다
+  switch (arg) {
+    case 1: digitalWrite(PIN_SAMPLE_DOOR, HIGH); break;
+    case 2: digitalWrite(PIN_SAMPLE_DOOR, LOW);  break;
+    case 3: case 4: break;
+    default:
+      Serial.print(F("[DR] 거절 — 명령표에 없는 값: ")); Serial.println(arg);
+      return false;
+  }
+  Serial.print(F("[DR] arg=")); Serial.println(arg);
+  return true;
+}
+
+// 센서 훅 둘 — 샘플 주석 블록의 모양 그대로다
+#define PIN_US_TRIG 3
+#define PIN_US_ECHO 4
+static const uint16_t US_OCCUPIED_CM = 60;
+static bool ultrasonicRead(uint8_t pin) {
+  (void)pin;
+  static unsigned long lastAt  = 0;
+  static bool          lastVal = false;
+  const unsigned long now = millis();
+  if (now - lastAt < 200UL) return lastVal;
+  lastAt = now;
+  digitalWrite(PIN_US_TRIG, LOW);  delayMicroseconds(2);
+  digitalWrite(PIN_US_TRIG, HIGH); delayMicroseconds(10);
+  digitalWrite(PIN_US_TRIG, LOW);
+  const unsigned long us = pulseIn(PIN_US_ECHO, HIGH, 6000UL);
+  if (us == 0) { lastVal = false; return false; }
+  lastVal = (us / 58UL) < US_OCCUPIED_CM;
+  return lastVal;
+}
+static bool readLedBack(uint8_t pin) {
+  (void)pin;
+  return digitalRead(PIN_SAMPLE_LED) == HIGH;
+}
+static bool readA1(uint8_t pin) { (void)pin; return (slotNo % 20) < 10; }
 
 // ── 테스트 유틸 ────────────────────────────────────────────────────────
 static int g_pass = 0, g_fail = 0;
@@ -2046,42 +2121,56 @@ int main() {
 
     setup();                                       // 🔴 실기가 부르는 그 함수
 
-    // ① 명령 핸들러 — `O*` 모듈은 **전부** 붙어 있어야 한다
-    bool everyO = true;
-    for (uint8_t i = 0; i < MODULE_N; i++) {
-      char k4[4]; moduleKindOf(i, k4);
-      if (k4[0] == 'O' && !router.has(i)) {
-        everyO = false;
-        char n4[4]; moduleNameOf(i, n4);
-        printf("      🔴 %s 에 명령 핸들러가 없다 — setup() 에 router.on 이 빠졌다\n", n4);
-      }
-    }
-    ok(everyO,              "★★★ **setup() 이 명령 가능한 모듈 전부에 핸들러를 붙인다**");
-
-    // ② 센서 훅 — 샘플은 둘을 붙인다. 하나라도 빠지면 그 자리는 기본 경로로 조용히 돈다
-    ok(sensors.at(0) != 0,  "★★★ setup() 이 A1 에 센서 훅을 붙인다 (주석이 아니다)");
-    ok(sensors.at(1) != 0,  "★★★ setup() 이 B1 에 센서 훅을 붙인다");
-
-    // ③ 자리 소스도 `setup()` 이 잡는다 — 훅이 불릴 수 있는 상태여야 한다
-    ok(node.srcReal != 0,   "★★ setup() 뒤에 실물 칸이 있다 — 0 이면 훅이 영영 안 불린다");
-
-    // ④ 🔴 **샘플 훅 둘이 서로 다른 값을 낼 수 있는가** — 서버의 OR/AND 판정이 갈리려면 필요하다
+    // ① 🔴 **샘플이 붙이는 것** — 지금 샘플은 `LD` 하나다(사용자 지시).
+    //   이것이 *"콜백이 주석이 아니라 컴파일되어 돈다"* 의 전부다.
     {
-      bool everSplit = false;
-      g_pinLevel[PIN_SAMPLE_LED] = LOW;            // B1(LED 되읽기) = 0 으로 고정
-      for (uint32_t t = 0; t < 40 && !everSplit; t++) {
-        slotNo = t;                                // A1 시뮬은 slotNo 를 본다
-        node.readSensors();
+      int8_t ld = -1;
+      for (uint8_t k = 0; k < MODULE_N; k++) {
+        char n4[4]; moduleNameOf(k, n4);
+        if (strcmp(n4, "LD") == 0) ld = (int8_t)k;
+      }
+      ok(ld >= 0,           "★ 샘플 표에 LD 가 있다");
+      ok(ld >= 0 && router.has((uint8_t)ld),
+                            "★★★ **setup() 이 LD 에 핸들러를 붙인다** (주석이 아니다)");
+    }
+
+    // ② 🔴 **경계** — 시험이 늘린 모듈(LC·DR·L2)은 `setup()` 이 **안** 붙인다.
+    //   그것들은 시험 하네스 것이다. 여기가 갈리면 "샘플에 있다"의 뜻이 흐려진다.
+    {
+      bool extraUntouched = true;
+      for (const char* nm : {"LC", "DR", "L2"}) {
+        for (uint8_t k = 0; k < MODULE_N; k++) {
+          char n4[4]; moduleNameOf(k, n4);
+          if (strcmp(n4, nm) == 0 && router.has(k)) { extraUntouched = false;
+            printf("      🔴 %s 를 setup() 이 붙였다 — 샘플에 새 나갔다\n", nm); }
+        }
+      }
+      ok(extraUntouched,    "★★★ 시험용 모듈은 `setup()` 이 **안 붙인다** (경계가 산다)");
+    }
+
+    // ③ 🔴 **센서 훅은 샘플이 안 붙인다** — 보드에 센서가 없기 때문이다. **그게 정직하다.**
+    //   ⚠ 옛 판은 시뮬/LED되읽기 훅을 붙여 "센서가 도는 것처럼" 보이게 했다. 그것을 지웠다.
+    {
+      bool noSampleHook = true;
+      for (uint8_t k = 0; k < MODULE_N; k++) if (sensors.at(k)) noSampleHook = false;
+      ok(noSampleHook,      "★★ setup() 은 센서 훅을 **안 붙인다** — 붙일 실물이 없다");
+    }
+    ok(node.srcReal != 0,   "★★ 그래도 실물 소스는 켜져 있다 — 센서를 달면 **바로 읽힌다**");
+
+    // ④ 🔴 훅을 붙이면 **두 센서가 갈릴 수 있는가** — 서버의 OR/AND 판정이 갈리려면 필요하다
+    {
+      sensors.on("A1", readA1);            // 시험 하네스의 훅(주기 24초)
+      sensors.on("B1", readLedBack);       // LED 되읽기
+      g_pinLevel[PIN_SAMPLE_LED] = LOW;
+      bool everSplit = false, sawHi = false, sawLo = false;
+      for (uint32_t t = 0; t < 40; t++) {
+        slotNo = t; node.readSensors();
         if (((node.occMask >> 0) & 1) != ((node.occMask >> 1) & 1)) everSplit = true;
+        if ((node.occMask >> 0) & 1) sawHi = true; else sawLo = true;
       }
-      ok(everSplit,         "★★★ 두 센서가 **갈리는 순간이 있다** — OR 와 AND 가 다른 답을 낸다");
-    }
-    // ⑤ 그리고 A1 시뮬이 **양쪽 값을 다 낸다** (늘 0 이면 갈림이 우연일 수 있다)
-    {
-      bool sawHi = false, sawLo = false;
-      for (uint32_t t = 0; t < 40; t++) { slotNo = t; node.readSensors();
-        if ((node.occMask >> 0) & 1) sawHi = true; else sawLo = true; }
-      ok(sawHi && sawLo,    "★★ A1 시뮬이 찼다/비었다를 **둘 다** 낸다 (화면이 움직인다)");
+      ok(everSplit,         "★★★ 훅을 붙이면 두 센서가 **갈리는 순간이 있다**");
+      ok(sawHi && sawLo,    "★★ 훅이 찼다/비었다를 **둘 다** 낸다 (값이 고정이 아니다)");
+      sensors.on("A1", 0); sensors.on("B1", 0);
     }
 
     Serial.out.clear(); Serial.echoToStdout = true;
