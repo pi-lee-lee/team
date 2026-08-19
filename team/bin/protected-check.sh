@@ -25,11 +25,25 @@ if rng:
     changed = set(x for x in out.split("\0") if x)
     label = f"범위 {rng}"
 else:
-    out = sh("git","-c","core.quotepath=false","status","--porcelain","-z")
+    # 🔴 2026-08-19 결함 수정 — 예전에는 **작업 트리 대 HEAD** 만 봤다.
+    #   그래서 **커밋하고 나면 검사가 조용해졌다.** 잠긴 파일이 커밋으로 바뀌어도 영원히 초록.
+    #   (uplink.h 가 29줄 바뀐 커밋 직후에도 "변화 없음"이 떴다 — 그것으로 발견했다)
+    #   ✅ 이제 **잠금 기준선 커밋..HEAD** 와 **작업 트리** 를 둘 다 본다.
+    #   🔑 초록의 뜻이 바뀐다: "아무도 안 건드렸다"가 아니라 **"마지막 검토 이후 안 건드렸다"**.
     changed = set()
+    out = sh("git","-c","core.quotepath=false","status","--porcelain","-z")
     for rec in out.split("\0"):
         if len(rec) > 3: changed.add(rec[3:])
-    label = "작업 트리 대 HEAD"
+    base = cfg.get("baseline_commit")
+    if base:
+        try:
+            o2 = sh("git","-c","core.quotepath=false","diff","--name-only","-z",base,"HEAD")
+            changed |= set(x for x in o2.split("\0") if x)
+            label = f"기준선 {base[:7]}..HEAD + 작업 트리"
+        except Exception:
+            label = f"🔴 기준선 커밋 {base} 를 못 읽는다 — 작업 트리만 봤다"
+    else:
+        label = "🔴 **기준선 커밋 미설정** — 작업 트리만 본다(커밋된 변경은 안 보인다)"
 
 # 🔴 **목록의 경로가 실재하는가** — 없으면 통과가 아니라 경보다.
 #   파일이 옮겨지면 목록이 낡고, 낡은 목록은 "변화 없음"으로 조용히 통과한다.
