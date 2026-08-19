@@ -375,6 +375,11 @@ def _is_redirect_target(lead, tok):
     tok = tok.strip("'\"()[]{},")
     if not tok or not _PATHY.fullmatch(tok):
         return False
+    # 전개 안 된 변수가 든 경로는 **값을 모른다.** 모르는 것을 남의 것으로 단정할 근거가 없다.
+    # (`> "$TMP/x.h"` 가 `조별과제샘플/$TMP/x.h` 로 해석돼 차단된 사고가 있었다)
+    # 진짜로 막아야 하는 것 — 남의 파일에 직접 쓰기 — 은 거의 언제나 리터럴 경로다.
+    if "$" in tok or "`" in tok:
+        return False
     if "/" in tok:
         return True                      # 경로는 모호하지 않다
     ext = tok.rsplit(".", 1)[-1].lower() if "." in tok else ""
