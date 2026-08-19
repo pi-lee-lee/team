@@ -325,6 +325,7 @@
 
     void bind_modules(Node& n) {
         Lot::BindResult r = lot.bind(n.devid, n.mods, lot_);
+        mod_seen_ += (long long)n.mods.size();   // 🔑 분모 — 시도한 만큼 센다
         for (size_t i = 0; i < r.conflicts.size(); i++) {
             mod_name_conflict++;
             if (mod_name_conflict <= 3 || mod_name_conflict % 100 == 0)
