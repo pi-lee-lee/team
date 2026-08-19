@@ -1329,6 +1329,25 @@ int main() {
     ackQ.clearCache(); ackQ.clearQueue();
     node.occMask = 0; node.resMask = 0; node.testArmed = false;
 
+    // 🔴 **미등록 상태에서 먼저 확인한다** (2026-08-19 · 콜백 경로 도입).
+    //   `G` 는 이제 `CommandRouter` 를 탄다 — **등록이 없으면 `result=3`(수행 불가)** 이다.
+    //   ⚠ 이 시험이 없으면 "등록을 잊어도 조용히 성공하는" 회귀를 못 잡는다.
+    {
+      slotNo = 0;
+      char g0[] = "G,900,10,1,";  appendChecksum(g0, (uint8_t)strlen(g0));
+      handleFrameLine(g0);
+      const int8_t h0 = ackQ.find(900);
+      ok(h0 >= 0 && ackQ.at(h0).result == 3,
+                            "★★ **등록 없으면 result=3** — 조용히 성공하지 않는다");
+      ackQ.clearCache(); ackQ.clearQueue();
+    }
+
+    // 🔴 이제 `setup()` 과 **같은 등록**을 한다. 아래 시험들은 **콜백 경로로 도는 것**을 본다.
+    //   ⚠ 옛 판은 `G` 처리 안에 가상 차단봉이 하드코딩돼 있었다 — 지금은 등록이 그것을 정한다.
+    ok(router.on("E1", gateE1), "★★ E1 핸들러 등록 (이름→idx 를 라우터가 푼다)");
+    ok(router.on("X1", gateX1), "★★ X1 핸들러 등록");
+    ok(!router.on("ZZ", gateE1), "★★ 표에 없는 이름은 **false** — 조용히 무시하지 않는다");
+
     // ① 등록에 가상 모듈이 실린다 — 이름은 자리 id · kind 에 V 접미
     char rbuf[BATCH_CAP + 1];
     buildRegistration(rbuf, sizeof rbuf);

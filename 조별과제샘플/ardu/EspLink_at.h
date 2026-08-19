@@ -114,19 +114,12 @@ static void handleFrameLine(char* cand) {
       return;
     }
 
+    // 🔴 **하드코딩 분기를 없앴다 (2026-08-19).** 어떤 모듈이 명령을 받을 수 있는지는
+    //   `setup()` 의 `router.on(...)` 등록이 정한다 — **여기는 어느 모듈인지 모른다.**
+    //   그래서 **기여자가 자기 액추에이터를 붙일 수 있다.** 옛 코드는 가상 차단봉만 알았다.
+    //   ⚠ 등록이 없으면 `result=3`(수행 불가) — **조용히 성공으로 답하지 않는다.**
     uint8_t gres = 3;                       // 기본 = 수행할 수 없다(§2.4 result=3)
-#if VIRTUAL_MODULES
-    if (okIdx && gidx >= SLOT_N && gidx < moduleCount()) {
-      const uint8_t k = (uint8_t)(gidx - SLOT_N);
-      // 🔴 **첫 명령이 자율 토글을 영구 정지시킨다.**
-      //   안 그러면 명령 효과가 다음 주기에 되돌려져 "안 먹었다"로 보인다.
-      // 🔴 첫 명령이 자율 토글을 영구 정지시킨다 — 굳히는 절차를 `gates` 안으로 넣었다.
-      //   호출부가 "굳히고 나서 세운다"는 **순서를 지킬 필요가 없어졌다**(§commitAck 과 같은 종류).
-      gates.latch((uint8_t)(moduleCount() - SLOT_N), slotNo);
-      gates.set(k, gop != 0);
-      gres = 0;
-    }
-#endif
+    if (okIdx && gidx <= 0xFF && router.dispatch((uint8_t)gidx, (uint8_t)(gop != 0))) gres = 0;
 #if DEBUG
     if (gres != 0) { Serial.print(F("[G] 거절 idx=")); Serial.println(gidx); }
     else           { Serial.print(F("[G] idx=")); Serial.print(gidx);

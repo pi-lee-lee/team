@@ -132,6 +132,29 @@ static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_T
 #include "Commands.h"          // ← R / C / T 프레임 처리. **위치를 옮기지 마라**
 #include "Session.h"           // ← 주기 처리(sensorTick·statusTick·cntTick·diag·ram). **위치를 옮기지 마라**
 // ─────────────────────────────────────────────────────────────────────────
+// ██████████████████████████████████████████████████████████████████████████
+// █  🔓  **명령 수신 핸들러 — 자기 액추에이터를 여기 붙인다**                █
+// ██████████████████████████████████████████████████████████████████████████
+//
+//   모양 :  `bool 이름(uint8_t op)`  — `op` 는 0/1 · 반환 **true = 성공**(ACK `result=0`)
+//   예   :  `bool myGate(uint8_t op) { digitalWrite(PIN_GATE, op); return true; }`
+//   등록 :  아래 `setup()` 에서 `router.on("모듈이름", 핸들러);`
+//
+// ⚠ **등록 안 한 모듈에 명령이 오면 `result=3`(수행 불가)로 답한다** — 조용히 성공하지 않는다.
+// 🔑 **이름으로 등록한다.** 전선은 `idx`(등록 순서)로 오는데 표를 고치면 idx 가 밀린다 —
+//   **이름은 안 밀린다.** 그 변환은 `CommandRouter` 가 한다.
+#if VIRTUAL_MODULES
+// 🔴 **가상 차단봉도 이제 이 경로로 돈다** — 옛 하드코딩 분기를 지웠다.
+//   그래서 이 경로가 **지금 실제로 돌아가고 검증된다.** 실물이 붙으면 아래 등록 한 줄만 바꾼다.
+static bool virtualGate(uint8_t k, uint8_t op) {
+  gates.latch((uint8_t)(moduleCount() - SLOT_N), slotNo);   // 첫 명령이 자율 토글을 영구 정지
+  gates.set(k, op != 0);
+  return true;
+}
+static bool gateE1(uint8_t op) { return virtualGate(0, op); }
+static bool gateX1(uint8_t op) { return virtualGate(1, op); }
+#endif
+
 void setup() {
   Serial.begin(115200);
   espInit();                        // ★ UART 를 열고 사다리를 시작만 한다 (설계문서 §1.2)
@@ -147,6 +170,12 @@ void setup() {
   // 자리 초기화 — 실물로 지정된 칸의 입력 모드까지 **`node` 가 스스로 잡는다**.
   //   ⚠ 생성자가 아니라 여기다: 전역 생성자는 `main()` 전에 돌아 `pinMode` 를 부를 수 없다.
   node.begin();
+
+  // 🔓 **명령 수신 등록** — 자기 모듈은 여기 붙인다
+#if VIRTUAL_MODULES
+  router.on("E1", gateE1);      // 입구 차단봉 (가상) — 실물이 오면 이 줄만 바꾼다
+  router.on("X1", gateX1);      // 출구 차단봉 (가상)
+#endif
 
   // §12A.3 재부팅하면 테스트 오버라이드는 사라진다 — 서버가 재하달하지 않는다(예약과 정반대).
   // 전역이라 어차피 0 이지만, "여기서 버린다"는 것을 코드로 남겨 둔다.

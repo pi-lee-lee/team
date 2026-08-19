@@ -140,8 +140,53 @@ static void moduleKindOf(uint8_t i, char* out4) {
     out4[k] = c;
     if (c == '\0') return;
   }
+
   out4[3] = '\0';
 }
+
+// ═════════════════════════════════════════════════════════════════════════
+// 🔴 `CommandRouter` — **모듈별 명령 수신 콜백** (2026-08-19 · 사용자 지시)
+//
+// 왜 지금 만드나: 서버는 `actuator(devid, name)` 로 **기여자가 조작 모듈을 선언할 수 있는데**,
+//   장치에는 그 명령을 받을 자리가 없었다(`G` 처리가 가상 차단봉을 **하드코딩**하고 있었다).
+//   🔴 **서버에서 붙일 수는 있는데 장치가 못 받는다 — 기여자는 왜 안 되는지 모른다.**
+//
+// 🔑 **가상 차단봉을 이 경로로 옮긴다.** 그러면 **지금 실제로 돌아가는 경로**가 되고,
+//   나중에 가상을 지우고 실물을 붙일 때 **등록 한 줄만 바꾸면 된다.**
+//   ⚠ 시그니처만 정해 두면 **그 경로는 한 번도 안 돌아간다** —
+//     §"시험이 실기가 안 하는 준비를 대신해 주면 실기만 빈다" 의 **반대 활용**이다.
+//
+// ── AVR 제약 ──
+//   ✅ **함수 포인터만**(모듈당 2B · 표 전체 32B). `std::function`·캡처 람다는 힙·RAM 을 먹는다
+//   ⚠ **`MODULE_TABLE` 에 넣지 않는다** — **선언은 자료, 동작은 코드**다.
+//     표는 `PROGMEM` 이고 핸들러는 RAM 이라 물리적으로도 갈린다
+//   ⚠ **등록은 이름으로, 전선은 `idx` 로 온다.** 등록할 때 이름→idx 를 여기서 푼다 —
+//     기여자가 `idx`(등록 순서)를 셀 필요가 없다. **표를 고치면 idx 가 밀리는데 이름은 안 밀린다.**
+// ═════════════════════════════════════════════════════════════════════════
+typedef bool (*CommandFn)(uint8_t op);   // 반환 true → ACK `result=0`(성공) · false → `3`(수행 불가)
+
+class CommandRouter {
+ public:
+  // 이름으로 등록한다. 표에 없는 이름이면 false — **조용히 무시하지 않는다.**
+  bool on(const char* name, CommandFn fn) {
+    for (uint8_t i = 0; i < MODULE_N; i++) {
+      char n4[4];
+      moduleNameOf(i, n4);
+      if (strcmp(n4, name) == 0) { fn_[i] = fn; return true; }
+    }
+    return false;
+  }
+  // 전선에서 온 `idx` 로 부른다. 등록이 없으면 false → 호출부가 `result=3` 으로 답한다.
+  bool dispatch(uint8_t idx, uint8_t op) const {
+    if (idx >= MODULE_N || fn_[idx] == 0) return false;
+    return fn_[idx](op);
+  }
+  bool has(uint8_t idx) const { return idx < MODULE_N && fn_[idx] != 0; }
+ private:
+  CommandFn fn_[MODULE_N];   // ⚠ 생성자 없음 — 전역은 `.bss` 로 0(=미등록) 시작이다
+};
+
+static CommandRouter router;
 
 // 등록 배치를 만든다. 성공하면 길이, 실패하면 0.
 //   ⚠ **`D` 여러 줄 + `S` 는 상한을 넘는다.** 그래서 명세가 *"첫 슬롯은 `D` 만"* 으로 정했다.
