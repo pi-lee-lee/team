@@ -435,7 +435,8 @@ static const size_t MAX_UNKNOWN_SOCKS = MAX_ARD_NODES;   // id 없는 소켓이 
 
 static const char* SLOT_ID[10] = {"A1","A2","A3","A4","A5","B1","B2","B3","B4","B5"};
 #include "server_device.h"   // 디바이스 계층 잎 유틸 (REQ-0096 A): SHA-1·base64·ws_accept·체크섬
-#include "server_seam.h"     // 이음매 계약 (REQ-0096 B→C): DeviceEvent / DeviceCommand
+#include "server_seam.h"
+#include "parking.h"     // 🔴 **공개 조립 API** — 사용 코드가 읽는 유일한 헤더     // 이음매 계약 (REQ-0096 B→C): DeviceEvent / DeviceCommand
 
 // 타이머 전용 — 상대 시각 (윈도우: 부팅 후 경과)
 static long long now_ms() {
@@ -1643,8 +1644,22 @@ struct Server {
     }
 
     // 기본 지형. ⚠ **기본값이지 고정값이 아니다** — 설정 적재가 생기면 이 함수를 대체한다.
+    // 🔴 조립 표가 주어지면 **그것이 지형이다**(REQ-0272). 없으면 종전 기본 지형.
+    //   ⚠ 표는 `ParkingServer` 가 넣어 준다 — 자가검증은 표 없이 돌므로 기본값이 남아야 한다.
+    const ParkingLot* lot_ = 0;   // 🔑 선언 자리에서 초기화한다 — 초기화 목록에 넣으면
+                              //   선언 순서와 어긋나 `-Wreorder` 가 난다(실제로 났다)
     void build_default_zones() {
         zones.clear();
+        if (lot_ && !lot_->empty()) {
+            const std::vector<ParkingLot::Area>& as = lot_->areas();
+            for (size_t i = 0; i < as.size(); i++) {
+                Zone z; z.id = as[i].id; z.kind = as[i].kind;
+                z.cells.push_back(std::make_pair((int)(i / grid_cols), (int)(i % grid_cols)));
+                zones.push_back(z);
+            }
+            bump_epoch("조립 표에서 지형 구성");
+            return;
+        }
         // 🔴 **주차 자리는 5개다. 10개가 아니다** (사용자 확정 (A) · 2026-08-19 · 명세 §9)
         //   각 자리에 **주차확인센서가 둘**이다 — 영역1 ← 센서 A1(#0) · B1(#5). 이중화다.
         //   ⚠ 옛 지형은 10개를 만들었고 **그것이 화면의 "10자리"였다.**
@@ -1688,6 +1703,17 @@ struct Server {
     //   한 자리에 센서가 둘이다: 영역1 ← `A1`(#0) · `B1`(#5).
     //   ⚠ 전에는 `zone_find(name)` 으로 **이름이 곧 자리**였고 그래서 자리가 10개였다.
     //   🔑 이 함수가 그 결합을 끊는다 — **자리는 5개, 센서는 10개.**
+    // 🔴 표가 있으면 **표가 답한다** — 추측이 사라진다(명세 §10.2).
+    std::string zone_of_module_tbl(const std::string& nm) const {
+        if (lot_ && !lot_->empty()) {
+            const std::vector<ParkingLot::Area>& as = lot_->areas();
+            for (size_t i = 0; i < as.size(); i++)
+                for (size_t k = 0; k < as[i].sensors.size(); k++)
+                    if (as[i].sensors[k] == nm) return as[i].id;
+            return nm;              // 표에 없는 이름 — 자기 이름으로 찾아본다(종전과 같다)
+        }
+        return zone_of_module(nm);
+    }
     static std::string zone_of_module(const std::string& nm) {
         if (nm.size() == 2 && nm[0] == 'B' && nm[1] >= '1' && nm[1] <= '5')
             return std::string("A") + nm[1];      // B3 → 자리 A3 의 둘째 센서
@@ -1697,7 +1723,7 @@ struct Server {
     void bind_modules(Node& n) {
         bool changed = false;
         for (size_t i = 0; i < n.mods.size(); i++) {
-            Zone* z = zone_find(zone_of_module(n.mods[i].first));
+            Zone* z = zone_find(zone_of_module_tbl(n.mods[i].first));
             if (!z) continue;
             std::pair<std::string,std::string> key(n.devid, n.mods[i].first);
             bool dup = false;
@@ -4206,7 +4232,12 @@ struct Server {
         return s;
     }
 
-    int run() {
+    // ── 🔴 `run()` 을 셋으로 갈랐다 (REQ-0272 1단계 · 2026-08-19)
+    //   호출자가 **바꿀 수 있는 것**(언제 열지 · 어떻게 돌지)을 밖으로 낸다.
+    //   한 박자 **안**의 순서는 못 바꾸므로 안에 남는다 — 우리 판별자 그대로다.
+    //   ⚠ 기계적 분할이다. 루프 몸통에 최상위 `continue`/`break`/`return` 이 **하나도 없는 것**을
+    //     먼저 확인하고 옮겼다 — 있으면 의미가 조용히 바뀐다.
+    bool openPorts() {
         lsn_ard   = listen_on(PORT_ARDUINO + g_port_offset);
         lsn_http  = listen_on(PORT_HTTP    + g_port_offset);
         lsn_phone = listen_on(PORT_PHONE   + g_port_offset);
@@ -4324,7 +4355,12 @@ struct Server {
         }
         logf("⏱", "소크 관측 시작 — " + std::to_string(SOAK_REPORT_MS / 1000) + "초마다 요약, 종료(Ctrl-C) 시 한 줄 총평");
 
-        while (!g_stop) {
+        return true;
+    }
+
+    // 한 박자 : 수신 → 자리 판정 → 하행 송신 → 화면 방송. **false 면 그만 돈다**
+    bool serveOneTick() {
+        if (g_stop) return false;
             fd_set rd; FD_ZERO(&rd);
             sock_t mx = 0;
             FD_SET(lsn_ard, &rd);  if (lsn_ard  > mx) mx = lsn_ard;
@@ -4702,7 +4738,10 @@ struct Server {
                 last_report_ms = now_ms();
                 logf("⏱", soak_line());
             }
-        }
+        return !g_stop;
+    }
+
+    void closeDown() {
 
         // ---------- 소크 종료 요약 (REQ-0065) — 한 줄로 끝난다
         if (sess_start_ms) end_ard_session("서버 종료");
@@ -4721,6 +4760,13 @@ struct Server {
                   << " frames=" << all_frames
                   << " sessions=" << ard_sessions
                   << " ===" << std::endl;
+    }
+
+    // 옛 진입점 — 셋을 순서대로 부른다. **이 순서가 곧 흐름이다.**
+    int run() {
+        if (!openPorts()) return 1;
+        while (serveOneTick()) { }
+        closeDown();
         return 0;
     }
 };
@@ -6150,5 +6196,48 @@ static int selftest() {
 // 🔴 **엔트리 포인트는 `main.cpp` 로 나갔다** (REQ-0272 1단계 · 2026-08-19)
 //   원래 자리에서 그대로 `#include` 한다 — **전처리 결과가 같아야 `.o` 0 차이가 성립한다.**
 //   ⚠ `#include` 위치를 옮기는 순간 그것은 "분리"가 아니라 "변경"이다. 이 자리를 지켜라.
+// ── 🔴 공개 조립 API 구현 (REQ-0272 1단계 · 2026-08-19)
+//
+//   헤더(`parking.h`)에는 **자료구조가 하나도 안 나온다.** 여기 `Impl` 이 `Server` 를 들고 있고
+//   호출자는 그 존재를 모른다 — 그것이 은닉이다.
+//   ⏳ 지금은 **얇은 층**이다. `Server` 3,900줄을 쪼개는 것은 3단계이고, 그때 이 층은 안 바뀐다.
+//   🔑 그래서 **사용 코드가 먼저 돌고** 내부는 나중에 정리된다.
+
+Spot& Spot::sensor(const std::string& name) {
+    lot_->areas_[idx_].sensors.push_back(name);
+    return *this;
+}
+
+Spot ParkingLot::spot(const std::string& id) {
+    for (size_t i = 0; i < areas_.size(); i++)
+        if (areas_[i].id == id) return Spot(this, i);      // 같은 자리를 두 번 불러도 안전하다
+    Area a; a.id = id; a.kind = "parking";
+    areas_.push_back(a);
+    return Spot(this, areas_.size() - 1);
+}
+
+void ParkingLot::gate(const std::string& id, Gate::Kind kind) {
+    for (size_t i = 0; i < areas_.size(); i++)
+        if (areas_[i].id == id) { areas_[i].kind = (kind == Gate::IN) ? "entrance" : "exit"; return; }
+    Area a; a.id = id; a.kind = (kind == Gate::IN) ? "entrance" : "exit";
+    areas_.push_back(a);
+}
+
+struct ParkingServer::Impl {
+    ParkingLot lot;      // 🔑 **사본을 든다** — 호출자가 뒤에 표를 바꿔도 서버가 안 흔들린다
+    Server     srv;
+};
+
+ParkingServer::ParkingServer(const ParkingLot& lot) : p_(new Impl) {
+    p_->lot = lot;
+    p_->srv.lot_ = &p_->lot;
+}
+ParkingServer::~ParkingServer() { delete p_; }
+
+bool ParkingServer::openPorts()    { return p_->srv.openPorts(); }
+bool ParkingServer::serveOneTick() { return p_->srv.serveOneTick(); }
+void ParkingServer::closeDown()    { p_->srv.closeDown(); }
+
 #include "main.cpp"
+
 

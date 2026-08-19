@@ -92,8 +92,37 @@ int main(int argc, char** argv) {
     if (argc > 1 && std::string(argv[1]) == "--selftest") rc = selftest();
     else {
         open_log(log_path);
-        Server s;
-        rc = s.run();
+
+        // ── 🔴 여기가 **사용 코드**다 (REQ-0272) ─────────────────────────────
+        //   사용자 요구: *"코드 작성 시점에 해당 코드의 **흐름이 보인다**"*
+        //   위에서 아래로 읽으면 **무슨 일이 어떤 순서로** 일어나는지 보여야 한다.
+        //
+        //   ⚠ **자동 배선을 쓰지 않았다.** 자리마다 센서를 적는 것이 한 줄로 줄 수도 있지만
+        //     그러면 **언제 무엇이 붙는지 안 보인다.** 배치는 호출자가 바꾸는 것이라 밖에 남긴다.
+        //   🔑 판별자: **호출자가 바꿀 수 있으면 밖, 못 바꾸면 안.**
+
+        // ① 주차장을 조립한다 — 자리 다섯, 각 자리에 센서 둘(이중화)
+        ParkingLot lot;
+        lot.spot("A1").sensor("A1").sensor("B1");
+        lot.spot("A2").sensor("A2").sensor("B2");
+        lot.spot("A3").sensor("A3").sensor("B3");
+        lot.spot("A4").sensor("A4").sensor("B4");
+        lot.spot("A5").sensor("A5").sensor("B5");
+        lot.gate("E1", Gate::IN);      // 입구
+        lot.gate("X1", Gate::OUT);     // 출구
+
+        // ② 서버에 싣는다
+        ParkingServer srv(lot);
+
+        // ③ 포트를 연다 — 아두이노 · 화면 · 폰
+        if (!srv.openPorts()) return 1;
+
+        // ④ 한 박자씩 돈다 — 수신 → 자리 판정 → 하행 송신 → 화면 방송
+        while (srv.serveOneTick()) { }
+
+        // ⑤ 요약을 남기고 닫는다
+        srv.closeDown();
+        rc = 0;
     }
 #ifdef _WIN32
     WSACleanup();
