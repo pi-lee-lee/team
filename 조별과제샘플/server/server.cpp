@@ -1110,6 +1110,7 @@ struct Server {
     //   (실측 `센서갈림 32` — 사건은 둘인데 방송이 32번이었다).
     //   🔑 **파생 상태는 사건이 아니다. 사건처럼 세면 방송 빈도에 비례해 부풀고 창끼리 비교가 안 된다.**
     int  sensor_split_now;             // 지금 두 센서가 갈린 주차 자리 수
+    long long not_reservable_n;        // 자리가 아닌 id 로 온 예약/취소 요청 (B* 등)
     std::string last_bits;             // data_log 중복 쓰기 방지
 
     // §7.5 예약 은퇴 — occupied 1→0 전이를 보려면 직전 프레임이 기준선으로 필요하다.
@@ -1226,7 +1227,7 @@ struct Server {
                rid_cursor(1), rid_reserved_to(0), rid_persist_on(false),
                rid_rel_seq(0),
                rid_alloc_n(0), rid_skips(0), rid_forced(0), rid_exhausted(0),
-               ack_unknown_rid(0), ack_slot_mismatch(0), mod_name_conflict(0), sensor_split_now(0),
+               ack_unknown_rid(0), ack_slot_mismatch(0), mod_name_conflict(0), sensor_split_now(0), not_reservable_n(0),
                base_valid(false), test_armed(false),
                resync_count(0), no_disk(false),
                soak_start_ms(0), ard_sessions(0), sess_start_ms(0), sess_frames(0),
@@ -1473,6 +1474,8 @@ struct Server {
         //   감시는 만들었는데 **그 결과를 볼 자리를 안 만들었다.** 세는 것과 보이는 것은 다른 일이다.
         s += " · 순서변경 " + std::to_string(mod_order_changed);
         // 🔴 계수를 만들었으면 **볼 자리도 만든다**(원장 규칙 셋째). 분모는 `등록 완료` 다.
+        s += " · 비자리예약 " + std::to_string(not_reservable_n)
+           + (not_reservable_n > 0 ? " 🔴" : "");
         s += " · 센서갈림 " + std::to_string(sensor_split_now) + "자리"
            + (sensor_split_now > 0 ? " 🔴" : "");
         s += " · 이름충돌 " + std::to_string(mod_name_conflict)
@@ -2619,11 +2622,30 @@ struct Server {
                     for (size_t k = 0; k < mn->mods.size(); k++)
                         if (mn->mods[k].first == z.modules[m].second) { mi = (int)k; break; }
                 const bool known = (mn && mi >= 0 && mi < mn->mod_bits_n);
+                // 🔴 **`known:false` 에는 사유를 붙인다** (명세 §8.10 · 2026-08-19)
+                //   전에는 원인 셋이 **같은 모양**으로 나왔다 — 원인이 다른데 표시가 같으면 아무도 못 고친다.
+                //   ⚠ 어휘는 §6.5 의 기존 코드를 먼저 쓰고 없는 것만 새로 만들었다.
+                //   ⚠ `reason` 은 **`known:false` 일 때만** 싣는다(존재/부재 규칙).
+                const char* why = 0;
+                if (!known) {
+                    const bool off = mn && (mn == &park ? !device_online() : !mn->online);
+                    if (!mn)                      why = "node_unregistered";
+                    else if (mi < 0)              why = "module_absent";
+                    else if (off)                 why = "node_offline";
+                    else if (mn != &park && mn->mod_bits_n == 0)
+                        // 🔑 보조 노드는 `S` 가 아직 파서에 안 들어간다(②-b 가 `D` 만 넣었다).
+                        //   **구조적으로 값 경로가 없다** — "해독 실패"와 다른 사건이다.
+                        why = "bits_unavailable";
+                    else if (mn->mod_bits_n == 0) why = "bits_undecoded";
+                    else                          why = "bits_out_of_range";
+                }
                 o << "{\"devid\":" << jstr(z.modules[m].first)
                   << ",\"name\":" << jstr(z.modules[m].second)
                   << ",\"idx\":" << mi
                   << ",\"value\":" << (known ? (mn->mod_bits[mi] ? "true" : "false") : "null")
-                  << ",\"known\":" << (known ? "true" : "false") << "}";
+                  << ",\"known\":" << (known ? "true" : "false");
+                if (why) o << ",\"reason\":" << jstr(why);
+                o << "}";
             }
             o << "]}";
         }
@@ -3930,6 +3952,26 @@ struct Server {
         if (slot_index(slot) < 0) {
             send_err(fd, rid, "bad_request", "그런 자리가 없습니다");
             return;
+        }
+        // 🔴 **`B1..B5` 는 이제 자리가 아니라 센서다** (사용자 확정 (A) · 명세 §9.3)
+        //
+        // `slot_index("B5")` 는 여전히 5 를 돌려준다 — `slots[10]` 이 모듈 값의 원천이라 남기 때문이다.
+        // ⚠ **그대로 두면 예약이 *성공* 하고 화면 어디에도 안 보인다.** 자리가 5개인 화면에
+        //   `B5` 예약이 조용히 성립하면 **그 자리는 예약된 채 아무 표시가 없다.**
+        //   🔑 **없는 것이 보이는 것보다, 있는 것이 안 보이는 것이 나쁘다.**
+        //
+        // 사유 코드는 `not_supported` 와 **다르다**: 저건 "할 수 있는 일인데 수단이 없다"이고
+        // 이건 **"애초에 그 대상이 아니다"** 다.
+        {
+            Zone* zt = zone_find(slot);
+            if (!zt || zt->kind != "parking") {
+                not_reservable_n++;
+                logf("!", "예약 대상이 아닌 id — 거절 " + slot
+                          + " (자리가 아니라 센서다. 명세 §9.3) 누적 "
+                          + std::to_string(not_reservable_n));
+                send_err(fd, rid, "not_reservable", "그 이름은 예약할 수 있는 자리가 아닙니다");
+                return;
+            }
         }
         // 브라우저 user_id 는 **번호판이 들어올 수 있으므로 UTF-8 을 허용한다.**
         // 전선으로 나갈 값은 wire_userid() 가 따로 좁힌다 — 두 이름공간이다.
@@ -6024,6 +6066,62 @@ static int selftest() {
                     t.ard = BAD_SOCK;
                     closesock(os_[0]); closesock(os_[1]);
                 }
+            }
+
+            // ㉞ 🔴 **`known:false` 의 사유가 갈린다** (명세 §8.10)
+            //    ⚠ `ws_probe` 는 메시지를 잘라 찍어 `state` 전문을 못 읽는다 —
+            //      그래서 **여기서 `state_json()` 문자열을 직접 본다.** 도구 한계를 시험으로 메운다.
+            {
+                Server t; t.build_default_zones(); t.init_srv_id();
+                // (가) 주 노드가 등록도 안 된 상태 → 그 자리 모듈이 아예 없다(모듈 배열이 빈다)
+                std::string j0 = t.state_json();
+                bool okA = (j0.find("\"value_state\":\"unknown\"") != std::string::npos);
+
+                // (나) 보조 노드가 등록만 됐다 → **값 경로가 없다** = bits_unavailable
+                Node& aux2 = t.aux["P9"]; aux2.devid = "P9"; aux2.online = true;
+                aux2.mods.push_back(std::make_pair(std::string("A2"), std::string("IP")));
+                t.bind_modules(aux2);
+                std::string j1 = t.state_json();
+                bool okB = (j1.find("\"reason\":\"bits_unavailable\"") != std::string::npos);
+
+                // (다) 그 보조 노드가 오프라인이면 사유가 바뀐다
+                aux2.online = false;
+                std::string j2 = t.state_json();
+                bool okC = (j2.find("\"reason\":\"node_offline\"") != std::string::npos);
+
+                bool ok34 = okA && okB && okC;
+                std::cout << (ok34 ? "  ✓ " : "  ✗ ") << "known:false 사유가 갈린다 — "
+                          << "미등록 unknown(" << (okA ? "예" : "🔴아니오") << ") · "
+                          << "보조노드 bits_unavailable(" << (okB ? "예" : "🔴아니오") << ") · "
+                          << "오프라인 node_offline(" << (okC ? "예" : "🔴아니오") << ")\n";
+                if (!ok34) bad++;
+                t.aux.clear();
+            }
+
+            // ㉝ 🔴 **`B*` 는 예약 대상이 아니다** (사용자 확정 (A) · 명세 §9.3)
+            //    ⚠ `slot_index("B5")` 는 여전히 5 를 준다 — 그래서 **막지 않으면 예약이 성공한다.**
+            //      성공했는데 화면에 안 보이는 것이 이 변경에서 가장 나쁜 결말이다.
+            {
+                LoopPair lb; Server t; t.build_default_zones(); t.init_srv_id();
+                t.conns[lb.a].kind = Conn::WS;
+                t.park.devid = "P1"; t.park.fd = lb.a; t.park.seen = true; t.park.last_ms = now_ms();
+                t.on_ws_message(lb.a, "{\"type\":\"reserve\",\"slot\":\"B5\",\"rid\":\"b1\",\"user_id\":\"00000000\"}");
+                t.on_ws_message(lb.a, "{\"type\":\"reserve\",\"slot\":\"A3\",\"rid\":\"b2\",\"user_id\":\"00000000\"}");
+                char bb[4096]; std::string gb; int idleb = 0;
+                for (int tries = 0; tries < 4000 && idleb < 200; tries++) {
+                    int n = (int)recv(lb.b, bb, sizeof(bb), MSG_DONTWAIT);
+                    if (n > 0) { gb.append(bb, n); idleb = 0; } else idleb++;
+                }
+                // 🔑 **B5 는 거절되고 A3 은 안 거절돼야 한다.** 둘 다 봐야 "전부 막혔다"와 갈린다.
+                const bool okB = (gb.find("not_reservable") != std::string::npos)
+                                 && (t.not_reservable_n == 1)
+                                 && (gb.find("\"rid\":\"b2\",\"slot\":\"A3\"") != std::string::npos
+                                     || gb.find("queued") != std::string::npos
+                                     || t.pend.size() >= 1);
+                std::cout << (okB ? "  ✓ " : "  ✗ ") << "B5 예약은 not_reservable 로 거절 · A3 은 통과"
+                          << " (비자리예약 " << t.not_reservable_n << " · 기대 1)\n";
+                if (!okB) bad++;
+                t.park.fd = BAD_SOCK; t.conns.clear();
             }
 
             // ㉜ 🔴 **A[1] `rid` 폭 고정과 격리** — 정본 `docs/net/DESIGN-rid-width-and-quarantine.md`
