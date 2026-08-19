@@ -30,14 +30,17 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { readFile, writeFile, copyFile, stat } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
-import { compare, readStamp, contentSha, applyStamp, makeStamp, UNSTAMPED } from './screen-build.mjs';
+import { compare, readStamp, contentSha, applyStamp, makeStamp, UNSTAMPED, SOURCE_HTML } from './screen-build.mjs';
 
 const pexec = promisify(execFile);
 const argv = process.argv.slice(2);
 const has = (f) => argv.includes(f);
 const val = (f, d) => { const i = argv.indexOf(f); return i >= 0 && argv[i + 1] ? argv[i + 1] : d; };
 
-const SOURCE = resolve(val('--source', '조별과제샘플/index.html'));
+/* 🔑 기본 원본은 **이 파일 위치 기준**이다(`screen-build.mjs` 의 `SOURCE_HTML`).
+   ⚠ 전에는 cwd 상대 문자열이었다 — **어디서 실행하느냐로 원본이 달라지는** 형태이고,
+   그것이 바로 이 도구가 잡으려는 결함(REQ-0240)과 같은 병이다. 도구가 그 병을 앓으면 안 된다. */
+const SOURCE = resolve(val('--source', SOURCE_HTML));
 const PORT = val('--port', '9900');
 const MODE = has('--deploy') ? 'deploy' : 'check';
 

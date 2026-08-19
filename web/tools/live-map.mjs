@@ -44,7 +44,7 @@ function actLog(what) {
 const URL_ = 'http://127.0.0.1:' + PORT + '/index.html';
 /* 🔑 **cwd 가 아니라 이 파일 위치를 기준으로 잡는다.** 이 도구를 어디서 실행하든 같은 원본을 본다 —
    cwd 상대경로가 무엇을 만드는지는 REQ-0240 이 보여 줬다(서버가 바로 그것 때문에 08-17 판을 냈다). */
-const SOURCE_HTML = fileURLToPath(new URL('../../조별과제샘플/index.html', import.meta.url));
+const SOURCE_HTML = fileURLToPath(new URL('../../조별과제샘플/web/index.html', import.meta.url));
 
 let pass = 0, fail = 0, skipped = 0;
 function ok(name, cond, detail) {

@@ -22,7 +22,7 @@ const HEAD = process.argv.includes('--head');
    검사가 실패할 수 없으면 그 초록은 아무 말도 안 한다(원장 §5.85 계열). */
 const fileArg = (() => { const i = process.argv.indexOf('--file'); return i >= 0 ? process.argv[i + 1] : null; })();
 const URL_ = (fileArg ? new URL('file://' + (fileArg.startsWith('/') ? fileArg : process.cwd() + '/' + fileArg)).href
-                      : new URL('../../조별과제샘플/index.html', import.meta.url).href) + '?demo=1';
+                      : new URL('../../조별과제샘플/web/index.html', import.meta.url).href) + '?demo=1';
 
 let pass = 0, fail = 0, skipped = 0;
 const ok = (n, c, d) => { if (c) { pass++; console.log('  ✅ ' + n); } else { fail++; console.log('  ❌ ' + n + (d ? '\n       → ' + d : '')); } };

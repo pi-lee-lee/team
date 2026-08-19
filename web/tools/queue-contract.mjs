@@ -21,7 +21,7 @@ import { launch, evaluate, sleep } from './cdp.mjs';
 
 const argv = process.argv.slice(2);
 const HEAD = argv.includes('--head');
-const URL_ = new URL('../../조별과제샘플/index.html', import.meta.url).href + '?demo=1';
+const URL_ = new URL('../../조별과제샘플/web/index.html', import.meta.url).href + '?demo=1';
 
 const ACK_TIMEOUT = 6000;      // index.html:564 — 화면의 자체 타임아웃. 아래 B4 의 기준선이다.
 

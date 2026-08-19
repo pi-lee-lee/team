@@ -89,7 +89,7 @@ export async function readHtml(path) {
  * 저장소 원본의 절대 경로. 🔑 **cwd 가 아니라 이 파일 위치 기준**이라 어디서 실행해도 같은 것을 본다.
  * (cwd 상대경로가 무엇을 만드는지는 REQ-0240 이 보여 줬다 — 서버가 바로 그것 때문에 08-17 판을 냈다.)
  */
-export const SOURCE_HTML = fileURLToPath(new URL('../../조별과제샘플/index.html', import.meta.url));
+export const SOURCE_HTML = fileURLToPath(new URL('../../조별과제샘플/web/index.html', import.meta.url));
 
 /**
  * 🔴 **브라우저로 재는 하니스의 첫 줄에 넣어라.**

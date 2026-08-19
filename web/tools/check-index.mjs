@@ -12,7 +12,7 @@
  */
 import { readFileSync } from 'node:fs';
 
-const HTML = new URL('../../조별과제샘플/index.html', import.meta.url);
+const HTML = new URL('../../조별과제샘플/web/index.html', import.meta.url);
 const html = readFileSync(HTML, 'utf8');
 
 let pass = 0, fail = 0;

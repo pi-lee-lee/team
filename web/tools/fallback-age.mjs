@@ -18,7 +18,7 @@ import { launch, evaluate, sleep } from './cdp.mjs';
 
 const argv = process.argv.slice(2);
 const HEAD = argv.includes('--head');
-const URL_ = new URL('../../조별과제샘플/index.html', import.meta.url).href + '?demo=1';
+const URL_ = new URL('../../조별과제샘플/web/index.html', import.meta.url).href + '?demo=1';
 
 let pass = 0, fail = 0;
 function ok(name, cond, detail) {
