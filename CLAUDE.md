@@ -36,7 +36,7 @@
 | 담당 에이전트 | 소유 경로·확장자 |
 |---|---|
 | `android-engineer` | `docs/android/**`, `android/**`, `**/AndroidManifest.xml`, `**/build.gradle`, `**/build.gradle.kts`, `**/settings.gradle*`, `**/gradle.properties`, `.kt`, `.kts`, `.java`, `.aidl`, `.pro` |
-| `arduino-engineer` | `docs/arduino/**`, `arduino/**`, `**/*.ino`, `**/platformio.ini`, `.ino` |
+| `arduino-engineer` | `docs/arduino/**`, `arduino/**`, `**/*.ino`, `**/platformio.ini`, `조별과제샘플/EspLink*`, `.ino` |
 | `cpp-engineer` | `docs/cpp/**`, `**/src/main/cpp/**`, `**/src/main/jni/**`, `**/jni/**`, `cpp/**`, `opencv/**`, `.c`, `.cc`, `.cpp`, `.cxx`, `.h`, `.hpp`, `.hxx`, `.inl` |
 | `monitor-engineer` | `monitor/**` |
 | `socket-engineer` | `조별과제샘플/server.cpp`, `조별과제샘플/server.cpp`, `docs/net/**`, `net/**`, `socket/**`, `**/net/**`, `**/*.proto`, `조별과제샘플/server*`, `조별과제샘플/server*` |

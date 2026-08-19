@@ -157,6 +157,11 @@
       "note": "서버를 OS별/계층별 파일로 쪼갤 때 확장자 규칙에 걸려 cpp-engineer 로 새는 것을 막는다"
     },
     {
+      "glob": "조별과제샘플/EspLink*",
+      "owner": "arduino-engineer",
+      "note": "펌웨어 ESP/WiFi 링크 계층을 스케치에서 뺀 헤더(REQ-0264). .h 라서 ext_rules 로는 cpp-engineer 가 되는데 툴체인·수명주기가 아두이노다 — 바로 위 server* 규칙과 같은 이유다. 접두어로 좁혀 socket 의 server*·web 의 index.html 을 안 건드린다"
+    },
+    {
       "glob": "조별과제샘플/server*",
       "owner": "socket-engineer",
       "note": "서버를 OS별/계층별 파일로 쪼갤 때 확장자 규칙에 걸려 cpp-engineer 로 새는 것을 막는다"
