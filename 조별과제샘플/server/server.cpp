@@ -45,6 +45,7 @@
 #include <vector>
 #include <algorithm>    // 복구시간 중앙값 — nth_element
 #include <map>
+#include <set>            // 창 원자성 — 이번 창에 미룬 배치 표지
 #include <fstream>
 #include <sstream>
 #include <iostream>

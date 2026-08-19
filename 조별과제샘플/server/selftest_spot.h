@@ -140,6 +140,55 @@
                     if (!ok) bad++;
                 }
 
+                // ⓸ 🔴🔴 **묶음 — "묶어진다"가 아니라 "묶는다"**
+                //
+                //   ⚠ 큐는 전부터 여러 줄을 한 거래로 담았다. **그건 관찰이지 보장이 아니다** —
+                //     내 셋을 넣기 전에 남의 것이 큐에 있으면 **호출자 모르게 쪼개진다.**
+                //   🔑 그래서 배치는 **통째로 들어가거나 통째로 미뤄진다.**
+                {
+                    int sv[2];
+                    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) != 0) {
+                        std::cout << "  ! socketpair 실패 — 건너뛴다\n";
+                    } else {
+                        Server t; t.no_disk = true;
+                        t.ard = sv[0]; t.park_dev = "P1";
+                        t.ard_seen = true; t.ard_last_ms = now_ms();
+                        t.park.devid = "P1";
+                        t.park.mods.push_back(std::make_pair(std::string("LC"), std::string("OL")));
+                        t.park.mods.push_back(std::make_pair(std::string("LD"), std::string("OG")));
+                        t.park.reg_done = true;
+
+                        // ⓐ LCD 3건(18B×3=56B) → 링 64B 안. **들어간다**
+                        int q1 = 0, r1 = 0;
+                        std::vector<std::pair<std::string, long> > three;
+                        for (int i = 0; i < 3; i++) three.push_back(std::make_pair(std::string("LC"), 1234567L));
+                        t.send_batch("P1", three, &q1, &r1);
+
+                        // ⓑ LCD **5건** → 🔴 건수 상한 4 를 넘는다. **통째로 거절**
+                        int q2 = 0, r2 = 0;
+                        std::vector<std::pair<std::string, long> > five = three;
+                        five.push_back(std::make_pair(std::string("LC"), 1234567L));
+                        five.push_back(std::make_pair(std::string("LC"), 1234567L));
+                        t.send_batch("P1", five, &q2, &r2);
+
+                        // ⓒ 🔴 **LCD 4건** — 사용자가 물은 그 수다. 들어가야 한다
+                        int q3 = 0, r3 = 0;
+                        std::vector<std::pair<std::string, long> > four = three;
+                        four.push_back(std::make_pair(std::string("LC"), 1234567L));
+                        t.send_batch("P1", four, &q3, &r3);
+
+                        bool ok = (q1 == 3 && r1 == 0)      // 3건은 들어간다
+                               && (q3 == 4 && r3 == 0)      // 🔑 **4건도 들어간다**
+                               && (q2 == 0 && r2 == 5);     // 🔴 5건은 **한 건도 안 나간다**
+                        std::cout << (ok ? "  ✓ " : "  ✗ ") << "묶음 — LCD 3건 큐 " << q1
+                                  << "/거절 " << r1 << " · **5건 큐 " << q2 << "/거절 " << r2
+                                  << "** · 4건 큐 " << q3 << " (기대 3·0 / 0·5 / 4 — 부분 전송 없음)\n";
+                        if (!ok) bad++;
+                        t.ard = BAD_SOCK;
+                        closesock(sv[0]); closesock(sv[1]);
+                    }
+                }
+
                 // ⓵ 🔴🔴 **자리에 꽂은 판정이 실제로 쓰이는가** — 이게 "콜백"의 전부다
                 //   ⚠ 꽂았는데 안 불리면 **기본이 조용히 계속 쓰인다.** 기여자 입장에서는
                 //     *"내가 쓴 코드가 아무 일도 안 한다"* 이고, **오류도 안 난다.**

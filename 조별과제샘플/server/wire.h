@@ -162,7 +162,8 @@
     //   announce : 브라우저에 `queued` 를 보내나 (재전송은 안 보낸다 — §expires_ms 단조성)
     //   force    : 깊이 상한을 무시하나 (재전송은 이미 약속한 것이므로 거절하지 않는다)
     // 반환값 false = 거절했다(호출자가 `pend` 에서 지워야 한다).
-    bool enqueue_down(Pending& p, const std::string& line, bool announce, bool force) {
+    bool enqueue_down(Pending& p, const std::string& line, bool announce, bool force,
+                      long long batch_id = 0) {
         // 🔴 **장치가 없으면 큐에 담지 않는다.** 담으면 아무도 빼가지 않아 다음 세션까지
         // 살아남고, 그러면 **장치가 모르는 상태에 옛 명령이 떨어진다**(설계 §2 가 금지한 것).
         // 옛 거동은 `send_ard` 가 조용히 no-op 해서 **아무 말 없이 사라졌다** — 그건 더 나쁘다.
@@ -231,6 +232,7 @@
         // 마감은 **enqueue 때 한 번만 박는다.** 그래야 `expires_ms = deadline − now` 가
         // 같은 rid 에 대해 **단조 비증가**가 된다(설계 §4-B). `ahead` 로 다시 계산하면
         // 앞이 밀릴 때 값이 늘어 단조성이 깨진다.
+        q.batch_id = batch_id;
         q.deadline_ms = now_ms() + DOWNQ_WAIT_CAP_MS;
         q.important = important;
         downq.push_back(q);
@@ -266,6 +268,8 @@
         // 바이트 상한까지만 담는다. **남은 것은 버리지 않고 다음 창으로 미룬다.**
         std::string payload;
         std::vector<DownQ> batch;
+        // 이번 창에서 통째로 미룬 배치 / 담기로 한 배치
+        std::set<long long> skipped_batch, accepted_batch;
         // 🔴 **중요 계열을 먼저 담는다.** 각 계열 안에서는 FIFO 다(예약/취소가 뒤집히면 안 된다).
         // **계열 사이에는 순서 보장이 필요 없다** — 상태 정정과 새 의도는 서로 독립이다.
         for (int pass = 0; pass < 2; pass++) {
@@ -273,6 +277,30 @@
             for (size_t k = 0; k < downq.size(); ) {
                 const DownQ& q = downq[k];
                 if (q.important != want) { k++; continue; }
+                // 🔴🔴 **창 원자성** — 배치는 **통째로 들어가거나 통째로 미뤄진다.**
+                //
+                //   전에는 큐에 있는 것을 순서대로 담았다. 그러면 **내 셋을 넣기 전에 남의 것이
+                //   큐에 있으면 내 셋 중 하나가 다음 창으로 밀리고, 호출자는 그것을 모른다.**
+                //   🔑 **"같이 나가더라"는 관찰이고 "같이 나간다"는 보장이다.** 여기가 그 차이다.
+                //
+                // ⚠ 이건 **창 원자성**이지 **실행 원자성**이 아니다 — 나간 뒤에 하나가 거절돼도
+                //   나머지는 수행된다. 되돌릴 수단이 없으므로 그건 약속하지 않는다.
+                if (q.batch_id != 0 && !skipped_batch.count(q.batch_id)) {
+                    size_t need_b = 0; int need_n = 0;
+                    for (size_t j = 0; j < downq.size(); j++)
+                        if (downq[j].batch_id == q.batch_id) { need_b += downq[j].line.size(); need_n++; }
+                    const bool fitsB = payload.empty()
+                                    || payload.size() + need_b <= (size_t)DOWN_BATCH_CAP_B;
+                    const bool fitsN = (int)batch.size() + need_n <= max_n;
+                    if (!fitsB || !fitsN) {
+                        // 이번 창에는 이 배치가 통째로 안 들어간다 — **한 줄도 안 담는다**
+                        skipped_batch.insert(q.batch_id);
+                        batch_deferred++;
+                        k++; continue;
+                    }
+                    accepted_batch.insert(q.batch_id);
+                }
+                if (q.batch_id != 0 && skipped_batch.count(q.batch_id)) { k++; continue; }
                 // ⚠ 첫 줄은 상한을 넘어도 담는다 — 안 그러면 큰 줄 하나가 큐를 영구히 막는다.
                 if (!payload.empty() &&
                     payload.size() + q.line.size() > (size_t)DOWN_BATCH_CAP_B) break;

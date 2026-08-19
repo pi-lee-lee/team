@@ -125,6 +125,18 @@
     //     192B 기준 → 23 + 7×24 = 191 ⇒ **8건**
     // ⚠ 묶는 제약이 둘이다 : 하행 배치(여기) **8** · ACK 되돌림 약 9(arduino 계산).
     //   **작은 쪽이 먼저 걸린다.** 넘기면 두 슬롯으로 쪼개져 "묶었는데 왜 느리지"가 된다.
+    // 바이트 축만 본 값(최악 인자 기준). `max_per_batch()` 가 이것과 건수 상한 중 작은 것을 낸다.
+    int max_per_batch_bytes() const {
+        const int one = (int)std::string("G,999,255,4294967295,").size() + 2;
+        const int cap = (DEV_RX_RING_B < DOWN_BATCH_CAP_B) ? DEV_RX_RING_B : DOWN_BATCH_CAP_B;
+        int n = 0, used = 0;
+        while (true) {
+            const int add = (n == 0) ? one : one + 1;
+            if (used + add > cap) break;
+            used += add; n++;
+        }
+        return n;
+    }
     int max_per_batch() const {
         const int one = (int)std::string("G,999,255,4294967295,").size() + 2;   // 23
         int byN = 0, used = 0;
@@ -133,7 +145,13 @@
             if (used + add > DOWN_BATCH_CAP_B) break;
             used += add; byN++;
         }
-        // 🔴🔴 **바이트만 보면 틀린다.** 건수 상한이 따로 있고 **그쪽이 먼저 걸린다.**
+        // ⚠ **장치 수신 링(64B)은 여기 안 들어간다** — 한때 넣었다가 뺐다.
+        //   링은 **배치 전체를 담지 않는다.** 장치의 `espRead()` 가 매 loop 마다 비우므로
+        //   거기 쌓이는 것은 배치 크기가 아니라 **loop 한 바퀴 동안 도착한 바이트**다
+        //   (LCD 4건 76B 는 79ms 에 걸쳐 오고 그 사이 loop 이 여러 바퀴 돈다).
+        //   🔑 **정적 바이트 비교로 "링을 넘는다"고 판단하면 틀린다** — 시간축이 빠진 계산이다.
+
+        // 🔴🔴 **바이트만 보면 틀린다.** 건수 상한이 따로 있고 **그쪽도 본다.**
         //   `DOWN_BATCH_MAX_N` 은 장치의 ACK 배출률에서 유도된 값이다(지금 4).
         //   ⚠ 바이트로 8이 들어가도 **건수에서 4로 끊긴다** — 나머지는 다음 창으로 밀린다.
         //   🔑 상한이 셋이면(바이트·건수·ACK 되돌림) **가장 작은 것이 답이다.**
@@ -146,16 +164,40 @@
                     const std::vector<std::pair<std::string, long> >& items,
                     int* queued, int* rejected) {
         *queued = 0; *rejected = 0;
-        const int cap = max_per_batch();
-        if ((int)items.size() > cap) {
+        // 🔴 **실제 줄 길이로 잰다.** `max_per_batch()` 는 *어떤 인자가 와도* 되는 하한이고,
+        //   여기서는 이 배치의 **진짜 바이트**를 세므로 짧은 인자면 더 들어간다.
+        //   예) LCD 7자리 줄은 18B 라 링 64B 에 **3건**. 최악값(23B)으로는 2건뿐이다.
+        //   🔑 상수는 **보장**을 말하고 이 계산은 **이번 배치**를 말한다. 둘 다 필요하다.
+        size_t need = 0;
+        for (size_t i = 0; i < items.size(); i++) {
+            char est[48];
+            // rid 는 최대 3자리(RID_SPACE 1000). idx·인자는 실제 값으로 센다.
+            snprintf(est, sizeof(est), "G,999,%d,%ld,xx\n", 255, items[i].second);
+            need += strlen(est);
+        }
+        if (!need) need = 1;
+        need -= 1;                                   // 마지막 줄 뒤 LF 는 payload 안에 이미 있다
+        // 🔴 **축을 섞지 마라.** 바이트는 위에서 **실제 길이**로 이미 쟀다 —
+        //   여기서 최악값 기반 건수를 또 씌우면 **같은 바이트를 두 번 세는 것**이고,
+        //   짧은 인자를 쓰는 배치가 이유 없이 거절된다. (내 시험이 그것을 잡았다)
+        const int    capN = DOWN_BATCH_MAX_N;        // 건수 축 — ACK 배출률에서 유도
+        const size_t capB = (size_t)DOWN_BATCH_CAP_B; // 바이트 축 — 하행 한 거래 상한
+        if ((int)items.size() > capN || need > capB) {
             *rejected = (int)items.size();
-            logf("!", "묶음 거절 — " + std::to_string(items.size()) + "건은 한 창에 안 들어간다"
-                      " (지금 상한 " + std::to_string(cap) + "건). **나눠서 보내라** — "
-                      "자동으로 쪼개면 두 창에 걸쳐 나가고 **묶은 뜻이 사라진다**");
+            char rb[288];
+            snprintf(rb, sizeof(rb),
+                     "묶음 거절 — %zu건 %zuB 는 한 창에 안 들어간다 "
+                     "(건수 상한 %d · 바이트 상한 %zuB = 장치 수신 링). **나눠서 보내라** — "
+                     "자동으로 쪼개면 두 창에 걸쳐 나가고 **묶은 뜻이 사라진다**",
+                     items.size(), need, capN, capB);
+            logf("!", rb);
             return;
         }
+        // 🔴 **표지를 하나 발급한다** — 이 표지를 가진 줄들은 창에 통째로 들어가거나
+        //   통째로 미뤄진다. 그것이 "묶는다"의 뜻이다("묶어진다"가 아니라).
+        const long long bid = ++batch_seq_;
         for (size_t i = 0; i < items.size(); i++) {
-            if (send_to_module(devid, items[i].first, items[i].second)) (*queued)++;
+            if (send_to_module(devid, items[i].first, items[i].second, bid)) (*queued)++;
             else (*rejected)++;      // 사유는 send_to_module 이 이름을 지목해 로그에 남긴다
         }
     }
@@ -172,7 +214,8 @@
     //
     //   반환: 전선 큐에 들어갔으면 true. **`true` 는 "보냈다"이지 "됐다"가 아니다** —
     //   실제 수행 여부는 장치의 ACK(`result`)와 다음 `S` 의 에코가 답한다.
-    bool send_to_module(const std::string& devid, const std::string& name, long arg) {
+    bool send_to_module(const std::string& devid, const std::string& name, long arg,
+                        long long batch_id = 0) {
         const Node* n = node_by_devid(devid);
         if (!n) {
             logf("!", "발행 실패 — 노드 `" + devid + "` 를 모른다 "
@@ -199,7 +242,7 @@
         p.slot = name; p.kind = 'G'; p.mod_idx = idx; p.g_arg = arg;
         p.sent_ms = now_ms(); p.tries = 1;
         pend[rid] = p;
-        if (!enqueue_down(pend[rid], build_line(gate_prefix(p)), true, false)) {
+        if (!enqueue_down(pend[rid], build_line(gate_prefix(p)), true, false, batch_id)) {
             pend.erase(rid); rid_release(rid);
             return false;
         }
