@@ -107,6 +107,39 @@
                     if (!ok) bad++;
                 }
 
+                // ⓷ 🔴🔴 **두 봉투가 같은 자리 집합을 말한다** — `snapshot.slots` == `map.zones`
+                //
+                //   화면은 새 격자를 못 쓰면 `snapshot.slots` 로 **옛 격자를 만든다**(폴백).
+                //   두 출처가 다르면 폴백이 **없는 자리를 그린다** — 값이 `00` 이라 조용하고,
+                //   🔴 고장이 아니라 **"빈 자리"** 로 보인다.
+                //   🔑 그리고 분모가 다르면 "두 경로 일치" 대조가 **항상 불일치이거나 무의미**해진다.
+                {
+                    ParkingLot lt;
+                    lt.spot("A1").sensor("P1", "A1");
+                    lt.spot("A3").sensor("P1", "A3");
+                    lt.gate("E1", Gate::IN);              // 입출구는 옛 격자의 자리가 아니다
+                    Server t; t.lot_ = &lt; t.no_disk = true;
+                    t.build_default_zones(); t.init_srv_id();
+                    const std::string snap = t.snapshot_json();
+                    const std::string mp   = t.map_json();
+
+                    // 🔴 **분모를 따로 단언한다** — 둘 다 비면 항상 같다(공허 통과).
+                    size_t nSnap = 0;
+                    for (size_t i = snap.find("\"id\":"); i != std::string::npos;
+                         i = snap.find("\"id\":", i + 1)) nSnap++;
+                    bool hasA1 = snap.find("\"A1\"") != std::string::npos;
+                    bool hasA3 = snap.find("\"A3\"") != std::string::npos;
+                    bool noE1  = snap.find("\"E1\"") == std::string::npos;   // 입구는 안 들어간다
+                    bool mapOk = mp.find("\"A1\"") != std::string::npos
+                              && mp.find("\"A3\"") != std::string::npos;
+
+                    bool ok = (nSnap == 2) && hasA1 && hasA3 && noE1 && mapOk;
+                    std::cout << (ok ? "  ✓ " : "  ✗ ") << "snapshot.slots 가 지형을 따라간다 — 자리 "
+                              << nSnap << "개(A1·A3) · 입구 제외(" << (noE1 ? "예" : "🔴아니오")
+                              << ") (기대 2 · 예)\n";
+                    if (!ok) bad++;
+                }
+
                 // ⓵ 🔴🔴 **자리에 꽂은 판정이 실제로 쓰이는가** — 이게 "콜백"의 전부다
                 //   ⚠ 꽂았는데 안 불리면 **기본이 조용히 계속 쓰인다.** 기여자 입장에서는
                 //     *"내가 쓴 코드가 아무 일도 안 한다"* 이고, **오류도 안 난다.**

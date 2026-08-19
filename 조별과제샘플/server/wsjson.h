@@ -311,16 +311,39 @@
         for (int i = 0; i < 10; i++) if (test_armed && test_ovr[i]) novr++;
         o << ",\"test_mode\":{\"armed\":" << (test_armed ? "true" : "false")
           << ",\"override_count\":" << novr << "}";
+        // 🔴🔴 **지형의 자리만 낸다.** 전에는 `SLOT_ID[10]` 을 고정으로 돌았다.
+        //
+        //   화면은 새 격자(`map.zones`)를 못 쓰면 **이 목록으로 옛 격자를 만든다**(폴백).
+        //   지형이 자리 하나인데 여기서 열을 내면 **없는 자리 아홉이 화면에 그려진다.**
+        //   🔴 값이 `00` 이라 고장으로 안 보이고 **"빈 자리 아홉"** 으로 보인다 —
+        //     **운전자가 없는 자리를 보고 간다.**
+        //   ⚠ 실제로 났다: 전선 키가 깨져 `mapUsable()` 이 false 가 됐을 때 화면이
+        //     이 폴백으로 떨어졌고, 그때 열 칸 중 아홉이 지금 지형에 없는 자리였다.
+        //
+        // 🔑 **폴백은 안전장치인데, 없는 자리를 그리면 안전장치가 아니라 거짓 정보다.**
+        // 🔑 그리고 두 봉투가 **같은 출처**가 되므로 "두 경로 일치" 대조가 다시 성립한다 —
+        //   분모가 다른 두 값을 대조하는 검사는 **항상 불일치이거나 아무 말도 안 한다.**
+        //
+        // ⚠ **봉투에서 빼지 않는다.** 빼면 폴백 경로가 죽고, 새 격자가 깨진 날 화면이 통째로 빈다.
         o << ",\"slots\":[";
-        for (int i = 0; i < 10; i++) {
-            if (i) o << ",";
-            o << "{\"id\":\"" << SLOT_ID[i] << "\",\"occupied\":" << slots[i].occupied
-              << ",\"reserved\":" << slots[i].reserved << ",\"user_id\":";
-            if (slots[i].user_id.empty()) o << "null"; else o << jstr(slots[i].user_id);
-            o << ",\"reserved_at\":";
-            if (slots[i].reserved_at == 0) o << "null"; else o << slots[i].reserved_at;
-            o << ",\"overridden\":" << ((test_armed && test_ovr[i]) ? 1 : 0);
-            o << "}";
+        {
+            bool first_slot = true;
+            for (size_t z = 0; z < lot.zones().size(); z++) {
+                const Zone& zn = lot.zones()[z];
+                if (zn.kind != "parking") continue;        // 입출구는 옛 격자의 자리가 아니다
+                const int si = slot_index(zn.id);          // 옛 자리 배열에 있으면 그 값을 쓴다
+                if (!first_slot) o << ",";
+                first_slot = false;
+                o << "{\"id\":" << jstr(zn.id)
+                  << ",\"occupied\":" << (si >= 0 ? slots[si].occupied : 0)
+                  << ",\"reserved\":" << (si >= 0 ? slots[si].reserved : 0)
+                  << ",\"user_id\":";
+                if (si < 0 || slots[si].user_id.empty()) o << "null"; else o << jstr(slots[si].user_id);
+                o << ",\"reserved_at\":";
+                if (si < 0 || slots[si].reserved_at == 0) o << "null"; else o << slots[si].reserved_at;
+                o << ",\"overridden\":" << ((si >= 0 && test_armed && test_ovr[si]) ? 1 : 0);
+                o << "}";
+            }
         }
         o << "]}";
         return o.str();
