@@ -2026,6 +2026,67 @@ int main() {
     Serial.echoToStdout = true;
   }
 
+  // ── [43] 🔴🔴 **`setup()` 이 실제로 등록하는가** — 시험이 대신 해 주던 것을 막는다 ──
+  //   🔑 사용자 지시: *"콜백은 샘플에 필수이다. 무조건 있어야 한다."*
+  //     그 뜻은 *"주석에 적혀 있다"* 가 아니라 **"컴파일되어 돈다"** 이다.
+  //   🔴 지금까지 시험은 `setup()` 을 안 부르고 **자기가 등록**했다. 그래서 `setup()` 에서
+  //     `router.on` 을 하나 빠뜨려도 시험이 통과했다 — 실제로 `L2` 에서 그렇게 물렸다.
+  //   → **여기서는 `setup()` 을 직접 부른다.** 그것만이 "샘플에 있다"를 검사한다.
+  printf("\n[43] setup() 이 콜백을 실제로 등록하는가\n");
+  {
+    Serial.echoToStdout = false;
+    // 등록을 **전부 지우고** 시작한다 — 앞 시험이 해 둔 것에 기대면 이 시험은 무의미하다
+    for (uint8_t i = 0; i < MODULE_N; i++) {
+      char n4[4]; moduleNameOf(i, n4);
+      router.on(n4, 0); sensors.on(n4, 0);
+    }
+    bool cleared = true;
+    for (uint8_t i = 0; i < MODULE_N; i++) if (router.has(i) || sensors.at(i)) cleared = false;
+    ok(cleared,             "★ 음성 대조: 지우면 하나도 안 남는다 (이 시험이 실제로 돈다)");
+
+    setup();                                       // 🔴 실기가 부르는 그 함수
+
+    // ① 명령 핸들러 — `O*` 모듈은 **전부** 붙어 있어야 한다
+    bool everyO = true;
+    for (uint8_t i = 0; i < MODULE_N; i++) {
+      char k4[4]; moduleKindOf(i, k4);
+      if (k4[0] == 'O' && !router.has(i)) {
+        everyO = false;
+        char n4[4]; moduleNameOf(i, n4);
+        printf("      🔴 %s 에 명령 핸들러가 없다 — setup() 에 router.on 이 빠졌다\n", n4);
+      }
+    }
+    ok(everyO,              "★★★ **setup() 이 명령 가능한 모듈 전부에 핸들러를 붙인다**");
+
+    // ② 센서 훅 — 샘플은 둘을 붙인다. 하나라도 빠지면 그 자리는 기본 경로로 조용히 돈다
+    ok(sensors.at(0) != 0,  "★★★ setup() 이 A1 에 센서 훅을 붙인다 (주석이 아니다)");
+    ok(sensors.at(1) != 0,  "★★★ setup() 이 B1 에 센서 훅을 붙인다");
+
+    // ③ 자리 소스도 `setup()` 이 잡는다 — 훅이 불릴 수 있는 상태여야 한다
+    ok(node.srcReal != 0,   "★★ setup() 뒤에 실물 칸이 있다 — 0 이면 훅이 영영 안 불린다");
+
+    // ④ 🔴 **샘플 훅 둘이 서로 다른 값을 낼 수 있는가** — 서버의 OR/AND 판정이 갈리려면 필요하다
+    {
+      bool everSplit = false;
+      g_pinLevel[PIN_SAMPLE_LED] = LOW;            // B1(LED 되읽기) = 0 으로 고정
+      for (uint32_t t = 0; t < 40 && !everSplit; t++) {
+        slotNo = t;                                // A1 시뮬은 slotNo 를 본다
+        node.readSensors();
+        if (((node.occMask >> 0) & 1) != ((node.occMask >> 1) & 1)) everSplit = true;
+      }
+      ok(everSplit,         "★★★ 두 센서가 **갈리는 순간이 있다** — OR 와 AND 가 다른 답을 낸다");
+    }
+    // ⑤ 그리고 A1 시뮬이 **양쪽 값을 다 낸다** (늘 0 이면 갈림이 우연일 수 있다)
+    {
+      bool sawHi = false, sawLo = false;
+      for (uint32_t t = 0; t < 40; t++) { slotNo = t; node.readSensors();
+        if ((node.occMask >> 0) & 1) sawHi = true; else sawLo = true; }
+      ok(sawHi && sawLo,    "★★ A1 시뮬이 찼다/비었다를 **둘 다** 낸다 (화면이 움직인다)");
+    }
+
+    Serial.out.clear(); Serial.echoToStdout = true;
+  }
+
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }

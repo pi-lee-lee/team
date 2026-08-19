@@ -296,6 +296,22 @@ static bool ultrasonicRead(uint8_t pin) {
   return lastVal;
 }
 
+// ── 🔓 **자리 A1 의 첫째 센서(A1) — 핀 2** ─────────────────────────────────────
+//   🔴 **실물을 붙이면 `SAMPLE_SIM_SENSORS` 를 0 으로 바꿔라. 그게 전부다.**
+//     아래 `#else` 쪽이 **실물을 읽는 진짜 한 줄**이다 — 지금도 눈에 보이게 두었다.
+//   🔑 시뮬이 **훅 안에** 있다는 것이 요점이다. 자리는 늘 실물 경로로 돌고
+//     `sensors.on` → `readRealSensor` → **이 함수**까지 전부 실제로 불린다.
+static bool readA1(uint8_t pin) {
+#if SAMPLE_SIM_SENSORS
+  (void)pin;
+  // 🔓 배선이 없어도 화면이 움직이게 — 주기 24초로 스스로 찼다/비었다를 오간다.
+  //   ⚠ `slotNo` 는 부팅부터 세므로 **재현 가능**하다(무작위가 아니다).
+  return (slotNo % 20) < 10;
+#else
+  return digitalRead(pin) == LOW;      // ACTIVE_LOW — 눌리면 LOW = **찼다**
+#endif
+}
+
 // ── 🔓 하드웨어 없이 왕복을 보는 예시 — **LED 를 되읽어 자리 값으로 쓴다** ────────
 //   🔴 **이건 "되읽기(피드백) 센서" 라는 실제 패턴이다.** 차단봉에 리밋 스위치를 달아
 //     *"정말 열렸는가"* 를 읽는 것과 같은 모양이고, 여기서는 그것을 **내장 LED** 로 한다.
@@ -343,8 +359,11 @@ void setup() {
   // sensors.on("A1", ultrasonicRead);
   // pinMode(PIN_US_TRIG, OUTPUT);  pinMode(PIN_US_ECHO, INPUT);   // ← 같이 풀어라
 
-  // 🔓 **하드웨어가 없어도 왕복이 보이게** — 자리 A1 의 둘째 센서(B1)가 LED 를 되읽는다.
-  //   ⚠ **진짜 센서를 달면 이 줄을 지워라.** 그러면 `digitalRead(핀 9)` 기본 경로로 돌아간다.
+  // 🔓 **센서 훅 둘 — 여기서 붙는다. 주석이 아니라 실제로 돈다.**
+  //   `A1` 은 스스로 오가고(화면이 움직인다) · `B1` 은 LED 를 되읽는다(명령이 화면까지 닿는다).
+  //   🔑 **둘이 서로 다른 값을 낼 수 있다** — 그래야 서버의 점유 판정(OR/AND)이 실제로 갈린다.
+  //   ⚠ 진짜 센서를 달면 `SAMPLE_SIM_SENSORS` 를 0 으로(A1) · 이 줄을 지우면 된다(B1).
+  sensors.on("A1", readA1);
   sensors.on("B1", readLedBack);
 
   // 🔓 **명령 수신 등록 — 자기 액추에이터를 여기 붙인다**
@@ -393,13 +412,15 @@ void setup() {
   for (uint8_t i = 0; i < SENSOR_N; i++) {
     char nm[4]; moduleNameOf(i, nm);
     Serial.print(nm); Serial.print('=');
-    if (!(node.srcReal & ((uint16_t)1 << i))) Serial.print(F("시뮬"));
-    else {
-      Serial.print(F("실물(핀")); Serial.print(slotPin(i)); Serial.print(')');
-      if (sensors.at(i)) Serial.print(F("+훅"));      // 기여자 핸들러가 붙어 있다
-    }
+    if (!(node.srcReal & ((uint16_t)1 << i)))  Serial.print(F("안읽음"));
+    else if (sensors.at(i))                    Serial.print(F("훅"));
+    else { Serial.print(F("핀")); Serial.print(slotPin(i)); }
     Serial.print(' ');
   }
+#if SAMPLE_SIM_SENSORS
+  // ⚠ **"실물"이라고 찍으면 거짓말이다.** 샘플 훅이 무엇을 하는지 그대로 말한다.
+  Serial.print(F(" ⚠ 샘플 훅 = 시뮬/LED되읽기 (배선 없음)"));
+#endif
   Serial.println();
 
   Serial.print(F("\n[PARKING NODE] proto v1 / "));
