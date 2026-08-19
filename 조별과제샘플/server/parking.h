@@ -31,6 +31,7 @@
 #include <string>
 #include <vector>
 #include <cstddef>
+#include <iostream>   // 🔑 기여자가 `std::cout` 을 바로 쓸 수 있게 — include 를 둘로 만들지 않는다
 #include "spot.h"      // SpotBehavior — 자리의 동작 방식(기여자가 구현한다)
 #include "cmdresult.h" // CmdResult — 명령 결과를 나중에 받는다
 
