@@ -81,8 +81,13 @@ static inline uint8_t slotPin(uint8_t i) {
 // **실제 설치는 10칸이 한꺼번에 되지 않는다.** 배선이 끝난 칸만 1 로 올리면
 // 나머지는 그대로 시뮬로 돈다. 예) A1·A2·B3 만 배선했다면 → 0x0083
 //   (A1=bit0, A2=bit1, A3=bit2, A4=bit3, A5=bit4, B1=bit5 … B5=bit9)
-#ifndef SLOT_SRC_DEFAULT
-#define SLOT_SRC_DEFAULT 0x0000      // 기본: 센서가 아직 하나도 없으므로 10칸 전부 시뮬
+// 🔓 **센서를 실물로 읽을 것인가** — 기본은 **읽는다**(모듈 표에 핀을 적었으면 그 뜻이다).
+//   🔴 **이 값을 1 로 하면 실물 센서를 안 읽고 시뮬레이터가 자리를 움직인다.**
+//     하드웨어가 아직 없는 사람이 화면을 보려고 쓰는 탈출구다.
+//   ⚠ 시뮬이면 **`sensors.on()` 으로 등록한 훅도 안 불린다** — 실물 경로 안에 있기 때문이다.
+//     부팅 `[SENS]` 줄이 지금 어느 쪽인지 말해 준다.
+#ifndef SAMPLE_SIM_SENSORS
+#define SAMPLE_SIM_SENSORS 0
 #endif
 static inline uint8_t simPair(uint8_t i) { return (uint8_t)((i + SENSOR_N / 2) % SENSOR_N); }
 
@@ -126,7 +131,14 @@ class ParkingNode {
   //   전역 객체의 생성자는 `main()` 전에 돌아 `Serial`·`millis()` 가 없다(§AVR 함정).
   //   ⚠ `srcReal` 만 0 이 아닐 수 있다(`SLOT_SRC_DEFAULT` 를 바꾸면). 그래서 여기서 넣는다.
   void begin() {
-    srcReal = SLOT_SRC_DEFAULT;
+    // 🔴 **소스는 모듈 표에서 파생한다.** 핀을 적었으면 그 핀을 읽겠다는 뜻이다.
+    //   ⚠ 예전에는 `SLOT_SRC_DEFAULT` 라는 **두 번째 진실**이 따로 있었고 기본이 `0x0000`
+    //     이라 **핀을 적어도 한 번도 안 읽었다.** 값이 두 곳에 있으면 갈린다 — 하나로 모았다.
+    srcReal = 0;
+#if !SAMPLE_SIM_SENSORS
+    for (uint8_t i = 0; i < SENSOR_N; i++)
+      if (slotPin(i) != PIN_NONE) srcReal |= (uint16_t)1 << i;
+#endif
     for (uint8_t i = 0; i < SENSOR_N; i++) applySlotPinMode(i);
   }
 

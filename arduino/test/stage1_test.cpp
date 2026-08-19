@@ -1704,7 +1704,27 @@ int main() {
   //   여기서 등록 → 읽기 → 문턱 판정 → 캐시까지 밟는다.
   printf("\n[38] 센서 읽기 훅 (sensors.on) + 초음파 샘플\n");
   {
-    node.srcReal = 0xFFFF;                 // 실물 경로를 타게 한다
+    // 🔴🔴 **먼저 불변식**: `begin()` 뒤에 **핀을 적은 칸은 실물로 잡혀야 한다.**
+    //   ⚠ 예전에는 `SLOT_SRC_DEFAULT = 0x0000` 이라 **표에 핀을 적어도 한 번도 안 읽었다.**
+    //     그래서 `sensors.on()` 으로 등록한 훅도 **조용히 무시**됐다 — 오류도 안 났다.
+    //   🔑 이 단언이 없으면 그 회귀가 **아무 신호 없이** 돌아온다.
+    node.begin();
+    {
+      bool everyPinnedIsReal = true;
+      for (uint8_t i = 0; i < SENSOR_N; i++)
+        if (slotPin(i) != PIN_NONE && !(node.srcReal & ((uint16_t)1 << i))) {
+          everyPinnedIsReal = false;
+          printf("      🔴 슬롯 %u 는 핀 %u 를 적었는데 시뮬이다\n", i, slotPin(i));
+        }
+      ok(everyPinnedIsReal,
+                            "★★★ **핀을 적은 칸은 실물로 읽는다** (표가 유일한 진실이다)");
+      ok(node.srcReal != 0, "★★ 기본 구성에서 실물 칸이 **하나 이상** 있다 — 0 이면 훅이 죽는다");
+      // 그리고 실물 칸은 핀 모드가 잡혀 있어야 한다(훅이 없을 때)
+      ok(g_pinMode[slotPin(0)] == INPUT_PULLUP,
+                            "★★ 실물 칸의 핀 모드를 `begin()` 이 잡는다");
+    }
+
+    node.srcReal = 0xFFFF;                 // 아래 훅 시험은 전 칸을 실물로 둔다
     ok(!sensors.at(0),      "★ 등록 전에는 훅이 없다 (기본 digitalRead 경로)");
     ok(sensors.on("A1", ultrasonicRead),
                             "★★ 이름으로 등록된다 (router.on 과 같은 모양)");
@@ -1749,7 +1769,7 @@ int main() {
     node.applySlotPinMode(0);
     ok(g_pinMode[slotPin(0)] == INPUT_PULLUP,
                             "★★ 훅을 떼면 기본 INPUT_PULLUP 이 다시 걸린다");
-    node.srcReal = SLOT_SRC_DEFAULT;
+    node.begin();      // 소스를 표에서 다시 파생시킨다
   }
 
   // ── [39] 🔴 **거절이 조용하지 않은가** — 로그가 셋을 갈라 주는가 ──────────────

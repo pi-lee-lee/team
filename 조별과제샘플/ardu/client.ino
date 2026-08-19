@@ -367,6 +367,21 @@ void setup() {
   //     `SENSOR_N`      = **센서 수**  — 자리마다 둘이므로 자리 수의 2배다
   //     `moduleCount()` = **모듈 수**  — 센서 + 액추에이터. `D,*,<drain>,<n>` 의 `n` 이 이것이다
   //   ⚠ 옛 판은 센서 수 하나만 `slots` 라고 찍었다 — **센서 수를 자리 수로 읽게 만들었다.**
+  // 🔴 **내 센서가 실제로 읽히는가** — 이 줄이 그 답이다.
+  //   ⚠ 시뮬이면 `sensors.on()` 훅도 안 불린다(실물 경로 안에 있다). 그 사실이 여기 보인다.
+  Serial.print(F("\n[SENS] "));
+  for (uint8_t i = 0; i < SENSOR_N; i++) {
+    char nm[4]; moduleNameOf(i, nm);
+    Serial.print(nm); Serial.print('=');
+    if (!(node.srcReal & ((uint16_t)1 << i))) Serial.print(F("시뮬"));
+    else {
+      Serial.print(F("실물(핀")); Serial.print(slotPin(i)); Serial.print(')');
+      if (sensors.at(i)) Serial.print(F("+훅"));      // 기여자 핸들러가 붙어 있다
+    }
+    Serial.print(' ');
+  }
+  Serial.println();
+
   Serial.print(F("\n[PARKING NODE] proto v1 / "));
   Serial.print(SPOT_N);         Serial.print(F(" spots / "));
   Serial.print(SENSOR_N);            Serial.print(F(" sensors / "));
