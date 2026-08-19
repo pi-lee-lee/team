@@ -262,6 +262,35 @@ void ParkingLot::gate(const std::string& id, Gate::Kind kind) {
     areas_.push_back(a);
 }
 
+Control ParkingLot::control(const std::string& devid, const std::string& name) {
+    // 🔑 **같은 (devid,name) 은 덮어쓴다.** 두 벌이 생기면 화면에 버튼이 둘 뜨고
+    //   어느 것이 참인지 아무도 모른다 — 조용히 갈리는 것보다 나중 선언이 이기는 것이 낫다.
+    for (size_t i = 0; i < controls_.size(); i++)
+        if (controls_[i].devid == devid && controls_[i].name == name)
+            return Control(this, i);
+    ControlDecl c; c.devid = devid; c.name = name;
+    controls_.push_back(c);
+    return Control(this, controls_.size() - 1);
+}
+Control& Control::toggle(const std::string& label) {
+    ControlDecl& c = lot_->controls_[idx_];
+    c.widget = ControlDecl::TOGGLE; c.label = label; return *this;
+}
+Control& Control::number(const std::string& label, long vmin, long vmax) {
+    ControlDecl& c = lot_->controls_[idx_];
+    c.widget = ControlDecl::NUMBER; c.label = label; c.vmin = vmin; c.vmax = vmax; return *this;
+}
+Control& Control::choice(const std::string& label) {
+    ControlDecl& c = lot_->controls_[idx_];
+    c.widget = ControlDecl::CHOICE; c.label = label; return *this;
+}
+Control& Control::option(long value, const std::string& label) {
+    // ⚠ `choice()` 없이 부르면 위젯이 `NONE` 인 채로 목록만 쌓인다.
+    //   **막지 않는다 — 기동 로그가 지목해 말한다.** 증상이 보이는 오류는 막는 것보다 말하는 것이 낫다.
+    lot_->controls_[idx_].options.push_back(std::make_pair(value, label));
+    return *this;
+}
+
 struct ParkingServer::Impl {
     ParkingLot lot;      // 🔑 **사본을 든다** — 호출자가 뒤에 표를 바꿔도 서버가 안 흔들린다
     Server     srv;

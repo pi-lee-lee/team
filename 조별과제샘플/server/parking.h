@@ -34,6 +34,7 @@
 #include <iostream>   // 🔑 기여자가 `std::cout` 을 바로 쓸 수 있게 — include 를 둘로 만들지 않는다
 #include "spot.h"      // SpotBehavior — 자리의 동작 방식(기여자가 구현한다)
 #include "cmdresult.h" // CmdResult — 명령 결과를 나중에 받는다
+#include "control.h"   // ControlDecl — 화면에 그릴 조작 UI 를 기여자가 선언한다
 
 class ParkingLot;
 
@@ -91,11 +92,42 @@ private:
     std::size_t idx_;
 };
 
+// 🔴🔴 **모듈 하나의 조작 UI 를 선언한다** (2026-08-20 · 화면 직접 조작)
+//
+//   ```
+//   lot.control("P1","LD").toggle("표시등");                    // 0 / 1
+//   lot.control("P1","LC").number("표시기", 0, 9999999);        // 숫자 칸
+//   lot.control("P1","DR").choice("차단봉")                     // 🔑 **이것이 명령표다**
+//           .option(1,"열기").option(2,"닫기").option(3,"잠금").option(4,"해제");
+//   ```
+//   🔑 **화면은 값의 뜻을 모른다.** 라벨을 그리고 값을 보낼 뿐이다 —
+//     그래서 `kind` 가 늘어도 화면을 안 고친다.
+//   🔴 **선언 안 한 모듈은 조작 UI 가 없다.** 표시는 그대로 된다.
+//   ⚠ 모듈 종류를 안 가린다 — 센서(`IP`)에도 선언할 수 있다.
+class Control {
+public:
+    Control& toggle(const std::string& label);
+    Control& number(const std::string& label, long vmin, long vmax);
+    Control& choice(const std::string& label);
+    // ⚠ `{{1,"열기"},…}` 대신 **연쇄**로 둔 이유: 초기화 리스트는 중괄호를 틀리기 쉽고
+    //   오류 문구가 길다. **`sensor().actuator()` 와 같은 모양**이 기여자에게 낫다.
+    Control& option(long value, const std::string& label);
+private:
+    friend class ParkingLot;
+    Control(ParkingLot* lot, std::size_t idx) : lot_(lot), idx_(idx) {}
+    ParkingLot* lot_;
+    std::size_t idx_;
+};
+
 // 주차장 한 곳. **지형을 선언하는 것이 유일한 일**이다.
 class ParkingLot {
 public:
     Spot spot(const std::string& id);                    // 주차 자리를 만든다
     void gate(const std::string& id, Gate::Kind kind);   // 입구/출구를 만든다
+
+    // 🔴 조작 UI 선언 (위 `Control` 주석 참조). **같은 (devid,name) 을 다시 부르면 덮어쓴다** —
+    //   두 벌이 생기면 화면에 버튼이 둘 뜨고 어느 것이 참인지 아무도 모른다.
+    Control control(const std::string& devid, const std::string& name);
 
     // 서버가 읽는다. **호출자가 쓸 일은 없다** — 다만 감출 이유도 없다(상태는 드러낸다).
     // 자리에 붙은 모듈 하나의 **선언**. (실제로 붙었는지는 등록이 정한다)
@@ -119,11 +151,14 @@ public:
         Area() : behavior(0) {}
     };
     const std::vector<Area>& areas() const { return areas_; }
+    const std::vector<ControlDecl>& controls() const { return controls_; }
     bool empty() const { return areas_.empty(); }
 
 private:
     friend class Spot;
-    std::vector<Area> areas_;
+    friend class Control;
+    std::vector<Area>        areas_;
+    std::vector<ControlDecl> controls_;
 };
 
 // 서버. 🔴 **복잡함은 전부 이 뒤에 있다** — 헤더에 자료구조가 하나도 안 나온다.
