@@ -5512,13 +5512,25 @@ static int selftest() {
                 // ⚠ **여기도 재시도해야 한다.** 처음엔 한 번만 읽었고 디버그 빌드에서는 우연히
                 //   통과했다 — 🔴 **`-O2` 빌드가 더 빨라서 그 우연이 깨졌다.**
                 //   **배포용 빌드를 돌려 본 것이 이 결함을 드러냈다.**
-                char rb[4096]; int n = -1;
-                for (int tries = 0; tries < 2000 && n <= 0; tries++)
-                    n = (int)recv(lw.b, rb, sizeof(rb), MSG_DONTWAIT);
-                std::string got(rb, n > 0 ? n : 0);
-                bool ok29 = (got.find("module_absent") != std::string::npos);
+                // 🔴 **한 번의 `recv` 에 단언하지 않는다** (2026-08-19 수리)
+                //   전에는 첫 성공 `recv` 하나로 판정하고 **그 바이트 수를 찍었다.** 그 값이
+                //   `93B` 와 `199B` 사이를 오갔다 — **응답 셋이 한 번에 오기도 하고 나뉘어 오기도 한다.**
+                //   🔑 **부분 읽기는 정상이다.** TCP 는 스트림이지 메시지가 아니다(내 도메인 제1규칙).
+                //   ⚠ 그런데 그 비결정 줄이 **출력 대조라는 판별 도구 자체를 흔들었다** —
+                //     ②-a·②-c 대조에서 매번 잡음으로 나왔다. 판별자를 쓰기 직전이 고칠 마지막 기회다.
+                //   ⚠ 그리고 더 나쁜 것: 첫 조각만 읽고 단언하면 **셋 중 하나만 보고 통과**할 수 있다.
+                //     §"헛통과" 부류다 — 밟긴 밟았는데 다른 것을 밟았다.
+                //   → **더 안 올 때까지 모으고, 찍는 값도 바이트가 아니라 *건수* 로 바꾼다.**
+                char rb[4096]; std::string got; int idle = 0;
+                for (int tries = 0; tries < 4000 && idle < 200; tries++) {
+                    int n = (int)recv(lw.b, rb, sizeof(rb), MSG_DONTWAIT);
+                    if (n > 0) { got.append(rb, n); idle = 0; } else idle++;
+                }
+                int msgs = 0;
+                for (size_t q = got.find("\"rid\""); q != std::string::npos; q = got.find("\"rid\"", q + 1)) msgs++;
+                bool ok29 = (got.find("module_absent") != std::string::npos && msgs == 3);
                 std::cout << (ok29 ? "  ✓ " : "  ✗ ") << "조작 요청: 없는 자리·차단봉 없는 자리·"
-                          << "미결속 입구 → 전부 사유가 간다(응답 " << (n > 0 ? n : 0) << "B)\n";
+                          << "미결속 입구 → 전부 사유가 간다(응답 " << msgs << "건 · 기대 3)\n";
                 if (!ok29) bad++;
 
                 // 🔴 ④ 모듈이 붙고 노드가 살아 있어도 **전선 명령이 없으면 not_supported**
@@ -5534,13 +5546,15 @@ static int selftest() {
                 // ⚠ **루프백 TCP 는 `socketpair` 와 달리 즉시 도착하지 않는다.**
                 //   한 번만 읽고 `-1`(EWOULDBLOCK)을 "안 보냈다"로 읽으면 **없는 결함이 생긴다** —
                 //   실제로 그렇게 나왔다. 짧게 재시도한다.
-                n = -1;
-                for (int tries = 0; tries < 2000 && n <= 0; tries++)
-                    n = (int)recv(lx.b, rb, sizeof(rb), MSG_DONTWAIT);
-                std::string g2(rb, n > 0 ? n : 0);
+                // 🔑 여기도 **모아서 읽는다**(앞 시험과 같은 이유 · 부분 읽기는 정상이다)
+                std::string g2; int idle2 = 0;
+                for (int tries = 0; tries < 4000 && idle2 < 200; tries++) {
+                    int n2 = (int)recv(lx.b, rb, sizeof(rb), MSG_DONTWAIT);
+                    if (n2 > 0) { g2.append(rb, n2); idle2 = 0; } else idle2++;
+                }
                 bool ok30 = (g2.find("not_supported") != std::string::npos);
                 if (!ok30) std::cout << "    [진단] lx.a=" << lx.a << " lx.b=" << lx.b
-                                     << " conns=" << t.conns.count(lx.a) << " n=" << n << "\n";
+                                     << " conns=" << t.conns.count(lx.a) << " 받은B=" << g2.size() << "\n";
                 std::cout << (ok30 ? "  ✓ " : "  ✗ ") << "준비된 자리인데 전선 명령이 없다 → "
                           << "**not_supported**(거짓 완료를 안 만든다)\n";
                 if (!ok30) bad++;
