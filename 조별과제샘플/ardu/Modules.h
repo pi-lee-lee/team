@@ -35,34 +35,9 @@
 //   설정 파일이 없어서 **이름을 결속으로 쓰는 부트스트랩**이다. socket 이 그 간극을 밝혔다.
 // 🔮 **설정 적재가 들어오면 이 종속이 사라진다.** 그 전에 이름을 바꿀 계획이 생기면
 //   **socket 에 먼저 말해라** — 설정을 먼저 넣으면 안전해진다.
-struct ModuleDef {
-  char    name[3];      // "A1" + NUL — 명칭이자 **지금은 자리 결속 키다**(위 경고)
-  char    kind[4];      // KIND_* 2글자 + 선택적 `V` 접미(가상) + NUL
-  uint8_t pin;
-};
-// 🔴 **가상 모듈 스위치** (REQ-0227 · 2026-08-19)
-//   실기에 `O*`(명령 가능) 모듈이 하나도 없어 **조작 사슬이 한 번도 안 돌았다.**
-//   ⚠ **실물 모듈이 생기면 반드시 0 으로 꺼라** — 켜 둔 채 실물을 붙이면 **같은 자리에 둘이 붙는다.**
-#ifndef VIRTUAL_MODULES
-#define VIRTUAL_MODULES 1
-#endif
-
-static const ModuleDef MODULE_TABLE[] PROGMEM = {
-  {"A1", KIND_PARK_SENSOR,  2}, {"A2", KIND_PARK_SENSOR,  3}, {"A3", KIND_PARK_SENSOR,  4},
-  {"A4", KIND_PARK_SENSOR,  5}, {"A5", KIND_PARK_SENSOR,  6},
-  {"B1", KIND_PARK_SENSOR,  9}, {"B2", KIND_PARK_SENSOR, 10}, {"B3", KIND_PARK_SENSOR, 11},
-  {"B4", KIND_PARK_SENSOR, 12}, {"B5", KIND_PARK_SENSOR, A0},
-#if VIRTUAL_MODULES
-  // 🔴 **끝에만 붙인다. 중간 삽입 금지.**
-  //   `idx` 는 **등록 순서**이고 **서버의 자리 결속과 `G,<rid>,<idx>,<op>` 가 둘 다 그것을 쓴다.**
-  //   중간에 넣으면 **기존 자리의 idx 가 전부 밀려 지금 되는 결속이 조용히 깨진다.**
-  // ⚠ 이름은 **자리 id 와 같아야 한다**(원장 §20) — `E1`·`X1` 말고 다른 이름을 쓰면
-  //   등록은 성공하고 자리에는 아무것도 안 붙는다. **오류가 안 뜬다.**
-  {"E1", KIND_BARRIER_V, PIN_NONE},   // 입구 차단봉 (가상)
-  {"X1", KIND_BARRIER_V, PIN_NONE},   // 출구 차단봉 (가상)
-#endif
-};
-static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_TABLE[0]));
+// ✏️ `ModuleDef`·`MODULE_TABLE`·`MODULE_N` 은 **`client.ino` 로 옮겼다** (2026-08-19 · 사용자 지시).
+//   🔑 이 배포본은 **기여자가 받아 자기 것으로 고치는 출발점**이다. 모듈 표는 반드시 고치는 것이라
+//   **헤더를 열지 않고** 고칠 수 있어야 한다. `client.ino` 가 이 파일보다 **먼저** 정의한다.
 
 // 🔴 **상한을 컴파일 시점에 박는다.** `node.occMask`·`node.resMask`·`node.ovrActive` 가 전부 `uint16_t` 다.
 //   표에 17번째가 들어오는 순간 `1u << 16` 이 **아무 일도 안 하고** 그 자리가 조용히 사라진다 —
