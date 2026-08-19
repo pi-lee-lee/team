@@ -794,10 +794,18 @@ struct Node {
     long long   last_q_ms;      // 마지막 `Q` — 슬롯당 1회로 묶는다
     std::vector<std::pair<std::string, std::string> > mods;   // (name, kind) · **순서가 곧 idx**
 
+    // ── 🔴 ②-c — **자리 비트열은 노드의 것이다** (REQ-0262/0263 · 2026-08-19)
+    //   전에는 `Server` 에 한 벌뿐이었다. 그래서 보조 노드의 모듈은 값 경로가 없었고
+    //   `state_json()` 이 그것을 정직하게 `known:false` 로 냈다(설계 §8.9).
+    //   🔴 **이 필드가 `Node` 로 오기 전에 보조 노드의 줄을 파서에 넣으면**
+    //     그 `S` 가 **주 노드의 비트열을 덮는다.** 그래서 ②-c 가 ②-b 보다 먼저다.
+    int         mod_bits[REG_MODS_MAX];   // 자리 비트열(자리 10칸을 넘는 비트 포함)
+    int         mod_bits_n;               // 해독한 비트 수. **0 = 안 읽었다**(모른다이지 0 이 아니다)
+
     Node() : fd(BAD_SOCK), seen(false), last_ms(0), last_epoch_ms(0),
              connected_ms(0), frames(0), drops(0), online(false), offline_episodes(0),
              reg_n(-1), reg_drain(-1), reg_done(false), reg_giveup(false),
-             reg_first_ms(0), q_sent(0), last_q_ms(0) {}
+             reg_first_ms(0), q_sent(0), last_q_ms(0), mod_bits_n(0) {}
 
     void reg_reset() {          // 세션이 새로 서면 등록도 처음부터다
         reg_n = -1; reg_drain = -1; reg_done = false; reg_giveup = false;
@@ -929,7 +937,7 @@ struct Server {
     //   (arduino REQ-0228 답변 · 명세 §5 "위험 다섯째"). **조작 완료를 판정하는 값이 이것이다.**
     //   ⚠ 새 칸을 만들면 같은 값이 두 곳에 생기고 **갈리는 순간 어느 쪽이 맞는지 알 방법이 없다.**
     //   🔑 그래서 칸을 안 늘리고 **이미 오는 값을 제대로 읽는 쪽**을 골랐다(전선 예산 증가 0).
-    int  mod_bits[REG_MODS_MAX];
+    // ~~int mod_bits[REG_MODS_MAX];~~ → **`Node` 로 내렸다**(②-c). 노드마다 한 벌이다.
     // 🔴 **마지막으로 요청한 값**(모듈 인덱스 → 0/1). **완료 판정은 대조이지 존재 확인이 아니다.**
     //   ⚠ 처음엔 "그 모듈의 에코가 있으면 settled" 로 짰는데 **그건 "무엇이 됐는가"를 안 본다** —
     //     열라고 했는데 닫혀 있어도 `settled` 가 됐다. **거짓 완료를 막으려던 값이 거짓 완료를 만든다.**
@@ -938,7 +946,7 @@ struct Server {
     // 재등록 직전의 모듈 목록. `D,*` 에서 찍고 등록 완료에서 대조한 뒤 비운다.
     std::vector<std::pair<std::string,std::string> > prev_mods_snapshot;
     long long mod_order_changed;   // 🔴 약속이 깨진 횟수. **0 이 정상이고 1 이상은 조사 대상이다**
-    int  mod_bits_n;             // 해독한 비트 수. **0 = 안 읽었다**(모른다이지 0 이 아니다)
+    // ~~int mod_bits_n;~~ → **`Node` 로 내렸다**(②-c).
     // 🔴 **분모를 같이 만든다.** `장치거절 0` 만 찍으면 **`0` 이 혼자 서서 건강처럼 보인다** —
     //   `치유 0/386` 은 분모가 보여서 `0` 이 건강임을 말할 수 있는데, 이건 말할 수 없다.
     //   ⚠ **`0/0` 은 최소한 `0/0` 이라고 말해 준다. 분모 칸이 없는 것이 더 나쁘다**(monitor 지적).
@@ -1191,7 +1199,7 @@ struct Server {
                lsn_ard(BAD_SOCK), lsn_http(BAD_SOCK), lsn_phone(BAD_SOCK),
                reg_ok(0), reg_bad(0), reg_qsent(0), reg_giveups(0), reg_widthbad(0),
                occ_undecoded(0), occ_undecoded_warned(false),
-               mod_order_changed(0), mod_bits_n(0),
+               mod_order_changed(0),
                gate_q(0), gate_sent(0), gate_ans(0), dev_reject(0),
                heal_checks(0), heal_fires(0), res_undecoded(0), res_undecoded_warned(false),
                dup_devid_reject(0), takeover_grace(0),  // 선언 순서와 일치시킨다(-Wreorder)
@@ -1539,7 +1547,7 @@ struct Server {
         //   `known:true` 로 낡은 값을 **사실로 주장한다** — 차단봉이 열려 있다고 그려 놓고
         //   실제로는 볼 수 없는 상태다. **모르면 덜 주장한다**(같은 블록에 적어 둔 규칙이다).
         //   ⚠ `z.modules` 는 남는다(지형은 유지) — **없어지는 것은 값이지 구조가 아니다.**
-        mod_bits_n = 0;
+        park.mod_bits_n = 0;
         gate_want.clear();          // 대조할 기준도 이 세션 것이다. 다음 세션으로 넘기지 않는다
         clear_downq("세션 종료");
     }
@@ -2497,8 +2505,8 @@ struct Server {
                 const char* comp = "unknown";
                 std::map<int,int>::const_iterator wi = gate_want.find(gi);
                 if (any_pending)                                  comp = "pending";
-                else if (gi >= 0 && gi < mod_bits_n && wi != gate_want.end())
-                    comp = (mod_bits[gi] == wi->second) ? "settled" : "mismatch";
+                else if (gi >= 0 && gi < park.mod_bits_n && wi != gate_want.end())
+                    comp = (park.mod_bits[gi] == wi->second) ? "settled" : "mismatch";
                 o << ",\"completion\":\"" << comp << "\",\"modules\":[";
             }
             for (size_t m = 0; m < z.modules.size(); m++) {
@@ -2510,11 +2518,11 @@ struct Server {
                 if (z.modules[m].first == park.devid)
                     for (size_t k = 0; k < park.mods.size(); k++)
                         if (park.mods[k].first == z.modules[m].second) { mi = (int)k; break; }
-                const bool known = (mi >= 0 && mi < mod_bits_n);
+                const bool known = (mi >= 0 && mi < park.mod_bits_n);
                 o << "{\"devid\":" << jstr(z.modules[m].first)
                   << ",\"name\":" << jstr(z.modules[m].second)
                   << ",\"idx\":" << mi
-                  << ",\"value\":" << (known ? (mod_bits[mi] ? "true" : "false") : "null")
+                  << ",\"value\":" << (known ? (park.mod_bits[mi] ? "true" : "false") : "null")
                   << ",\"known\":" << (known ? "true" : "false") << "}";
             }
             o << "]}";
@@ -3320,8 +3328,8 @@ struct Server {
             for (int i = 0; i < 10; i++) occ[i] = mod_state[i];
             // 🔑 **자리 열 개를 넘는 비트를 보관한다** — 조작 완료 판정이 이것을 읽는다.
             //   ⚠ 못 읽었으면 `mod_bits_n = 0` 으로 남긴다. **모른다와 0 은 다르다.**
-            mod_bits_n = occ_bits;
-            if (occ_bits > 0) for (int i = 0; i < REG_MODS_MAX; i++) mod_bits[i] = mod_state[i];
+            n.mod_bits_n = occ_bits;
+            if (occ_bits > 0) for (int i = 0; i < REG_MODS_MAX; i++) n.mod_bits[i] = mod_state[i];
             if (!occ_known) {
                 // 🔴 미등록 + hex 로 보이는 폭 → **해독하지 않는다.** 등록 뒤 다음 `S` 부터 읽는다
                 if (!occ_undecoded_warned) {
