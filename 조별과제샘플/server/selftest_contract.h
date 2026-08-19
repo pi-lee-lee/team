@@ -287,13 +287,20 @@
 
                 // ── 🔴 `confirmed` 판정 넷. **분모를 먼저 세운다** — LD=idx1 · L2=idx2
                 struct C { const char* mod; long req; int bit; const char* want; };
-                static const C cases[] = {
+                static const C cases[] = {   // 🔑 위젯이 판별자다(LD=toggle · L2=number)
                     { "LD", 1,       1, "settled"  },   // 요청 1 · 비트 1 → 증명된다
                     { "LD", 1,       0, "mismatch" },   // 요청 1 · 비트 0 → 어긋났다
                     { "L2", 1234567, 1, "partial"  },   // 🔴 비트는 "0이 아니다"만 말한다
-                    { "L2", 1234567, 0, "mismatch" },   // 2 이상인데 비트 0 → 장치가 안 갖고 있다
+                    // 🔴 **비트가 0 이어도 `partial` 이다.** 처음엔 `mismatch` 로 적었는데 **틀렸다** —
+                    //   에코 비트는 장치의 **상태**이고 우리가 보낸 **인자**가 아니다.
+                    //   실측: `DR 2`(닫기) → 비트 **0**. **성공인데 값이 다르다.**
+                    //   `mismatch` 로 두면 **정확히 성공한 명령을 실패라고 부른다.**
+                    { "L2", 1234567, 0, "partial"  },
+                    // 🔴 값이 1 이어도 **`number` 위젯이면 `partial`** 이다 — 판별자는 **값이 아니라 위젯**이다.
+                    //   `toggle` 선언만이 *"값이 곧 상태다"* 를 뜻한다.
+                    { "L2", 1,       1, "partial"  },
                 };
-                for (int i = 0; i < 4; i++) {
+                for (int i = 0; i < 5; i++) {
                     const int mi = (std::string(cases[i].mod) == "LD") ? 1 : 2;
                     t.mod_req.clear();
                     t.mod_req[std::string("P1\t") + cases[i].mod] = cases[i].req;

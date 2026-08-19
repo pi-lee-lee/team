@@ -246,9 +246,13 @@
                 if (!a2) bad++;
 
                 // 입출구는 조작이 둘이다 — 🔑 **`bool` 하나였으면 못 갈렸을 자리**
-                bool a3 = (j2.find("\"open_gate\":{") != std::string::npos
-                           && j2.find("\"close_gate\":{") != std::string::npos);
-                std::cout << (a3 ? "  ✓ " : "  ✗ ") << "입출구: open_gate·close_gate 둘 다 나온다\n";
+                // 🔴 **뒤집었다** (2026-08-20 · 사용자 확정 *"control 로 통일한다"*).
+                //   전에는 *"둘 다 나온다"* 를 단언했다. 지금은 **안 나오는 것**이 계약이다.
+                //   ⚠ **지우지 않고 반대로 단언한다** — 지우면 왜 없어졌는지가 같이 사라진다.
+                bool a3 = (j2.find("\"open_gate\":{") == std::string::npos
+                           && j2.find("\"close_gate\":{") == std::string::npos);
+                std::cout << (a3 ? "  ✓ " : "  ✗ ")
+                          << "🔴 입출구에 open_gate·close_gate 가 **안 나온다**(control 로 통일)\n";
                 if (!a3) bad++;
 
                 // 🔴 `state` 가 `srv_id`·`epoch` 를 싣는다 — 화면이 낡음을 스스로 안다
@@ -280,16 +284,29 @@
 
             // ㉖ 🔴 **조작 요청 라우팅** (REQ-0203 4d) — **거절 사유가 갈려야 한다**
             {
+                // 🔴 **`open_gate` 판본이었다** (2026-08-20 · 사용자 확정 *"control 로 통일한다"*).
+                //   갈래 셋을 `send_cmd` 로 옮겨 다시 세운다 — **지우지 않는다.**
+                //   🔑 이 시험이 지키는 것은 문법이 아니라 *"거절 사유가 갈린다"* 이고,
+                //     그 요구는 경로가 바뀌어도 그대로다. **사유가 뭉치면 고칠 곳을 못 가른다.**
+                ParkingLot CL3;
+                CL3.control("P1", "E1").toggle("입구 차단봉");
+                CL3.control("P1", "QQ").toggle("장치에 없는 모듈");   // ④ 용
                 LoopPair lw;                       // 화면 소켓 자리(진짜 fd 가 있어야 응답이 나간다)
-                Server t; t.build_default_zones(); t.init_srv_id();
+                Server t; t.lot_ = &CL3; t.build_default_zones(); t.init_srv_id();
                 t.conns[lw.a].kind = Conn::WS;     // 🔑 **WS 로 승격해야 응답이 나간다**
+                t.park.devid = "P1"; t.park.seen = true; t.park.last_ms = now_ms();
+                t.park.reg_done = true; t.ard_seen = true; t.ard_last_ms = now_ms();
+                t.park.mods.push_back(std::make_pair(std::string("E1"), std::string("OB")));
 
-                // ① 없는 자리
-                t.on_ws_message(lw.a, "{\"type\":\"open_gate\",\"slot\":\"ZZ\",\"rid\":\"1\"}");
-                // ② 차단봉이 없는 주차 자리 — **조용히 무시하지 않는다**
-                t.on_ws_message(lw.a, "{\"type\":\"open_gate\",\"slot\":\"A1\",\"rid\":\"2\"}");
-                // ③ 입구인데 모듈이 안 붙었다 → module_absent
-                t.on_ws_message(lw.a, "{\"type\":\"open_gate\",\"slot\":\"E1\",\"rid\":\"3\"}");
+                // ① 모르는 장치
+                t.on_ws_message(lw.a, "{\"type\":\"send_cmd\",\"devid\":\"ZZ\","
+                                      "\"module\":\"E1\",\"value\":1,\"rid\":\"1\"}");
+                // ② 선언이 없는 모듈 — **조용히 무시하지 않는다**
+                t.on_ws_message(lw.a, "{\"type\":\"send_cmd\",\"devid\":\"P1\","
+                                      "\"module\":\"A1\",\"value\":1,\"rid\":\"2\"}");
+                // ③ 선언은 있는데 **그 값이 선언 밖**이다(toggle 인데 9)
+                t.on_ws_message(lw.a, "{\"type\":\"send_cmd\",\"devid\":\"P1\","
+                                      "\"module\":\"E1\",\"value\":9,\"rid\":\"3\"}");
                 // ⚠ **여기도 재시도해야 한다.** 처음엔 한 번만 읽었고 디버그 빌드에서는 우연히
                 //   통과했다 — 🔴 **`-O2` 빌드가 더 빨라서 그 우연이 깨졌다.**
                 //   **배포용 빌드를 돌려 본 것이 이 결함을 드러냈다.**
@@ -309,13 +326,21 @@
                 }
                 int msgs = 0;
                 for (size_t q = got.find("\"rid\""); q != std::string::npos; q = got.find("\"rid\"", q + 1)) msgs++;
-                bool ok29 = (got.find("module_absent") != std::string::npos && msgs == 3);
-                std::cout << (ok29 ? "  ✓ " : "  ✗ ") << "조작 요청: 없는 자리·차단봉 없는 자리·"
-                          << "미결속 입구 → 전부 사유가 간다(응답 " << msgs << "건 · 기대 3)\n";
+                // 🔴 **셋이 서로 다른 사유여야 한다.** 하나만 확인하면 *"전부 같은 사유"* 여도 통과한다 —
+                //   그게 이 시험이 막으려는 것 자체다.
+                bool ok29 = (got.find("module_absent") != std::string::npos
+                             && got.find("not_declared") != std::string::npos
+                             && got.find("out_of_range") != std::string::npos
+                             && msgs == 3);
+                if (!ok29) std::cout << "    [진단] " << got << "\n";
+                std::cout << (ok29 ? "  ✓ " : "  ✗ ") << "명령 거절: 모르는 장치·선언 없음·범위 밖 → "
+                          << "**사유가 셋으로 갈린다**(응답 " << msgs << "건 · 기대 3)\n";
                 if (!ok29) bad++;
 
                 // 🔴 ④ 모듈이 붙고 노드가 살아 있어도 **전선 명령이 없으면 not_supported**
                 //    ⚠ 조용히 성공으로 답하면 화면이 "열렸다"로 그리고 아무 일도 안 일어난다
+                // 🔴 ④ **선언은 있는데 장치에 그 모듈이 없다** → `module_absent`
+                //   ⚠ 조용히 성공으로 답하면 화면이 "됐다"로 그리고 **아무 일도 안 일어난 것을 모른다.**
                 Zone* e1 = t.zone_find("E1");
                 e1->modules.push_back(std::make_pair(std::string("P1"), std::string("E1")));
                 // 🔑 **자기 소켓쌍을 준다.** 앞 응답 셋이 남은 버퍼에서 읽으면
@@ -323,7 +348,8 @@
                 LoopPair lx; t.conns[lx.a].kind = Conn::WS;
                 t.park.devid = "P1"; t.park.fd = lx.a; t.park.seen = true;
                 t.park.last_ms = now_ms(); t.park.reg_done = true;
-                t.on_ws_message(lx.a, "{\"type\":\"open_gate\",\"slot\":\"E1\",\"rid\":\"4\"}");
+                t.on_ws_message(lx.a, "{\"type\":\"send_cmd\",\"devid\":\"P1\","
+                                      "\"module\":\"QQ\",\"value\":1,\"rid\":\"4\"}");
                 // ⚠ **루프백 TCP 는 `socketpair` 와 달리 즉시 도착하지 않는다.**
                 //   한 번만 읽고 `-1`(EWOULDBLOCK)을 "안 보냈다"로 읽으면 **없는 결함이 생긴다** —
                 //   실제로 그렇게 나왔다. 짧게 재시도한다.
@@ -333,11 +359,11 @@
                     int n2 = (int)recv(lx.b, rb, sizeof(rb), MSG_DONTWAIT);
                     if (n2 > 0) { g2.append(rb, n2); idle2 = 0; } else idle2++;
                 }
-                bool ok30 = (g2.find("not_supported") != std::string::npos);
+                bool ok30 = (g2.find("module_absent") != std::string::npos);
                 if (!ok30) std::cout << "    [진단] lx.a=" << lx.a << " lx.b=" << lx.b
                                      << " conns=" << t.conns.count(lx.a) << " 받은B=" << g2.size() << "\n";
-                std::cout << (ok30 ? "  ✓ " : "  ✗ ") << "준비된 자리인데 전선 명령이 없다 → "
-                          << "**not_supported**(거짓 완료를 안 만든다)\n";
+                std::cout << (ok30 ? "  ✓ " : "  ✗ ") << "선언은 있는데 장치에 그 모듈이 없다 → "
+                          << "**module_absent**(거짓 완료를 안 만든다)\n";
                 if (!ok30) bad++;
                 t.park.fd = BAD_SOCK; t.conns.clear();
             }

@@ -98,46 +98,14 @@
         // 🔑 **화면은 자리 하나만 지목한다**(`slot`). **모듈을 지목하지 않는다** —
         //   "어느 모듈이 그 조작을 맡는가"가 화면에도 생기면 서버 라우팅과 규칙이 두 곳이 되고,
         //   갈리면 **엉뚱한 모듈에 명령이 간다.** 자리 → 모듈 라우팅은 여기 있다.
+        // 🔴🔴 **없앤 경로다** (2026-08-20). 위 `wsjson.h` 의 긴 주석이 이유를 말한다.
+        //   조용히 무시하지 않고 **무엇을 대신 하라는지** 답한다 — 옛 화면이 붙어 있을 수 있다.
         if (type == "open_gate" || type == "close_gate") {
-            Zone* z = zone_find(slot);
-            if (!z) { send_err(fd, rid, "module_absent", "그런 자리가 없습니다"); return; }
-            if (z->kind != "entrance" && z->kind != "exit") {
-                // ⚠ **조용히 무시하지 않는다.** 화면이 안 보낼 조작이지만 **보내면 이유를 답한다**
-                send_err(fd, rid, "module_absent", "이 자리에는 차단봉이 없습니다");
-                return;
-            }
-            const std::string blk = zone_block_reason(*z);
-            if (!blk.empty()) { send_err(fd, rid, blk.c_str(), "지금은 조작할 수 없습니다"); return; }
-
-            // 🔑 **자리 → 모듈 라우팅은 `gate_index_of()` 한 곳에만 있다.** 화면은 자리만 지목한다.
-            const int gidx = gate_index_of(*z);
-            if (gidx < 0) {
-                // 🔴 **자리와 노드는 멀쩡한데 *명령 가능한 모듈*이 없다.**
-                //   ⚠ **조용히 성공으로 답하지 않는다** — 그러면 화면이 "열렸다"로 그리고
-                //     **아무 일도 안 일어난 것을 사람이 모른다**(그게 `거짓 완료` 다).
-                logf("!", "조작 " + type + " 요청 — 자리 " + slot
-                          + " 에 명령 가능한 모듈이 없다(kind 가 `O*` 인 것). 거절한다");
-                send_err(fd, rid, "not_supported", "이 조작을 맡을 모듈이 이 자리에 없습니다");
-                return;
-            }
-            // 🔴🔴 **여기 `if (gidx < 10)` 가드가 있었다. 2026-08-20 에 걷어냈다.**
-            //   근거였던 주석: *"장치가 `idx >= SLOT_N` 만 받는다"* — **옛 12자리 지형의 사실**이다.
-            //   지금 모듈 색인은 노드의 모듈 표 그대로 `0..n-1` 이고(`DR` = 4), 그래서
-            //   **화면의 차단봉 버튼이 항상 `not_supported` 로 거절됐다.**
-            //
-            //   ⚠ **실측으로 확인하고 고쳤다**(판독만으로 고치지 않았다):
-            //     `{"type":"open_gate","slot":"E1"}` → `{"code":"not_supported"}` 를 시험
-            //     인스턴스(+300)에서 재현했다. 없는 결함을 고치는 것이 아니다.
-            //
-            //   🔑 **왜 안 보였나**: 같은 모듈로 가는 길이 둘인데 **규칙이 달랐다.**
-            //     `send_to_module`(기여자 API)에는 이 가드가 없어서 `srv.send("P1","DR",1)` 은
-            //     실기에서 실제로 돌았다 — **도는 쪽만 밟혀서 막힌 쪽을 아무도 안 봤다.**
-            //     그리고 자가검증의 지형은 `gidx >= 10` 이라 **시험은 이 갈래를 못 밟았다**
-            //     (§"시험 경로 ≠ 실기 경로").
-            //
-            //   범위 검사를 없앤 것이 아니다 — **`gate_index_of()` 가 이미
-            //   `kind_commandable()` 인 모듈만 돌려준다.** 이 가드는 중복이면서 틀렸다.
-            dispatch_gate(fd, rid, slot, gidx, type == "open_gate");
+            logf("!", "게이트 내장 조작(" + type + ") 요청 — **없앤 경로다.** "
+                      "차단봉도 `lot.control(\"<devid>\",\"<모듈>\").choice(...)` 로 선언해라. "
+                      "그래야 **뜻을 기여자가 정한다** (서버가 1/0 을 가정하던 것이 오늘 장치 거절을 냈다)");
+            send_err(fd, rid, "not_supported",
+                     "차단봉도 lot.control(...) 선언으로 조작합니다 (명령표를 기여자가 정합니다)");
             return;
         }
 
@@ -149,13 +117,11 @@
             const std::string dv = jget(msg, "devid");
             const Node* n = node_by_devid(dv);
             if (!n) { send_err(fd, rid, "module_absent", "그런 장치를 모릅니다"); return; }
-            if (!n->reg_done) {
-                // 🔑 **등록 전과 미접속을 가른다.** 사람이 할 일이 다르다 —
-                //   전자는 기다리는 것이고 후자는 선을 보는 것이다.
-                send_err(fd, rid, "node_unregistered", "장치가 아직 등록되지 않았습니다");
-                return;
-            }
-            if (!device_online()) { send_err(fd, rid, "device_offline", "장치가 연결되어 있지 않습니다"); return; }
+            // 🔴 **장치 상태 검사는 요청 검증 *뒤* 로 옮겼다** (2026-08-20 · 시험이 잡았다)
+            //   전에는 여기서 `device_offline` 을 먼저 냈다. 그러면 **선언 오타나 범위 오류가
+            //   "장치가 연결되어 있지 않습니다" 로 보고된다** — 기여자가 선을 들여다본다.
+            //   🔑 **요청 자체의 결함은 장치 상태와 무관하다. 그것부터 답하는 것이 맞다.**
+            //     §"빨강의 원인이 그 항목 안에 있다고 가정하지 마라" 의 사유 코드 판본이다.
 
             std::vector<std::pair<std::string, long> > items;
             if (type == "send_cmd") {
@@ -195,6 +161,14 @@
                     if (n->mods[q].first == items[k].first) { found = true; break; }
                 if (!found) { send_err(fd, rid, "module_absent", "장치에 그 모듈이 없습니다"); return; }
             }
+            // ── 여기서부터 **장치 상태**를 본다. 요청은 이미 옳다.
+            if (!n->reg_done) {
+                // 🔑 **등록 전과 미접속을 가른다.** 사람이 할 일이 다르다 —
+                //   전자는 기다리는 것이고 후자는 선을 보는 것이다.
+                send_err(fd, rid, "node_unregistered", "장치가 아직 등록되지 않았습니다");
+                return;
+            }
+            if (!device_online()) { send_err(fd, rid, "device_offline", "장치가 연결되어 있지 않습니다"); return; }
             if ((int)items.size() > max_per_batch()) {
                 // 🔴 **한 건도 안 보낸다. 자동 분할 안 한다** — 쪼개면 두 창에 걸쳐 나가고
                 //   **묶은 뜻이 사라진다.** 거절이 정직하다.

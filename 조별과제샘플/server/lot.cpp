@@ -34,8 +34,8 @@ void buildLot(ParkingLot& lot) {
     //   선언 안 한 모듈은 화면에 **표시만** 되고 조작 버튼이 안 생긴다.
     lot.control("P1", "LD").toggle("표시등");                    // 0 / 1
     // lot.control("P1", "L2").number("표시기", 0, 9999999);        // 숫자 칸
-    // lot.control("P1", "DR").choice("차단봉")                     // 🔴 **이 선언이 곧 명령표다**
-    //         .option(1, "열기").option(2, "닫기");
+    lot.control("P1", "DR").choice("차단봉")                     // 🔴 **이 선언이 곧 명령표다**
+            .option(1, "열기").option(2, "닫기");
     // 🔑 값의 뜻은 **장치의 콜백**이 정한다. 여기 라벨과 그쪽 표가 같아야 한다
     // ⚠ 범위를 벗어난 값은 서버가 거절한다(`out_of_range`) — 화면이 막기 전에 서버가 막는다
     // 🔴 이름은 **정확히 2글자** — 장치 표(`client.ino`)와 글자 그대로 같아야 붙는다

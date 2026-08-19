@@ -307,23 +307,14 @@
         return true;
     }
 
-    void dispatch_gate(sock_t ws_fd, const std::string& brid,
-                       const std::string& slot, int idx, bool open) {
-        uint16_t rid = alloc_rid();
-        if (rid == RID_NONE) { logf("!", "rid 공간 고갈 — G 발행 포기"); return; }
-        Pending p;
-        p.wire_rid = rid; p.ws_fd = ws_fd; p.browser_rid = brid;
-        p.slot = slot; p.kind = 'G'; p.mod_idx = idx;
-        p.top = open ? '1' : '0';
-        p.g_arg = open ? 1 : 0;      // 차단봉은 0/1 만 쓴다 — 새 칸에 같은 값을 담는다
-        p.sent_ms = now_ms(); p.tries = 1;
-        pend[rid] = p;
-        gate_want[idx] = open ? 1 : 0;      // 🔑 **대조할 값을 여기서 남긴다**(ACK 이 지우기 전에)
-        // 🔑 **큐에 들어간 것만 센다.** 거절되면 전선에 안 나갔으므로 장치거절의 분모가 아니다 —
-        //   분모에 넣으면 "장치가 멀쩡한데 거절률이 낮아 보이는" 착시가 생긴다.
-        if (!enqueue_down(pend[rid], build_line(gate_prefix(p)), true, false)) { pend.erase(rid); rid_release(rid); }
-        else gate_q++;
-    }
+    // 🔴 `dispatch_gate()` 가 여기 있었다. **2026-08-20 에 지웠다** — 호출자가 없어졌다.
+    //   게이트 내장 버튼이 `1=열기 · 0=닫기` 를 **서버가 정한 뜻으로** 보냈고,
+    //   장치의 기여자 표는 `1=열기 · 2=닫기` 였다. **닫기에서 갈려 장치가 거절했다**(실기).
+    //   ⚠ 남겨 두지 않았다 — 호출자 없는 코드는 **있는 것처럼 읽힌다.**
+    //   지금 모듈에 명령하는 길은 `send_to_module()` 하나다.
+    //   ⚠ `gate_want` 는 이제 채워지지 않는다 → 게이트 자리의 `completion` 은 `unknown` 이다.
+    //     **그게 맞다.** 그 자리에 서버가 정한 명령이 더는 없다. 값은 모듈의 `confirmed` 가 나른다.
+
     static std::string sim_prefix(const Pending& p) {
         char buf[32];
         snprintf(buf, sizeof(buf), "M,%u,", p.wire_rid);

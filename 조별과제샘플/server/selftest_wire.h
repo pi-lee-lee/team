@@ -108,8 +108,25 @@
             {
                 sock_t gs[2];
                 if (socketpair(AF_UNIX, SOCK_STREAM, 0, gs) == 0) {
-                    Server t; t.build_default_zones(); t.init_srv_id();
+                    // 🔴 **조작 선언을 붙인다** (2026-08-20). 자리는 안 만든다 —
+                    //   `areas_` 가 비면 `build_default_zones()` 가 기본 지형을 그대로 쓰므로
+                    //   **지형 픽스처를 안 건드리고 선언만 얹을 수 있다.**
+                    //   🔑 그리고 이것이 설계를 드러낸다: **`control` 은 조립과 독립이다.**
+                    // ⚠ E1 은 `toggle`, X1 은 `choice` 로 **일부러 다르게** 선언한다 —
+                    //   두 위젯이 `confirmed` 를 다르게 판정하는 것이 이 시험의 요점이다.
+                    ParkingLot CL;
+                    CL.control("P1", "E1").toggle("입구 차단봉");
+                    CL.control("P1", "X1").choice("출구 차단봉")
+                            .option(1, "열기").option(2, "닫기");
+                    Server t; t.lot_ = &CL; t.build_default_zones(); t.init_srv_id();
                     t.ard = gs[0]; t.ard_seen = true; t.ard_last_ms = now_ms();
+                    // 🔴 **`devid` 를 등록 *전* 에 세운다.** 이 픽스처는 `D` 가 `S` 보다 먼저 오는데
+                    //   (실기는 반대다) 그 순서에서는 등록 시점의 `park.devid` 가 **비어 있고**
+                    //   결속이 `("", "E1")` 로 굳는다. 뒤에 `devid` 를 채우면
+                    //   `node_by_devid("")` 가 못 찾아 **모듈 값이 전부 `known:false` 가 된다.**
+                    //   ⚠ 실제로 늦게 세웠다가 시험 넷이 깨졌다 — `node_by_devid` 의 주석이
+                    //     경고하던 바로 그 자리다(*"빈 값끼리 맞춰 동작한다"*).
+                    t.park.devid = "P1";
                     // n=12 : 자리 10(IP) + E1·X1 (**OB** = 차단봉)
                     // 🔴 옛 값은 `OBV` 였다 — 끝의 `V` 가 "가상"을 뜻했다(REQ-0271 로 없앤다).
                     //   🔑 **서버는 그 `V` 를 한 번도 읽지 않았다** — `kind_commandable()` 이
@@ -131,7 +148,8 @@
                     char gb[512];
                     while (recv(gs[1], gb, sizeof(gb), MSG_DONTWAIT) > 0) {}   // 전선 비우기
 
-                    t.on_ws_message(BAD_SOCK, "{\"type\":\"open_gate\",\"slot\":\"E1\",\"rid\":\"g1\"}");
+                    t.on_ws_message(BAD_SOCK, "{\"type\":\"send_cmd\",\"devid\":\"P1\","
+                                              "\"module\":\"E1\",\"value\":1,\"rid\":\"g1\"}");
                     t.on_ard_line(t_line("S,2,000,000,6,P1,"));                // 다음 창에 나간다
                     std::string gw;
                     for (;;) { int r = (int)recv(gs[1], gb, sizeof(gb), MSG_DONTWAIT);
@@ -144,14 +162,18 @@
                               << (okG1 ? "" : std::string(" · 실제: ") + gw) << "\n";
                     if (!okG1) bad++;
 
-                    // 닫기는 op=0
-                    t.on_ws_message(BAD_SOCK, "{\"type\":\"close_gate\",\"slot\":\"X1\",\"rid\":\"g2\"}");
+                    // 🔴 **닫기는 `2` 다 — 기여자가 정한 값이다.** 전에는 서버가 `0` 을 보냈고
+                    //   장치 표에 `0` 이 없어 **실기에서 거절당했다**(2026-08-20 사용자가 잡았다).
+                    //   🔑 이 시험이 지금 보는 것은 *"보낸 값이 전선에 **그대로** 나가는가"* 다 —
+                    //     서버가 어떤 뜻도 덧씌우지 않는다는 단언이다.
+                    t.on_ws_message(BAD_SOCK, "{\"type\":\"send_cmd\",\"devid\":\"P1\","
+                                              "\"module\":\"X1\",\"value\":2,\"rid\":\"g2\"}");
                     t.on_ard_line(t_line("S,3,000,000,7,P1,"));
                     gw.clear();
                     for (;;) { int r = (int)recv(gs[1], gb, sizeof(gb), MSG_DONTWAIT);
                                if (r <= 0) break; gw.append(gb, (size_t)r); }
-                    bool okG2 = (gw.find(",11,0,") != std::string::npos);
-                    std::cout << (okG2 ? "  ✓ " : "  ✗ ") << "close_gate(X1) → `,11,0,`"
+                    bool okG2 = (gw.find(",11,2,") != std::string::npos);
+                    std::cout << (okG2 ? "  ✓ " : "  ✗ ") << "send_cmd(X1,**2**) → 전선에 `,11,2,` (값이 그대로)"
                               << (okG2 ? "" : std::string(" · 실제: ") + gw) << "\n";
                     if (!okG2) bad++;
 
@@ -208,7 +230,8 @@
                                     uint16_t rr = it->first; ++it; t.on_ard_line(t_line(ab0)); (void)rr; }
                                 else ++it;
                             }
-                            t.on_ws_message(ws[0], "{\"type\":\"open_gate\",\"slot\":\"E1\",\"rid\":\"g9\"}");
+                            t.on_ws_message(ws[0], "{\"type\":\"send_cmd\",\"devid\":\"P1\","
+                                                   "\"module\":\"E1\",\"value\":1,\"rid\":\"g9\"}");
                             t.on_ard_line(t_line("S,5,002,000,9,P1,"));
                             uint16_t rg = 0;
                             for (std::map<uint16_t, Pending>::iterator it = t.pend.begin();
@@ -220,9 +243,13 @@
                             std::string wsout;
                             for (;;) { int r = (int)recv(ws[1], wsb, sizeof(wsb), MSG_DONTWAIT);
                                        if (r <= 0) break; wsout.append(wsb, (size_t)r); }
-                            bool okG6 = (wsout.find("차단봉을 열었습니다") != std::string::npos);
-                            std::cout << (okG6 ? "  ✓ " : "  ✗ ") << "화면 ACK 문구가 `차단봉을 열었습니다`"
-                                      << " (**예전엔 `예약되었습니다` 가 나갔다**)\n";
+                            // 🔴 **`ack` 가 아니라 `cmd_result` 다**(2026-08-20). 옛 화면이
+                            //   `type==='ack'` 만 보고 pending 을 지우는 것을 피하려고 **새 타입**을 썼다.
+                            bool okG6 = (wsout.find("\"type\":\"cmd_result\"") != std::string::npos
+                                         && wsout.find("\"outcome\":\"ok\"") != std::string::npos
+                                         && wsout.find("\"module\":\"E1\"") != std::string::npos);
+                            std::cout << (okG6 ? "  ✓ " : "  ✗ ")
+                                      << "화면에 `cmd_result` 가 간다 — outcome=ok · module=E1\n";
                             if (!okG6) bad++;
                             t.conns.clear();
                             closesock(ws[0]); closesock(ws[1]);
@@ -233,19 +260,31 @@
                     //   E1 은 열라고 했고 비트 10 이 1 이다 → settled
                     //   X1 은 닫으라고 했고 비트 11 이 **1 이면** → 🔴 mismatch (장치가 안 했다)
                     t.on_ard_line(t_line("S,6,003,000,10,P1,"));   // 비트 1·0 = 모듈 10·11 둘 다 1
+                    // 🔴 **판정이 자리(`zone.completion`)에서 모듈(`confirmed`)로 옮겨졌다.**
+                    //   자리 단위 판정은 **서버가 정한 뜻**(1/0)에 기대고 있었다. 그것을 없앴다.
                     {
                         std::string js2 = t.state_json();
-                        size_t px = js2.find("\"id\":\"X1\"");
-                        std::string xseg = (px == std::string::npos) ? "" : js2.substr(px, 400);
-                        bool okG7 = (xseg.find("\"completion\":\"mismatch\"") != std::string::npos);
-                        std::cout << (okG7 ? "  ✓ " : "  ✗ ") << "닫으라 했는데 열려 있다 → "
-                                  << "**completion=mismatch** (`settled` 로 답하면 그게 거짓 완료다)\n";
+                        // 🔴 모듈 조각은 `}` 로 자르면 안 된다 — 안에 `"cmd":{...}` 가 중첩이다.
+                        //   **다음 `"name":"` 까지**가 그 모듈이다(같은 함정을 오늘 한 번 밟았다).
+                        struct S2 { static std::string seg(const std::string& j, const char* nm) {
+                            std::string k = std::string("\"name\":\"") + nm + "\"";
+                            size_t p = j.find(k); if (p == std::string::npos) return "";
+                            size_t e = j.find("\"name\":\"", p + k.size());
+                            return j.substr(p, (e == std::string::npos ? j.size() : e) - p); } };
+
+                        // X1 은 `choice` 다 → 🔴 **`partial` 이 유일한 참이다.**
+                        //   인자 `2`(닫기)와 에코 비트의 관계를 **서버는 모른다.**
+                        //   ⚠ 옛 시험은 여기서 `mismatch` 를 기대했다 — 그건 `0=닫기` 라는
+                        //     **서버의 가정** 위에 서 있었다. 그 가정이 오늘 실기에서 깨졌다.
+                        bool okG7 = (S2::seg(js2, "X1").find("\"confirmed\":\"partial\"") != std::string::npos);
+                        std::cout << (okG7 ? "  ✓ " : "  ✗ ")
+                                  << "choice 모듈은 **partial** — 서버는 arg 와 비트의 관계를 모른다\n";
                         if (!okG7) bad++;
 
-                        size_t pe = js2.find("\"id\":\"E1\"");
-                        std::string eseg = (pe == std::string::npos) ? "" : js2.substr(pe, 400);
-                        bool okG8 = (eseg.find("\"completion\":\"settled\"") != std::string::npos);
-                        std::cout << (okG8 ? "  ✓ " : "  ✗ ") << "열라 했고 열려 있다 → completion=settled\n";
+                        // E1 은 `toggle` 이다 → **값이 곧 상태**라는 기여자의 선언이므로 증명된다.
+                        bool okG8 = (S2::seg(js2, "E1").find("\"confirmed\":\"settled\"") != std::string::npos);
+                        std::cout << (okG8 ? "  ✓ " : "  ✗ ")
+                                  << "toggle 모듈은 요청 1 · 비트 1 → **settled**\n";
                         if (!okG8) bad++;
                     }
 
@@ -284,15 +323,19 @@
             {
                 sock_t os_[2];
                 if (socketpair(AF_UNIX, SOCK_STREAM, 0, os_) == 0) {
-                    Server t; t.build_default_zones(); t.init_srv_id();
+                    ParkingLot CL2;
+                    CL2.control("P1", "E1").toggle("입구 차단봉");
+                    Server t; t.lot_ = &CL2; t.build_default_zones(); t.init_srv_id();
                     t.ard = os_[0]; t.ard_seen = true; t.ard_last_ms = now_ms();
+                    t.park.devid = "P1";                 // 🔑 등록 전에(위 ㉚ 주석과 같은 이유)
                     t.on_ard_line(t_line("D,*,7,12,"));
                     for (int i = 0; i < 10; i++)
                         t.on_ard_line(t_line(std::string("D,") + SLOT_ID[i] + ",IP,"));
                     t.on_ard_line(t_line("D,E1,OB,"));
                     t.on_ard_line(t_line("D,X1,OB,"));
                     t.on_ard_line(t_line("S,1,000,000,5,P1,"));
-                    t.on_ws_message(BAD_SOCK, "{\"type\":\"open_gate\",\"slot\":\"E1\",\"rid\":\"z1\"}");
+                    t.on_ws_message(BAD_SOCK, "{\"type\":\"send_cmd\",\"devid\":\"P1\","
+                                              "\"module\":\"E1\",\"value\":1,\"rid\":\"z1\"}");
                     size_t pend0 = t.pend.size();
 
                     // 🔴 **중간에 끼워 넣은 재등록** — A1 앞에 새 모듈이 들어와 전부 밀린다
