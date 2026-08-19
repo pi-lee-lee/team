@@ -86,9 +86,8 @@ static void arm(const char* refuse /* nullptr 이면 정상 프롬프트 */) {
   sendOkT1Passed = false;    // 안 걸면 앞 시험의 걸쇠가 새어 `okto` 가 안 세진다
   sendOkGiveups  = 0;
   cifsrRefused   = false;
-  ackqDrops      = 0;
-  ackqStale      = 0;        // ★ REQ-0204
-  ackqClear();
+  ackQ.resetStats();         // ★ REQ-0204 — drops·stale 을 한 번에
+  ackQ.clearQueue();
   ssOverflows    = 0;
   sendOkMatch    = 0;        // ★ REQ-0218
   sendOkByStream = 0;
@@ -301,11 +300,11 @@ int main() {
   // ── [12c] 게이트가 닫혀 있으면 ACK 가 큐에 남는다 ──────────────────────────
   printf("\n[12c] ACK 보류 큐 — 게이트가 닫혀 있어도 잃지 않는다\n");
   arm(nullptr);
-  ackqClear();
+  ackQ.clearQueue();
   sendLine(FRAME);                          // 성공 송신 → 게이트가 닫힌다
   ok(awaitingSendOk,            "게이트가 닫힌 상태");
   feedDown("R,77,A1,u1,");                  // 하행 도착 (체크섬은 실제 함수로 붙인다)
-  ok(ackqCount == 1,            "★★ 못 보낸 ACK 가 큐에 남는다 (예전엔 사라졌다)");
+  ok(ackQ.pending() == 1,            "★★ 못 보낸 ACK 가 큐에 남는다 (예전엔 사라졌다)");
 
   // ── [12d] 게이트가 열리면 보류된 ACK 가 나간다 ─────────────────────────────
   // ✏️ **2026-08-17 개정 (슬롯 구조 · REQ-0164)** — 원래 `ackqDrain()` 을 불렀다.
@@ -334,7 +333,7 @@ int main() {
     const bool sent = sendSlotBatch(&acks, &bytes);
     ok(sent,                    "배치가 나갔다");
     ok(acks == 1,               "★★ 보류된 ACK 1건이 그 배치에 실렸다");
-    ok(ackqCount == 0,          "★★ 성공했으므로 큐에서 소비됐다");
+    ok(ackQ.pending() == 0,          "★★ 성공했으므로 큐에서 소비됐다");
     ok(wifi.sentLines.size() == before + 1,
                                 "★ 거래는 **한 번**이다 (ACK 를 따로 보내지 않는다)");
   }
@@ -346,25 +345,25 @@ int main() {
   //   ★ 나머지 회귀가 전부 통과해서 "거동이 안 바뀐 것처럼" 보였다. 그래서 이 시험이 필요하다.
   printf("\n[12j] 게이트가 열려 있어도 ACK 은 즉시 나가지 않는다 (슬롯 규율)\n");
   arm(nullptr);
-  ackqClear();
+  ackQ.clearQueue();
   ok(!awaitingSendOk,           "게이트가 열린 상태 (예전이면 즉시 나갔다)");
   {
     const size_t before = wifi.sentLines.size();
     feedDown("R,601,A1,u1,");
     ok(wifi.sentLines.size() == before,
        "★★ 전선에 아무것도 안 나갔다 — ACK 이 슬롯을 우회하지 않는다");
-    ok(ackqCount == 1,          "★★ 대신 큐에 담겼다 (배치가 자기 창에서 보낸다)");
+    ok(ackQ.pending() == 1,          "★★ 대신 큐에 담겼다 (배치가 자기 창에서 보낸다)");
   }
 
   // ── [12h] 🔴 배치에 S 와 ACK 가 **한 거래**로 같이 담긴다 ──────────────────
   //   이것이 슬롯 설계의 핵심이다. 확인하지 않으면 "묶었다"가 주장으로만 남는다.
   printf("\n[12h] 배치 — S 프레임과 ACK 들이 한 거래에 함께 담긴다\n");
   arm(nullptr);
-  ackqClear();
+  ackQ.clearQueue();
   sendLine(FRAME);                          // 게이트를 닫아 ACK 를 큐에 쌓는다
   feedDown("R,201,A1,u1,");
   feedDown("R,202,A2,u1,");
-  ok(ackqCount == 2,            "ACK 2건이 큐에 있다");
+  ok(ackQ.pending() == 2,            "ACK 2건이 큐에 있다");
   // ⚠ **등록이 밀려 있으면 그 슬롯은 `D` 가 나간다**(명세: 첫 S → 둘째 D).
   //   이 시험은 정상 운항 중의 배치를 보는 것이므로 등록을 먼저 끝낸다.
   //   🔑 등록 자체는 [32] 가 따로 본다 — **여기서 섞으면 둘 다 흐려진다.**
@@ -394,14 +393,14 @@ int main() {
   //   그 방식을 못 쓴다. **손실 경로가 아예 없는지**를 시험이 직접 확인한다.
   printf("\n[12i] 배치 전송이 실패하면 ACK 가 큐에 남는다\n");
   arm(nullptr);
-  ackqClear();
+  ackQ.clearQueue();
   sendLine(FRAME);
   feedDown("R,211,A3,u1,");
   {
     char sendok[] = "SEND OK";
     handleLine(sendok);
   }
-  ok(ackqCount == 1,            "ACK 1건이 큐에 있다");
+  ok(ackQ.pending() == 1,            "ACK 1건이 큐에 있다");
   wifi.refusePrompt = true;                 // 이번 거래는 실패시킨다
   wifi.refuseReply  = "busy s...\r\n";
   {
@@ -409,7 +408,7 @@ int main() {
     uint16_t bytes = 0;
     const bool sent = sendSlotBatch(&acks, &bytes);
     ok(!sent,                   "배치가 실패했다");
-    ok(ackqCount == 1,          "★★ 실패했으므로 ACK 가 큐에 그대로 남는다 (잃지 않는다)");
+    ok(ackQ.pending() == 1,          "★★ 실패했으므로 ACK 가 큐에 그대로 남는다 (잃지 않는다)");
   }
 
   // ── [12e] 큐가 넘치면 버리되 **세어서 드러낸다** ───────────────────────────
@@ -418,23 +417,23 @@ int main() {
   //   시험이 상수를 박고 있으면 값이 바뀔 때마다 깨진다 → **`ACKQ_N` 을 그대로 쓴다.**
   printf("\n[12e] 큐 넘침 — 버리되 ackdrop 으로 드러낸다\n");
   arm(nullptr);
-  ackqClear();
-  ackqDrops = 0;
+  ackQ.clearQueue();
+  ackQ.resetStats();
   sendLine(FRAME);                          // 게이트를 닫아 둔다
   for (int i = 0; i < ACKQ_N + 2; i++) {    // 깊이보다 2건 더 넣는다
     char body[24];
     snprintf(body, sizeof(body), "R,%d,A1,u1,", 100 + i);
     feedDown(body);
   }
-  ok(ackqCount == ACKQ_N,       "★ 깊이 상한(ACKQ_N)을 지킨다");
-  ok(ackqDrops == 2,            "★★ 넘친 2건이 ackdrop 에 남는다 (조용히 안 버린다)");
+  ok(ackQ.pending() == ACKQ_N,       "★ 깊이 상한(ACKQ_N)을 지킨다");
+  ok(ackQ.drops() == 2,            "★★ 넘친 2건이 ackdrop 에 남는다 (조용히 안 버린다)");
 
   // ── [12f] 소켓이 끊기면 큐를 비운다 ────────────────────────────────────────
   // ⚠ 이 설계가 새로 만드는 **유일한 위험**이다 — 새 소켓에서 옛 rid 에 답하면 안 된다.
   printf("\n[12f] 소켓이 끊기면 보류 ACK 를 버린다 (새 소켓에 옛 rid 로 답하지 않는다)\n");
-  ok(ackqCount > 0,             "끊기 전에는 보류가 남아 있다");
+  ok(ackQ.pending() > 0,             "끊기 전에는 보류가 남아 있다");
   startSocketRecovery();
-  ok(ackqCount == 0,            "★★ 소켓 재수립 시 큐가 비워진다");
+  ok(ackQ.pending() == 0,            "★★ 소켓 재수립 시 큐가 비워진다");
 
   // ══ 슬롯 구조 (2026-08-17 · REQ-0164) ═════════════════════════════════════
   // ⚠ 이 시험들은 **수정 전 판본에서 컴파일되지 않는다**(새 심볼을 쓴다).
@@ -672,12 +671,12 @@ int main() {
   //   예전에는 둘 다 `ackdrop` 이었다 — **대책이 다른데 한 칸이라 무엇을 고칠지 못 읽었다.**
   //     ① 큐가 가득 참   → 유입 초과 → 큐/배출을 키운다        → `ackdrop`
   //     ② 캐시에서 밀려남 → 캐시가 작다 → 캐시를 키운다          → `ackstale`
-  //   ⚠ 이 시험은 수정 전 판본에서 **컴파일되지 않는다**(`ackqStale` 이 없다) —
+  //   ⚠ 이 시험은 수정 전 판본에서 **컴파일되지 않는다**(`ackQ.stale()` 이 없다) —
   //     §8.2-15-2 대로 컴파일 실패를 시험 실패로 쓰지 않는다. **가르는 동작 자체**를 확인한다.
   printf("\n[25] 큐 넘침(ackdrop)과 캐시 밀림(ackstale)이 갈려 세어진다\n");
   arm(nullptr);
-  ackqClear();
-  ackqDrops = ackqStale = 0;
+  ackQ.clearQueue();
+  ackQ.resetStats();
   {
     // ① 큐 넘침만 만든다 — 캐시에는 다 들어 있게 둔다
     sendLine(FRAME);                          // 게이트를 닫아 ACK 이 큐에 쌓이게
@@ -686,19 +685,19 @@ int main() {
       snprintf(body, sizeof(body), "R,%d,A1,u1,", 700 + i);
       feedDown(body);
     }
-    ok(ackqDrops == 3,          "★★ 넘친 3건이 ackdrop 에만 계상된다");
-    ok(ackqStale == 0,          "★★ 캐시 밀림은 0 이다 (두 원인이 안 섞인다)");
+    ok(ackQ.drops() == 3,          "★★ 넘친 3건이 ackdrop 에만 계상된다");
+    ok(ackQ.stale() == 0,          "★★ 캐시 밀림은 0 이다 (두 원인이 안 섞인다)");
   }
   {
     // ② 캐시 밀림만 만든다 — 큐에 든 rid 를 캐시에서 밀어낸다
-    ackqClear();
-    ackqDrops = ackqStale = 0;
-    ackqPush(9001);                           // 캐시에 없는 rid 를 직접 넣는다
-    ok(ackqCount == 1,          "큐에 1건");
+    ackQ.clearQueue();
+    ackQ.resetStats();
+    ackQ.push(9001);                           // 캐시에 없는 rid 를 직접 넣는다
+    ok(ackQ.pending() == 1,          "큐에 1건");
     uint8_t  acks = 0; uint16_t bytes = 0;
     sendSlotBatch(&acks, &bytes);             // 배치가 만들려다 캐시에 없음을 발견한다
-    ok(ackqStale == 1,          "★★ 캐시 밀림이 ackstale 에 계상된다");
-    ok(ackqDrops == 0,          "★★ 큐 넘침은 0 이다 (반대 방향도 안 섞인다)");
+    ok(ackQ.stale() == 1,          "★★ 캐시 밀림이 ackstale 에 계상된다");
+    ok(ackQ.drops() == 0,          "★★ 큐 넘침은 0 이다 (반대 방향도 안 섞인다)");
   }
 
   // ── [26] 🔴 `SEND OK` 를 **바이트 흐름**에서 잡는다 (REQ-0218 ②) ──────────
@@ -1099,16 +1098,16 @@ int main() {
     wifi.refusePrompt = false;
     wifi.stickySocket = false;
     markNeedsRegistration();
-    ackqCount = 0; ackqHead = 0;
-    cacheClear();
+    ackQ.clearQueue();
+    ackQ.clearCache();
     awaitingSendOk = false; sendOkT1Passed = false; inSend = false;
     netOnline = true; sendFailStreak = 0;
     lastSendEndAt = 0;
 
     // ACK 을 하나 큐에 넣어 둔다 — **재접속이면 이런 상태가 실제로 가능하다**
-    cachePut(77, 'A', '1', 1);
-    ackqPush(77);
-    ok(ackqCount == 1,      "준비: ACK 1건이 큐에 있다");
+    ackQ.put(77, 'A', '1', 1);
+    ackQ.push(77);
+    ok(ackQ.pending() == 1,      "준비: ACK 1건이 큐에 있다");
     ok(!regPending && regAfterS,
                             "★★ 접속 직후엔 D 가 아니라 S 가 먼저다 (승격이 먼저다)");
 
@@ -1123,9 +1122,9 @@ int main() {
     { char sk1[] = "SEND OK"; handleLine(sk1); }
 
     // 🔴 **이제 등록 슬롯에 ACK 이 도착한 상황을 만든다** — 이것이 밀림 시험의 본체다
-    cachePut(78, 'B', '2', 1);
-    ackqPush(78);
-    ok(ackqCount == 1,      "준비: 등록 슬롯 직전에 ACK 가 하나 더 들어왔다");
+    ackQ.put(78, 'B', '2', 1);
+    ackQ.push(78);
+    ok(ackQ.pending() == 1,      "준비: 등록 슬롯 직전에 ACK 가 하나 더 들어왔다");
 
     // ── 슬롯 2: D ────────────────────────────────────────────────────────
     uint8_t  a1 = 0; uint16_t b1 = 0;
@@ -1133,7 +1132,7 @@ int main() {
     ok(sent1,               "★ 등록 배치가 나갔다");
     ok(a1 == 0,             "★★ 이 슬롯에 ACK 는 안 실린다 (D 전용)");
     // 🔴 **여기가 이 시험의 본체다.** 밀리는 것은 지연이고 버리는 것은 손실이다
-    ok(ackqCount == 1,      "★★ ACK 가 큐에 그대로 남는다 — 밀린 것이지 버린 게 아니다");
+    ok(ackQ.pending() == 1,      "★★ ACK 가 큐에 그대로 남는다 — 밀린 것이지 버린 게 아니다");
     ok(!regPending,         "★ 성공했으므로 등록 대기가 내려간다");
 
     const std::string& line = wifi.sentLines.back();
@@ -1327,7 +1326,7 @@ int main() {
   {
     wifi.refusePrompt = false;
     vGateManual = false; vGateState = 0;
-    cacheClear(); ackqCount = 0; ackqHead = 0;
+    ackQ.clearCache(); ackQ.clearQueue();
     occMask = 0; resMask = 0; testArmed = false;
 
     // ① 등록에 가상 모듈이 실린다 — 이름은 자리 id · kind 에 V 접미
@@ -1380,27 +1379,27 @@ int main() {
     }
 
     // ⑤ 🔴 모르는 idx — **조용히 안 버린다. 거절도 ACK 이 온다**
-    ackqCount = 0; ackqHead = 0;
+    ackQ.clearQueue();
     snprintf(g, sizeof g, "G,303,99,1,"); appendChecksum(g, (uint8_t)strlen(g));
     handleFrameLine(g);
-    ok(ackqCount == 1,      "★★ 모르는 idx 도 ACK 를 보낸다 (ack_timeout 을 안 만든다)");
-    { int8_t h = cacheFind(303);
-      ok(h >= 0 && cache[h].result == 3,
+    ok(ackQ.pending() == 1,      "★★ 모르는 idx 도 ACK 를 보낸다 (ack_timeout 을 안 만든다)");
+    { int8_t h = ackQ.find(303);
+      ok(h >= 0 && ackQ.at(h).result == 3,
                             "★★ result=3 (수행할 수 없다) — 새 코드를 안 만들었다"); }
 
     // ⑥ 실물 자리를 idx 로 조작하려 하면 거절 — 차단봉이 아니다
     snprintf(g, sizeof g, "G,304,3,1,"); appendChecksum(g, (uint8_t)strlen(g));
     handleFrameLine(g);
-    { int8_t h = cacheFind(304);
-      ok(h >= 0 && cache[h].result == 3,
+    { int8_t h = ackQ.find(304);
+      ok(h >= 0 && ackQ.at(h).result == 3,
                             "★★ 실물 센서 자리(idx 3)는 조작 대상이 아니다"); }
 
     // ⑦ 멱등 — 같은 rid 를 다시 받으면 같은 답
-    ackqCount = 0; ackqHead = 0;
+    ackQ.clearQueue();
     snprintf(g, sizeof g, "G,302,10,0,"); appendChecksum(g, (uint8_t)strlen(g));
     handleFrameLine(g);
     ok(vGateOpen(0),        "★★ 같은 rid 는 상태를 다시 안 바꾼다 (열린 채 유지)");
-    ok(ackqCount == 1,      "★ 그래도 ACK 는 다시 보낸다");
+    ok(ackQ.pending() == 1,      "★ 그래도 ACK 는 다시 보낸다");
 
     // 🔴 **G 의 ACK 가 전선에서 실제로 어떻게 보이나** — socket 이 명세에 적을 값이다.
     //   ⚠ "코드가 이렇게 생겼다"가 아니라 **나가는 바이트로** 확인한다.
@@ -1411,10 +1410,10 @@ int main() {
       awaitingSendOk = false; sendOkT1Passed = false; inSend = false;
       netOnline = true; lastSendEndAt = 0;
       regPending = false; regAfterS = false;
-      ackqCount = 0; ackqHead = 0;
-      cacheClear();
-      cachePut(401, 'G', '1', 0);       // idx 11 → '1' (= 11 % 10)
-      ackqPush(401);
+      ackQ.clearQueue();
+      ackQ.clearCache();
+      ackQ.put(401, 'G', '1', 0);       // idx 11 → '1' (= 11 % 10)
+      ackQ.push(401);
       size_t before2 = wifi.sentLines.size();
       uint8_t aa = 0; uint16_t bb = 0;
       const bool sent2 = sendSlotBatch(&aa, &bb);

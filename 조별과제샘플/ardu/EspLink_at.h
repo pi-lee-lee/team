@@ -108,9 +108,9 @@ static void handleFrameLine(char* cand) {
     const bool okIdx = parseU16(gf[2], &gidx) && parseU16(gf[3], &gop);
 
     // §4.2 멱등 — 이미 본 rid 면 같은 ACK 를 다시 보낸다
-    int8_t ghit = cacheFind(grid);
+    int8_t ghit = ackQ.find(grid);
     if (ghit >= 0) {
-      sendAck(cache[ghit].rid, cache[ghit].slot[0], cache[ghit].slot[1], cache[ghit].result);
+      sendAck(ackQ.at(ghit).rid, ackQ.at(ghit).slot[0], ackQ.at(ghit).slot[1], ackQ.at(ghit).result);
       return;
     }
 
@@ -492,7 +492,7 @@ static void handleLine(char* s) {
     cifsrTries = 0;
     netHasIp = true;
     if (!assocAt) assocAt = millis();
-    cacheClear();
+    ackQ.clearCache();
 #if DEBUG
     Serial.println(F("[NET] online (CONNECT) + 캐시 비움"));
 #endif
@@ -515,7 +515,7 @@ static void handleLine(char* s) {
     // 닫혔다는 통보다 — 낡은 소켓 의심이 해소됐다. 사다리도 내려온다.
     staleSocket = false;
     closeAttempts = 0;
-    cacheClear();                     // ★ 주 방어선 — 위 주석 참조
+    ackQ.clearCache();                     // ★ 주 방어선 — 위 주석 참조
     // ★ REQ-0064 — 예전에는 여기서 곧장 CIPSTART 로 갔다. 그런데 **소켓이 죽은 이유가
     //   와이파이가 끊긴 것일 수 있다**(공유기 재부팅 — 상시가동에서 가장 흔한 경우다).
     //   이 펌웨어는 `WIFI DISCONNECT` 를 내지 않으므로 netHasIp 는 참으로 남아 있고,

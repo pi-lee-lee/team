@@ -932,11 +932,11 @@ static void cntTick(uint32_t now) {
   //   ⚠ 옛 로그에는 이 칸들이 없다. **굽기 전후를 같은 표에 넣지 마라** —
   //     그 칸의 0 은 "안 났다"가 아니라 "그 칩엔 없었다"다.
   Serial.print(F(" stuck="));        Serial.print(sendOkGiveups);   // T2 초과 → 링크 재수립
-  Serial.print(F(" ackq="));         Serial.print(ackqCount);       // 지금 보류 중인 ACK
-  Serial.print(F(" ackdrop="));      Serial.print(ackqDrops);       // 큐가 넘쳐 버린 ACK(유입 초과)
+  Serial.print(F(" ackq="));         Serial.print(ackQ.pending());       // 지금 보류 중인 ACK
+  Serial.print(F(" ackdrop="));      Serial.print(ackQ.drops());       // 큐가 넘쳐 버린 ACK(유입 초과)
   // ★ REQ-0204 — 캐시에서 밀려 버린 ACK. **대책이 다르므로 칸을 가른다.**
   //   ⚠ 칸을 더해 이 줄이 길어지는 것은 이제 안전하다 — `cntTick` 이 송신 창 안에서만 나간다(§11.2-2).
-  Serial.print(F(" ackstale="));     Serial.print(ackqStale);
+  Serial.print(F(" ackstale="));     Serial.print(ackQ.stale());
   // ★ 2026-08-17 슬롯 — **정수 계수는 `DEBUG` 밖**이다(원장 §8.4-2 의 경계).
   //   `[SLOT]` 줄은 매 슬롯 나가 대역을 먹으므로 `DEBUG` 안에 두지만, **누적은 여기 남긴다.**
   //   그래야 `DEBUG=0` 시연 빌드에서도 슬롯이 지켜졌는지 셀 수 있다.
@@ -1014,7 +1014,7 @@ static void startSocketRecovery(void) {
   //   새 소켓에서 의미가 없다. **이것이 ACK 큐가 새로 만드는 유일한 위험이고**, 그래서
   //   `awaitingSendOk` 를 푸는 바로 이 자리에 둔다 — 한 곳에서만 처리하면 빠뜨릴 수 없다.
   //   ⚠ 멱등 캐시는 **비우지 않는다**(아래 이유 참조). 큐만 비운다 — 둘은 다른 물건이다.
-  ackqClear();
+  ackQ.clearQueue();
   // ★ 운영 계수 — **전송이 안 되어 링크를 다시 세우는 모든 경로가 여기를 지난다.**
   //   그래서 여기 한 곳에서만 세면 중복도 누락도 없다(이 함수의 존재 이유 그대로다).
   if (linkDrops < 65535) linkDrops++;
@@ -1206,10 +1206,10 @@ static bool sendAck(uint16_t rid, char s0, char s1, uint8_t result) {
   //   **성공 경로와 실패 경로가 둘**이었다. 이제 **하나**다 — 담고, 배치가 보낸다.
   //   실제 송신은 `sendSlotBatch` 가 하고 그쪽은 **성공했을 때만 큐에서 소비**한다.
   //
-  // ⚠ 내용(`s0`·`s1`·`result`)은 담지 않는다 — **호출부가 `cachePut` 을 먼저 부르므로
+  // ⚠ 내용(`s0`·`s1`·`result`)은 담지 않는다 — **호출부가 `ackQ.put()` 을 먼저 부르므로
   //   멱등 캐시가 이미 갖고 있고**, 배치가 보낼 때 거기서 **재생성**한다(재생이 아니다).
   (void)s0; (void)s1; (void)result;
-  ackqPush(rid);
+  ackQ.push(rid);
   return true;          // "보냈다"가 아니라 **"담았다"**. 호출부 5곳 모두 반환값을 안 쓴다(확인함)
 }
 
@@ -1217,11 +1217,11 @@ static bool sendAck(uint16_t rid, char s0, char s1, uint8_t result) {
 //   ⚠ 둘을 따로 부르면 **캐시를 빠뜨린 재전송이 *다른 답*을 받는다**(§4.2 멱등 파손) — 조용히 틀린다.
 //   주석으로만 지키던 순서를 **함수로** 지킨다. 호출부(5곳)는 이것만 부른다.
 //   🔑 캐시에서 되보내는 재전송 경로(2곳)는 `sendAck` 을 그대로 쓴다 — 그건 이미 캐시에 있다.
-//   ★ **거동 근거**: 5곳 전부 `cachePut(x)` 바로 뒤 `sendAck(x)` 이고 **인자가 동일**했다.
+//   ★ **거동 근거**: 5곳 전부 `ackQ.put(x)` 바로 뒤 `sendAck(x)` 이고 **인자가 동일**했다.
 //     이 함수는 그 쌍을 **그 순서 그대로** 감싼 것뿐이다. ⚠ 다만 `hex` 는 달라진다(+6B) —
 //     **"거동 변화 0"을 hex 로 증명할 수는 없고, 소스 대조로만 주장한다.**
 static void commitAck(uint16_t rid, char s0, char s1, uint8_t result) {
-  cachePut(rid, s0, s1, result);
+  ackQ.put(rid, s0, s1, result);
   sendAck(rid, s0, s1, result);
 }
 
@@ -1289,27 +1289,20 @@ static bool sendSlotBatch(uint8_t* ackOut, uint16_t* bytesOut) {
 
   // ── 2) head 쪽에서 **만들 수 없는 것**부터 걷어낸다 ──────────────────────
   //   캐시에서 밀려났으면 내용을 만들 방법이 없다. 큐도 캐시도 FIFO 라 오래된 쪽에서 난다.
-  while (ackqCount > 0 && cacheFind(ackq[ackqHead]) < 0) {
-    ackqHead = (uint8_t)((ackqHead + 1) % ACKQ_N);
-    ackqCount--;
-    if (ackqStale < 65535) ackqStale++;      // ★ REQ-0204 — 큐 넘침(ackdrop)과 **다른 사건**이다
-#if DEBUG
-    Serial.println(F("[ACKQ] 캐시에서 밀려나 만들 수 없다 — 버린다"));
-#endif
-  }
+  ackQ.dropUnbuildable();          // 🔴 캐시가 있어야 판정되는 일이라 **큐가 스스로 한다**
 
   // ── 3) 담을 수 있는 만큼 이어 붙인다 (아직 큐에서 빼지 않는다) ───────────
   uint8_t take = 0;
-  while (take < ackqCount) {
-    const uint16_t rid = ackq[(uint8_t)((ackqHead + take) % ACKQ_N)];
-    const int8_t   hit = cacheFind(rid);
+  while (take < ackQ.pending()) {
+    const uint16_t rid = ackQ.peek(take);
+    const int8_t   hit = ackQ.find(rid);
     if (hit < 0) break;                       // 중간 미스 — 다음 슬롯에서 걷어낸다
 
     char one[24];
     int m = snprintf(one, sizeof(one), "A,%u,%c%c,%u,",
-                     (unsigned int)cache[hit].rid,
-                     cache[hit].slot[0], cache[hit].slot[1],
-                     (unsigned int)cache[hit].result);
+                     (unsigned int)ackQ.at(hit).rid,
+                     ackQ.at(hit).slot[0], ackQ.at(hit).slot[1],
+                     (unsigned int)ackQ.at(hit).result);
     if (m <= 0 || (unsigned)m + 3 > sizeof(one)) break;
     appendChecksum(one, (uint8_t)m);
     const uint8_t ol = (uint8_t)strlen(one);
@@ -1325,8 +1318,7 @@ static bool sendSlotBatch(uint8_t* ackOut, uint16_t* bytesOut) {
 
   // ── 4) **성공했을 때만** 소비한다 ────────────────────────────────────────
   if (ok && take) {
-    ackqHead = (uint8_t)((ackqHead + take) % ACKQ_N);
-    ackqCount = (uint8_t)(ackqCount - take);
+    ackQ.consume(take);
   }
   // 🔴 **`S` 가 실제로 나갔으면 그때 등록을 예약한다.**
   //   이 `S` 가 서버에서 **승격**(소켓 → 노드)을 만든다. 그 뒤라야 `D` 가 처리된다.
@@ -1438,12 +1430,12 @@ static void processCommand(char* cand) {
   if (nf < 3 || !parseU16(f[1], &rid)) return;   // rid 를 모르면 ACK 를 만들 수 없다 → 버린다
 
   // §4.2 멱등: 이미 본 rid 면 상태를 다시 바꾸지 말고 같은 ACK 를 다시 보낸다
-  int8_t hit = cacheFind(rid);
+  int8_t hit = ackQ.find(rid);
   if (hit >= 0) {
 #if DEBUG
     Serial.print(F("[DUP rid] ")); Serial.println(rid);
 #endif
-    sendAck(cache[hit].rid, cache[hit].slot[0], cache[hit].slot[1], cache[hit].result);
+    sendAck(ackQ.at(hit).rid, ackQ.at(hit).slot[0], ackQ.at(hit).slot[1], ackQ.at(hit).result);
     return;
   }
 
@@ -1469,7 +1461,7 @@ static void processCommand(char* cand) {
   if (type == 'M') {
     // §12B.4 시뮬 한 걸음. **무장 여부로 막지 않는다** — 테스트 모드와 별개다(§12B.3).
     // 멱등이 특히 중요하다: 재전송이 새 걸음으로 처리되면 한 번 눌렀는데 두 칸이 바뀐다.
-    // (위쪽 cacheFind 가 이미 걸러 준다 — M 도 R/C/T 와 같은 기계장치를 탄다.)
+    // (위쪽 `ackQ.find()` 가 이미 걸러 준다 — M 도 R/C/T 와 같은 기계장치를 탄다.)
     uint8_t idx = simStep();
     if (idx == 0xFF) {
       s0 = '?'; s1 = '?'; result = 5;    // 바꿀 시뮬 칸이 없다

@@ -21,33 +21,15 @@ struct AckRec {
   char     slot[2];
   uint8_t  result;
 };
-static AckRec  cache[CACHE_N];
-static uint8_t cacheHead = 0;   // 다음에 덮어쓸 자리
-static uint8_t cacheCount = 0;
-
-static int8_t cacheFind(uint16_t rid) {
-  for (uint8_t k = 0; k < cacheCount; k++) if (cache[k].rid == rid) return (int8_t)k;
-  return -1;
-}
+// 🔴 **클래스 선언은 큐 상수(ACKQ_N)를 본 뒤에 온다** — 아래 §"ACK 보류 큐" 끝에 있다.
+//   여기서는 자료 모양만 정의한다.
 // REQ-0032 판정 (a): **새 TCP 연결이 맺어지면 캐시를 비운다.**
 // wire_rid 는 서버가 발급하고 서버 재시작 시 1부터 다시 시작한다. 아두이노는 재부팅하지 않았으므로
 // 옛 세션의 rid 가 캐시에 남아 새 서버의 1,2,3… 과 충돌하고, 최대 8개 명령이 "재수신"으로 삼켜진다.
 // 가장 나쁜 점은 result=0 이라 **성공으로 보인다**는 것이다 — 타임아웃도 오류도 안 난다.
 // 비워도 잃는 것이 없다: §7.3 재전송(1500ms·2회)은 전부 살아 있는 연결 위에서 끝나고,
 // 연결이 끊기면 §7.4 가 새 wire_rid 로 재하달한다. rid 를 가로질러 재전송이 이어지는 경로가 없다.
-static void cacheClear(void) {
-  cacheHead = 0;
-  cacheCount = 0;
-}
 
-static void cachePut(uint16_t rid, char s0, char s1, uint8_t result) {
-  cache[cacheHead].rid = rid;
-  cache[cacheHead].slot[0] = s0;
-  cache[cacheHead].slot[1] = s1;
-  cache[cacheHead].result = result;
-  cacheHead = (uint8_t)((cacheHead + 1) % CACHE_N);
-  if (cacheCount < CACHE_N) cacheCount++;
-}
 
 // ─────────────────────────────────────────────────────────────────────────
 // 🔴 ACK 보류 큐 — **게이트가 닫혀 있을 때 ACK 가 조용히 사라지던 것을 막는다**
@@ -89,32 +71,89 @@ static const uint8_t ACKQ_N = 12;
 //     그래서 문장이 아니라 **다음 사람이 큐만 올리면 빌드가 깨지는 형태**로 둔다.
 static_assert(CACHE_N >= ACKQ_N,
               "CACHE_N 은 ACKQ_N 이상이어야 한다 — 큐는 rid 만 담고 내용은 캐시에 있다");
-static uint16_t      ackq[ACKQ_N];
-static uint8_t       ackqCount = 0;
-static uint8_t       ackqHead  = 0;   // 다음에 내보낼 자리
-static uint16_t      ackqDrops = 0;   // ★ **큐가 가득 차서** 밀어낸 수 (유입 초과)
+//   (아래 클래스의 `drops_` 가 그 칸이다)
 // 🔴 2026-08-18 (REQ-0204) — **원인을 갈라 센다.** 예전에는 아래 둘이 같은 칸이었다:
 //     ① 큐가 가득 참        → 유입이 배출보다 빠르다      → 대책: 큐/배출을 키운다
 //     ② 캐시에서 밀려남      → 캐시가 큐보다 작다          → 대책: 캐시를 키운다
 //   **대책이 다른데 한 칸이었다.** `ackdrop 31` 이 어느 쪽인지 아무도 몰랐다.
 //   ★ 원장 §5.1 과 같은 뿌리 — **합쳐 세면 "무엇을 고쳐야 하나"를 못 읽는다.**
-static uint16_t      ackqStale = 0;   // ★ **캐시에서 밀려나** 내용을 만들 수 없어 버린 수
+//   (아래 클래스의 `stale_` 가 그 칸이다)
 
-static void ackqPush(uint16_t rid) {
-  for (uint8_t i = 0; i < ackqCount; i++)                    // 같은 rid 가 이미 있으면 안 넣는다
-    if (ackq[(uint8_t)((ackqHead + i) % ACKQ_N)] == rid) return;
-  if (ackqCount == ACKQ_N) {
-    ackqHead = (uint8_t)((ackqHead + 1) % ACKQ_N);           // 가장 오래된 것을 버린다
-    ackqCount--;
-    if (ackqDrops < 65535) ackqDrops++;
-#if DEBUG
-    Serial.println(F("[ACKQ] 가득 참 — 가장 오래된 보류 ACK 를 버린다"));
-#endif
+// ═════════════════════════════════════════════════════════════════════════
+// 🔴 `AckQueue` — **멱등 캐시와 보류 큐를 한 캡슐로** (REQ-0275 1단계 · 2026-08-19)
+//
+//   왜 둘이 한 클래스인가: **불변식 `CACHE_N >= ACKQ_N` 이 둘을 묶는다.**
+//   큐는 `rid` 만 담고 **내용은 캐시에만 있다** — 따로 두면 그 불변식을 지킬 주인이 없다.
+//
+// ⚠ **생성자를 두지 않는다.** AVR 전역 객체의 생성자는 `main()` 전에 돌고,
+//   NSDMI(`= 0`)를 쓰면 **`.bss` 영타 대신 생성자 코드가 생긴다.**
+//   전역은 어차피 0 으로 시작하므로 **아무것도 안 쓰는 것이 가장 싸다**(원장 §19 계열).
+// ═════════════════════════════════════════════════════════════════════════
+class AckQueue {
+ public:
+  // ── 멱등 캐시 ──
+  int8_t find(uint16_t rid) const {
+    for (uint8_t k = 0; k < cCount_; k++) if (cache_[k].rid == rid) return (int8_t)k;
+    return -1;
   }
-  ackq[(uint8_t)((ackqHead + ackqCount) % ACKQ_N)] = rid;
-  ackqCount++;
-}
+  const AckRec& at(uint8_t k) const { return cache_[k]; }
+  void clearCache() { cHead_ = 0; cCount_ = 0; }
+  void put(uint16_t rid, char s0, char s1, uint8_t result) {
+    cache_[cHead_].rid = rid;
+    cache_[cHead_].slot[0] = s0;
+    cache_[cHead_].slot[1] = s1;
+    cache_[cHead_].result = result;
+    cHead_ = (uint8_t)((cHead_ + 1) % CACHE_N);
+    if (cCount_ < CACHE_N) cCount_++;
+  }
 
-// ★ 소켓이 끊기면 비운다 — **새 소켓에서 옛 `rid` 에 답하면 안 된다.**
-//   이 설계가 새로 만드는 유일한 위험이 그것이라 `awaitingSendOk=false` 와 같은 자리에 둔다.
-static void ackqClear(void) { ackqCount = 0; ackqHead = 0; }
+  // ── 보류 큐 ──
+  uint8_t  pending() const { return qCount_; }
+  uint16_t peek(uint8_t i) const { return q_[(uint8_t)((qHead_ + i) % ACKQ_N)]; }
+  void     clearQueue() { qCount_ = 0; qHead_ = 0; }
+  void     consume(uint8_t n) { qHead_ = (uint8_t)((qHead_ + n) % ACKQ_N); qCount_ = (uint8_t)(qCount_ - n); }
+  uint16_t drops() const { return drops_; }
+  void     resetStats() { drops_ = 0; stale_ = 0; }   // 진단 계수 초기화(시험·재기동용)
+  uint16_t stale() const { return stale_; }
+
+  void push(uint16_t rid) {
+    for (uint8_t i = 0; i < qCount_; i++)                     // 같은 rid 가 이미 있으면 안 넣는다
+      if (q_[(uint8_t)((qHead_ + i) % ACKQ_N)] == rid) return;
+    if (qCount_ == ACKQ_N) {
+      qHead_ = (uint8_t)((qHead_ + 1) % ACKQ_N);              // 가장 오래된 것을 버린다
+      qCount_--;
+      if (drops_ < 65535) drops_++;
+#if DEBUG
+      Serial.println(F("[ACKQ] 가득 참 — 가장 오래된 보류 ACK 를 버린다"));
+#endif
+    }
+    q_[(uint8_t)((qHead_ + qCount_) % ACKQ_N)] = rid;
+    qCount_++;
+  }
+
+  // 🔴 **캐시에서 밀려나 만들 수 없는 것을 head 쪽에서 걷어낸다.**
+  //   ⚠ 이 판정에 캐시가 필요하다 — **그래서 이 메서드가 클래스 안에 있어야 한다.**
+  //     밖에 두면 호출부가 `find` 와 `consume` 의 순서를 지켜야 하고, 그건 은닉이 아니다.
+  void dropUnbuildable() {
+    while (qCount_ > 0 && find(q_[qHead_]) < 0) {
+      qHead_ = (uint8_t)((qHead_ + 1) % ACKQ_N);
+      qCount_--;
+      if (stale_ < 65535) stale_++;   // ★ REQ-0204 — 큐 넘침(drops)과 **다른 사건**이다
+#if DEBUG
+      Serial.println(F("[ACKQ] 캐시에서 밀려나 만들 수 없다 — 버린다"));
+#endif
+    }
+  }
+
+ private:
+  AckRec   cache_[CACHE_N];
+  uint8_t  cHead_;      // 다음에 덮어쓸 자리
+  uint8_t  cCount_;
+  uint16_t q_[ACKQ_N];
+  uint8_t  qCount_;
+  uint8_t  qHead_;      // 다음에 내보낼 자리
+  uint16_t drops_;      // ★ **큐가 가득 차서** 밀어낸 수 (유입 초과)
+  uint16_t stale_;      // ★ **캐시에서 밀려나** 내용을 만들 수 없어 버린 수
+};
+
+static AckQueue ackQ;
