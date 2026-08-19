@@ -346,6 +346,15 @@ _REDIR = re.compile(r"(.?)>>?\s*([^\s;|&<>=]+)")
 # 가장 위험하다 — 오탐은 미탐보다 비싸다. 그래서 대상 토큰을 한 번 더 거른다.
 _OPERATOR_LEAD = set("-=<!+*/%&|>")  # ->  =>  <>  !>  +>  >>= … 앞글자가 이러면 연산자다
 
+# 슬래시가 없는 리다이렉션 대상을 파일로 인정하는 확장자.
+# 넓히면 오탐이 돌아오고 좁히면 미탐이 는다 — 이 훅은 **오탐을 더 비싸게** 친다.
+_FILE_EXTS = {
+    "txt", "log", "md", "json", "jsonl", "csv", "yml", "yaml", "xml", "html", "htm",
+    "css", "scss", "js", "mjs", "cjs", "ts", "tsx", "jsx", "vue", "py", "sh", "bash",
+    "c", "cc", "cpp", "cxx", "h", "hpp", "hxx", "inl", "ino", "kt", "kts", "java",
+    "hex", "bin", "o", "d", "out", "err", "diff", "patch", "conf", "ini", "cfg", "lock",
+}
+
 
 def _is_redirect_target(lead, tok):
     """`>` 뒤에 잡힌 토큰이 정말 '쓰기 대상 파일'인가.
@@ -354,17 +363,22 @@ def _is_redirect_target(lead, tok):
       - 연산자의 일부  (`->`, `>=`, `=>`)  — 앞글자로 판별. `>=` 는 정규식에서 이미 제외
       - 파일 이름 같지 않은 토큰 (`5`, `n`, `0xE0`) — 비교식의 우변이다
 
+      - 슬래시 없는 `이름.이름` (`ctl.max`, `.znode`) — CSS 자손 선택자와 멤버 비교가
+        전부 이 꼴이라 파일과 구별이 안 된다. **아는 확장자일 때만** 파일로 본다
+
     통과시키는 것: `out.txt`, `../a/b.log`, `cpp/x.cpp`, `~/tmp/z.md`
-    점이나 슬래시가 있어야 파일로 본다. 확장자 없는 `> outfile` 은 놓치지만,
-    이 훅은 선언대로 실수를 잡는 그물이지 샌드박스가 아니다 — 미탐 하나와
-    정상 코드 실행 차단을 맞바꾸지 않는다.
+    확장자 없는 `> outfile` 은 놓치지만, 이 훅은 선언대로 실수를 잡는 그물이지
+    샌드박스가 아니다 — 미탐 하나와 정상 코드 실행 차단을 맞바꾸지 않는다.
     """
     if lead in _OPERATOR_LEAD:
         return False
     tok = tok.strip("'\"()[]{},")
     if not tok or not _PATHY.fullmatch(tok):
         return False
-    return "/" in tok or "." in tok
+    if "/" in tok:
+        return True                      # 경로는 모호하지 않다
+    ext = tok.rsplit(".", 1)[-1].lower() if "." in tok else ""
+    return ext in _FILE_EXTS
 
 
 def check_bash(cmd, cwd, role, own):
