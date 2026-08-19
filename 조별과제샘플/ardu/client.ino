@@ -1,23 +1,22 @@
 /*
- * client.ino — 주차 관제 노드 (2열 × 5행 = 10칸)
+ * client.ino — 주차 관제 노드 (장치 쪽 샘플)
  *
- * 근거 문서: docs/net/parking-protocol.md v1 (얼림).  요청: REQ-0018
- * 이 파일과 명세가 어긋나면 **명세가 이긴다.** 명세를 바꿔야 하면 루트에게 요청을 발행한다(§12).
+ * 🔴 **기여자가 여는 파일은 이것 하나다.** 자기 것으로 바꿀 자리에 🔓 표시가 있다:
+ *      DEVICE_ID · 망 설정(Config.h) · MODULE_TABLE · 명령 핸들러 · setup() 의 router.on
  *
  * 타깃 보드 : Arduino Uno   (FQBN arduino:avr:uno)
  * 무선 모듈 : ESP-01, AT 펌웨어, SoftwareSerial 9600bps
- * 배선      : D7 = ESP TX → Uno(RX) / D8 = Uno(TX) → ESP RX   (현행 배선 유지)
+ * 배선      : D7 = ESP TX → Uno(RX) / D8 = Uno(TX) → ESP RX
  *
- * 명세 대응표
- *   §1    자리 인덱스 0..9 = A1..A5,B1..B5. 비트열 왼쪽 끝이 인덱스 0
+ * 프로토콜 : docs/net/parking-protocol.md 가 정본이다.
+ *            이 파일과 명세가 어긋나면 **명세가 이긴다.**
  *   §2.2  체크섬 = 첫 바이트 ~ 체크섬 앞 쉼표(포함) XOR, 대문자 2자리 hex
- *   §2.4  S(상태) 송신 / R,C 수신 / A(ACK) 송신
+ *   §2.4  S(상태)·D(등록)·A(ACK) 송신 / R·C·G·T 수신
  *   §3.3  AT+UART_DEF 를 쓰지 않는다 — ESP-01 플래시에 영구 기록되기 때문
- *   §3.4  하트비트 1Hz + 변화 시 100ms 디바운스, 타이머는 하나·전송하면 리셋
- *   §4.2  rid 멱등 캐시 8건 — 같은 rid 재수신 시 재적용 없이 같은 ACK 재전송
+ *   §4.2  rid 멱등 캐시 — 같은 rid 를 다시 받으면 재적용 없이 같은 ACK 를 다시 보낸다
  *   §6.2  수신 4단계: LF 분할 → +IPD,<n>: 뒤 → 타입 문자 → 체크섬
  *
- * String 을 쓰지 않는다(AVR 힙 단편화). 모든 프레임은 고정 char[] + snprintf 로 만든다.
+ * 🔴 `String` 을 쓰지 마라(AVR 힙 단편화). 모든 프레임은 고정 char[] + snprintf 로 만든다.
  */
 
 #include <SoftwareSerial.h>
@@ -26,11 +25,9 @@
 #include <stdio.h>
 #include <string.h>
 
-// ⚠ `#ifndef` 로 감싼 이유 (REQ-0116): 후보 ④(진단 출력이 AT 타이밍을 미는가)를 재려면
-//   **소스를 고치지 않고** `DEBUG=0` 빌드를 만들 수 있어야 한다. 소스를 고쳐 가며 구우면
-//   두 팔의 차이가 DEBUG 뿐이라는 보장이 깨진다.
+// 진단 출력 스위치. `#ifndef` 인 이유: **소스를 고치지 않고** DEBUG=0 빌드를 만들 수 있어야
+//   두 빌드의 차이가 DEBUG 하나뿐임이 보장된다. 소스를 고쳐 가며 구우면 그 보장이 깨진다.
 //     arduino-cli compile --build-property "compiler.cpp.extra_flags=-DDEBUG=0" ...
-//   기본값은 1 그대로이므로 평소 빌드는 바이트가 변하지 않는다(확인함).
 #ifndef DEBUG
 #define DEBUG 1
 #endif
@@ -58,17 +55,26 @@
 static_assert(sizeof(DEVICE_ID) > 1 && sizeof(DEVICE_ID) <= 9,
               "DEVICE_ID 는 1~8자여야 한다 (명세 §2.3). 빈 값도 9자 이상도 안 된다");
 
-#include "Boot.h"              // ← 부팅 원인 기록(MCUSR 미러). **위치를 옮기지 마라**
-#include "Config.h"            // ← 배선·네트워크 상수·타이밍·반송파 슬롯. **위치를 옮기지 마라**
-#include "RxBuf.h"             // ← 수신 버퍼 셋(rxLine·workLine·pendLine)  🔒링크. **위치를 옮기지 마라**
-#include "Diag.h"              // ← 현장 진단·RAM 계측  👁관측. **위치를 옮기지 마라**
-#include "TxState.h"           // ← 송신 상태·슬롯 상태. **위치를 옮기지 마라**
-#include "Checksum.h"          // ← 체크섬(§2.2) — 순수 함수. **위치를 옮기지 마라**
-#include "RxLine.h"            // ← 수신 줄 조립(§6.2 1단계)  🔒링크. **위치를 옮기지 마라**
-#include "LinkGate.h"          // ← 살아있음 불변식·SEND OK 게이트  🔒링크. **위치를 옮기지 마라**
-#include "Counters.h"          // ← 운영 계수기 [CNT]  👁관측 — 🔴잠그지 마라. **위치를 옮기지 마라**
-#include "LinkRecovery.h"      // ← IP 소실·소켓 복구·오프라인 전이  🔒링크. **위치를 옮기지 마라**
-#include "FrameCodec.h"        // ← S·D·A 프레임 · hex 인코딩 · 슬롯 배치. **위치를 옮기지 마라**
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴🔴 **이 include 들의 순서와 위치를 바꾸지 마라.**
+//   스케치는 전처리된 하나의 파일로 컴파일된다 — 순서를 바꾸면 **선언 순서와
+//   전역 초기화 순서가 같이 바뀌고, 산출물이 달라진다.** 아래 표 사이에 끼워 넣는
+//   것도 마찬가지다(모듈 표가 `FrameCodec.h` 와 `Modules.h` 사이에 있는 이유다).
+//   🔑 새 헤더를 더할 자리는 **이 목록의 끝**이다.
+//
+//   🔒 = 링크 계층(ESP 와의 통신 안정성) · 👁 = 관측
+// ─────────────────────────────────────────────────────────────────────────
+#include "Boot.h"              // 부팅 원인 기록(MCUSR 미러)
+#include "Config.h"            // 🔓 배선·망 설정·타이밍·반송파 슬롯 — **SSID/IP 를 여기서 바꾼다**
+#include "RxBuf.h"             // 🔒 수신 버퍼 셋(rxLine·workLine·pendLine)
+#include "Diag.h"              // 👁 현장 진단·RAM 계측
+#include "TxState.h"           // 송신 상태·슬롯 상태
+#include "Checksum.h"          // 체크섬(§2.2) — 순수 함수
+#include "RxLine.h"            // 🔒 수신 줄 조립(§6.2 1단계)
+#include "LinkGate.h"          // 🔒 살아있음 불변식·SEND OK 게이트
+#include "Counters.h"          // 👁 운영 계수기 [CNT] — 계수기를 더하는 것은 정상 작업이다
+#include "LinkRecovery.h"      // 🔒 IP 소실·소켓 복구·오프라인 전이
+#include "FrameCodec.h"        // S·D·A 프레임 · hex 인코딩 · 슬롯 배치
 
 // ██████████████████████████████████████████████████████████████████████████
 // █  🔓  **모듈 표 — 이 장치의 자기 구성. 자기 것으로 바꿔라**              █
@@ -83,21 +89,18 @@ static_assert(sizeof(DEVICE_ID) > 1 && sizeof(DEVICE_ID) <= 9,
 //     종류 : KIND_PARK_SENSOR(`IP` 관측) · KIND_GATE_SENSOR(`IX`) · KIND_BARRIER(`OB` 명령)
 //     핀   : 실물이면 핀 번호, 가상이면 `PIN_NONE`
 //
-// ⚠ **왜 여기 있나**: `FrameCodec.h` 와 `Modules.h` **사이**여야 한다 —
-//   앞에서 `KIND_*` 가, 뒤에서 이 표를 쓰는 코드가 온다. **위치를 옮기지 마라.**
+// ⚠ **이 표는 `FrameCodec.h` 와 `Modules.h` 사이에 있어야 한다** —
+//   앞에서 `KIND_*` 가 정의되고, 뒤에서 이 표를 읽는 코드가 온다.
 // ██████████████████████████████████████████████████████████████████████████
 struct ModuleDef {
   char    name[3];      // "A1" + NUL — 명칭이자 **지금은 자리 결속 키다**(위 경고)
   char    kind[4];      // KIND_* 2글자 + 선택적 `V` 접미(가상) + NUL
   uint8_t pin;
 };
-// 🔴 **가상 모듈 스위치** (REQ-0227 · 2026-08-19)
-//   실기에 `O*`(명령 가능) 모듈이 하나도 없어 **조작 사슬이 한 번도 안 돌았다.**
-//   ⚠ **실물 모듈이 생기면 반드시 0 으로 꺼라** — 켜 둔 채 실물을 붙이면 **같은 자리에 둘이 붙는다.**
-// 🔴 **가상 모듈 스위치 — 샘플 기본값은 0(끔)** (2026-08-19)
-//   가상 차단봉은 **시험용**이다. 실물 없이 조작 사슬을 밟아 보려면 1 로 켠다.
-//   ⚠ **실물 모듈이 있으면 반드시 0으로 둬라** — 켠 채 실물을 붙이면 같은 자리에 둘이 붙는다.
-//   🔑 회귀 시험은 이 값을 **1 로 켜서 빌드한다** — 그래야 콜백 경로가 실제로 밟힌다.
+// 🔴 **가상 모듈 스위치 — 기본값 0(끔)**
+//   가상 차단봉 `E1`·`X1` 은 **시험용**이다. 실물 없이 명령 사슬을 밟아 보려면 1 로 켠다.
+//   ⚠ **실물 모듈이 있으면 0 으로 둬라** — 켠 채 실물을 붙이면 같은 자리에 둘이 붙는다.
+//   🔑 회귀 시험은 이 값을 1 로 켜서 빌드한다 — 그래야 콜백 경로가 실제로 밟힌다.
 #ifndef VIRTUAL_MODULES
 #define VIRTUAL_MODULES 0
 #endif
@@ -135,19 +138,20 @@ static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_T
 // █  ⚠  아래부터는 **고쳐도 된다. 다만 비용이 있다**                        █
 // ██████████████████████████████████████████████████████████████████████████
 //
-// 🔴 **금지가 아니다.** 아래(그리고 링크 계층 헤더들)는 **링크 안정성이 걸린 코드**다:
-//   · 이 코드가 **하드웨어 리셋을 불필요하게 만든 물건**이다(사용자 확정 2026-08-19).
-//     ESP 가 꼬였을 때 자력으로 돌아오는 경로가 여기서 나온다
-//   · 고치면 **그 안정성 기준선을 다시 재야 한다** — 기준: 무자극 41분에
-//     `CIFSR 0.0.0.0` 0 · `LADDER 실패` 0 · `T2` 0 · `esprst` 0 · 깨진 나가는 AT 0/3,470
+// 🔴 **금지가 아니다.** 아래(그리고 🔒 표시된 헤더들)는 **링크 안정성이 걸린 코드**다:
+//   · ESP 가 꼬였을 때 **자력으로 돌아오는 경로**가 여기서 나온다.
+//     이 코드가 도는 덕분에 **하드웨어 리셋선이 필요 없다.**
+//   · 고치면 **그 안정성 기준선을 다시 재야 한다.** 기준선은 이렇게 생겼다 —
+//     무자극 41분 동안 `CIFSR 0.0.0.0` 0회 · `LADDER 실패` 0회 · `T2` 0회 ·
+//     `esprst` 0회 · 깨진 나가는 AT 0건
 //
 // 🔑 **그러니 "만지지 마라"가 아니라 "만지면 그 비용을 안다"이다.**
 //   **비용을 알고 고치는 것은 정상 작업이다.** 고쳤으면 **알려라** — 기준선을 다시 재면 된다.
 // ██████████████████████████████████████████████████████████████████████████
-#include "Modules.h"           // ← 모듈 표를 쓰는 코드. **위치를 옮기지 마라**
-#include "FrameCodec2.h"       // ← ACK 발행·슬롯 배치. **위치를 옮기지 마라**
-#include "Commands.h"          // ← R / C / T 프레임 처리. **위치를 옮기지 마라**
-#include "Session.h"           // ← 주기 처리(sensorTick·statusTick·cntTick·diag·ram). **위치를 옮기지 마라**
+#include "Modules.h"           // 모듈 표를 쓰는 코드 · 명령 라우터
+#include "FrameCodec2.h"       // ACK 발행·슬롯 배치
+#include "Commands.h"          // R / C / G / T 프레임 처리
+#include "Session.h"           // 주기 처리(statusTick·cntTick)
 // ─────────────────────────────────────────────────────────────────────────
 // ██████████████████████████████████████████████████████████████████████████
 // █  🔓  **명령 수신 핸들러 — 자기 액추에이터를 여기 붙인다**                █
@@ -180,8 +184,8 @@ static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_T
 // 🔑 **이름으로 등록한다.** 전선은 `idx`(표 순서)로 오는데 표를 고치면 idx 가 밀린다 —
 //   **이름은 안 밀린다.** 그 변환은 `CommandRouter` 가 한다.
 #if VIRTUAL_MODULES
-// 🔴 **가상 차단봉도 이제 이 경로로 돈다** — 옛 하드코딩 분기를 지웠다.
-//   그래서 이 경로가 **지금 실제로 돌아가고 검증된다.** 실물이 붙으면 아래 등록 한 줄만 바꾼다.
+// 시험용 가상 차단봉의 핸들러. **실물 액추에이터도 똑같은 모양으로 쓴다** —
+//   실물이 붙으면 아래 `setup()` 의 등록 한 줄만 바꾸면 된다.
 static bool virtualGate(uint8_t k, uint32_t arg) {
   gates.latch((uint8_t)(moduleCount() - SLOT_N), slotNo);   // 첫 명령이 자율 토글을 영구 정지
   gates.set(k, arg != 0);
@@ -193,14 +197,14 @@ static bool gateX1(uint32_t arg) { return virtualGate(1, arg); }
 
 void setup() {
   Serial.begin(115200);
-  espInit();                        // ★ UART 를 열고 사다리를 시작만 한다 (설계문서 §1.2)
+  espInit();                        // UART 를 열고 접속 사다리를 시작만 한다 (여기서 기다리지 않는다)
 
-  // ★ 슬롯 위상의 원점. **반드시 여기서 잡는다** — 0 으로 두면 첫 `statusTick` 에서
-  //   `now - 0` 만큼의 슬롯을 한꺼번에 소진하느라 while 이 헛돈다(부팅 몇 초면 수 회).
+  // 슬롯 위상의 원점. 🔴 **반드시 여기서 잡는다** — 0 으로 두면 첫 `statusTick` 에서
+  //   `now - 0` 만큼의 슬롯을 한꺼번에 소진하느라 while 이 헛돈다.
   slotStart = millis();
 
-  // 시드는 A1 에서 뽑는다 — 어디에도 안 물린 핀이라야 노이즈가 나온다.
-  // (A0 은 자리 B5 의 센서 입력으로 배정했으므로 쓰면 안 된다.)
+  // 난수 시드는 **아무 데도 안 물린 아날로그 핀**에서 뽑는다 — 물려 있으면 노이즈가 안 나온다.
+  // ⚠ `MODULE_TABLE` 에서 아날로그 핀을 센서로 쓰면 그 핀을 여기 쓰지 마라.
   randomSeed((unsigned long)analogRead(A1) ^ micros());
 
   // 자리 초기화 — 실물로 지정된 칸의 입력 모드까지 **`node` 가 스스로 잡는다**.
@@ -215,40 +219,32 @@ void setup() {
   router.on("X1", gateX1);
 #endif
 
-  // §12A.3 재부팅하면 테스트 오버라이드는 사라진다 — 서버가 재하달하지 않는다(예약과 정반대).
-  // 전역이라 어차피 0 이지만, "여기서 버린다"는 것을 코드로 남겨 둔다.
+  // 재부팅하면 테스트 오버라이드는 사라진다 — 서버가 다시 내려보내지 않는다(예약과 정반대).
+  // 전역이라 어차피 0 이지만, **"여기서 버린다"를 코드로 남겨 둔다.**
   node.testArmed = false;
   node.slotOverrideClearAll();
 
-  // 시작 시 몇 칸은 차 있는 편이 주차장답다: A2, A3, B4
-  // 이 값은 **트리거를 받기 전까지 그대로 유지된다**(§12B.1 — 자율 전진 없음).
-  // 🔴 REQ-0270 — **짝 단위로 채운다.** 옛 값 `A2·A3·B4` 는 지형과 어긋났다:
-  //   `A2` 의 짝 `B2` 가 비고 `B4` 의 짝 `A4` 가 비어 **한 자리에서 두 센서가 모순**이었다.
-  //   지금은 **자리 2·3·4 를 통째로** 채운다(A2·B2 · A3·B3 · A4·B4). 자리 1·5 는 빈다.
-  node.simOcc = 0;   // 🔓 샘플은 **빈 자리로 시작**한다.
-                     //   채우려면 `(1U<<0) | (1U<<1)` 처럼 **짝으로** 넣어라 —
-                     //   ⚠ 한쪽만 넣으면 한 자리에서 두 센서가 모순된 값을 낸다
+  // 🔓 모의 점유의 시작 상태. 이 값은 **트리거를 받기 전까지 그대로 유지된다**(자율 전진 없음).
+  node.simOcc = 0;   // 샘플은 **빈 자리로 시작**한다.
+                     //   채우려면 `(1U<<0) | (1U<<1)` 처럼 **한 자리의 센서를 짝으로** 넣어라.
+                     //   🔴 한쪽만 넣으면 **한 자리에서 두 센서가 모순된 값**을 내고,
+                     //     서버는 그 자리에서 갈린 두 값을 보게 된다.
 
-  // ★ REQ-0071 4단 — 리셋선은 **놓은 상태(하이임피던스)로 시작**한다.
-  //   전원 인가 직후 AVR 핀은 원래 INPUT 이라 이미 떠 있지만, "여기서 명시적으로 놓는다"를
-  //   코드로 남겨 둔다. 실수로 OUTPUT LOW 로 두면 ESP 가 영원히 리셋에 잡혀 아무 일도 안 난다.
+  // ESP 리셋선은 **놓은 상태(하이임피던스)로 시작**한다.
+  //   전원 인가 직후 AVR 핀은 원래 INPUT 이라 이미 떠 있지만, **"여기서 명시적으로 놓는다"**를
+  //   코드로 남긴다. 🔴 실수로 OUTPUT LOW 로 두면 ESP 가 영원히 리셋에 잡혀 아무 일도 안 난다.
 #if ESP_RST_WIRED
   pinMode(PIN_ESP_RST, INPUT);
 #endif
 
-  // ✏️ 사다리 초기화는 `espInit()` 안으로 옮겼다 — **UART 열기와 같이 있어야 하는 것**이다.
-  //   떨어져 있으면 한쪽만 고치는 실수가 난다.
-
 #if DEBUG
-  // 🔴 하드코딩 "10 slots" 를 **파생값**으로 바꿨다 (§30 · REQ-0273).
-  //   ⚠ **"12 slots" 가 아니다.** 12 는 **모듈 수**(`D,*,<drain>,<n>` 의 `n`)이고 자리 수는 10(`SLOT_N`)이다.
-  //     socket 이 2026-08-19 에 `n` 은 모듈 수임을 명세에 못 박았다. 둘은 다른 값이다.
-  //   🔑 **따로** 찍어야 판본 판별에도 쓰인다 — 옛 판은 "10 slots" 만 찍었다.
+  // 🔴 **자리 수와 모듈 수는 다른 값이다.** `D,*,<drain>,<n>` 의 `n` 은 **모듈 수**다.
+  //   그래서 둘을 **따로** 찍는다 — 하나만 찍으면 어느 쪽인지 못 가린다.
   Serial.print(F("\n[PARKING NODE] proto v1 / "));
   Serial.print(SLOT_N);            Serial.print(F(" slots / "));
   Serial.print(moduleCount());     Serial.println(F(" modules / dev=" DEVICE_ID));
 
-  // ── 부팅 원인 (REQ-0071 사실 4) — 추측을 사실로 바꾸는 한 줄 ──
+  // ── 부팅 원인 — **추측을 사실로 바꾸는 한 줄**. 왜 재부팅했는지는 여기서만 알 수 있다 ──
   Serial.print(F("[BOOT] 리셋 원인: "));
   if (mcusrMirror == 0) {
     Serial.println(F("불명 (부트로더가 MCUSR 을 지우고 넘어왔다)"));
@@ -273,7 +269,7 @@ void setup() {
 }
 
 #if DEBUG
-// 오프라인인 동안 3초마다 한 줄. **이 한 줄이 원인을 셋으로 가른다**(REQ-0042):
+// 오프라인인 동안 3초마다 한 줄. 🔴 **이 한 줄이 원인을 셋으로 가른다:**
 //   rx=0                 → ESP→Uno 로 바이트가 아예 안 온다. 배선(D7)·레벨·모듈 전원을 봐라
 //   rx>0, lines=0        → 바이트는 오는데 줄이 안 끊긴다. 줄 종단이 LF 가 아닐 수 있다
 //   lines>0, online=0    → 줄은 오는데 접속 문구를 못 알아본다. [AT] 로그에서 실제 문구를 봐라
@@ -283,8 +279,8 @@ static void diagTick(unsigned long now) {
   if (now - dbgLastDiag < DIAG_PERIOD_MS) return;
   dbgLastDiag = now;
   Serial.print(F("[DIAG] offline step="));  Serial.print(netStep);
-  // ★ REQ-0071 — 사다리의 현재 칸을 같이 찍는다. 이게 없으면 3초마다 같은 줄이 흘러갈 뿐
-  //   "지금 무엇을 하며 기다리는 중인가"를 로그에서 알 수 없다.
+  // 사다리의 현재 칸을 같이 찍는다. 없으면 3초마다 같은 줄이 흘러갈 뿐
+  //   **"지금 무엇을 하며 기다리는 중인가"**를 로그에서 알 수 없다.
   Serial.print(F(" 사다리="));              Serial.print(rung);
   Serial.print('/');                        Serial.print(rungFails);
   if (espRstHeld) Serial.print(F(" [ESP리셋유지중]"));
@@ -312,17 +308,17 @@ static void ramTick(unsigned long now) {
 
 void loop() {
 #if ENABLE_WDT
-  wdt_reset();                      // 6단 — 여기 못 오면(=행) 8초 뒤 AVR 이 리셋된다
+  wdt_reset();                      // 여기 못 오면(=행) 8초 뒤 AVR 이 스스로 리셋된다
 #endif
   unsigned long now = millis();
   espReset(now);
   espRead();
   drainPending();
-  // ⚠ 2026-08-17 — `ackqDrain()` 을 뺐다. **보류 ACK 는 이제 슬롯 배치에 실려 나간다**
-  //   (`sendSlotBatch`). 여기서 따로 내보내면 슬롯당 1거래 규칙이 깨지고 수신 창을 침범한다.
-  node.readSensors();          // 자리 상태를 훑는다 (옛 sensorTick)
+  // 🔴 **보류 ACK 를 여기서 따로 내보내지 마라.** 슬롯 배치(`sendSlotBatch`)가 같이 싣는다 —
+  //   따로 내보내면 **슬롯당 1거래 규칙이 깨지고 수신 창을 침범한다.**
+  node.readSensors();               // 자리 상태를 훑는다
   statusTick(now);
-  cntTick(now);                     // ★ DEBUG 밖 — 운영 빌드에서도 관측이 남는다
+  cntTick(now);                     // 🔴 DEBUG 밖이다 — 운영 빌드에서도 관측이 남아야 한다
 #if DEBUG
   diagTick(now);
   ramTick(now);
