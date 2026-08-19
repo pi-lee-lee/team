@@ -1639,7 +1639,7 @@ struct Server {
                 logf("!", b);
                 continue;
             }
-            if (!line.empty()) on_ard_line(line);
+            if (!line.empty()) on_ard_line(park, line);
         }
         if (ard_buf.size() > (size_t)MAX_LINE) {
             drop_noise++;
@@ -3178,7 +3178,16 @@ struct Server {
     }
 
     // ---------- 아두이노 라인 처리
-    void on_ard_line(const std::string& line) {
+    // ⏳ **호환 껍데기 — 자가검증 전용.** 실기 호출부 둘은 이미 `park` 를 명시로 넘긴다.
+    //   자가검증 50여 곳을 이 조각에서 같이 고치면 **거동 변화 0 의 증명 범위가 넓어진다.**
+    //   🔴 ②-b(소켓별 버퍼 라우팅)에서 없앤다. **그때까지 새 호출부는 이걸 쓰지 마라.**
+    void on_ard_line(const std::string& line) { on_ard_line(park, line); }
+
+    // 🔴 ②-a (REQ-0263/0262) — **노드를 인자로 받는다.** 시그니처만 바꾼다.
+    //   지금 호출부는 둘 다 `park` 를 넘기므로 **거동 변화 0 이어야 하고, 산출물 대조로 증명한다.**
+    //   🔑 이것이 슬롯 경로 추출의 전제다 — `park` 32회 참조가 인자로 바뀌지 않으면
+    //     "노드 안에서 닫힌 파서"가 안 되고, 그러면 떼어 내도 전역을 계속 만진다(설계 §8.13).
+    void on_ard_line(Node& n, const std::string& line) {
         // 🔑 **받은 바이트 수를 같이 남긴다** — `AT+CIPSEND` 조용한 잘림(③)의 유일한 판별자다.
         // 장치는 `SEND OK` 를 받으면 **성공으로 세므로 잘린 것을 모른다.**
         // **서버가 "몇 바이트 받았나"를 적어야 "보낸 만큼 왔나"를 대조할 수 있다.**
@@ -3238,16 +3247,16 @@ struct Server {
             //    갈릴 수 없다. 갈리면 그 자체가 결함 신호다.**
             // ⚠ **등록이 끝난 노드에만 적용한다** — 옛 펌웨어는 등록을 안 하므로 이 검사를 안 탄다.
             //    (옛 10진 형식은 폭이 `n` 이고 hex 는 `ceil(n/4)` 라 규칙이 다르다)
-            if (!park.reg_first_ms) park.reg_first_ms = now_ms();   // `REG_TIMEOUT` 의 기준
-            if (park.reg_done && park.reg_n > 0) {
-                const size_t want = (size_t)((park.reg_n + 3) / 4);
+            if (!n.reg_first_ms) n.reg_first_ms = now_ms();   // `REG_TIMEOUT` 의 기준
+            if (n.reg_done && n.reg_n > 0) {
+                const size_t want = (size_t)((n.reg_n + 3) / 4);
                 if (f[2].size() != want) {
                     reg_widthbad++;
                     char wb[176];
                     snprintf(wb, sizeof(wb),
                              "🔴 자리 폭 불일치 — S 의 폭 %zu, 선언 n=%d 이면 %zu 여야 한다. "
                              "같은 함수에서 나온 값이 갈렸다 (누적 %lld)",
-                             f[2].size(), park.reg_n, want, reg_widthbad);
+                             f[2].size(), n.reg_n, want, reg_widthbad);
                     logf("!!", wb);
                 }
             }
@@ -3454,45 +3463,45 @@ struct Server {
                 //   약속: *"새 모듈은 목록 끝에만 붙인다. 중간에 끼우지 않는다."*
                 //   깨지면 **`idx` 가 밀려 전선에 나가 있던 `G` 가 다른 모듈을 친다** — 조용히.
                 //   ⚠ 이 검사는 *"약속을 어겼나"* 만 잡는다. *"왜 어겼나"* 는 arduino 만 안다.
-                prev_mods_snapshot = park.mods;   // 🔑 `D,*` 와 등록 완료는 **다른 프레임**이다 — 멤버로 잇는다
-                park.reg_reset();
-                park.reg_drain = atoi(f[2].c_str());
-                park.reg_n     = atoi(f[3].c_str());
-                if (park.reg_n < 0 || park.reg_n > REG_MODS_MAX) {
+                prev_mods_snapshot = n.mods;   // 🔑 `D,*` 와 등록 완료는 **다른 프레임**이다 — 멤버로 잇는다
+                n.reg_reset();
+                n.reg_drain = atoi(f[2].c_str());
+                n.reg_n     = atoi(f[3].c_str());
+                if (n.reg_n < 0 || n.reg_n > REG_MODS_MAX) {
                     reg_bad++;
                     logf("!", "D,* 의 n=" + f[3] + " 이 범위 밖(0~"
                               + std::to_string(REG_MODS_MAX) + ") — 등록 무효");
-                    park.reg_n = -1; return;
+                    n.reg_n = -1; return;
                 }
                 char b[160];
                 snprintf(b, sizeof(b), "등록 시작 — 선언 drain=%d · n=%d (device=%s)",
-                         park.reg_drain, park.reg_n, park.devid.c_str());
+                         n.reg_drain, n.reg_n, n.devid.c_str());
                 logf("=", b);
                 return;
             }
             // `D,<name>,<kind>` — 모듈 한 줄. **순서가 곧 `idx` 다**(등록 순서가 비트 자리를 정한다).
-            if (park.reg_n < 0) { reg_bad++; logf("!", "D,* 없이 모듈 줄이 왔다 — 버림"); return; }
-            if ((int)park.mods.size() >= park.reg_n) {
+            if (n.reg_n < 0) { reg_bad++; logf("!", "D,* 없이 모듈 줄이 왔다 — 버림"); return; }
+            if ((int)n.mods.size() >= n.reg_n) {
                 reg_bad++;
-                logf("!", "선언 n=" + std::to_string(park.reg_n) + " 보다 모듈 줄이 많다 — 버림");
+                logf("!", "선언 n=" + std::to_string(n.reg_n) + " 보다 모듈 줄이 많다 — 버림");
                 return;
             }
-            park.mods.push_back(std::make_pair(f[1], f[2]));
-            if ((int)park.mods.size() == park.reg_n) {
-                park.reg_done = true;
+            n.mods.push_back(std::make_pair(f[1], f[2]));
+            if ((int)n.mods.size() == n.reg_n) {
+                n.reg_done = true;
                 reg_ok++;
-                bind_modules(park);          // 🔑 등록이 지형을 바꾼다 → epoch 이 여기서 오른다
+                bind_modules(n);          // 🔑 등록이 지형을 바꾼다 → epoch 이 여기서 오른다
                 // 🔴 **삼중 검산 ①②** — 선언 `n` 과 실제 줄 수. ③(hex 폭)은 `S` 에서 본다.
                 // 🔴 **앞부분 대조** — 겹치는 구간이 그대로인가. 하나라도 다르면 `idx` 가 밀린 것이다.
                 if (!prev_mods_snapshot.empty()) {
-                    size_t n_ov = prev_mods_snapshot.size() < park.mods.size()
-                                ? prev_mods_snapshot.size() : park.mods.size();
+                    size_t n_ov = prev_mods_snapshot.size() < n.mods.size()
+                                ? prev_mods_snapshot.size() : n.mods.size();
                     for (size_t i = 0; i < n_ov; i++)
-                        if (prev_mods_snapshot[i] != park.mods[i]) {
+                        if (prev_mods_snapshot[i] != n.mods[i]) {
                             mod_order_changed++;
                             logf("!", "🔴 재등록에서 모듈 순서가 바뀌었다 — idx " + std::to_string(i)
                                       + " 가 `" + prev_mods_snapshot[i].first + "` → `"
-                                      + park.mods[i].first + "`. **끝에만 붙인다는 약속이 깨졌다** "
+                                      + n.mods[i].first + "`. **끝에만 붙인다는 약속이 깨졌다** "
                                       "(명세 §7.4). 떠 있는 조작 명령을 버린다");
                             // ⚠ **떠 있는 `G` 를 버린다.** 그 `idx` 는 이제 다른 모듈을 가리킨다 —
                             //   보내 놓고 결과를 기다리는 것보다 **실패로 끝내는 것이 정직하다.**
@@ -3516,7 +3525,7 @@ struct Server {
                 char b[192];
                 snprintf(b, sizeof(b),
                          "등록 완료 — n=%d · drain=%d · 명령가능 %d개 (device=%s)",
-                         park.reg_n, park.reg_drain, reg_cmdable(), park.devid.c_str());
+                         n.reg_n, n.reg_drain, reg_cmdable(), n.devid.c_str());
                 logf("=", b);
             }
             return;
@@ -4370,7 +4379,7 @@ struct Server {
                 logf("!", b);
                 continue;
             }
-                            if (!line.empty()) on_ard_line(line);
+                            if (!line.empty()) on_ard_line(park, line);
                         }
                         if (ard_buf.size() > (size_t)MAX_LINE) {
                             drop_noise++;
