@@ -24,7 +24,8 @@
 // ① 주차장을 조립한다 — 🔴 **이것만 채우면 돌아간다**       자세히: GUIDE-sample.md §조립
 void buildLot(ParkingLot& lot) {
     lot.spot("A1").sensor("P1", "A1").sensor("P1", "B1")     // 주차 자리 — 센서 둘(이중화)
-                  .actuator("P1", "LD").actuator("P1", "L2");  // 그 자리의 표시등·표시기
+                   .actuator("P1", "LD");
+                //    .actuator("P1", "L2");  // 그 자리의 표시등·표시기
 
     lot.gate("E1", Gate::IN);                 // 입구
     lot.spot("E1").actuator("P1", "DR");      // 🔑 차단봉은 **입구에** 있다. 주차 자리가 아니다
@@ -32,9 +33,9 @@ void buildLot(ParkingLot& lot) {
     // ④ 화면에서 조작할 UI 를 선언한다 — 🔑 **뜻을 아는 사람이 선언한다**   자세히: §화면조작
     //   선언 안 한 모듈은 화면에 **표시만** 되고 조작 버튼이 안 생긴다.
     lot.control("P1", "LD").toggle("표시등");                    // 0 / 1
-    lot.control("P1", "L2").number("표시기", 0, 9999999);        // 숫자 칸
-    lot.control("P1", "DR").choice("차단봉")                     // 🔴 **이 선언이 곧 명령표다**
-            .option(1, "열기").option(2, "닫기");
+    // lot.control("P1", "L2").number("표시기", 0, 9999999);        // 숫자 칸
+    // lot.control("P1", "DR").choice("차단봉")                     // 🔴 **이 선언이 곧 명령표다**
+    //         .option(1, "열기").option(2, "닫기");
     // 🔑 값의 뜻은 **장치의 콜백**이 정한다. 여기 라벨과 그쪽 표가 같아야 한다
     // ⚠ 범위를 벗어난 값은 서버가 거절한다(`out_of_range`) — 화면이 막기 전에 서버가 막는다
     // 🔴 이름은 **정확히 2글자** — 장치 표(`client.ino`)와 글자 그대로 같아야 붙는다
