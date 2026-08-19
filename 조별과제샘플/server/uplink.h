@@ -466,6 +466,11 @@
             //   ⚠ 합쳐 두면 `실패 N` 을 보고 재시도를 늘리는데, 절반은 늘려도 소용이 없다.
             //   (§8.16 의 `error` 한 칸 · §8.23-(38) 과 같은 형태다.)
             if (p.kind == 'G') gate_ans++;       // 🔑 **응답** — result 와 무관하게 답이 온 것
+            // 🔴 **명령 결과 콜백** — `result` 로 갈래를 가른다.
+            //   0 = 콜백이 true 를 냈다 · 3 = 장치가 거절했다.
+            //   ⚠ 무응답은 여기 안 온다(ACK 이 없으니까) — 재전송 소진 자리에서 따로 부른다.
+            if (p.kind == 'G')
+                notify_cmd(p, (result == 0) ? CmdResult::OK : CmdResult::REJECTED, result);
             if (result == 3) {
                 dev_reject++;
                 logf("!", std::string("장치가 거절했다(result=3) — ") + p.kind + " " + slot

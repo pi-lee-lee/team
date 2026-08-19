@@ -116,10 +116,10 @@
                 char rb[224];
                 snprintf(rb, sizeof(rb),
                          "rid 계약 — 공간 %u([0,%u] · 최대 %d자리) · 격리 %lldms(=ACK_TIMEOUT×ACK_MAX_TRIES) "
-                         "· 장치 멱등창 %d (arduino §25.3)",
+                         "· 장치 멱등창 %d (arduino §25.3) · **묶음 상한 %d건**",
                          (unsigned)RID_SPACE, (unsigned)(RID_SPACE - 1),
                          (int)std::to_string((unsigned)(RID_SPACE - 1)).size(),
-                         RID_QUARANTINE_MS, DEV_RID_CACHE_N);
+                         RID_QUARANTINE_MS, DEV_RID_CACHE_N, max_per_batch());
                 logf("=", rb);
             }
             // 🔴 **여기서 부르지 않으면 커서가 안 이어진다.** 생성자에 두지 않은 것은 일부러다 —

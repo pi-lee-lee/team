@@ -33,6 +33,7 @@
 #include <vector>
 #include <cstddef>
 #include "spot.h"      // SpotBehavior — 자리의 동작 방식(기여자가 구현한다)
+#include "cmdresult.h" // CmdResult — 명령 결과를 나중에 받는다
 
 class ParkingLot;
 
@@ -174,6 +175,27 @@ public:
         std::vector<std::pair<std::string, long> > items_;
     };
     Batch batch(const std::string& devid) { return Batch(this, devid); }
+
+    // ── 명령 결과를 나중에 받는다 (콜백) ───────────────────────────────────
+    //
+    //   `send()` 는 **큐에 넣었다**까지만 말한다. 실제 결과는 장치가 자기 주기에 실어 보내고,
+    //   도착할 때 이 함수가 불린다.
+    //
+    //   ```
+    //   static void onResult(const CmdResult& r) {
+    //       // r.kindName() : "성공" | "거절" | "무응답"
+    //   }
+    //   srv.onCommandResult(onResult);
+    //   ```
+    //
+    // 🔴 **갈래 셋을 꼭 갈라 읽어라 — 고치는 곳이 다르다:**
+    //   `OK`        장치가 받았고 콜백이 `true` 를 냈다
+    //               ⚠ **물리적으로 그렇게 됐다가 아니다.** 차단봉이 걸려도 `true` 가 온다
+    //   `REJECTED`  장치가 **답했고** 거절했다 → 값이나 등록을 고쳐라. 재시도는 뜻이 없다
+    //   `NO_ANSWER` 🔴 **답이 없다** → 장치·링크 문제다. **콜백 로직을 고쳐도 안 낫는다**
+    //
+    // ⚠ 이 함수 안에서 오래 걸리는 일을 하지 마라 — 서버의 한 박자 안에서 불린다.
+    void onCommandResult(CmdResultFn fn);
 
     // 한 번에 묶을 수 있는 최대 건수. 🔴 **상수가 아니다** — 손잡이(`--down-cap`)를 따라간다.
     int maxPerBatch() const;

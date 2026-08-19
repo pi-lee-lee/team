@@ -116,6 +116,19 @@
         }
         return -1;
     }
+    // 🔴 **명령 결과를 알린다** — 갈래 셋을 여기 한 곳에서 만든다.
+    //   🔑 한 곳에서 만들어야 세 갈래가 **같은 모양**으로 나간다. 흩어지면 칸이 갈린다.
+    void notify_cmd(const Pending& p, CmdResult::Kind k, int devResult) {
+        if (k == CmdResult::OK)            cb_ok_++;
+        else if (k == CmdResult::REJECTED) cb_rejected_++;
+        else                               cb_noanswer_++;
+        if (!cmd_cb_) return;              // 등록 안 했으면 세기만 한다
+        CmdResult r;
+        r.kind = k; r.devid = park.devid; r.module = p.slot;
+        r.value = p.g_arg; r.deviceResult = devResult; r.rid = p.wire_rid;
+        cmd_cb_(r);
+    }
+
     // 🔴 **한 창에 몇 건까지 묶을 수 있나** — 상수가 아니라 **지금 상한에서 계산한다.**
     //   `DOWN_BATCH_CAP_B` 는 `--down-cap` 으로 바뀐다. 리터럴로 박으면 손잡이를 돌렸을 때 어긋난다.
     //
@@ -339,6 +352,8 @@
                 ack_fail_count++;                         // 하행 건강 지표(소크 요약)
                 logf("!", "ACK 타임아웃 최종 실패 wire_rid=" + std::to_string(p.wire_rid));
                 send_err(p.ws_fd, p.browser_rid, "ack_timeout", "센서가 응답하지 않습니다");
+                // 🔴 **무응답 — 재전송을 다 쓰고도 답이 없다.** 거절과 **다른 사건**이다.
+                if (p.kind == 'G') notify_cmd(p, CmdResult::NO_ANSWER, -1);
                 dead.push_back(it->first);
                 continue;
             }

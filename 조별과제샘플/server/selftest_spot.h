@@ -177,12 +177,88 @@
                         four.push_back(std::make_pair(std::string("LC"), 1234567L));
                         t.send_batch("P1", four, &q3, &r3);
 
+                        // ⓓ 🔴🔴 **창 포기(탐침) 경로로 배치가 새어 나가면 안 된다**
+                        //    그 경로는 `ignore_window=true, max_n=DOWN_PROBE_N(1)` 로 부른다.
+                        //    한 줄만 내보내므로 **배치를 쪼개게 된다** — 보장이 거기서 깨진다.
+                        //    🔑 코드를 읽어서 "안 나간다"고 하지 말고 **실제로 그 경로를 불러 본다.**
+                        size_t before_q = t.downq.size();
+                        t.flush_downq("selftest 탐침", true, DOWN_PROBE_N);
+                        bool noLeak = (t.downq.size() == before_q);   // 한 줄도 안 빠졌다
+
                         bool ok = (q1 == 3 && r1 == 0)      // 3건은 들어간다
+                               && noLeak                     // 🔴 탐침이 배치를 안 쪼갠다
                                && (q3 == 4 && r3 == 0)      // 🔑 **4건도 들어간다**
                                && (q2 == 0 && r2 == 5);     // 🔴 5건은 **한 건도 안 나간다**
                         std::cout << (ok ? "  ✓ " : "  ✗ ") << "묶음 — LCD 3건 큐 " << q1
                                   << "/거절 " << r1 << " · **5건 큐 " << q2 << "/거절 " << r2
-                                  << "** · 4건 큐 " << q3 << " (기대 3·0 / 0·5 / 4 — 부분 전송 없음)\n";
+                                  << "** · 4건 큐 " << q3 << " · 탐침누출 " << (noLeak ? "없음" : "🔴있음") << " (기대 3·0 / 0·5 / 4 · 없음)\n";
+                        if (!ok) bad++;
+                        t.ard = BAD_SOCK;
+                        closesock(sv[0]); closesock(sv[1]);
+                    }
+                }
+
+                // ⓹ 🔴🔴 **명령 결과 콜백 — 갈래 셋이 갈리는가**
+                //   ⚠ 하나로 뭉치면 기여자가 **장치 고장을 자기 콜백 로직으로 쫓는다.**
+                //   🔑 특히 **무응답**은 ACK 이 안 오는 사건이라 **재전송을 다 써야** 나온다.
+                {
+                    struct Seen {
+                        static std::vector<CmdResult>& bag() { static std::vector<CmdResult> v; return v; }
+                        static void fn(const CmdResult& r) { bag().push_back(r); }
+                    };
+                    Seen::bag().clear();
+                    int sv[2];
+                    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) != 0) {
+                        std::cout << "  ! socketpair 실패 — 건너뛴다\n";
+                    } else {
+                        Server t; t.no_disk = true;
+                        t.ard = sv[0]; t.park_dev = "P1";
+                        t.ard_seen = true; t.ard_last_ms = now_ms();
+                        t.park.devid = "P1";
+                        t.park.mods.push_back(std::make_pair(std::string("LD"), std::string("OG")));
+                        t.park.reg_done = true;
+                        t.cmd_cb_ = &Seen::fn;
+
+                        // ⓐ 성공 — ACK result=0
+                        t.send_to_module("P1", "LD", 1);
+                        t.flush_downq("selftest cb", false);
+                        uint16_t rid0 = t.pend.begin()->first;
+                        t.on_ard_line(t.park, t_line("A," + std::to_string(rid0) + ",G0,0,"));
+
+                        // ⓑ 거절 — ACK result=3
+                        t.send_to_module("P1", "LD", 9);
+                        t.flush_downq("selftest cb", false);
+                        uint16_t rid1 = t.pend.begin()->first;
+                        t.on_ard_line(t.park, t_line("A," + std::to_string(rid1) + ",G0,3,"));
+
+                        // ⓒ 🔴 무응답 — ACK 을 **안 준다**. 재전송을 다 쓸 때까지 시간을 민다
+                        t.send_to_module("P1", "LD", 0);
+                        t.flush_downq("selftest cb", false);
+                        //   ⚠ `queued` 인 동안은 ACK 시계가 안 돈다(전선에 나가기 전이다).
+                        //     그리고 창 밖이면 `flush_downq` 가 미룬다 — **둘 다 만들어 줘야 한다.**
+                        char drain[512];
+                        for (int i = 0; i < ACK_MAX_TRIES + 3; i++) {
+                            t.ard_last_ms = now_ms();          // 창을 열어 둔다
+                            t.flush_downq("selftest cb", false);
+                            while (recv(sv[1], drain, sizeof(drain), MSG_DONTWAIT) > 0) {}
+                            for (std::map<uint16_t, Pending>::iterator it = t.pend.begin();
+                                 it != t.pend.end(); ++it)
+                                if (!it->second.queued)
+                                    it->second.sent_ms -= (ACK_TIMEOUT_MS + 50);   // 시각을 앞당긴다
+                            t.tick();
+                        }
+
+                        int nOk = 0, nRej = 0, nNo = 0;
+                        for (size_t i = 0; i < Seen::bag().size(); i++) {
+                            if (Seen::bag()[i].kind == CmdResult::OK)            nOk++;
+                            else if (Seen::bag()[i].kind == CmdResult::REJECTED) nRej++;
+                            else                                                nNo++;
+                        }
+                        bool ok = (nOk == 1 && nRej == 1 && nNo == 1)
+                               && (t.cb_ok_ == 1 && t.cb_rejected_ == 1 && t.cb_noanswer_ == 1);
+                        std::cout << (ok ? "  ✓ " : "  ✗ ") << "명령 결과 콜백 — 성공 " << nOk
+                                  << " · 거절 " << nRej << " · **무응답 " << nNo
+                                  << "** (기대 1·1·1 — 셋이 갈린다)\n";
                         if (!ok) bad++;
                         t.ard = BAD_SOCK;
                         closesock(sv[0]); closesock(sv[1]);

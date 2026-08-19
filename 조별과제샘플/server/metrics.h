@@ -103,6 +103,7 @@
                rid_alloc_n(0), rid_skips(0), rid_forced(0), rid_exhausted(0),
                ack_unknown_rid(0), ack_slot_mismatch(0), mod_name_conflict(0), mod_dup_name(0), mod_unbound(0), mod_seen_(0), asm_warn_(0), batch_seq_(0), batch_deferred(0), devid_example_(0), sensor_split_now(0), not_reservable_n(0),
                base_valid(false), test_armed(false),
+               cmd_cb_(0), cb_ok_(0), cb_rejected_(0), cb_noanswer_(0),
                ledger_new_(0), ledger_review_(0),
                resync_count(0), no_disk(false),
                soak_start_ms(0), ard_sessions(0), sess_start_ms(0), sess_frames(0),
@@ -358,6 +359,11 @@
         s += " · 미결속모듈 " + std::to_string(mod_unbound)
            + "/" + std::to_string(mod_seen_)
            + (mod_unbound > 0 ? " 🔴" : "");
+        // 🔑 갈래를 갈라 센다 — 뭉치면 "장치가 이상한가 내 로직이 이상한가"를 못 가른다
+        s += " · 명령결과 성공 " + std::to_string(cb_ok_)
+           + "/거절 " + std::to_string(cb_rejected_)
+           + "/무응답 " + std::to_string(cb_noanswer_)
+           + (cb_noanswer_ > 0 ? " 🔴" : "");
         s += " · 묶음미룸 " + std::to_string(batch_deferred)
            + (batch_deferred > 0 ? " 🔴" : "");
         s += " · 조립표문제 " + std::to_string(asm_warn_)

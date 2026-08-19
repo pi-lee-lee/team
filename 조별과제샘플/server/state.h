@@ -282,6 +282,11 @@
     //   ⚠ 그래서 이 단계의 거동 변화가 0 이고, 판별자가 **봉투 대조**다.
     SpotBehavior default_spot_;
 
+    // ── 명령 결과 콜백 (`cmdresult.h`) ─────────────────────────────────────
+    // 🔑 등록 안 하면 `0` 이고 아무 일도 안 일어난다 — 로그는 그대로 남는다.
+    CmdResultFn cmd_cb_;
+    long long   cb_ok_, cb_rejected_, cb_noanswer_;   // 갈래별 누계. 요약에 싣는다
+
     NodeLedger ledger_;
     long long  ledger_new_, ledger_review_;   // 이 인스턴스에서 본 사건 수(요약에 싣는다)
 
