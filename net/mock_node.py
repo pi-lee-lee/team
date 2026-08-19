@@ -165,12 +165,20 @@ def main():
                                     grid, gidx, gop = int(f[1]), int(f[2]), int(f[3])
                                 except ValueError:
                                     continue
-                                k = gidx - len(SLOTS)
-                                if a.gate_result == 0 and 0 <= k < len(gate_state):
-                                    gate_state[k] = 1 if gop else 0
-                                    gres = 0
+                                # 🔴 **표를 직접 준 경우**(`--modules`)는 자리/차단봉 구분이 없다.
+                                #   등록한 모듈이면 받는다 — 실기의 `router.on(...)` 등록과 같은 뜻이다.
+                                # ⚠ **에코는 안 한다.** 실기에서 `LD`·`LC`·`DR` 은 `occ` 비트에
+                                #   상태를 싣지 않는다(상태를 싣는 것은 가상 차단봉뿐이다).
+                                #   여기서 에코를 흉내 내면 **실기에 없는 것을 시험하게 된다.**
+                                if custom:
+                                    gres = 0 if (a.gate_result == 0 and 0 <= gidx < len(names)) else 3
                                 else:
-                                    gres = 3
+                                    k = gidx - len(SLOTS)
+                                    if a.gate_result == 0 and 0 <= k < len(gate_state):
+                                        gate_state[k] = 1 if gop else 0
+                                        gres = 0
+                                    else:
+                                        gres = 3
                                 s.sendall(line("A,%d,G%d,%d," % (grid, gidx % 10, gres)).encode())
                                 print("[mock] G idx=%d op=%d → result=%d" % (gidx, gop, gres),
                                       flush=True)
