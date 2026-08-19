@@ -37,7 +37,7 @@ static uint8_t MCUSR = 0;
 uint8_t __heap_start = 0;
 
 #ifndef SKETCH_PATH
-#define SKETCH_PATH "../../조별과제샘플/client.ino"
+#define SKETCH_PATH "../../조별과제샘플/ardu/client.ino"
 #endif
 #include SKETCH_PATH
 

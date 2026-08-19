@@ -27,7 +27,7 @@ ipconfig getifaddr en0        # 무선. 값이 안 나오면 en1 을 시도한�
 
 ---
 
-## 1. 고칠 줄 — `조별과제샘플/client.ino` 딱 셋
+## 1. 고칠 줄 — `조별과제샘플/ardu/client.ino` 딱 셋
 
 | 줄 | 현재 값 | 바꿀 것 |
 |---|---|---|
@@ -37,7 +37,7 @@ ipconfig getifaddr en0        # 무선. 값이 안 나오면 en1 을 시도한�
 
 ⚠ **줄번호는 소스가 바뀌면 밀린다. 반드시 `grep` 으로 다시 찾아라:**
 ```sh
-grep -n "WIFI_SSID\|WIFI_PASS\|SERVER_IP" 조별과제샘플/client.ino
+grep -n "WIFI_SSID\|WIFI_PASS\|SERVER_IP" 조별과제샘플/ardu/client.ino
 ```
 **안 고치는 것**: `SERVER_PORT "9991"`(98) · `DEVICE_ID "P1"`(99) — 망과 무관하다.
 🔮 `DEVICE_ID` 는 별건이다(조원 충돌 회피용 `P1A` 변경이 대기 중 · socket 의 `park-dev` 락 이후).
@@ -51,18 +51,22 @@ grep -n "WIFI_SSID\|WIFI_PASS\|SERVER_IP" 조별과제샘플/client.ino
 
 ```sh
 # ① 사본 동기화 (⚠ 빠뜨리면 옛 소스를 굽는다 — 실제로 어긋나 있던 적이 있다)
-cp 조별과제샘플/client.ino arduino/.burn/client/client.ino
-diff -q 조별과제샘플/client.ino arduino/.burn/client/client.ino     # "동일" 이어야 한다
+# 🔴 2026-08-19 — **파일이 하나가 아니다.** 링크 계층이 EspLink_*.h 넷으로 갈렸고(REQ-0264)
+#    소스가 ardu/ 로 이사했다(REQ-0265). **스케치만 복사하면 낡은 헤더로 굽는다.**
+rm -rf arduino/.burn/client; mkdir -p arduino/.burn/client
+cp 조별과제샘플/ardu/client.ino 조별과제샘플/ardu/EspLink_*.h arduino/.burn/client/
+for f in 조별과제샘플/ardu/client.ino 조별과제샘플/ardu/EspLink_*.h; do \
+  cmp "$f" "arduino/.burn/client/$(basename "$f")" || echo "🔴 불일치: $f"; done   # 한 줄이라도 뜨면 멈춰라
 
 # ② 회귀 시험 — 굽기 전에 돌린다
-bash arduino/test/run_stage1.sh | tail -3                          # 134 PASS / 0 FAIL
+bash arduino/test/run_stage1.sh | tail -3                          # 237 PASS / 0 FAIL (2026-08-19 기준)
 
 # ③ 빌드 — 🔴 새 디렉토리 이름으로. 기존 것에 쓰면 hex 대조가 엉뚱한 걸 검증한다
 ls arduino/.burn/                                                   # 안 쓴 이름을 고른다 (예: slot9)
 arduino-cli compile --fqbn arduino:avr:uno --output-dir arduino/.burn/slot9 arduino/.burn/client
 
 # ④ 커밋 — 🔴 굽기 전에. 칩 판본을 커밋 해시로 말할 수 있어야 한다
-git commit -m "..." -- 조별과제샘플/client.ino                      # ⚠ commit 에 경로를 준다(add 금지)
+git commit -m "..." -- 조별과제샘플/ardu/client.ino 조별과제샘플/ardu/EspLink_*.h   # ⚠ commit 에 경로를 준다(add 금지)
 
 # ⑤ 포트 확인 — 🔴 이름을 박지 마라. USB 재연결마다 바뀐다 (1101 과 21201 전례)
 arduino-cli board list

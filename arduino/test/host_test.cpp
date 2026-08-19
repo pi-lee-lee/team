@@ -63,7 +63,7 @@ uint8_t __heap_start = 0;
 //   **고치기 전 판본을 같은 하네스로 돌려 기준선을 잡는 것**이 유일한 방법이다.
 //   예: g++ -DSKETCH_PATH='"/tmp/base/client.ino"' ...
 #ifndef SKETCH_PATH
-#define SKETCH_PATH "../../조별과제샘플/client.ino"
+#define SKETCH_PATH "../../조별과제샘플/ardu/client.ino"
 #endif
 #include SKETCH_PATH
 
