@@ -54,13 +54,13 @@ def bits_to_hex(bits, n):
     return ("%0*X" % ((n + 3) // 4, v))
 
 
-def build_reg(drain, n, gate_names):
+def build_reg(drain, n, gate_names, gate_kind):
     """등록 묶음. 🔴 **자리 먼저, 차단봉은 끝에** — 명세 §7.4 의 약속이고 서버가 대조한다."""
     pkt = line("D,*,%d,%d," % (drain, n))
     for sl in SLOTS:
         pkt += line("D,%s,IP," % sl)
     for g in gate_names:
-        pkt += line("D,%s,OBV," % g)        # `V` 접미 = 가상. 종류(OB)는 안 바뀐다
+        pkt += line("D,%s,%s," % (g, gate_kind))
     return pkt
 
 
@@ -74,7 +74,16 @@ def main():
     ap.add_argument("--seconds", type=float, default=120.0)
     ap.add_argument("--occupied", default="", help="점유로 둘 자리 목록(쉼표) 예: A1,B2")
     ap.add_argument("--gates", type=int, default=0,
-                    help="차단봉(OBV) 모듈 수. 자리 뒤에 붙는다 — **끝에만 붙인다**(명세 §7.4)")
+                    help="차단봉 모듈 수. 자리 뒤에 붙는다 — **끝에만 붙인다**(명세 §7.4)")
+    # 🔴🔴 **기본값이 `OB` 다 — 펌웨어와 맞춘 것이다** (2026-08-19 정정)
+    #   이 도구는 오래 `OBV` 를 보냈는데 **펌웨어는 REQ-0271 에서 `V` 를 뺐다**(`FrameCodec.h:85`).
+    #   → 계측기가 **실기가 더 이상 안 보내는 형식**을 보내고 있었다. §"시험 경로 ≠ 실기 경로" 다.
+    #   ⚠ 그리고 그 낡은 값이 **명세 문서에까지 옮겨 적혔다**(대장 §4.5) — 내가 mock 출력을
+    #     장치 거동으로 읽었다. **fixture 를 실기 근거로 쓰면 이렇게 된다.**
+    #   🔑 옛 형태를 **지우지는 않았다** — 화면이 `V` 를 떼는 방어 경로가 있고
+    #     (`index.html` 의 `MOD_KIND_LABEL` 조회), 그 경로도 시험할 수 있어야 한다.
+    ap.add_argument("--gate-kind", default="OB", choices=["OB", "OBV"],
+                    help="차단봉 kind. 기본 OB(펌웨어와 같다). OBV 는 옛 형태 — 화면의 V 제거 경로 시험용")
     ap.add_argument("--gate-result", type=int, default=0, choices=[0, 3],
                     help="`G` 에 돌려줄 result. **3 = 장치가 수행 불가** — 실물로는 밟기 어려운 갈래다")
     a = ap.parse_args()
@@ -107,7 +116,7 @@ def main():
 
             # 🔑 **둘째 슬롯부터 `D`**(명세 §5). 첫 슬롯은 `S` 만 — 그것이 승격을 만든다.
             if not sent_reg and seq == 1:
-                pkt = build_reg(a.drain, n, gate_names)
+                pkt = build_reg(a.drain, n, gate_names, a.gate_kind)
                 s.sendall(pkt.encode())
                 sent_reg = True
                 print("[mock] 등록 %d줄 · %dB 보냄" % (n + 1, len(pkt)), flush=True)
