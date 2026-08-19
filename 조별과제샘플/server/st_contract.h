@@ -1,0 +1,237 @@
+// st_contract.h — 봉투 키 계약·known 사유·B* 예약 금지·rid 폭과 격리 ㉟~㉜
+// 🔴 `selftest()` 의 몸통 조각. 단독 컴파일되지 않는다.
+            // ═══════════════════════════════════════════════════════════════
+            // 🔴 **단독 컴파일 불가.** `selftest()` **함수 몸통 조각**이고 그 자리에 include 된다.
+            //   `s`(socketpair 가 꽂힌 Server) · `sv` · `bad` 를 바깥에서 물려받는다.
+            // 🔑 옮긴 것이지 고친 것이 아니다 — **`.o` 바이트 동일**이어야 한다(REQ-0272).
+            // ⚠ 시험을 새로 더할 때 **`bad++` 를 빠뜨리지 마라** — 빠지면 ✗ 를 찍고도 통과한다.
+            // ═══════════════════════════════════════════════════════════════
+
+            // ㉟ 🔴🔴 **전선 봉투의 키 이름을 단언한다** (REQ-0276 · 2026-08-19)
+            //
+            //   내가 `zones` → `lot.zones()` 정규식 치환을 하면서 **문자열 리터럴 안까지 바꿨다.**
+            //   `map`·`state` 가 `"lot.zones()"` 라는 키를 냈고 **화면 격자가 10분 27초 동안 안 보였다.**
+            //
+            //   🔴 **자가검증 114개가 전부 통과했다. 못 잡은 게 아니라 *같이 틀렸다*** —
+            //     ㉗ 의 기대값(`"zones":[]`)도 **같은 정규식이** 바꿨기 때문에 대조가 성립했다.
+            //     > **기대값을 코드와 같은 도구로 만들면, 그 도구의 실수는 시험을 통과한다.**
+            //     ⚠ web 이 같은 부류를 다른 경로로 밟았다 — **기대 표를 피검체에서 읽어** `[] == []` 공허 통과.
+            //       **도구가 같아서 / 출처가 같아서. 둘 다 "기대값이 피검체와 독립인가"를 안 물었다.**
+            //
+            //   🔑 그래서 여기서는 **계약 이름을 손으로 박은 리터럴로** 둔다. 치환이 같이 못 바꾸도록.
+            //
+            //   ⚠ **이 시험의 분모는 "web 이 실제로 읽는 키"다**(2026-08-19 web 이 값으로 준 목록).
+            //     **봉투 계약이 늘면 이 시험은 자동으로 안 는다.** 갱신 경로는 web 의 통보다 —
+            //     화면이 읽는 키가 바뀌면 알려 주기로 했다. **안 오면 이 목록은 조용히 낡는다.**
+            {
+                Server t; t.build_default_zones(); t.init_srv_id();
+                // 🔑 모듈이 결속돼야 `modules[]` 하위 키가 봉투에 나온다.
+                //    빈 배열로 재면 **하위 키를 하나도 안 밟는다** — 통과 수만 늘고 분모는 0 이다.
+                t.park.devid = "P1";
+                t.park.mods.push_back(std::make_pair(std::string("A1"), std::string("IP")));
+                t.bind_modules(t.park);
+                const std::string m  = t.map_json();
+                const std::string st = t.state_json();
+
+                // ── web 이 실제로 파싱하는 키 (그쪽이 값으로 준 목록) ────────────────
+                static const char* mapKeys[] = {
+                    "\"type\":\"map\"", "\"srv_id\":", "\"epoch\":",
+                    "\"grid\":", "\"rows\":", "\"cols\":",
+                    "\"zones\":[", "\"id\":", "\"kind\":", "\"cells\":", "\"modules\":[",
+                    "\"devid\":", "\"name\":", "\"idx\":"
+                };
+                static const char* stateKeys[] = {
+                    "\"type\":\"state\"", "\"srv_id\":", "\"epoch\":", "\"ts_ms\":",
+                    "\"zones\":[", "\"id\":", "\"occupied\":", "\"reserved\":",
+                    "\"actions\":", "\"completion\":", "\"modules\":[",
+                    "\"devid\":", "\"name\":", "\"idx\":", "\"value\":", "\"known\":"
+                };
+                bool ok35 = true; std::string missing;
+                for (size_t i = 0; i < sizeof(mapKeys)/sizeof(mapKeys[0]); i++)
+                    if (m.find(mapKeys[i]) == std::string::npos) { ok35 = false; missing += std::string(" map:") + mapKeys[i]; }
+                for (size_t i = 0; i < sizeof(stateKeys)/sizeof(stateKeys[0]); i++)
+                    if (st.find(stateKeys[i]) == std::string::npos) { ok35 = false; missing += std::string(" state:") + stateKeys[i]; }
+
+                // 🔴 **서명 검사** — 키에 `.` 나 `(` 가 하나라도 있으면 실패.
+                //    이번 사고의 서명이 정확히 그것이었다(C++ 표현식이 키 자리에 들어갔다).
+                //    🔑 위 목록은 **아는 키만** 지키고, 이 검사는 **모르는 키까지** 잡는다.
+                const std::string* both[2]; both[0] = &m; both[1] = &st;
+                for (int w = 0; w < 2 && ok35; w++) {
+                    const std::string& j = *both[w];
+                    for (size_t q = j.find("\":"); q != std::string::npos; q = j.find("\":", q + 1)) {
+                        size_t b = j.rfind('"', q - 1);
+                        if (b == std::string::npos) continue;
+                        std::string k = j.substr(b + 1, q - b - 1);
+                        if (k.find('.') != std::string::npos || k.find('(') != std::string::npos) {
+                            ok35 = false; missing += std::string(w ? " state이상한키:" : " map이상한키:") + k; break;
+                        }
+                    }
+                }
+                std::cout << (ok35 ? "  ✓ " : "  ✗ ") << "전선 봉투의 키가 계약대로다 (map "
+                          << sizeof(mapKeys)/sizeof(mapKeys[0]) << "종 · state "
+                          << sizeof(stateKeys)/sizeof(stateKeys[0]) << "종 + 서명검사)"
+                          << (ok35 ? "" : (" — 🔴" + missing)) << "\n";
+                if (!ok35) bad++;
+            }
+
+
+            // ㉞ 🔴 **`known:false` 의 사유가 갈린다** (명세 §8.10)
+            //    ⚠ `ws_probe` 는 메시지를 잘라 찍어 `state` 전문을 못 읽는다 —
+            //      그래서 **여기서 `state_json()` 문자열을 직접 본다.** 도구 한계를 시험으로 메운다.
+            {
+                Server t; t.build_default_zones(); t.init_srv_id();
+                // (가) 주 노드가 등록도 안 된 상태 → 그 자리 모듈이 아예 없다(모듈 배열이 빈다)
+                std::string j0 = t.state_json();
+                bool okA = (j0.find("\"value_state\":\"unknown\"") != std::string::npos);
+
+                // (나) 보조 노드가 등록만 됐다 → **값 경로가 없다** = bits_unavailable
+                Node& aux2 = t.aux["P9"]; aux2.devid = "P9"; aux2.online = true;
+                aux2.mods.push_back(std::make_pair(std::string("A2"), std::string("IP")));
+                t.bind_modules(aux2);
+                std::string j1 = t.state_json();
+                bool okB = (j1.find("\"reason\":\"bits_unavailable\"") != std::string::npos);
+
+                // (다) 그 보조 노드가 오프라인이면 사유가 바뀐다
+                aux2.online = false;
+                std::string j2 = t.state_json();
+                bool okC = (j2.find("\"reason\":\"node_offline\"") != std::string::npos);
+
+                bool ok34 = okA && okB && okC;
+                std::cout << (ok34 ? "  ✓ " : "  ✗ ") << "known:false 사유가 갈린다 — "
+                          << "미등록 unknown(" << (okA ? "예" : "🔴아니오") << ") · "
+                          << "보조노드 bits_unavailable(" << (okB ? "예" : "🔴아니오") << ") · "
+                          << "오프라인 node_offline(" << (okC ? "예" : "🔴아니오") << ")\n";
+                if (!ok34) bad++;
+                t.aux.clear();
+            }
+
+            // ㉝ 🔴 **`B*` 는 예약 대상이 아니다** (사용자 확정 (A) · 명세 §9.3)
+            //    ⚠ `slot_index("B5")` 는 여전히 5 를 준다 — 그래서 **막지 않으면 예약이 성공한다.**
+            //      성공했는데 화면에 안 보이는 것이 이 변경에서 가장 나쁜 결말이다.
+            {
+                LoopPair lb; Server t; t.build_default_zones(); t.init_srv_id();
+                t.conns[lb.a].kind = Conn::WS;
+                t.park.devid = "P1"; t.park.fd = lb.a; t.park.seen = true; t.park.last_ms = now_ms();
+                t.on_ws_message(lb.a, "{\"type\":\"reserve\",\"slot\":\"B5\",\"rid\":\"b1\",\"user_id\":\"00000000\"}");
+                t.on_ws_message(lb.a, "{\"type\":\"reserve\",\"slot\":\"A3\",\"rid\":\"b2\",\"user_id\":\"00000000\"}");
+                char bb[4096]; std::string gb; int idleb = 0;
+                for (int tries = 0; tries < 4000 && idleb < 200; tries++) {
+                    int n = (int)recv(lb.b, bb, sizeof(bb), MSG_DONTWAIT);
+                    if (n > 0) { gb.append(bb, n); idleb = 0; } else idleb++;
+                }
+                // 🔑 **B5 는 거절되고 A3 은 안 거절돼야 한다.** 둘 다 봐야 "전부 막혔다"와 갈린다.
+                const bool okB = (gb.find("not_reservable") != std::string::npos)
+                                 && (t.not_reservable_n == 1)
+                                 && (gb.find("\"rid\":\"b2\",\"slot\":\"A3\"") != std::string::npos
+                                     || gb.find("queued") != std::string::npos
+                                     || t.pend.size() >= 1);
+                std::cout << (okB ? "  ✓ " : "  ✗ ") << "B5 예약은 not_reservable 로 거절 · A3 은 통과"
+                          << " (비자리예약 " << t.not_reservable_n << " · 기대 1)\n";
+                if (!okB) bad++;
+                t.park.fd = BAD_SOCK; t.conns.clear();
+            }
+
+            // ㉜ 🔴 **A[1] `rid` 폭 고정과 격리** — 정본 `docs/net/DESIGN-rid-width-and-quarantine.md`
+            //
+            // 🔴 **분모를 먼저 적는다.** 아래 검사가 **밟지 못하는 것**:
+            //   · 장치 멱등 캐시의 실제 삼킴 — 실기 장치가 있어야 한다. 여기서는 못 만든다
+            //   · 늦은 ACK 의 실제 최대 지연 — 격리 값(§3.1)은 **가정이고 잰 적이 없다**
+            //   · 재시작 충돌(§4) — 확률 1.6% 사건이라 시험으로 재현할 수 없다
+            //   **그러므로 이 항목이 전부 ✓ 라도 "안전이 증명됐다"가 아니다.**
+            struct NoneInUse { bool operator()(uint16_t) const { return false; } };
+            struct AllButOne { uint16_t keep;
+                               bool operator()(uint16_t r) const { return r != keep; } };
+            // 🔴 **은닉 뒤로 옮기고 시험을 다시 썼다** (REQ-0272 3단계 · 2026-08-19)
+            //   전에는 `t.rid_quar[321].until_ms = …` 처럼 **내부를 직접 만졌다.**
+            //   `RidPool` 이 그것을 감추면서 그 시험이 못 쓰게 됐다 — **은닉의 대가다.**
+            //   ✅ 대신 **시계를 인자로 받게 만든 덕에 시간을 통제해 계약으로 시험한다.**
+            //   🔑 내부를 만지는 시험은 내부가 바뀌면 깨지고, **계약을 만지는 시험은 계약이 바뀔 때만 깨진다.**
+            {
+                // (a)(d) 폭 상한과 **재사용 간격** — 발행하고 곧바로 해제한다(같은 시각)
+                RidPool pool; NoneInUse none;
+                std::vector<int> last_at(RID_SPACE, -1);
+                int minDist = 1 << 30; bool inRange = true; size_t maxDigits = 0;
+                const long long T = 1000000;
+                for (int i = 0; i < 2000; i++) {
+                    uint16_t r = pool.alloc(none, T);
+                    if (r == RID_NONE || r >= RID_SPACE) { inRange = false; break; }
+                    size_t dg = std::to_string((unsigned)r).size();
+                    if (dg > maxDigits) maxDigits = dg;
+                    if (last_at[r] >= 0 && i - last_at[r] < minDist) minDist = i - last_at[r];
+                    last_at[r] = i;
+                    pool.release(r, T);
+                }
+                bool okA = inRange && maxDigits <= 3 && minDist >= DEV_RID_CACHE_N;
+                std::cout << (okA ? "  ✓ " : "  ✗ ") << "rid 폭 ≤3자리(실측 " << maxDigits
+                          << ") · 최소 재사용 간격 " << minDist
+                          << " ≥ 장치 멱등창 " << DEV_RID_CACHE_N << "\n";
+                if (!okA) bad++;
+            }
+            {
+                // (b) 🔴 **하드 규칙** — 쓰이는 중인 rid 는 절대 발행하지 않는다.
+                //     하나만 빼고 전부 "쓰는 중"이라고 답하면 **그 하나가 나와야 한다.**
+                RidPool pool; AllButOne only; only.keep = 500;
+                uint16_t got = pool.alloc(only, 1000000);
+                bool okB = (got == 500 && pool.skips() > 0 && pool.forced() == 0);
+                std::cout << (okB ? "  ✓ " : "  ✗ ") << "쓰이는 중인 rid 를 피해 빈 칸을 고른다 (got "
+                          << got << " · 기대 500 · 건너뜀 " << pool.skips() << ")\n";
+                if (!okB) bad++;
+            }
+            {
+                // (c) 격리는 **시간이 지나야** 풀린다 — 시계를 통제해 그것만 본다.
+                RidPool pool; NoneInUse none;
+                const long long T = 5000000;
+                uint16_t first = pool.alloc(none, T);
+                pool.release(first, T);
+                bool blocked = true;                       // 같은 시각에 한 바퀴 — 그 값이 안 나와야 한다
+                for (int i = 0; i < (int)RID_SPACE - 1; i++)
+                    if (pool.alloc(none, T) == first) { blocked = false; break; }
+                bool freed = false;                        // 격리가 지난 뒤에는 나와야 한다
+                for (int i = 0; i < (int)RID_SPACE; i++)
+                    if (pool.alloc(none, T + RID_QUARANTINE_MS + 1) == first) { freed = true; break; }
+                bool okC = blocked && freed;
+                std::cout << (okC ? "  ✓ " : "  ✗ ") << "격리 중에는 안 나오고(" << (blocked ? "예" : "🔴아니오")
+                          << ") 지나면 나온다(" << (freed ? "예" : "🔴아니오") << ")\n";
+                if (!okC) bad++;
+            }
+            {
+                // (e) 전부 격리면 **가장 먼저 해제된 것**을 강제로 내준다(순번 FIFO).
+                //     ⚠ **시각이 전부 같아도** 순번으로 갈리는지를 본다 — 그게 이 설계의 요점이다.
+                RidPool pool; NoneInUse none;
+                const long long T = 9000000;
+                std::vector<uint16_t> order;
+                for (int i = 0; i < (int)RID_SPACE; i++) {
+                    uint16_t r = pool.alloc(none, T);
+                    order.push_back(r);
+                    pool.release(r, T);
+                }
+                uint16_t forced = pool.alloc(none, T);
+                bool okE = (!order.empty() && forced == order[0] && pool.forced() == 1);
+                std::cout << (okE ? "  ✓ " : "  ✗ ") << "전부 격리면 **가장 먼저 해제된 것**을 내준다 (got "
+                          << forced << " · 기대 " << (order.empty() ? 0 : order[0])
+                          << " · 강제 " << pool.forced() << ")\n";
+                if (!okE) bad++;
+            }
+            {
+                // (f) 🔴 **실기 발행 지점이 이 풀을 타는가.** (a)~(e)는 풀을 직접 부른다 —
+                //     서버가 옛 경로로 남아 있어도 전부 통과한다. 그 구멍을 여기서 막는다.
+                Server t; t.ard = BAD_SOCK;
+                long long n0 = t.ridpool_.allocN();
+                t.dispatch_sim(BAD_SOCK, "selftest-M");
+                bool okF = (t.ridpool_.allocN() == n0 + 1);
+                std::cout << (okF ? "  ✓ " : "  ✗ ") << "dispatch_sim 이 RidPool 을 탄다 (발행 "
+                          << (t.ridpool_.allocN() - n0) << " · 기대 1)\n";
+                if (!okF) bad++;
+            }
+            {
+                // (g) 🔴 **커서 영속은 기본이 꺼져 있다** — 시험이 실기 커서를 덮어쓰지 못하게.
+                //     그리고 **예약값은 커서보다 항상 앞서 있어야 한다** — 그게 영속의 전부다.
+                Server t;
+                bool offByDefault = (t.ridpool_.persistOn() == false);
+                for (int i = 0; i < 700; i++) t.alloc_rid();
+                bool ahead = (t.ridpool_.reservedTo() >= t.ridpool_.cursor());
+                bool okG = offByDefault && ahead;
+                std::cout << (okG ? "  ✓ " : "  ✗ ") << "커서 영속 기본 꺼짐(" << (offByDefault ? "예" : "🔴아니오")
+                          << ") · 예약 " << t.ridpool_.reservedTo() << " ≥ 커서 " << t.ridpool_.cursor() << "\n";
+                if (!okG) bad++;
+            }
