@@ -23,19 +23,23 @@
 
 // ① 주차장을 조립한다 — 🔴 **이것만 채우면 돌아간다**       자세히: GUIDE-sample.md §조립
 void buildLot(ParkingLot& lot) {
-    lot.spot("A1").sensor("P1", "A1").sensor("P1", "B1")
-                  .actuator("P1", "LD").actuator("P1", "LC")
-                  .actuator("P1", "DR").actuator("P1", "L2");
+    lot.spot("A1").sensor("P1", "A1").sensor("P1", "B1")     // 주차 자리 — 센서 둘(이중화)
+                  .actuator("P1", "LD").actuator("P1", "L2");  // 그 자리의 표시등·표시기
+
+    lot.gate("E1", Gate::IN);                 // 입구
+    lot.spot("E1").actuator("P1", "DR");      // 🔑 차단봉은 **입구에** 있다. 주차 자리가 아니다
     // 🔴 이름은 **정확히 2글자** — 장치 표(`client.ino`)와 글자 그대로 같아야 붙는다
     // 🔴 선언 안 한 모듈은 **꺼진 것**이다. 장치에 있어도 화면에 안 나온다
-    // 🔑 `actuator` 는 **점유 판정에서 빠진다**(차단봉이 열려도 차가 있는 게 아니다)
+    // 🔑 `actuator` 는 **점유 판정에서 빠진다** — 표시등이 켜졌다고 차가 있는 게 아니다
 
     // 자리를 더 켜려면 — 주석을 지운다
     // lot.spot("A2").sensor("P1", "A2").sensor("P1", "B2");
     // 다른 사람 아두이노 : devid 만 바꾼다(1~8자)
     // lot.spot("A6").sensor("KIM01", "C1").sensor("KIM01", "C2");
-    // 차단봉(지금 칩의 E1·X1 은 가상이라 꺼 뒀다)
-    // lot.gate("E1", Gate::IN);  lot.spot("E1").actuator("P1", "E1");
+    // 출구도 같은 모양이다
+    // lot.gate("X1", Gate::OUT);  lot.spot("X1").actuator("P1", "<차단봉 모듈>");
+    // 장치가 하나뿐이면 devid 를 빼도 된다 — "아무 장치나 그 이름을 가진 것"
+    // lot.spot("A2").sensor("A2");
 }
 
 // ② 한 박자마다 불린다 — 명령을 여기서 낸다      🔑 **비워 둬도 돌아간다**

@@ -13,15 +13,14 @@
 //
 // ── 쓰는 법 (이게 전부다) ────────────────────────────────────────────────
 //
-//   ParkingLot lot;
-//   lot.spot("A1").sensor("A1").sensor("B1");   // 자리 하나에 센서 둘(이중화)
-//   lot.spot("A2").sensor("A2").sensor("B2");
-//   lot.gate("E1", Gate::IN);
-//   lot.gate("X1", Gate::OUT);
+//   void buildLot(ParkingLot& lot) {              // ← `lot.cpp` 에 이 함수만 채운다
+//       lot.spot("A1").sensor("P1","A1").sensor("P1","B1");   // 자리 + 센서 둘(이중화)
+//       lot.gate("E1", Gate::IN);                             // 입구
+//       lot.spot("E1").actuator("P1","DR");                   // 그 입구의 차단봉
+//   }
 //
-//   ParkingServer srv(lot);
-//   if (!srv.openPorts()) return 1;             // ① 포트를 연다
-//   while (srv.serveOneTick()) { }              // ② 한 박자씩 돈다
+// 🔴 **`main()` 은 여기 없다.** 포트를 열고 도는 것은 엔진(`entry.h`)이 한다 —
+//   그 순서는 호출자가 못 바꾸므로 드러내 봐야 **지킬 의무만** 생긴다.
 //   srv.closeDown();                            // ③ 요약을 남기고 닫는다
 //
 // ⚠ 순서 요구가 **없다**: `spot` 과 `gate` 는 어느 쪽을 먼저 써도 같다.
