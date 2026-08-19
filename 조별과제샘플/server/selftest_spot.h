@@ -53,26 +53,26 @@
                 //   ⚠ **쓰이지 않는 일반화는 검증되지 않은 코드다.** 그래서 더하자마자 밟는다.
                 {
                     ParkingLot lt;
-                    lt.spot("A1").sensor("P1", "왼쪽센서");   // 🔑 이름이 자리 id 와 **다르다**
+                    lt.spot("A1").sensor("P1", "Q7");   // 🔑 이름이 자리 id 와 **다르다**(2바이트는 지킨다)
                     Server t; t.lot_ = &lt;
                     t.build_default_zones();
                     t.park.devid = "P1";
-                    t.park.mods.push_back(std::make_pair(std::string("왼쪽센서"), std::string("IP")));
+                    t.park.mods.push_back(std::make_pair(std::string("Q7"), std::string("IP")));
                     t.bind_modules(t.park);
                     const Zone* z = t.lot.find("A1");
                     bool bound = z && z->modules.size() == 1
                                  && z->modules[0].first == "P1"
-                                 && z->modules[0].second == "왼쪽센서";
+                                 && z->modules[0].second == "Q7";
                     bool quiet = (t.mod_unbound == 0);
 
                     // 음성 대조 — **다른 장치의 같은 이름은 안 붙어야 한다**
                     //   ⚠ 이게 없으면 "그냥 이름만 보고 붙은 것"과 구분이 안 된다
                     ParkingLot lt2;
-                    lt2.spot("A1").sensor("P9", "왼쪽센서");   // 🔴 P9 를 지정했는데 P1 이 온다
+                    lt2.spot("A1").sensor("P9", "Q7");   // 🔴 P9 를 지정했는데 P1 이 온다
                     Server u; u.lot_ = &lt2;
                     u.build_default_zones();
                     u.park.devid = "P1";
-                    u.park.mods.push_back(std::make_pair(std::string("왼쪽센서"), std::string("IP")));
+                    u.park.mods.push_back(std::make_pair(std::string("Q7"), std::string("IP")));
                     u.bind_modules(u.park);
                     const Zone* z2 = u.lot.find("A1");
                     bool notBound = z2 && z2->modules.empty() && u.mod_unbound == 1;
@@ -82,6 +82,28 @@
                               << (bound ? "붙는다" : "🔴안 붙는다") << ", 미결속 " << t.mod_unbound
                               << ") · **다른 devid 는 안 붙는다**("
                               << (notBound ? "안 붙는다" : "🔴붙는다") << ")\n";
+                    if (!ok) bad++;
+                }
+
+                // ⓶ 🔴🔴 **모듈 이름이 2바이트 ASCII 가 아니면 말한다**
+                //   ⚠ 안 말하면 증상이 `미결속모듈` 뿐인데, 그 칸은 **"안 쓰기로 한 것"과
+                //     구분이 안 된다.** 그래서 이름을 **지목해서** 말해야 한다.
+                //   🔑 음성 대조가 핵심이다 — 정상 이름에 뜨면 **늘 뜨는 경고**가 된다.
+                {
+                    ParkingLot okLot;
+                    okLot.spot("A1").sensor("P1", "A1").sensor("P1", "B1").actuator("P1", "LD");
+                    Server a; a.lot_ = &okLot; a.build_default_zones();
+
+                    ParkingLot badLot;
+                    badLot.spot("A1").sensor("P1", "LED1")      // 4바이트
+                                     .sensor("P1", "A")         // 1바이트
+                                     .sensor("P1", "가");       // 한글 3바이트
+                    Server b; b.lot_ = &badLot; b.build_default_zones();
+
+                    bool ok = (a.asm_warn_ == 0) && (b.asm_warn_ == 3);
+                    std::cout << (ok ? "  ✓ " : "  ✗ ") << "모듈 이름 2바이트 검사 — 정상 표 "
+                              << a.asm_warn_ << "건 · `LED1`/`A`/`가` " << b.asm_warn_
+                              << "건 (기대 0 · 3)\n";
                     if (!ok) bad++;
                 }
 

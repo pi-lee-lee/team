@@ -206,6 +206,30 @@
                         }
                     }
 
+        // ③ 🔴🔴 **모듈 이름은 정확히 2바이트다** — 장치의 표가 `char name[3]` 이다.
+        //
+        //   장치 쪽은 3글자 이상을 쓰면 **컴파일이 막는다.** 서버 쪽은 아무 문자열이나 받는다 —
+        //   그래서 `"LED1"` 이나 `"왼쪽센서"` 라고 적으면 **그 모듈은 영영 안 붙는다.**
+        //   🔴 증상은 `미결속모듈` 인데, 그 칸은 **"안 쓰기로 한 것"과 구분이 안 된다.**
+        //     그래서 여기서 **이름을 지목해서** 말한다.
+        //
+        // ⚠ **바이트로 센다.** 한글 한 글자가 3바이트라 `"가"` 도 안 된다 — 전선은 ASCII 다.
+        for (size_t i = 0; i < as.size(); i++)
+            for (size_t k = 0; k < as[i].modules.size(); k++) {
+                const std::string& nm = as[i].modules[k].name;
+                bool okLen = (nm.size() == 2);
+                bool okChr = okLen;
+                for (size_t c = 0; c < nm.size() && okChr; c++)
+                    if ((unsigned char)nm[c] < 0x21 || (unsigned char)nm[c] > 0x7E) okChr = false;
+                if (okLen && okChr) continue;
+                asm_warn_++;
+                logf("🔴", "조립 표 — 모듈 이름 `" + nm + "` (자리 " + as[i].id
+                           + ") 이 **쓸 수 없는 이름**이다. **정확히 2바이트 ASCII** 여야 한다"
+                             " — 장치의 표가 `char name[3]` 이라 전선에 2글자만 나간다. "
+                             "**이대로 두면 그 모듈은 영영 안 붙고 `미결속모듈` 로만 보인다.** "
+                             "지금 " + std::to_string(nm.size()) + "바이트");
+            }
+
         // ② **센서가 하나도 없는 주차 자리** — 점유를 영원히 모른다(`value_state: unknown` 고정).
         //    ⚠ 화면에는 자리가 보이는데 값이 안 채워진다 → *"센서가 고장났나"* 를 쫓게 된다
         for (size_t i = 0; i < as.size(); i++) {
