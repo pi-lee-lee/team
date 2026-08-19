@@ -540,6 +540,9 @@ static void drainSerial(void) {
 // (같은 이유로 slotOverrideSet() 등도 전역이다 — 위 "수동 오버라이드" 주석 참조).
 void espRstAssert(uint16_t holdMs) {
 #if ESP_RST_WIRED
+  // 🔴 **조치가 실제로 실행된 횟수.** `[LADDER]` 문구는 DEBUG 안이라 DEBUG=0 이면 사라진다.
+  //   계수는 밖에 둬서 **"4단이 있다"와 "4단이 돌았다"를 가를 자리**를 만든다(§30 선언 vs 결과).
+  if (hwRstAsserts < 65535) hwRstAsserts++;
   pinMode(PIN_ESP_RST, OUTPUT);
   digitalWrite(PIN_ESP_RST, LOW);      // ★ 절대 OUTPUT HIGH 로 놓지 않는다(5V 가 3.3V 핀에 실린다)
   espRstHeld = true;
@@ -914,6 +917,7 @@ static void cntTick(uint32_t now) {
   Serial.print(F("[CNT] up="));      Serial.print(now / 1000);
   Serial.print(F(" drop="));         Serial.print(linkDrops);
   Serial.print(F(" esprst="));       Serial.print(espResets);
+  Serial.print(F(" hwrst="));        Serial.print(hwRstAsserts);   // 4단 실제 실행 수
   Serial.print(F(" resync="));       Serial.print(promptResyncs);
   Serial.print(F(" sendfail="));     Serial.print(sendFails);
   Serial.print(F(" okto="));         Serial.print(sendOkTimeouts);
@@ -1199,6 +1203,15 @@ static bool sendAck(uint16_t rid, char s0, char s1, uint8_t result) {
   return true;          // "보냈다"가 아니라 **"담았다"**. 호출부 5곳 모두 반환값을 안 쓴다(확인함)
 }
 
+// 🔴 **멱등 커밋 + ACK 예약을 한 번에.** 순서(캐시 먼저)를 호출부에서 빼앗아 여기 가둔다.
+//   ⚠ 둘을 따로 부르면 **캐시를 빠뜨린 재전송이 *다른 답*을 받는다**(§4.2 멱등 파손) — 조용히 틀린다.
+//   주석으로만 지키던 순서를 **함수로** 지킨다. 호출부는 이것만 부른다(5곳).
+//   🔑 캐시에서 되보내는 재전송 경로(2곳)는 `sendAck` 을 그대로 쓴다 — 그건 이미 캐시에 있다.
+static void commitAck(uint16_t rid, char s0, char s1, uint8_t result) {
+  cachePut(rid, s0, s1, result);
+  sendAck(rid, s0, s1, result);
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // 🔴 슬롯 배치 — **S 프레임 + 밀린 ACK 를 한 거래로 묶는다** (2026-08-17 · REQ-0164)
 //
@@ -1430,15 +1443,13 @@ static void processCommand(char* cand) {
 #if DEBUG
     Serial.print(F("[BAD FIELDS] rid=")); Serial.println(rid);
 #endif
-    cachePut(rid, s0, s1, result);
-    sendAck(rid, s0, s1, result);
+    commitAck(rid, s0, s1, result);
     return;
   }
 
   if (type == 'T') {
     processTest(f, &s0, &s1, &result);
-    cachePut(rid, s0, s1, result);       // §4.2 멱등은 T 에도 그대로 적용된다
-    sendAck(rid, s0, s1, result);
+    commitAck(rid, s0, s1, result);      // §4.2 멱등은 T 에도 그대로 적용된다
     return;
   }
 
@@ -1460,8 +1471,7 @@ static void processCommand(char* cand) {
       Serial.println((simOcc >> idx) & 1);
 #endif
     }
-    cachePut(rid, s0, s1, result);
-    sendAck(rid, s0, s1, result);
+    commitAck(rid, s0, s1, result);
     return;
   }
 
@@ -1503,8 +1513,7 @@ static void processCommand(char* cand) {
     }
   }
 
-  cachePut(rid, s0, s1, result);
-  sendAck(rid, s0, s1, result);
+  commitAck(rid, s0, s1, result);
 }
 
 #include "EspLink_at.h"   // ← AT 응답 어휘 해석 (REQ-0273). **위치를 옮기지 마라**
@@ -1690,7 +1699,13 @@ void setup() {
   //   떨어져 있으면 한쪽만 고치는 실수가 난다.
 
 #if DEBUG
-  Serial.println(F("\n[PARKING NODE] proto v1 / 10 slots / dev=" DEVICE_ID));
+  // 🔴 하드코딩 "10 slots" 를 **파생값**으로 바꿨다 (§30 · REQ-0273).
+  //   ⚠ **"12 slots" 가 아니다.** 12 는 **모듈 수**(`D,*,<drain>,<n>` 의 `n`)이고 자리 수는 10(`SLOT_N`)이다.
+  //     socket 이 2026-08-19 에 `n` 은 모듈 수임을 명세에 못 박았다. 둘은 다른 값이다.
+  //   🔑 **따로** 찍어야 판본 판별에도 쓰인다 — 옛 판은 "10 slots" 만 찍었다.
+  Serial.print(F("\n[PARKING NODE] proto v1 / "));
+  Serial.print(SLOT_N);            Serial.print(F(" slots / "));
+  Serial.print(moduleCount());     Serial.println(F(" modules / dev=" DEVICE_ID));
 
   // ── 부팅 원인 (REQ-0071 사실 4) — 추측을 사실로 바꾸는 한 줄 ──
   Serial.print(F("[BOOT] 리셋 원인: "));

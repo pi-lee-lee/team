@@ -219,11 +219,17 @@ static unsigned long assocAt = 0;
 //   ⚠ 그러므로 **RST 쪽에 풀업이 있어야 한다.** 놓았을 때 라인이 뜨면 모듈이 불확정 상태가
 //     되어 4단이 없느니만 못해진다. 모듈에 풀업이 없으면 10kΩ 을 RST↔3.3V 사이에 달아라.
 //   ⚠ 리셋과 놓음의 GND 기준이 같아야 한다 — Uno GND 와 ESP GND 는 이미 공통이어야 정상이다.
-#define ESP_RST_WIRED 0                 // ★ 2026-08-15 A2↔ESP RST 선을 **물리적으로 분리했다** → 되돌림.
+#define ESP_RST_WIRED 1   // 🔴 2026-08-19 재활성 (REQ-0273 준비 · A2↔ESP RST 배선 확인됨)
+//   ⚠ 2026-08-15 에 선을 물리적으로 분리해 0 으로 내렸던 것을 되돌린다.
+//   🔴 켜는 이유가 "있으니까"가 아니다 — **AT 계층이 꼬이면 `AT+RST` 자체가 안 먹는다.**
+//     실기 13:43 이후 `CIPCLOSE→ERROR` · `CIFSR→0.0.0.0` · `busy p...` 가 그 상태였고,
+//     4·5단이 `AT+RST` 로 퇴화해 있어 **AT 를 거치지 않는 경로가 하나도 없었다.**
+//     하드리셋선은 **AT 파서를 안 거치는 유일한 수단**이다.                 // ★ 2026-08-15 A2↔ESP RST 선을 **물리적으로 분리했다** → 되돌림.
                                         //   1 로 두면 없는 배선을 전제해 4단이 "리셋했다"고 거짓 로그를 남긴다.
 static const uint8_t PIN_ESP_RST = A2;
 
 static bool          espRstHeld = false;
+static uint16_t      hwRstAsserts = 0;   // 🔴 4단(하드리셋) **실행** 횟수 — 선언이 아니라 결과다(§30)
 static unsigned long espRstReleaseAt = 0;
 
 // 무엇을 보냈는지 찍는다(REQ-0042 3순위). 이게 없으면 5초마다 CIPSTART 를 재시도하는지조차

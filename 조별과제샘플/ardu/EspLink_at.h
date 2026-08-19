@@ -136,8 +136,7 @@ static void handleFrameLine(char* cand) {
                      Serial.print(F(" op=")); Serial.println(gop); }
 #endif
     // ⚠ 캐시에 넣어야 재전송(같은 rid)이 같은 답을 받는다 — 멱등이 여기서도 성립해야 한다
-    cachePut(grid, 'G', (char)('0' + (gidx % 10)), gres);
-    sendAck(grid, 'G', (char)('0' + (gidx % 10)), gres);
+    commitAck(grid, 'G', (char)('0' + (gidx % 10)), gres);
     return;
   }
 
