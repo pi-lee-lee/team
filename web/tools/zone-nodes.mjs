@@ -104,11 +104,21 @@ const readZones = `(() => {
     cell.click();                          /* 이 자리를 패널에 띄운다 */
     out[id] = {
       dup: 1,
-      /* 이름·id·배지·겹침 경고는 **칸**이 그린다 */
-      name: (cell.querySelector('.zone__name') || {}).textContent || null,
-      idText: (cell.querySelector('.zone__id') || {}).textContent || null,
+      /* 🔴 REQ-0297: 칸에서 **중복**을 뺐다 — label 이 있으면 **날 id 와 상태 문구가 칸에 없다.**
+         그래서 이름·id·요약은 **패널**에서 읽는다. 칸에는 배지·⏸·겹침 경고가 남아 있다. */
+      name: (panel.querySelector('.zone__name') || {}).textContent || null,
+      idText: (panel.querySelector('.zone__id') || {}).textContent || null,
+      sumText: (panel.querySelector('.zone__sum') || {}).textContent || null,
       badgeText: (cell.querySelector('.zone__badge') || {}).textContent || null,
       overlapText: (cell.querySelector('.zone__overlap') || {}).textContent || null,
+      /* 칸이 실제로 무엇을 보이는가 — REQ-0297 의 합격선을 재는 값들 */
+      cellText: (cell.textContent || '').replace(/\s+/g, ' ').trim(),
+      cellHasSum: !!cell.querySelector('.zone__sum'),
+      cellHasId: !!cell.querySelector('.zone__id'),
+      cellName: (cell.querySelector('.zone__name') || {}).textContent || null,
+      cellFallback: (cell.querySelector('.zone__name') || { dataset: {} }).dataset.fallback || null,
+      cellInactive: (cell.querySelector('.zone__inactive') || {}).textContent || null,
+      aria: cell.getAttribute('aria-label'),
       /* 노드 박스·모듈 행·조작 버튼은 **패널**이 그린다 */
       nodes: [...panel.querySelectorAll('.znode:not(.znode--empty)')].map(n => ({
         devid: n.dataset.devid,
@@ -479,6 +489,45 @@ try {
        sel && sel.sel === 'FA' && sel.panelMods === 10, JSON.stringify(sel));
   }
 
+  /* ── 🔴 REQ-0297 — 칸은 **같은 뜻을 두 번 말하지 않는다** ──────────────────
+     사용자가 값으로 짚었다: *"1번자리 a1 빈자리 << 3개가 동일하다."*
+     ✅ 남는다: label(없으면 id) · 모듈 배지 · 비활성 `⏸` · 겹침 경고 · 색/점선/사선
+     ❌ 빠진다: label 과 겹치는 날 id · 상태 문구(색이 이미 말한다)
+     🔑 **정보를 줄이는 것이 아니라 중복을 줄이는 것이다** — 그 구분을 이 검사가 지킨다. */
+  {
+    const labeled = Object.keys(z).filter((k) => z[k].name);
+    const plain = Object.keys(z).filter((k) => !z[k].name);
+    ok('분모: 라벨 있는 자리와 없는 자리가 **둘 다** 있다 (' + S(labeled) + ' / ' + S(plain) + ')',
+       labeled.length > 0 && plain.length > 0, JSON.stringify({ labeled, plain }));
+    ok('🔴 어느 칸에도 상태 문구(.zone__sum)가 없다 — 색·테두리가 그것을 말한다',
+       Object.keys(z).every((k) => z[k].cellHasSum === false),
+       JSON.stringify(Object.keys(z).map((k) => [k, z[k].cellHasSum])));
+    ok('🔴 라벨 있는 칸에 날 id 가 따로 안 나온다 (' + S(labeled) + ')',
+       labeled.every((k) => z[k].cellHasId === false && !(z[k].cellText || '').includes(k)),
+       JSON.stringify(labeled.map((k) => [k, z[k].cellText])));
+    ok('🔴 라벨 없는 칸은 **id 를 이름으로** 보인다 (칸이 비면 그 자리가 무엇인지 아무 데도 없다)',
+       plain.every((k) => z[k].cellFallback === 'id' && z[k].cellName === k),
+       JSON.stringify(plain.map((k) => [k, z[k].cellName, z[k].cellFallback])));
+    /* ✅ 사용자가 **지우지 말라고 명시한 것들** — 중복이 아니라 다른 사실이다. */
+    ok('✅ 모듈 배지는 모든 칸에 남아 있다',
+       Object.keys(z).every((k) => !!z[k].badgeText && /모듈/.test(z[k].badgeText)),
+       JSON.stringify(Object.keys(z).map((k) => [k, z[k].badgeText])));
+    /* 🔴 화면에서 뺀 것이 **기계에서도** 빠지면 스크린리더는 상태를 영영 모른다(색을 못 읽는다). */
+    /* 🔴 문구를 **나열하지 않는다** — 목록은 낡는다(첫 판은 `장치가 요청대로 보고합니다` 를 빠뜨려
+       멀쩡한 화면을 빨강으로 만들었다). 대신 **패널 요약과 대조**한다: 같은 사실의 두 자리다.
+       ⚠ 기대값을 피검체(`aria`)가 아니라 **다른 자리(패널)** 에서 가져오므로 공허 통과가 아니다.
+          빈 요약(area 의 `unknown` 등)은 **분모에서 뺀다** — 없는 것을 포함 검사할 수 없다. */
+    const withSum = Object.keys(z).filter((k) => (z[k].sumText || '').trim().length > 0);
+    ok('분모: 패널 요약이 있는 자리가 하나 이상 (' + withSum.length + ')', withSum.length > 0,
+       JSON.stringify(Object.keys(z).map((k) => [k, z[k].sumText])));
+    ok('🔴 칸의 aria-label 이 패널 요약과 같은 상태를 말한다 (스크린리더는 색을 못 읽는다)',
+       withSum.every((k) => (z[k].aria || '').includes((z[k].sumText || '').trim())),
+       JSON.stringify(withSum.map((k) => [k, z[k].sumText, z[k].aria])));
+    ok('🔴 날 id 는 **패널**에서 여전히 보인다 (로그와 맞추는 유일한 값이다)',
+       Object.keys(z).every((k) => z[k].idText === k),
+       JSON.stringify(Object.keys(z).map((k) => [k, z[k].idText])));
+  }
+
   /* ── 🔴 REQ-0293 — `map.zones[].active` 를 화면이 어떻게 그리나 ────────────
      계약: `active = {ok, reason}` · **계산 주체는 서버**(화면이 modules.length 를 세지 않는다).
      🔑 그래서 이 시험은 **`modules` 와 `active` 를 일부러 어긋나게** 넣는다 —
@@ -510,11 +559,17 @@ try {
     await sleep(160);
     const av = await evaluate(client, `(() => {
       const out = {};
-      for (const c of document.querySelectorAll('#zone-grid .zone')) {
-        out[c.dataset.zone] = { act: c.dataset.active === undefined ? null : c.dataset.active,
-          sum: (c.querySelector('.zone__sum') || {}).textContent || null,
+      const panel = document.getElementById('zone-detail');
+      const ids = [...document.querySelectorAll('#zone-grid .zone')].map(c => c.dataset.zone);
+      for (const id of ids) {
+        const c = [...document.querySelectorAll('#zone-grid .zone')].find(x => x.dataset.zone === id);
+        if (!c) continue;
+        c.click();   /* 🔴 요약은 REQ-0297 로 패널로 갔다 — 자리마다 눌러서 읽는다 */
+        out[id] = { act: c.dataset.active === undefined ? null : c.dataset.active,
+          sum: (panel.querySelector('.zone__sum') || {}).textContent || null,
           why: (c.querySelector('.zone__inactive') || {}).textContent || null,
-          view: c.dataset.view || null, aria: c.getAttribute('aria-label') };
+          view: c.dataset.view || null, aria: c.getAttribute('aria-label'),
+          cellHasSum: !!c.querySelector('.zone__sum') };
       }
       return out;
     })()`);

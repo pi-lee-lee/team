@@ -156,7 +156,10 @@ try {
       z.click();
       zones.push({
         id: z.dataset.zone, kind: z.dataset.kind, usable: z.dataset.usable,
-        sum: z.querySelector('.zone__sum').textContent,
+        /* 🔴 REQ-0297: 상태 요약은 패널로 갔다(칸에는 색·테두리가 그 말을 한다).
+           칸에서 읽으면 null 이라 textContent 를 바로 붙이면 여기서 TypeError 로 죽는다.
+           ⚠ 이 주석은 템플릿 리터럴 안이다 — 역따옴표를 쓰면 문자열이 그 자리에서 끊긴다(오늘 세 번째다). */
+        sum: (panel.querySelector('.zone__sum') || {}).textContent || null,
         badge: (z.querySelector('.zone__badge') || {}).textContent || null,
         mods: [...panel.querySelectorAll('.zmod')].map(m => m.textContent + '|loud=' + m.dataset.loud),
         acts: [...panel.querySelectorAll('.zbtn')].map(b => b.dataset.act + ':' + b.getAttribute('aria-disabled')),
