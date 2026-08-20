@@ -7,7 +7,7 @@
 //   헤더 순서가 바뀌면 선언·초기화 순서가 같이 바뀌어 **산출물이 달라진다.**
 
 // ⚠ **`slot` 이라는 낱말이 이 저장소에서 셋을 가리킨다:**
-//     `modPin` · `readSensor` · `sensorIndexOf`   → **모듈/센서 칸.** 인덱스가 전선의 `idx` 다
+//     `readSensor` · `sensorIndexOf`   → **모듈/센서 칸.** 인덱스가 전선의 `idx` 다
 //     `slotName*` · `slotOverride*`               → **전선의 자리 토큰**(두 글자). 명세 용어다
 //     `slotNo` · `slotStart` · `SLOT_MS`          → **1.2초 반송파 슬롯.** 시간이다
 //   🔑 셋 다 `slot` 이었을 때는 코드를 읽어도 구분이 안 됐다.
@@ -34,23 +34,19 @@ static uint8_t sensorIndexOf(char c0, char c1) {
   return 0xFF;
 }
 
-// 센서 극성. INPUT_PULLUP 을 쓰므로 "차량 감지 시 접점이 GND 로 당기는" 형식이 기본이다.
-#define SENSOR_ACTIVE_LOW 1
-
 // ═════════════════════════════════════════════════════════════════════════
-// 🔓 **센서 읽기 훅** — 기여자가 자기 센서를 붙이는 자리
+// 🔓 **센서 읽기 함수** — 기여자가 자기 센서를 붙이는 자리
 //
-//   모양 :  `bool 이름(uint8_t pin)`   — 반환 **true = 찼다** · false = 비었다
-//   등록 :  `node.sensor("A1").pin(2).on(내함수);`
+//   모양 :  `bool 이름()`   — 반환 **true = 찼다** · false = 비었다
+//   등록 :  `node.sensor("A1").on(내함수);`
 //   🔑 **명령 쪽과 같은 `on` 이다.** 한 번만 배우면 양쪽에 쓴다.
 //
 // 🔴 **문턱 판정은 핸들러가 한다.** 초음파는 거리(숫자)를 내는데 자리 상태는 참/거짓이다 —
 //   *"몇 cm 아래면 찼다고 볼 것인가"* 는 **장치를 단 사람만 안다.**
 //   ⚠ 이 자리를 비워 두면 그 판정이 서버나 화면으로 새어 나가 **두 곳에 생긴다.**
 //
-// ⚠ **핸들러를 등록하면 핀 모드도 네가 잡아라.** `.pin()` 은 `INPUT_PULLUP` 을 거는데
-//   초음파처럼 trig(OUTPUT)/echo(INPUT)가 갈린 센서에는 그것이 틀리다 —
-//   `.pin()` 을 안 쓰고 핸들러 안에서 잡으면 된다.
+// 🔓 **핀 모드는 `setup()` 에서 네가 잡는다** — `pinMode(9, INPUT_PULLUP);` 같은 아두이노 기본이다.
+//   🔑 그래서 핀이 하나든 둘이든(초음파 trig/echo) **등록 모양이 같다.**
 //
 // ⚠ **이 함수는 매 `loop()` 마다 불린다.** 오래 걸리는 측정을 그대로 넣으면 슬롯이 밀린다 —
 //   `pulseIn` 은 최악 타임아웃만큼 **블로킹**한다. **간격을 두고 값을 캐시해라.**
@@ -94,16 +90,12 @@ class ParkingNode {
   uint16_t occMask;   // 점유 비트 (센서가 주인)
   uint16_t resMask;   // 예약 비트 (서버가 주인 — R 로 켜고 C 로만 끈다)
 
+  // 🔓 **등록된 함수가 답이다.** 없으면 0 — 장치는 가짜 점유를 만들지 않는다.
+  //   🔴 극성(HIGH/LOW)·문턱·필터는 전부 그 함수 안의 일이다. 센서마다 다르므로
+  //     여기에 기본값을 두면 반은 틀린다. **틀린 기본값보다 없는 것이 낫다.**
   uint8_t readRealSensor(uint8_t i) {
-    // 🔓 기여자 핸들러가 등록돼 있으면 **그것이 답이다.** 없으면 아래 기본 경로로 간다.
     SensorFn f = senseOf(i);
-    if (f) return f(modPin(i)) ? 1 : 0;
-    uint8_t raw = digitalRead(modPin(i));
-  #if SENSOR_ACTIVE_LOW
-    return (raw == LOW) ? 1 : 0;
-  #else
-    return (raw == HIGH) ? 1 : 0;
-  #endif
+    return f ? (f() ? 1 : 0) : 0;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -145,11 +137,8 @@ class ParkingNode {
     if (testArmed && (ovrActive & ((uint16_t)1 << i))) return (uint8_t)((ovrValue >> i) & 1);
 
     // 실제 센서는 **무장 중에도 계속 읽는다.** 그건 진실이고 가릴 이유가 없다.
-    if (modPin(i) != PIN_NONE || senseOf(i)) return readRealSensor(i);
-
-    // 🔴 핀도 훅도 없는 센서는 **늘 0(비었다)** 이다.
-    //   장치는 가짜 점유를 만들지 않는다 — 차 없이 시험할 수단은 위의 오버라이드(`T`)다.
-    return 0;
+    //   🔴 함수를 안 붙인 센서는 늘 0(비었다)이다 — 부팅의 `[SENS]` 줄이 그것을 지목한다.
+    return readRealSensor(i);
   }
 
 };

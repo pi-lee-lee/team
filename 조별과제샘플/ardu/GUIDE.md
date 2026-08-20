@@ -45,23 +45,28 @@ void setup() {
   Serial.begin(115200);
   node.begin();                          // 링크 시작 · 슬롯 원점 · 난수 시드 · 리셋선
 
-  node.sensor  ("A1").pin(2);            // 🔓 핀을 **읽는다**
-  node.actuator("LD").pin(13).on(cmdLed);// 🔓 핀에 **쓴다** + 명령 핸들러
-  node.actuator("L2").on(cmdL2);         // 🔓 핀이 없는 모듈은 `.pin()` 을 안 적는다
+  pinMode(2, INPUT_PULLUP);              // 🔓 내 핀 — 아두이노 기본 설정
+  pinMode(13, OUTPUT);
+
+  node.sensor  ("A1").on(readA1);        // 🔓 이름 ↔ 함수
+  node.actuator("LD").on(cmdLed);
+  node.actuator("L2").on(cmdL2);
 }
 
 void loop() {
   node.tick();                           // 한 박자: 수신 → 센서 훑기 → 송신 → 계수
 }
 ```
-🔑 **한 줄에 모듈 하나.** 배열도 등록표도 없고 `pinMode` 도 `.pin()` 이 대신 잡는다.
+🔑 **한 줄에 모듈 하나.** 배열도 등록표도 없다. **모양이 늘 같다** — 이름 하나, 함수 하나.
+🔴 **핀은 장치가 모른다.** `pinMode` 로 잡고 함수 안에서 `digitalRead(9)` 로 읽는다 —
+아두이노에서 늘 하던 그대로다. 그래서 핀이 하나든 둘이든(초음파 trig/echo) 등록이 안 바뀐다.
 ⚠ **적은 순서가 전선 순서다**(`idx`·`occ` 비트). 센서·액추에이터를 **섞어 적어도 된다** —
 순서 규칙은 없다. 다만 **중간에 끼우면 뒤의 `idx` 가 밀려** 지금 되는 결속이 조용히 깨진다.
 🔑 **`begin()`·`tick()` 안의 순서는 네가 바꿀 수 없어서 감춰 뒀다**(정의는 `Runtime.h`).
 드러내 봐야 *지킬 의무* 만 생기고 얻는 것이 없다. **이 두 함수에는 바꿀 수 있는 것만 남아 있다.**
 
 ⚠ **`node.tick()` 을 빼거나 `delay()` 로 막지 마라.** 한 박자가 1.2초 슬롯을 지키는 구조라
-막으면 그 슬롯을 놓친다. 오래 걸리는 일은 센서 훅 안에서 **간격을 두고 캐시**해라(§4).
+막으면 그 슬롯을 놓친다. 오래 걸리는 일은 센서 함수 안에서 **간격을 두고 캐시**해라(§4).
 
 ---
 
@@ -85,18 +90,18 @@ void loop() {
 ## 2. 모듈 등록 — `sensor` 와 `actuator` 둘
 
 ```c
-node.sensor  ("A1").pin(2);                 // 2번 핀을 읽는다      (아두이노의 INPUT)
-node.actuator("LD").pin(13).on(cmdLed);     // 13번 핀에 쓴다        (아두이노의 OUTPUT)
-node.actuator("L2").on(cmdL2);              // 핀이 없어도 된다
-node.sensor  ("B1").pin(9).on(myRead);      // 값을 직접 계산하는 센서
+node.sensor  ("A1").on(readA1);             // 값을 **읽는** 함수를 붙인다
+node.actuator("LD").on(cmdLed);             // 명령을 **받는** 함수를 붙인다
 ```
 
 ### 🔑 배우는 것은 **둘**이다
 
 ```
-sensor   … 값을 **읽는다**.  `.pin()` 이 `INPUT_PULLUP` 을 건다. `.on()` 은 **선택**(없으면 digitalRead)
-actuator … 값을 **쓴다**.    `.pin()` 이 `OUTPUT` 을 건다.       `.on()` 이 **필수**(없으면 result=3)
+sensor   … 값을 **읽는다**.  함수 모양 `bool 이름()`          — true = 찼다
+actuator … 값을 **쓴다**.    함수 모양 `bool 이름(uint32_t)`  — true = 성공
 ```
+🔴 **둘 다 `.on()` 이 필수다.** 안 붙이면 센서는 늘 0(비었다)이고 액추에이터는 `result=3` 이다.
+부팅의 `[SENS]` 줄이 **`🔴함수없음`** 으로 그것을 지목한다.
 ⚠ 옛 판에는 종류가 다섯(`IP`·`IX`·`OG`·`OL`·`OB`)이었고 **기여자가 그 글자를 외웠다.**
 🔑 서버·화면은 **첫 글자만** 동작에 쓴다(`kind[0]=='O'` = 명령을 받는다). 둘째 글자는
 **화면 라벨의 폴백**일 뿐이고 **정본은 서버 조립 표**다: `lot.label("P1","LD","안내등")`.
@@ -129,7 +134,7 @@ node.sensor("ABC")   →  error: invalid initialization of reference of type 'co
 
 ```c
 bool 이름(uint32_t arg);      // true = 성공(ACK result=0) · false = 수행 불가(3)
-node.actuator("모듈이름").on(핸들러);   // setup() 에서 — `.pin()` 은 필요하면 앞에
+node.actuator("모듈이름").on(핸들러);   // setup() 에서
 ```
 
 ### 🔴 `arg` 의 뜻은 **네가** 정한다
@@ -202,15 +207,20 @@ node.actuator("모듈이름").on(핸들러);   // setup() 에서 — `.pin()` �
 ## 4. 센서 읽기 — `node.sensor(...).on(...)`
 
 > 🔑 **`client.ino` 에 두 꼴이 이미 켜져 있다** — 베낄 것을 여기서 찾지 말고 그 파일을 봐라.
-> `A1` = 초음파(HC-SR04 · Trig 2 · Echo 4 · 훅이 판정) · `B1` = 접점(`.pin(9)` 한 줄).
+> `A1` = 초음파(HC-SR04 · Trig 2 · Echo 4) · `B1` = 접점(9번 핀). **둘 다 `.on(내함수)` 한 줄이다.**
 
 ```c
-bool 이름(uint8_t pin);       // true = 찼다
-node.sensor("모듈이름").on(핸들러);     // setup() 에서 — `.pin()` 은 필요하면 앞에
+bool 이름();                  // true = 찼다
+node.sensor("모듈이름").on(핸들러);     // setup() 에서
 ```
 
-안 붙이면 기본값은 `digitalRead(핀)` 이다. **리드 스위치·적외선처럼 켜짐/꺼짐을
-그대로 내는 센서는 아무것도 안 해도 된다.**
+🔴 **안 붙이면 그 센서는 늘 0(비었다)이다.** 화면에는 "빈 자리"로 보여서 조용하다 —
+부팅의 `[SENS]` 줄이 **`🔴함수없음`** 으로 지목하니 그것을 봐라.
+
+리드 스위치·적외선처럼 켜짐/꺼짐만 내는 센서도 **한 줄이면 끝난다**:
+```c
+bool readB1() { return digitalRead(9) == LOW; }
+```
 
 ### 🔴 문턱 판정은 핸들러가 한다
 
@@ -246,11 +256,21 @@ node.sensor("모듈이름").on(핸들러);     // setup() 에서 — `.pin()` �
 ```
 🔑 **문턱을 실측으로 정할 때 "하행이 오는 중"에도 한 번 재 봐라.** 여유가 없으면 그때만 튄다.
 
-### 핀 모드
+### 핀 모드 — 🔓 **네 일이다**
 
-`.pin()` 을 **안 부르면** 어떤 핀 모드도 안 걸린다 — 기본 경로는 `INPUT_PULLUP` 을
-거는데 초음파처럼 trig(OUTPUT)/echo(INPUT)가 갈린 센서에는 그것이 틀리기 때문이다.
-**네가 `setup()` 에서 직접 잡아라.**
+```c
+void setup() {
+  node.begin();
+  pinMode(9, INPUT_PULLUP);              // 내 센서
+  node.sensor("B1").on(readB1);
+}
+bool readB1() { return digitalRead(9) == LOW; }   // 극성도 여기서 정한다
+```
+🔴 **장치는 어느 모듈이 어느 핀인지 모른다.** 알 필요가 없다 — 서버는 *이름* 으로 부르고,
+그 이름에 붙은 함수가 핀을 안다. **그래서 핀이 둘인 센서도 특별한 것이 없다.**
+
+⚠ 극성(`HIGH`/`LOW`)·문턱·필터는 **센서마다 다르다.** 프레임워크에 기본값을 두면
+절반은 틀리므로 두지 않았다. **틀린 기본값보다 없는 것이 낫다.**
 
 ---
 

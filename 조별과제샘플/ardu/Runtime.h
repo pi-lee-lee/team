@@ -29,12 +29,11 @@ void ParkingNode::begin() {
   slotStart = millis();
 
   // 난수 시드는 **아무 데도 안 물린 아날로그 핀**에서 뽑는다 — 물려 있으면 노이즈가 안 나온다.
-  // ⚠ `MODULE_TABLE` 에서 아날로그 핀을 센서로 쓰면 그 핀을 여기 쓰지 마라.
+  // ⚠ 자기 센서에 A1 을 쓰면 그 핀을 여기 쓰지 마라 — 값이 노이즈가 아니게 된다.
   randomSeed((unsigned long)analogRead(A1) ^ micros());
 
-  // 🔑 **핀 모드는 여기서 안 잡는다.** 등록이 이 뒤에 오므로 잡을 대상이 없다 —
-  //   `node.sensor("A1").pin(2)` 의 `.pin()` 이 그 자리에서 잡는다.
-  //   ⚠ 그래서 `begin()` 과 등록의 **순서 의존이 없다**(`pinMode` 는 코어 `init()` 만 요구한다).
+  // 🔑 **핀 모드는 여기서 안 잡는다.** 기여자가 `setup()` 에서 `pinMode` 로 직접 잡는다 —
+  //   장치는 어느 모듈이 어느 핀에 붙었는지 **모른다.** 알 필요가 없다.
 
   // 재부팅하면 테스트 오버라이드는 사라진다 — 서버가 다시 내려보내지 않는다(예약과 정반대).
   // 전역이라 어차피 0 이지만, **"여기서 버린다"를 코드로 남겨 둔다.**
@@ -103,7 +102,7 @@ static void ramTick(unsigned long now) {
 #if DEBUG
 // ─────────────────────────────────────────────────────────────────────────
 // 부팅 배너 — 🔴 **첫 `tick()` 에서 한 번.** `begin()` 이 아니다
-//   `[SENS]` 줄이 기여자가 등록한 훅을 보고 `훅`/`핀N` 을 가르므로 **등록 뒤여야 참이다.**
+//   `[SENS]` 줄이 등록된 함수를 보고 있음/없음을 가르므로 **등록 뒤여야 참이다.**
 // ─────────────────────────────────────────────────────────────────────────
 static void printBootBanner(void) {
   // 🔴 **이 보드가 어느 서버를 보는가** — 포트 세트가 둘이라 자주 물어지는 것이다.
@@ -117,9 +116,9 @@ static void printBootBanner(void) {
     if (!isSensor(i)) continue;
     char nm[4]; moduleNameOf(i, nm);
     Serial.print(nm); Serial.print('=');
-    if (modPin(i) == PIN_NONE && !senseOf(i))   Serial.print(F("안읽음"));
-    else if (senseOf(i))                        Serial.print(F("훅"));
-    else { Serial.print(F("핀")); Serial.print(modPin(i)); }
+    // 🔴 함수가 없으면 그 센서는 **영원히 0** 이다. 화면에는 "비었다"로 보여 조용하다 —
+    //   그래서 이 줄이 그것을 지목한다. `.on(...)` 을 안 부른 것이 유일한 원인이다.
+    Serial.print(senseOf(i) ? F("함수있음") : F("🔴함수없음"));
     Serial.print(' ');
   }
   Serial.println();
@@ -174,7 +173,7 @@ static void printBootBanner(void) {
 #endif
 
 // ─────────────────────────────────────────────────────────────────────────
-// 🔓 모듈 등록 — `node.sensor("A1").pin(2)` · `node.actuator("LD").pin(13).on(cmdLed)`
+// 🔓 모듈 등록 — `node.sensor("A1").on(내함수)` · `node.actuator("LD").on(내함수)`
 //   🔴 **호출 순서가 전선 `idx` 이고 `occ` 비트 위치다.** 센서·액추에이터를 섞어도 된다 —
 //     `occ` 비트를 센서는 값으로, 액추에이터는 에코로 세우므로 **겹치지 않는다.**
 // ─────────────────────────────────────────────────────────────────────────

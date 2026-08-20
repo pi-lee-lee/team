@@ -51,6 +51,7 @@
 
 unsigned long g_millis = 0;
 unsigned long g_pulseIn = 0;      // 초음파 예시가 읽는 왕복 시간(µs). 0 = 반향 없음
+unsigned long g_pulseInCalls = 0, g_pulseInBlockUs = 0;   // 게이트가 듣는지 재는 계수
 bool          g_clockAutoAdvance = true;
 uint8_t       g_pinLevel[24];
 uint8_t       g_pinMode[24];
@@ -89,7 +90,7 @@ static bool cmdDoor(uint32_t arg);
 //   ⚠ 실기 빌드의 8 은 `ramLow` 602B 실측으로 정한 값이다. **그것을 바꾸는 것이 아니다.**
 #define MODULE_CAP 13
 #define SAMPLE_EXTRA_MODULES  node.actuator("LC").on(cmdLcd); \
-                              node.actuator("DR").pin(6).on(cmdDoor);
+                              node.actuator("DR").on(cmdDoor);
 #define PIN_SAMPLE_DOOR 6
 // 🔓 **샘플 액추에이터도 켜서 빌드한다** — 안 켜면 `cmdLed`/`cmdLcd`/`cmdDoor` 가
 //   **한 번도 컴파일되지 않는다.** 샘플 코드는 아무도 안 돌려 보면 조용히 썩는다.
@@ -155,12 +156,9 @@ static bool cmdDoor(uint32_t arg) {
 //   이 시험이 **그것을 직접 부른다** — 샘플이 검증받는 유일한 길이다.
 //   ⚠ 옛 판은 이 블록이 *"샘플 주석 블록의 모양 그대로"* 복제였다. 그러면 샘플이 낡어도
 //     시험은 통과한다(§"시험이 실기가 안 하는 준비를 대신해 준다").
-//   🔑 그래서 샘플의 `readUltrasonic`·`US_OCCUPIED_CM`·`US_TRIG`·`US_ECHO` 를 그대로 쓴다.
-static bool readLedBack(uint8_t pin) {
-  (void)pin;
-  return digitalRead(LED_BUILTIN) == HIGH;
-}
-static bool readA1(uint8_t pin) { (void)pin; return (slotNo % 20) < 10; }
+//   🔑 그래서 샘플의 `readUltrasonic`·`US_NEAR_CM`·`US_TRIG`·`US_ECHO` 를 그대로 쓴다.
+static bool readLedBack() { return digitalRead(LED_BUILTIN) == HIGH; }
+static bool readA1() { return (slotNo % 20) < 10; }
 
 // ── 테스트 유틸 ────────────────────────────────────────────────────────
 static int g_pass = 0, g_fail = 0;
@@ -1418,19 +1416,17 @@ int main() {
     }
     ok(allName,             "★★ 두 이름이 옛 계산식과 같다 (A1·B1 — 서버의 자리 id 와 동일해야 한다)");
 
-    // ② 핀이 SLOT_PIN 과 같은가 — **표와 핀 표가 갈리면 엉뚱한 칸을 읽는다**
-    // ⚠ **실물 범위(sensorCount())까지만 돈다** — 가상 모듈은 핀이 없고
-    //   `SLOT_PIN[]` 은 크기가 `sensorCount()` 이라 그 밖은 배열 밖 읽기다.
-    bool allPin = true;
-    // 🔴 **기대값을 손으로 박는다.** 옛 판은 `표의 pin` 과 `modPin(i)` 를 비교했는데
-    //   `modPin` 이 그 표를 읽는 유일한 경로이므로 **자기끼리 대조**였다 — 늘 통과한다.
-    //   지금 묻는 것은 *"`setup()` 의 `.pin(...)` 이 실제로 그 값을 넣었나"* 다.
-    // 🔴 A1 은 **초음파(두 핀)라 `.pin()` 을 안 준다** → PIN_NONE 이고 훅이 답한다
-    const uint8_t WANT[] = { PIN_NONE, 9, (uint8_t)LED_BUILTIN, PIN_NONE };
-    for (uint8_t i = 0; i < 4; i++)
-      if (modPin(i) != WANT[i]) { allPin = false;
-        printf("      🔴 i=%u: 핀 %u · 기대 %u\n", i, modPin(i), WANT[i]); }
-    ok(allPin,              "★★ 각 칸의 핀이 `setup()` 이 준 값과 같다");
+    // ② 🔴 **모든 모듈에 함수가 붙어 있는가.** 핀 대조를 이것으로 바꿨다 —
+    //   장치가 핀을 안 들고 있으므로(REQ-0312) 물을 것이 남아 있지 않고,
+    //   대신 **함수가 없으면 그 모듈이 조용히 죽는다**(센서는 늘 0 · 액추에이터는 result=3).
+    //   🔑 옛 핀 대조보다 강하다 — 핀은 틀리면 값이 이상하고, 함수는 **없으면 정상처럼 보인다.**
+    bool allBound = true;
+    for (uint8_t i = 0; i < MODULE_N; i++) {
+      const bool bound = isSensor(i) ? (senseOf(i) != 0) : (cmdOf(i) != 0);
+      if (!bound) { allBound = false;
+        printf("      🔴 i=%u (%c%c): 함수가 없다\n", i, modName0(i), modName1(i)); }
+    }
+    ok(allBound,            "★★★ 모듈 전부에 함수가 붙어 있다 — 없으면 조용히 죽는다");
 
     // ③ 🔴 **전선에 나가는 바이트가 그대로인가** — 이 축의 최종 판정이다
     wifi.refusePrompt = false;
@@ -1547,17 +1543,17 @@ int main() {
     ok(sensorCount() >= 1 && sensorCount() < MODULE_N,
                             "★ 표에 센서와 액추에이터가 둘 다 있다 (아래 검사의 사전 조건)");
 
-    // 핀이 표에서 온다
-    bool pinsMatch = true;
-    // 🔴 `modPin(i)` 와 표를 비교하면 **자기끼리 대조**다(늘 통과한다). 리터럴로 묻는다.
-    // 🔑 **두 방식이 나란히 있는 것**이 이 샘플의 값이다 — 기여자가 자기 센서가 어느 쪽인지 고른다
-    if (!(modPin(1) == 9)) pinsMatch = false;                    // 접점 센서 : `.pin(9)`
-    if (!(modPin(0) == PIN_NONE && senseOf(0) != 0)) pinsMatch = false;  // 두 핀 센서 : 훅만
-    ok(pinsMatch,           "★★★ `.pin(9)` 센서와 `.on()` 만 있는 센서가 **한 파일에 나란히** 있다");
-    // 🔑 옛 판은 "센서 범위 밖"(= `SENSOR_N` 이후)을 물었다. 지금은 센서가 표 어디에 있어도
-    //   되므로 그 경계가 없다 — 남은 경계는 **모듈 범위 밖**이다.
-    ok(modPin(MODULE_N) == PIN_NONE,
-                            "★★ 모듈 범위 밖은 PIN_NONE — 범위 가드가 산다");
+    // 🔴 **모양이 하나다** — 핀이 하나든(B1) 둘이든(A1 초음파) 등록이 `.on(함수)` 한 가지다.
+    //   그것을 **구조로** 묻는다: `struct Mod` 에 핀 칸이 없어야 이 성질이 유지된다.
+    //   ⚠ 필드를 되살리면 이 크기가 늘어 여기서 걸린다.
+    // 🔴 `sizeof` 로 묻지 않는다 — 64비트 호스트에서는 포인터 정렬 패딩이 핀 자리를 채워
+    //   있으나 없으나 24 다(실측). **`offsetof` 는 패딩과 무관하다**: 핀이 있으면 3 으로 밀린다.
+    //   🔑 AVR 쪽 `sizeof(Mod)==7` 검사는 `Module.h` 에 있다 — 거기서만 유효하다.
+    ok(offsetof(Mod, isAct) == 2,
+                            "★★★ `struct Mod` 에 핀 칸이 없다 — 장치는 핀을 안 들고 있다");
+    // 🔑 그리고 센서 함수의 시그니처에 핀 인자가 없다(있으면 컴파일이 여기서 막힌다).
+    { SensorFn probe = readA1; (void)probe;
+      ok(true,              "★★ `SensorFn` 은 인자가 없다 — `bool 이름()`"); }
 
     // 자리 토큰(전선 ACK 이 되비추는 두 글자)이 표의 이름에서 온다
     ok(slotName0(0) == (char)pgm_read_byte(&MODULE_TABLE[0].name[0]) &&
@@ -1582,11 +1578,11 @@ int main() {
     // 🔴 지금 구성에는 **핀 없는 센서가 없다**(둘 다 핀을 적었다). 하나 만들어 묻고 되돌린다 —
     //   ⚠ 안 되돌리면 뒤 시험의 지형 전제가 오염된다(그것으로 한 번 죽었다).
     {
-      node.sensor("ZS");                     // `.pin()` 을 안 부른다 = 핀 없는 센서
+      node.sensor("ZS");                     // `.on()` 을 안 부른다 = 함수 없는 센서
       const uint8_t k = (uint8_t)(MODULE_N - 1);
-      ok(modPin(k) == PIN_NONE && isSensor(k), "★ 사전 조건: 핀 없는 센서 칸을 만들었다");
+      ok(senseOf(k) == 0 && isSensor(k), "★ 사전 조건: 함수 없는 센서 칸을 만들었다");
       ok(node.readSensor(k) == 0,
-                            "★★ 핀도 훅도 없는 센서는 0 이다 (장치가 점유를 지어내지 않는다)");
+                            "★★ 함수 없는 센서는 0 이다 (장치가 점유를 지어내지 않는다)");
       MODULE_N--;                            // 되돌린다
     }
   }
@@ -1602,18 +1598,20 @@ int main() {
     //   🔑 이 단언이 없으면 그 회귀가 **아무 신호 없이** 돌아온다.
     node.begin();
     {
-      uint8_t pinned = 0;
-      for (uint8_t i = 0; i < MODULE_N; i++) if (modPin(i) != PIN_NONE) pinned++;
-      ok(pinned >= 1,       "★★ 기본 구성에서 핀을 적은 칸이 **하나 이상** 있다 — 0 이면 훅이 죽는다");
-      ok(g_pinMode[modPin(1)] == INPUT_PULLUP,
-                            "★★ 핀을 적은 칸(B1)의 핀 모드를 `.pin()` 이 잡는다");
-      // 🔴 초음파는 두 핀이라 **`setup()` 이 직접** 잡는다 — `.pin()` 이 못 하는 일이다
+      // 🔴 **핀 모드는 이제 전부 `setup()` 의 일이다**(프레임워크가 안 잡는다).
+      //   네 핀을 전수로 묻는다 — 하나가 빠지면 그 모듈만 조용히 안 듣는다.
       ok(g_pinMode[US_TRIG] == OUTPUT && g_pinMode[US_ECHO] == INPUT,
-                            "★★★ 초음파의 Trig=OUTPUT · Echo=INPUT 을 `setup()` 이 잡는다");
+                            "★★★ 초음파 Trig=OUTPUT · Echo=INPUT");
+      ok(g_pinMode[B1_PIN] == INPUT_PULLUP,
+                            "★★ 접점 센서 B1_PIN = INPUT_PULLUP");
+      ok(g_pinMode[LD_PIN] == OUTPUT,
+                            "★★ 액추에이터 LD_PIN = OUTPUT");
+      // 🔑 음성 대조: 아무도 안 쓰는 핀은 건드리지 않았다 — `setup()` 이 넓게 쓸지 않는다
+      ok(g_pinMode[11] != OUTPUT || g_pinMode[11] != INPUT_PULLUP,
+                            "★ 안 쓰는 핀(11)은 안 건드렸다");
     }
-    // 🔴 전제가 바뀌었다 — `setup()` 이 A1 에 **초음파 훅을 붙인다**(실물이 달렸다).
-    //   훅 없는 기본 경로는 `B1` 이 보여 준다.
-    ok(!sensors.at(1),      "★ 접점 센서(B1)는 훅이 없다 — 기본 `digitalRead` 경로다");
+    // 🔴 전제가 또 바뀌었다 — 이제 **모든 센서에 함수가 있다**(기본 경로가 없어졌다).
+    ok(sensors.at(1) != 0,  "★ 접점 센서(B1)에도 함수가 붙어 있다 — 기본 경로는 없다");
     ok(sensors.on("A1", readUltrasonic),
                             "★★ 이름으로 등록된다 (router.on 과 같은 모양)");
     ok(!sensors.on("ZZ", readUltrasonic),
@@ -1645,34 +1643,23 @@ int main() {
     ok(node.readRealSensor(0) == 0,
                             "★★ 200ms 가 지나면 새로 잰다 — **영구 고착이 아니다**");
 
-    // 🔴 **계약이 바뀌었다**: 핀 모드는 `.pin()` 이 그 자리에서 잡는다.
-    //   훅만 쓰는 센서는 `.pin()` 을 **안 부르면** 되고, 그러면 아무 핀도 안 건드린다 —
-    //   초음파처럼 trig/echo 가 갈린 장치는 핸들러가 직접 잡는다.
-    //   🔑 옛 판은 `applySensorPinMode()` 가 훅 여부를 보고 건너뛰었다. 지금은 **부르지 않는 것**이 그 뜻이다.
+    // 🔴 **계약이 또 바뀌었다**(REQ-0312): 장치는 핀을 안 들고 있고 등록도 핀 모드를 안 건다.
+    //   🔑 그래서 물을 것이 *"등록이 핀을 건드리지 않는가"* 로 바뀐다 — 건드리면
+    //     기여자가 `setup()` 에서 잡아 둔 것을 **덮어써서** 조용히 안 듣게 된다.
     {
-      // 🔑 **표를 늘리지 않는다** — 새로 등록하면 뒤 시험의 지형 전제가 오염된다(실제로 그래서
-      //   `EXPECT[]` 의 널 포인터를 읽고 죽었다). 이미 있는 `L2` 가 그 경우다: `.pin()` 을 안 썼다.
-      int8_t l2 = -1;
-      for (uint8_t k = 0; k < MODULE_N; k++) {
-        char n4[4]; moduleNameOf(k, n4);
-        if (strcmp(n4, "L2") == 0) l2 = (int8_t)k;
-      }
-      ok(l2 >= 0,           "★ 사전 조건: `.pin()` 을 안 부른 모듈(`L2`)이 있다");
-      ok(modPin((uint8_t)l2) == PIN_NONE,
-                            "★★ `.pin()` 을 안 부르면 핀이 PIN_NONE 이다 — 어떤 핀도 안 건드린다");
+      g_pinMode[11] = 0xEE;                  // 아무도 안 쓰는 핀에 표지를 박는다
+      node.sensor("ZP").on(readA1);           // 등록만 한다
+      MODULE_N--;                             // 되돌린다 (뒤 시험의 지형을 오염시키지 않는다)
+      ok(g_pinMode[11] == 0xEE,
+                            "★★★ 등록(`sensor().on()`)은 어떤 핀도 건드리지 않는다");
     }
 
-    // 뒤 시험에 영향이 없도록 되돌린다 — 0 을 넣으면 기본 경로로 돌아간다
+    // 뒤 시험에 영향이 없도록 되돌린다 — 0 을 넣으면 그 센서는 늘 0 이 된다
     sensors.on("A1", 0);
-    ok(!sensors.at(0),      "★ 0 을 등록하면 기본 경로로 돌아간다");
-    // 🔑 핀 모드를 다시 걸려면 `.pin()` 을 다시 부른다 — 그것이 이제 유일한 경로다.
-    //   ⚠ **이미 있는 칸에 다시 부른다**(표를 늘리지 않는다). `A1` 이 핀 2 를 쓴다.
-    g_pinMode[2] = 0xEE;
-    node.sensor("A1");                       // 같은 이름을 다시 등록하지 않는다 — 아래에서 idx 로 건다
-    MODULE_N--;                              // 방금 늘어난 칸을 되돌린다
-    ModRef(0).pin(2);                        // 🔑 인덱스 0(=A1)에 직접 건다
-    ok(g_pinMode[2] == INPUT_PULLUP,
-                            "★★ 센서의 `.pin()` 은 INPUT_PULLUP 을 건다");
+    ok(!sensors.at(0),      "★ 0 을 등록하면 함수가 떨어진다");
+    ok(node.readSensor(0) == 0,
+                            "★★ 함수가 떨어진 센서는 0 이다 — 남은 기본 경로가 없다");
+    sensors.on("A1", readUltrasonic);        // 🔑 지형을 원래대로 되돌린다
   }
 
   // ── [39] 🔴 **거절이 조용하지 않은가** — 로그가 셋을 갈라 주는가 ──────────────
@@ -1883,7 +1870,7 @@ int main() {
                             "★★ 되읽기 훅이 B1 에 붙는다 (`setup()` 과 같은 등록)");
     ok(sensors.at(1) == readLedBack, "★ 그 칸에 걸렸다");
     // A1(핀 2)은 훅이 없다 → 기본 경로. 미배선이면 INPUT_PULLUP 이라 HIGH → ACTIVE_LOW 로 0
-    g_pinLevel[modPin(0)] = HIGH;
+    g_pinLevel[US_ECHO] = HIGH;
 
     char gg[28];
     // ① LED 끄기 → 자리는 비어 있어야 한다
@@ -1919,7 +1906,7 @@ int main() {
 
     // ⑤ 훅을 떼면 기본 경로로 — 되돌릴 수 있다는 것까지 본다
     sensors.on("B1", 0);
-    g_pinLevel[modPin(1)] = HIGH;                 // 미배선 = 풀업 = HIGH (앞 시험이 바꿨을 수 있다)
+    g_pinLevel[B1_PIN] = HIGH;                    // 미배선 = 풀업 = HIGH (앞 시험이 바꿨을 수 있다)
     node.readSensors();
     ok((node.occMask & (1u << 1)) == 0,
                             "★★ 훅을 떼면 B1 이 핀 9(미배선 → 0)로 돌아간다");
@@ -2003,9 +1990,12 @@ int main() {
     {
       // 🔴 **정반대로 뒤집혔다**: 실물 초음파(Trig 2 · Echo 4)가 달려서 `setup()` 이 훅을 붙인다.
       //   ⚠ 옛 판은 *"붙일 실물이 없다"* 가 근거였다. 그 조건이 사라졌다.
-      int8_t hooked = -1;
-      for (uint8_t k = 0; k < MODULE_N; k++) if (sensors.at(k)) hooked = (int8_t)k;
-      ok(hooked == 0,        "★★★ `setup()` 이 A1 에 초음파 훅을 붙인다 (실물이 달렸다)");
+      // 🔴 전수로 묻는다 — 옛 판은 루프가 **마지막** 것만 담아서 "A1 에 붙었나"를 못 물었다.
+      uint8_t sens = 0, bound = 0;
+      for (uint8_t k = 0; k < MODULE_N; k++)
+        if (isSensor(k)) { sens++; if (sensors.at(k)) bound++; }
+      ok(sens > 0,           "★ 분모: 센서가 하나 이상 있다");
+      ok(bound == sens,      "★★★ `setup()` 이 **모든 센서에** 함수를 붙인다");
       ok(sensors.at(0) == readUltrasonic,
                             "★★ 그 훅이 **샘플의 그 함수**다 — 시험이 복제하지 않는다");
     }
@@ -2079,6 +2069,72 @@ int main() {
     ok(Serial.out.find("[PARKING NODE]") == std::string::npos,
                             "★★ 두 번째 `loop()` 은 배너를 다시 찍지 않는다");
     Serial.out.clear();
+  }
+
+  // ── [45] 🔴 **초음파 블로킹이 루프 예산을 깨나** — 값으로 답한다 ─────────────
+  //   왜 이 시험이 있나: `readSensors()` 는 **매 `loop()`** 돈다(슬롯 기반이 아니다).
+  //   `digitalRead` 는 몇 µs 라 공짜인데 `pulseIn` 은 **타임아웃만큼 블로킹**한다.
+  //   그동안 `espRead()` 가 안 돌므로 SoftwareSerial 링버퍼(64B)가 위험해진다.
+  //   🔑 그래서 묻는 것은 *"게이트(캐시)가 실제로 호출을 줄이나"* 다 — 코드가 아니라 계수로.
+  //   ⚠ **빈 자리가 최악이 아니라 기본이다**: 반향이 없으면 매번 타임아웃을 다 쓴다.
+  printf("\n[45] 초음파 블로킹 예산 — 한 슬롯(1.2초) 동안 실제로 몇 번 막히나\n");
+  {
+    node.testArmed = false; node.ovrActive = 0;
+    // 🔴 **사전 조건을 스스로 세운다.** [43] 이 끝에서 `sensors.on("A1", 0)` 으로 지형을 비우므로
+    //   그것을 상속하면 이 시험의 분모가 0 이 된다 — 실제로 그렇게 헛통과했다.
+    //   🔑 **뒤 시험은 앞 시험의 *정리* 를 상속한다.** 사전 조건을 남에게 기대지 마라.
+    sensors.on("A1", readUltrasonic);
+    g_millis += 10000;                      // 캐시(`lastAt`)를 확실히 만료시킨다
+    g_pulseIn = 0;                          // 🔴 반향 없음 = 타임아웃을 다 쓰는 최악(=빈 자리)
+    g_pulseInCalls = 0; g_pulseInBlockUs = 0;
+
+    // 🔴 **분모를 먼저 단언한다.** 이것 없이 "호출이 적다"를 물으면 **0 도 통과한다** —
+    //   실제로 그렇게 헛통과했다(앞 시험이 A1 의 함수를 떼어 놓은 상태였다).
+    printf("      사전: MODULE_N=%u · A1 센서=%d · A1 함수=%p\n",
+           MODULE_N, (int)isSensor(0), (void*)senseOf(0));
+    // 🔴 센서가 몇이고 그중 몇이 초음파 함수를 쓰나 — 12회의 원인을 여기서 가른다
+    { uint8_t ns=0, nus=0;
+      for (uint8_t k=0;k<MODULE_N;k++) if (isSensor(k)) { ns++; if (senseOf(k)==readUltrasonic) nus++; }
+      printf("      센서 %u개 중 초음파 함수 %u개\n", ns, nus); }
+    ok(isSensor(0) && senseOf(0) == readUltrasonic,
+                            "★★★ 분모: A1 이 센서이고 초음파 함수가 붙어 있다");
+
+    // 🔴 **자동 시계 전진을 끈다.** 이 shim 의 `millis()` 는 호출마다 1ms 를 흘리는데
+    //   (스핀 루프가 끝나게 하려고) 그러면 게이트 간격이 **절반으로 보인다** —
+    //   실측 12회가 그것이었다: 내 `g_millis++` 와 `millis()` 의 +1 이 합쳐져 2배로 흘렀다.
+    //   🔑 `Arduino.h` 머리가 *"타이밍은 재현하지 않는다"* 고 이미 경고한 그 자리다.
+    //     이 시험은 **시간을 재므로** 그 손잡이를 꼭 끄고 재야 한다.
+    const bool saveAuto = g_clockAutoAdvance;
+    g_clockAutoAdvance = false;
+
+    // 한 슬롯을 1ms 단위로 훑는다 — 실기 루프는 이보다 훨씬 빠르므로 **호출 수의 하한**이다.
+    const unsigned long SLOT_TOTAL_MS = 1200;
+    unsigned long loops = 0;
+    for (unsigned long t = 0; t < SLOT_TOTAL_MS; t++) { g_millis++; node.readSensors(); loops++; }
+    g_clockAutoAdvance = saveAuto;
+
+    const unsigned long blockMs = g_pulseInBlockUs / 1000UL;
+    printf("      루프 %lu회 · pulseIn %lu회 · 블로킹 %lu ms / %lu ms = %.1f%%\n",
+           loops, g_pulseInCalls, blockMs, SLOT_TOTAL_MS,
+           100.0 * (double)blockMs / (double)SLOT_TOTAL_MS);
+
+    // ① 게이트가 듣는다 — 1200번 불렸는데 실제 측정은 그보다 훨씬 적다
+    ok(g_pulseInCalls < loops / 10,
+                            "★★★ 게이트가 듣는다 — 호출 1200회 중 실제 측정은 10% 미만");
+    // ② 기대값을 리터럴로 박는다: 1200ms / 200ms = 6회 (+ 첫 회)
+    ok(g_pulseInCalls <= 7, "★★ 실제 측정이 슬롯당 7회 이하다 (200ms 게이트 = 6회 + 첫 회)");
+    // ③ 🔴 **블로킹 예산** — 이것이 루트의 물음에 답하는 수다
+    ok(blockMs <= 60,       "★★★ 최악(빈 자리)에서도 슬롯의 5% 이하만 막힌다");
+    // ④ 음성 대조 — 게이트를 무력화하면 이 검사가 실제로 빨강이 되는가
+    {
+      g_pulseInCalls = 0; g_pulseInBlockUs = 0;
+      g_clockAutoAdvance = false;
+      for (unsigned long t = 0; t < 100; t++) { g_millis += 500; node.readSensors(); }
+      g_clockAutoAdvance = saveAuto;
+      ok(g_pulseInCalls == 100,
+                            "★★★ 음성 대조: 게이트 간격을 넘겨 부르면 100회 전부 측정한다");
+    }
+    g_pulseIn = 0; g_pulseInCalls = 0; g_pulseInBlockUs = 0;
   }
 
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);

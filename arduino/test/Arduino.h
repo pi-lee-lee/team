@@ -61,9 +61,16 @@ inline void delayMicroseconds(unsigned int us) { (void)us; }
 // `pulseIn` 은 시험이 값을 **주입**한다. 0 = 반향 없음(범위 밖).
 //   왕복 µs → cm 은 /58 이므로 예: 2900 ≈ 50cm · 5800 ≈ 100cm
 extern unsigned long g_pulseIn;
+// 🔴 **호출 수와 블로킹 시간을 센다.** 게이트(캐시)가 실제로 듣는지는 이것으로만 답한다 —
+//   "게이트를 넣었다" 는 코드의 진술이고, "몇 번 불렸나" 는 값이다.
+extern unsigned long g_pulseInCalls;    // 실제로 이 함수에 들어온 횟수
+extern unsigned long g_pulseInBlockUs;  // 그 호출들이 쓴 시간 합(µs) — 반향 없으면 타임아웃 전부
 inline unsigned long pulseIn(uint8_t p, uint8_t v, unsigned long timeout) {
   (void)p; (void)v;
-  return (g_pulseIn > timeout) ? 0UL : g_pulseIn;   // 타임아웃을 넘으면 0 — 실물과 같은 규약
+  g_pulseInCalls++;
+  const unsigned long got = (g_pulseIn > timeout) ? 0UL : g_pulseIn;
+  g_pulseInBlockUs += got ? got : timeout;   // 🔑 반향이 없으면 **타임아웃을 다 쓴다**
+  return got;                                 //   빈 자리에서는 그것이 예외가 아니라 기본이다
 }
 inline void digitalWrite(uint8_t p, uint8_t v) { if (p < 24) g_pinLevel[p] = v; }
 inline int  analogRead(uint8_t)           { return 512; }

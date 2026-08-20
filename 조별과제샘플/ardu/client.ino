@@ -48,16 +48,15 @@ static_assert(sizeof(DEVICE_ID) > 1 && sizeof(DEVICE_ID) <= 9,
 // ██████████████████████████████████████████████████████████████████████████
 //
 //   명령 핸들러 :  `bool 이름(uint32_t arg)`   — arg 는 서버가 보낸 값
-//   센서 핸들러 :  `bool 이름(uint8_t pin)`    — 반환 true = 찼다
+//   센서 핸들러 :  `bool 이름()`              — 반환 true = 찼다
 //
 // 🔑 **함수를 쓰고 아래 `setup()` 에서 한 줄로 붙인다.** 배열도 등록표도 없다.
 // ██████████████████████████████████████████████████████████████████████████
 // ─────────────────────────────────────────────────────────────────────────
 // 🔓 **초음파 센서 (HC-SR04)** — Trig 2번 · Echo 4번
 //
-// 🔴 **두 핀을 쓰므로 `.pin()` 을 안 준다.** `.pin()` 은 한 핀에 `INPUT_PULLUP` 을 거는데
-//   Trig 는 `OUTPUT` 이어야 한다. → 핀 모드를 `setup()` 에서 직접 잡고 훅만 붙인다.
-//   🔑 `.pin()` 이 없어도 **훅이 있으면 그것이 답이다**(`readSensor` 가 훅을 먼저 본다).
+// 🔑 **핀은 이 함수 안의 일이다.** 핀 모드는 `setup()` 에서 `pinMode` 로 잡고
+//   여기서 그 핀을 쓴다 — 아두이노에서 늘 하던 그대로다. 핀이 둘이어도 등록은 한 줄이다.
 //
 // 🔴 **문턱 판정은 여기서 한다.** 초음파는 거리(숫자)를 내는데 자리 상태는 참/거짓이다 —
 //   *"몇 cm 아래면 찼다고 볼 것인가"* 는 **장치를 단 사람만 안다.**
@@ -76,7 +75,7 @@ static_assert(sizeof(DEVICE_ID) > 1 && sizeof(DEVICE_ID) <= 9,
 #define US_TIMEOUT_US  ((unsigned long)US_NEAR_CM * 58UL * 2UL)   // 6,960µs
 #define US_PERIOD_MS   200      // 🔓 재는 간격 (그 사이에는 캐시를 돌려준다)
 
-static bool readUltrasonic(uint8_t /* 핀 인자를 안 쓴다 — 두 핀을 위에서 상수로 안다 */) {
+static bool readUltrasonic() {
   static uint32_t lastAt  = 0;
   static bool     lastVal = false;
   const uint32_t now = millis();
@@ -92,8 +91,15 @@ static bool readUltrasonic(uint8_t /* 핀 인자를 안 쓴다 — 두 핀을 �
   return lastVal;
 }
 
+// 🔓 **접점 센서 (리드 스위치·적외선처럼 켜짐/꺼짐만 내는 것)** — 9번 핀
+//   🔑 `INPUT_PULLUP` 이라 눌리면 GND 로 당겨진다 → `LOW` 가 "차가 있다"다.
+//     ⚠ 극성은 센서마다 다르다. **네 센서 것으로 바꿔라** — 그래서 이 판정이 여기 있다.
+#define B1_PIN 9
+static bool readB1() { return digitalRead(B1_PIN) == LOW; }
+
+#define LD_PIN LED_BUILTIN            // 🔓 보드에 붙은 13번 LED
 static bool cmdLed(uint32_t arg) {
-  digitalWrite(LED_BUILTIN, arg ? HIGH : LOW);
+  digitalWrite(LD_PIN, arg ? HIGH : LOW);
   // 🔑 **거절 로그가 없는 이유**: 이 핸들러는 `false` 를 낼 자리가 없다.
   //   모든 값에 뜻이 있다(0=끔 · 그 외=켬). 거절이 없으면 남길 것도 없다.
   return true;
@@ -165,9 +171,11 @@ static bool cmdL2(uint32_t arg) {
 // 🔓 **본보기는 주석이 아니라 위의 실제 코드다** — 네 꼴이 다 켜져 있다:
 //
 //     readUltrasonic  두 핀 센서(거리 → 문턱 판정)   `node.sensor("A1").on(readUltrasonic)`
-//     (핸들러 없음)   접점 센서(켜짐/꺼짐)            `node.sensor("B1").pin(9)`
-//     cmdLed          on/off 액추에이터               `node.actuator("LD").pin(13).on(cmdLed)`
+//     readB1          접점 센서(켜짐/꺼짐)            `node.sensor("B1").on(readB1)`
+//     cmdLed          on/off 액추에이터               `node.actuator("LD").on(cmdLed)`
 //     cmdL2           숫자를 받는 표시기(거절 있음)    `node.actuator("L2").on(cmdL2)`
+//
+// 🔑 **넷이 모양이 같다.** 등록은 늘 *이름 ↔ 함수* 한 줄이고, 핀은 함수 안의 일이다.
 //
 // 🔑 **베낄 것을 주석에 두지 않는다.** 주석 예시는 컴파일을 안 거쳐서 **조용히 낡고**,
 //   그것을 정답으로 베낀 사람이 안 되는 코드를 얻는다. 위 넷은 **매번 컴파일된다.**
@@ -194,14 +202,16 @@ void setup() {
   Serial.begin(115200);
   node.begin();
 
-  // 🔓 **내 모듈 — 한 줄에 하나.** 적은 순서가 전선 순서다(섞어 적어도 된다)
-  // 🔓 **초음파는 두 핀이라 핀 모드를 직접 잡는다** — `.pin()` 은 한 핀만 다룬다
-  pinMode(US_TRIG, OUTPUT);
-  pinMode(US_ECHO, INPUT);
-  node.sensor  ("A1").on(readUltrasonic);   // 🔑 `.pin()` 없이 훅만 — 훅이 두 핀을 안다
-  node.sensor  ("B1").pin(9);               // 🔓 접점 센서는 이 한 줄이면 된다
-  node.actuator("LD").pin(LED_BUILTIN).on(cmdLed);
-  node.actuator("L2").on(cmdL2);              // 핀이 없는 모듈은 `.pin()` 을 안 적는다
+  // 🔓 **내 핀 — 아두이노 기본 설정.** 장치는 어느 모듈이 어느 핀인지 모른다
+  pinMode(US_TRIG, OUTPUT);   pinMode(US_ECHO, INPUT);
+  pinMode(B1_PIN,  INPUT_PULLUP);
+  pinMode(LD_PIN,  OUTPUT);
+
+  // 🔓 **내 모듈 — 이름 ↔ 함수, 한 줄에 하나.** 적은 순서가 전선 순서다(섞어 적어도 된다)
+  node.sensor  ("A1").on(readUltrasonic);
+  node.sensor  ("B1").on(readB1);
+  node.actuator("LD").on(cmdLed);
+  node.actuator("L2").on(cmdL2);
   SAMPLE_EXTRA_MODULES                        // 회귀 시험만 쓴다. 평소엔 비어 있다
 }
 

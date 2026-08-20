@@ -1,9 +1,9 @@
 #pragma once
 // ═════════════════════════════════════════════════════════════════════════
-// Module.h — 🔓 **모듈 등록**: `node.sensor("A1").pin(2)` · `node.actuator("LD").pin(13).on(cmdLed)`
+// Module.h — 🔓 **모듈 등록**: `node.sensor("A1").on(내함수)` · `node.actuator("LD").on(내함수)`
 //   ⚙ 응용 성질 — 잠금 대상이 아니다
 //
-// 🔓 **기여자는 이 파일을 열지 않아도 된다.** `setup()` 에서 위 두 줄 모양만 쓴다.
+// 🔓 **기여자는 이 파일을 열지 않아도 된다.** `setup()` 에서 위 한 가지 모양만 쓴다.
 //
 // 🔴 **왜 `client.ino` 가 아니라 여기인가**: 아두이노는 `.ino` 의 함수 정의마다 프로토타입을
 //   파일 머리에 자동 삽입한다. 타입·빌더가 `.ino` 에 있으면 그 선언이 `struct` 앞에 끼어들어
@@ -12,11 +12,12 @@
 // 🔴🔴 **위치를 옮기지 마라.** `client.ino` 의 `#include` 목록 **맨 앞**이다 —
 //   `Slots.h`(`ParkingNode`)와 `Modules.h`(라우터)가 이 표를 읽는다.
 
-#define PIN_NONE 0xFF     // 핀 없음(표시기처럼 핀이 필요 없는 모듈)
-
-// 🔓 모듈이 하는 일. 표에 함수 이름을 적으면 그것이 등록이다.
+// 🔓 모듈이 하는 일. 이름에 함수를 붙이면 그것이 등록이다.
+// 🔴 **핀은 여기 없다.** 등록은 *이름 ↔ 함수* 의 짝이고, 핀은 그 함수 안의 일이다 —
+//   기여자가 `setup()` 에서 `pinMode` 로 잡고 함수에서 `digitalRead(9)` 로 읽는다.
+//   🔑 그래서 핀이 하나든 둘이든(초음파) **등록 모양이 같다.**
 typedef bool (*CommandFn)(uint32_t arg);   // 액추에이터: 반환 true → ACK `result=0` · false → `3`
-typedef bool (*SensorFn)(uint8_t pin);     // 센서: 반환 true = 찼다 (안 주면 `digitalRead(핀)`)
+typedef bool (*SensorFn)(void);            // 센서: 반환 true = 찼다
 
 // ─────────────────────────────────────────────────────────────────────────
 // 🔴 **모듈 상한 8** — 실측으로 정했다(2026-08-20)
@@ -40,13 +41,20 @@ typedef bool (*SensorFn)(uint8_t pin);     // 센서: 반환 true = 찼다 (안 
 
 struct Mod {
   char      name[2];   // 전선에 나가는 두 글자
-  uint8_t   pin;       // PIN_NONE 이면 핀 없음
   uint8_t   isAct;     // 1 = 액추에이터(전선 kind `OG`) · 0 = 센서(`IP`)
   CommandFn cmd;       // 액추에이터만 쓴다
   SensorFn  sense;     // 센서만 쓴다
 };
 // 🔴 **표는 RAM 이다**(런타임 등록이므로). 전역이라 `.bss` 에서 0 으로 시작한다 —
 //   생성자를 두지 않는 이유는 AVR 전역 생성자가 `main()` 전에 돌기 때문이다.
+// 🔴 **핀 칸이 되살아나면 여기서 막힌다.** AVR 은 정렬이 1바이트라 패딩이 없어
+//   필드 하나가 그대로 모듈당 1바이트다(실측: 8 → 7, 8모듈에서 RAM 8B).
+//   ⚠ 호스트 시험은 이것을 못 잡는다 — 64비트에서는 포인터 정렬 패딩이 그 자리를 채워
+//     `sizeof` 가 24 로 같다. **그래서 이 검사는 실기 빌드에만 있다.**
+#ifdef __AVR__
+static_assert(sizeof(Mod) == 7, "sizeof(Mod) 가 바뀌었다 — 필드를 더했나? 모듈당 RAM 이 는다");
+#endif
+
 static Mod     MODULE_TABLE[MODULE_CAP];
 static uint8_t MODULE_N;        // 등록된 수. `D,*,7,<n>` 의 `n` 이고 `occ` 비트열 폭이다
 static uint8_t modOverflowed;   // 상한을 넘겨 버린 등록 수 — 부팅에서 문장으로 말한다
@@ -58,13 +66,12 @@ static inline bool isSensor  (uint8_t i) { return i < MODULE_N && !MODULE_TABLE[
 static inline bool isActuator(uint8_t i) { return i < MODULE_N &&  MODULE_TABLE[i].isAct; }
 static inline CommandFn cmdOf (uint8_t i) { return isActuator(i) ? MODULE_TABLE[i].cmd   : (CommandFn)0; }
 static inline SensorFn  senseOf(uint8_t i) { return isSensor(i)  ? MODULE_TABLE[i].sense : (SensorFn)0; }
-static inline uint8_t   modPin (uint8_t i) { return (i < MODULE_N) ? MODULE_TABLE[i].pin : PIN_NONE; }
 static inline char modName0(uint8_t i) { return (i < MODULE_N) ? MODULE_TABLE[i].name[0] : 0; }
 static inline char modName1(uint8_t i) { return (i < MODULE_N) ? MODULE_TABLE[i].name[1] : 0; }
 static inline uint8_t moduleCount(void) { return MODULE_N; }
 
 // ─────────────────────────────────────────────────────────────────────────
-// 🔓 빌더 — `node.sensor("A1").pin(2)` 의 `.pin(2)` 를 받는 임시 객체
+// 🔓 빌더 — `node.sensor("A1").on(내함수)` 의 `.on(...)` 을 받는 임시 객체
 //   🔑 **정적 RAM 을 안 쓴다.** 내부가 인덱스 하나이고 스택에 산다.
 //   ⚠ `on()` 은 **오버로드**다 — 센서에는 `SensorFn`, 액추에이터에는 `CommandFn` 이 붙는다.
 //     기여자는 `on` 하나만 기억하면 되고 **틀린 종류를 주면 컴파일이 막는다.**
@@ -72,15 +79,6 @@ static inline uint8_t moduleCount(void) { return MODULE_N; }
 class ModRef {
  public:
   explicit ModRef(uint8_t i) : i_(i) {}
-  // 🔴 핀 모드를 **여기서** 잡는다. `setup()` 안이면 코어 `init()` 이 이미 돌았으므로
-  //   `node.begin()` 과의 순서에 **의존하지 않는다.**
-  ModRef& pin(uint8_t p) {
-    if (i_ < MODULE_N) {
-      MODULE_TABLE[i_].pin = p;
-      if (p != PIN_NONE) pinMode(p, MODULE_TABLE[i_].isAct ? OUTPUT : INPUT_PULLUP);
-    }
-    return *this;
-  }
   ModRef& on(CommandFn f) { if (i_ < MODULE_N) MODULE_TABLE[i_].cmd   = f; return *this; }
   ModRef& on(SensorFn  f) { if (i_ < MODULE_N) MODULE_TABLE[i_].sense = f; return *this; }
   uint8_t idx() const { return i_; }
@@ -95,7 +93,6 @@ static ModRef modAdd(const char (&name)[3], uint8_t isAct) {
   const uint8_t i = MODULE_N++;
   MODULE_TABLE[i].name[0] = name[0];
   MODULE_TABLE[i].name[1] = name[1];
-  MODULE_TABLE[i].pin     = PIN_NONE;
   MODULE_TABLE[i].isAct   = isAct;
   MODULE_TABLE[i].cmd     = 0;
   MODULE_TABLE[i].sense   = 0;
