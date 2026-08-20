@@ -3,9 +3,9 @@ id: REQ-0272
 title: 🔴 서버를 조립식 구조로 — Parking·Node 클래스 분리 + main.cpp 분리 · 배치 API (사용자 지시)
 from: root
 to: socket-engineer
-status: open
+status: done
 created: 2026-08-19T13:27:38+0900
-updated: 2026-08-19T13:27:38+0900
+updated: 2026-08-20T13:55:03+0900
 files: ["조별과제샘플/server/server.cpp"]
 parent: none
 ---
@@ -229,4 +229,48 @@ main.cpp·Node·Parking 분리 · 각 분리마다 .o 대조(다르면 왜) · �
 <!-- 담당자가 여기에 적는다. 처리 후 반드시:
      team/bin/req.sh done REQ-0272 --by socket-engineer --note "<한 줄 요약>" -->
 
-_(미처리)_
+### 완료 — 2026-08-20 13:53 배포 (`ca7c64e` · pid 91027)
+
+| 완료 기준 | 결과 |
+|---|---|
+| ① 엔트리 포인트 분리 | `entry.h` 에 `main()`. `server.cpp` 6,321줄 → **19.7KB** |
+| ② Node · Parking 별도 파일 | `node.h` · `zone.h` · `nodes.h` · `parking.h` · `lot.h`/`lot.cpp` |
+| ③ 분리마다 `.o` 대조 | 앞 단계에서 수행(원장 §98 — 원래 자리에서 `#include` 하면 전처리 결과가 같다) |
+| ④ 조립 API 이름을 명세에 먼저 | `docs/net/SPEC-assembly-v2.md` · web 에 REQ-0284 로 발행(닫힘) |
+| ⑤ selftest 통과 · 무경고 | **148 pass / 0 fail**. ⚠ `-Wall -Wextra -Wshadow` 경고 30건이 **전부 `selftest_*.h`(시험 코드)** 다 — 운영 헤더는 0건 |
+| ⑥ 4·5 는 설계만이어도 됨 | 설계가 아니라 **구현·배포까지 갔다** |
+
+**합격 기준(사용 코드가 간단한가)** — 기여자가 배우는 것이 **다섯**이다:
+`spot` · `at` · `parking` · `label` · `module`. `sensor()`/`actuator()`/`gate()`/`Gate` 는 없앴다
+(장치가 등록에서 `kind` 첫 글자로 말하므로 조립 표에서 또 가를 이유가 없다).
+
+#### 마무리에서 찾아 고친 것 (`ca7c64e`)
+```
+🔴 서버가 말하는 문구가 **없는 파일·없는 API** 를 가리켰다
+   `센서 이름`→`모듈 이름` · `main.cpp`→`lot.cpp`(그런 파일은 없다) · `sensor(...)`→`module(...)`
+🔴 가이드 둘이 **v1 을 가르치고 있었고 배포 폴더 밖에 있었다**
+   docs/net/GUIDE-{sample,server-says}.md → 조별과제샘플/dev_server/ 로 이동(복사 아님)
+🔴 net/sync_check.sh 의 **음성 대조가 죽어 있었다** — sed 대상 `Spot& actuator` 가 v2 에서 사라져
+   아무것도 안 바꾸고 ✅ 를 냈다. 대상을 `Spot& module(` 로 바꾸고 `cmp` 로 "안 바뀌면 경보" 를 넣었다
+```
+
+#### 검증 (실행한 값)
+```
+자가검증 148/0 · 두 트리 컴파일 · sync_check ✅(음성 대조 🔴 rc=1 로 복구 확인)
+dev 봉투(mock) : kind "parking"/"area" · grid 1x3 · cells · label · control · zone.completion 없음
+운영 : 13:53:19 정지(72151) → 13:53:32 기동(91027 · ca7c64e) → 13:53:35 장치 재등록 n=4
+백업 : ~/parking-bin/srv_parking.prev-a8e04c5
+```
+
+#### ⚠ 이 REQ 밖으로 남긴 것
+```
+· 값 에코 `E,<idx>,<val>` — 숫자 확인이 지금 `partial` 까지만. **arduino 굽기 경계 대기**(루트 지시)
+· REQ-0248 ③ (cwd 절대경로) — 루트가 "지금 넣지 마라"
+· `조별과제샘플/dev_server/index.html` 이 v2 이전 판(07:32) — **web 소유**라 값만 전달했다
+```
+
+
+### 처리 완료 · socket-engineer · 2026-08-20T13:55:03+0900
+
+조립 API v2 구현·배포 완료 (ca7c64e · 13:53:32 · pid 91027) — 기여자가 배우는 것 다섯 · 자가검증 148/0 · 가이드 둘을 v2 로 고쳐 배포 폴더로 이동 · sync_check 음성대조 복구
+

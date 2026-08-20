@@ -742,3 +742,14 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-20T12:47:23+0900 | 발행 | REQ-0284 | socket-engineer → web-engineer | 조립 API v2 — 자리 종류가 parking/area 둘로 · 센서 구분이 등록 뒤로 |
 | 2026-08-20T12:47:39+0900 | 착수 | REQ-0284 | web-engineer → web-engineer | 조립 API v2 — 자리 종류가 parking/area 둘로 · 센서 구분이 등록 뒤로 |
 | 2026-08-20T12:50:26+0900 | 완료 | REQ-0284 | web-engineer → web-engineer | 조립 API v2 — 자리 종류가 parking/area 둘로 · 센서 구분이 등록 뒤로 |
+| 2026-08-20T13:21:12+0900 | 통보 | REQ-0285 | monitor-engineer → root | 기동 확인 — 미결 0건이나 장치가 2시간 22분째 미복구(서버 계측) · 창 AF 사전등록이 낡음 |
+| 2026-08-20T13:28:55+0900 | 통보 | REQ-0286 | monitor-engineer → root | 실물 개입 — 진단 탭 13:26:41 개방(DTR 리셋)·13:28:05 반납 · 칩은 이미 192.168.0.29:8888 을 보고 있다 |
+| 2026-08-20T13:32:29+0900 | 완료 | REQ-0283 | root → root | 조별과제샘플/dev_server/** 소유 규칙이 없다 — 작업이 막혔다 |
+| 2026-08-20T13:33:06+0900 | 착수 | REQ-0272 | socket-engineer → socket-engineer | 🔴 서버를 조립식 구조로 — Parking·Node 클래스 분리 + main.cpp 분리 · 배치 API (사용자 지시) |
+| 2026-08-20T13:41:55+0900 | 진행 | REQ-0281 | web-engineer → web-engineer | 화면 직접 조작 계약 1단계 — control 선언 · cmd_result · confirmed — 완료 기준 셋 대조: ①②는 주입 36 pass/0 fail 로 확정 · ③(숫자 모듈 settled 0건)은 실기 관측 항목이라 미측정. --live 측정 경로를 만들고 판본 게이트를 실측(exit 2, 미배포). v2 는 이 계약을 안 건드린다(SPEC-assembly-v2 마지막 줄). |
+| 2026-08-20T13:42:54+0900 | 통보 | REQ-0287 | web-engineer → root | REQ-0281 진행 중 한 것 — mod-control 에 --live 관측 경로 신설 · 원장 §5.90 |
+| 2026-08-20T13:44:43+0900 | 완료 | REQ-0281 | web-engineer → web-engineer | 화면 직접 조작 계약 1단계 — control 선언 · cmd_result · confirmed |
+| 2026-08-20T13:47:06+0900 | 발행 | REQ-0288 | root → web-engineer | 격자 칸을 요약만으로 — 모듈이 여러 개면 화면이 늘어나 깨진다 (사용자 확정 ③안) |
+| 2026-08-20T13:47:24+0900 | 착수 | REQ-0288 | web-engineer → web-engineer | 격자 칸을 요약만으로 — 모듈이 여러 개면 화면이 늘어나 깨진다 (사용자 확정 ③안) |
+| 2026-08-20T13:50:13+0900 | 진행 | REQ-0272 | socket-engineer → socket-engineer | 🔴 서버를 조립식 구조로 — Parking·Node 클래스 분리 + main.cpp 분리 · 배치 API (사용자 지시) — v2 조립 API 구현 완료(ca7c64e) · 자가검증 148/0 · sync_check 음성대조 복구 · dev 봉투 확인 · 배포는 화면 판본 때문에 루트 확인 대기 |
+| 2026-08-20T13:55:04+0900 | 완료 | REQ-0272 | socket-engineer → socket-engineer | 🔴 서버를 조립식 구조로 — Parking·Node 클래스 분리 + main.cpp 분리 · 배치 API (사용자 지시) |
