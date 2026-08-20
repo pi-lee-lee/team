@@ -89,6 +89,10 @@ static bool cmdDoor(uint32_t arg);
 //   호스트에는 RAM 제약이 없으므로 여기서 올린다. `Module.h` 의 `#ifndef` 가 받는다.
 //   ⚠ 실기 빌드의 8 은 `ramLow` 602B 실측으로 정한 값이다. **그것을 바꾸는 것이 아니다.**
 #define MODULE_CAP 13
+// 🔴 **실기가 컴파일하는 상한은 다르다.** 위 13 은 `BATCH_CAP` 이 허용하는 **이론** 상한이고
+//   시험이 지형을 넓게 쓰려고 올려 둔 값이다. **예산 계산의 분모는 실기 값이어야 한다** —
+//   섞으면 실기에서 도달할 수 없는 구성으로 없는 결함을 만든다.
+#define SAMPLE_MODULE_CAP 8      // `Module.h` 의 기본값과 같아야 한다
 #define SAMPLE_EXTRA_MODULES  node.actuator("LC").on(cmdLcd); \
                               node.actuator("DR").on(cmdDoor);
 #define PIN_SAMPLE_DOOR 6
@@ -2134,6 +2138,44 @@ int main() {
       ok(g_pulseInCalls == 100,
                             "★★★ 음성 대조: 게이트 간격을 넘겨 부르면 100회 전부 측정한다");
     }
+
+    // ── 🔴 **상한: 센서가 여럿이면 한 루프에 몇 번 막히나** ────────────────────
+    //   왜 이것을 재나: 게이트는 **함수마다 static** 이라 센서마다 따로 만료된다.
+    //   보통은 어긋나서 흩어지는데 🔴 **부팅 직후에는 전부 `lastAt == 0`** 이라
+    //   **첫 `readSensors()` 에서 N개가 한꺼번에 막힌다.** 그건 우연이 아니라 늘 일어난다.
+    //   ⚠ 그 구간에 `espRead()` 가 안 도는 동안 SoftwareSerial 링버퍼(64B)가 찬다.
+    {
+      g_clockAutoAdvance = false;
+      const uint8_t saveN = MODULE_N;
+      // 상한까지 초음파 센서를 채운다 — 전부 같은 함수라도 게이트는 **하나**이므로
+      // 최악을 만들려면 서로 다른 함수가 필요하다. 여기서는 **같은 함수 = 낙관 하한**을 재고,
+      // 다른 함수일 때의 최악은 그 값 × N 으로 계산한다(아래 문구가 그 수를 말한다).
+      while (MODULE_N < MODULE_CAP) { char nm[3] = {'Z', (char)('0' + MODULE_N), 0}; node.sensor(nm); }
+      const uint8_t nSens = MODULE_N;
+      g_pulseInCalls = 0; g_pulseInBlockUs = 0;
+      g_millis += 10000;                       // 모든 게이트 만료
+      node.readSensors();                      // 🔴 부팅 직후에 해당하는 한 번
+      const unsigned long oneLoopUs = g_pulseInBlockUs;
+      printf("      상한: 모듈 %u개(센서 %u) · 한 루프 pulseIn %lu회 · %lu µs\n",
+             MODULE_N, nSens, g_pulseInCalls, oneLoopUs);
+      // 🔴 **최악은 서로 다른 함수 N개**: 게이트가 각자라 첫 루프에서 N번 다 막힌다.
+      //   ⚠ **분모는 `SAMPLE_MODULE_CAP`(컴파일되는 상한)이다.** 이 시험이 쓰는 13 은
+      //     `BATCH_CAP` 이 허용하는 **이론** 상한이라 실기 구성이 아니다 — 섞으면 없는 결함이 된다.
+      const unsigned long capB  = ((unsigned long)SAMPLE_MODULE_CAP * US_TIMEOUT_US * 96UL) / 100000UL;
+      // 🔴 **경계를 값으로 낸다**: 링버퍼 64B 를 채우는 초음파 센서 수
+      const unsigned long limitN = (64UL * 100000UL) / (US_TIMEOUT_US * 96UL);
+      printf("      실기 상한 %u개 → 유입 약 %lu B / 64B  ·  🔴 넘치는 경계 = **%lu개**\n",
+             SAMPLE_MODULE_CAP, capB, limitN + 1);
+      ok(capB < 64,         "★★★ 실기 상한(SAMPLE_MODULE_CAP 전부가 초음파)에서 링버퍼를 안 넘긴다");
+      ok(limitN + 1 > (unsigned long)SAMPLE_MODULE_CAP,
+                            "★★★ 넘치는 경계가 실기 상한보다 크다 — 구성으로는 도달 못 한다");
+      // 🔑 그리고 그 값이 송신 창(0~600ms) 안에 든다 — 최악 배치 185ms 와 합쳐서
+      ok(((unsigned long)SAMPLE_MODULE_CAP * US_TIMEOUT_US) / 1000UL + 185UL < 600UL,
+                            "★★★ 상한 블로킹 + 최악 배치가 송신 창(600ms) 안에 든다");
+      MODULE_N = saveN;                        // 지형을 되돌린다
+      g_clockAutoAdvance = saveAuto;
+    }
+
     g_pulseIn = 0; g_pulseInCalls = 0; g_pulseInBlockUs = 0;
   }
 
