@@ -40,7 +40,7 @@
 | `cpp-engineer` | `docs/cpp/**`, `**/src/main/cpp/**`, `**/src/main/jni/**`, `**/jni/**`, `cpp/**`, `opencv/**`, `.c`, `.cc`, `.cpp`, `.cxx`, `.h`, `.hpp`, `.hxx`, `.inl` |
 | `monitor-engineer` | `monitor/**` |
 | `socket-engineer` | `조별과제샘플/server.cpp`, `조별과제샘플/server.cpp`, `**/VS_server/**`, `**/dev_server/**`, `docs/net/**`, `net/**`, `socket/**`, `**/net/**`, `**/*.proto`, `조별과제샘플/server*`, `조별과제샘플/server/**`, `조별과제샘플/server*` |
-| `web-engineer` | `**/VS_server/index.html`, `**/dev_server/index.html`, `docs/web/**`, `web/**`, `public/**`, `조별과제샘플/web/**`, `.html`, `.htm`, `.css`, `.scss`, `.js`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.jsx`, `.vue` |
+| `web-engineer` | `**/VS_server/**/index.html`, `**/dev_server/index.html`, `docs/web/**`, `web/**`, `public/**`, `조별과제샘플/web/**`, `.html`, `.htm`, `.css`, `.scss`, `.js`, `.mjs`, `.cjs`, `.ts`, `.tsx`, `.jsx`, `.vue` |
 | `root` | `.claude/**`, `team/**`, `CLAUDE.md`, `README.md`, `.gitignore`, `.mcp.json`, `docs/*`, `*.md` |
 | _(전원 공용)_ | `requests/**`, `.team/**`, `samples/**` |
 
