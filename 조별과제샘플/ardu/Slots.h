@@ -107,7 +107,12 @@ class ParkingNode {
 #endif
       const uint16_t th = nearOf(i);
       if (th == 0) return 0;                 // 🔴 문턱이 없으면 **판정 안 한다**(값만 보낸다)
-      return (v < (long)th) ? 1 : 0;
+      // 🔴🔴 **히스테리시스** — 문턱 하나로는 진동을 못 막는다(실측: 폭 70/32/23cm 가
+      //   문턱 60 을 넘나들어 **1초 간격 전이**가 났다). 들어올 때와 나갈 때를 갈라 놓으면
+      //   **진동이 구조적으로 불가능해진다** — §"조건이 성립할 수밖에 없게 만들어라".
+      //   🔑 상태는 `occMask` 에 이미 있다 → **RAM 추가 0**
+      if ((occMask >> i) & 1) return (v < (long)(th + NEAR_RELEASE_CM)) ? 1 : 0;  // 찼던 상태
+      return (v < (long)th) ? 1 : 0;                                              // 비었던 상태
     }
     // ② true/false 를 직접 내는 센서 — 옛 계약 그대로
     SensorFn f = senseOf(i);

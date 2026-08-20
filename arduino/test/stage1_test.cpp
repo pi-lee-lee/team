@@ -2088,6 +2088,7 @@ int main() {
   //   그동안 `espRead()` 가 안 돌므로 SoftwareSerial 링버퍼(64B)가 위험해진다.
   //   🔑 그래서 묻는 것은 *"게이트(캐시)가 실제로 호출을 줄이나"* 다 — 코드가 아니라 계수로.
   //   ⚠ **빈 자리가 최악이 아니라 기본이다**: 반향이 없으면 매번 타임아웃을 다 쓴다.
+  const bool saveAutoTop = g_clockAutoAdvance;
   printf("\n[45] 초음파 블로킹 예산 — 한 슬롯(1.2초) 동안 실제로 몇 번 막히나\n");
   {
     node.testArmed = false; node.ovrActive = 0;
@@ -2255,6 +2256,64 @@ int main() {
     ok(ps != std::string::npos && pv != std::string::npos && ps < pv,
                             "★★★ 한 배치에서 **`S` 가 `V` 보다 먼저** 나간다");
     Serial.out.clear();
+  }
+
+  // ── [47] 🔴 **히스테리시스 — 진동이 구조적으로 불가능한가** ──────────────────
+  //   왜: 실측(22:00 굽기 `[USD]`)에서 거리 폭이 **70/32/23cm** 였고 문턱 60 을 넘나들어
+  //   서버 로그에 **1초 간격 전이**가 찍혔다(슬롯 1.2초니 연속 슬롯). 사용자 기능(LED 토글)이
+  //   상승마다 토글되므로 **손을 안 대도 켜지고 꺼졌다.**
+  //   🔑 문턱 하나로는 원리적으로 못 막는다 — 경계는 어디로 옮겨도 경계다.
+  printf("\n[47] 히스테리시스 — 경계에서 진동하지 않는가\n");
+  {
+    node.testArmed = false; node.ovrActive = 0;
+    sensors.on("A1", readUltrasonic); sensors.nearOn("A1", 60);
+    g_clockAutoAdvance = false;
+
+    // 헬퍼: 거리(cm)를 주입하고 한 번 읽는다. 게이트를 매번 만료시킨다
+    auto readAt = [&](long cm) -> uint8_t {
+      g_pulseIn = (unsigned long)(cm * 58);
+      g_millis += 10000;                       // 캐시 만료
+      return node.readSensor(0);
+    };
+
+    // ① 비었던 상태에서 문턱 **밖**이면 안 찬다
+    node.occMask = 0;
+    ok(readAt(70) == 0,     "★★ 비었던 상태 · 70cm(문턱 60 밖) → 비었다");
+    // ② 비었던 상태에서 문턱 **안**이면 찬다
+    node.occMask = 0;
+    ok(readAt(50) == 1,     "★★ 비었던 상태 · 50cm(문턱 안) → 찼다");
+    // ③ 🔴 **핵심**: 찼던 상태에서 문턱을 조금 넘어도 **유지**한다
+    node.occMask = 1;                          // A1 = 비트 0(내부 마스크)
+    ok(readAt(70) == 1,     "★★★ 찼던 상태 · 70cm → **유지**한다 (여유 40 안이다)");
+    ok(readAt(95) == 1,     "★★★ 찼던 상태 · 95cm → 여전히 유지 (해제선 100 안)");
+    // ④ 해제선을 넘으면 비운다
+    node.occMask = 1;
+    ok(readAt(105) == 0,    "★★★ 찼던 상태 · 105cm(해제선 100 밖) → 비었다");
+    // ⑤ 🔴 **음성 대조** — 히스테리시스가 없으면 ③이 0 이 된다.
+    //   여유를 0 으로 만들어 그 갈래를 실제로 밟는다(상수를 못 바꾸므로 문턱을 올린다:
+    //   문턱 60+40=100 으로 두면 해제선이 140 이 되어 105 도 유지되어야 한다)
+    sensors.nearOn("A1", 100);
+    node.occMask = 1;
+    ok(readAt(105) == 1,    "★★★ 음성 대조: 문턱 100 이면 105cm 도 유지 (해제선 140)");
+    sensors.nearOn("A1", 60);                  // 지형 복원
+
+    // ⑥ 🔑 **실측 폭으로 진동을 재현해 본다** — 49~60cm 를 오가면 몇 번 뒤집히나
+    //   실측 분포: 49cm 42건 · 56cm 22건 · 55cm 11건 · 57cm 7건 · 60cm 6건
+    {
+      const long seq[] = {49, 56, 60, 55, 57, 49, 60, 56};
+      node.occMask = 0;
+      uint8_t flips = 0, prev = 0;
+      for (uint8_t k = 0; k < 8; k++) {
+        const uint8_t cur = readAt(seq[k]);
+        node.occMask = cur ? 1 : 0;            // 다음 판정의 "이전 상태"
+        if (k && cur != prev) flips++;
+        prev = cur;
+      }
+      printf("      실측 분포(49~60cm) 8회 → 뒤집힘 **%u회**\n", flips);
+      ok(flips == 0,        "★★★ 실측 분포에서 **한 번도 안 뒤집힌다** (히스테리시스가 듣는다)");
+    }
+    g_clockAutoAdvance = saveAutoTop;
+    g_pulseIn = 0; node.occMask = 0;
   }
 
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
