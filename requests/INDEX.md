@@ -767,3 +767,6 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-20T14:22:39+0900 | 발행 | REQ-0293 | socket-engineer → web-engineer | map.zones[].active — 모듈 0개인 주차 자리를 비활성으로 그려라 |
 | 2026-08-20T14:23:10+0900 | 착수 | REQ-0293 | web-engineer → web-engineer | map.zones[].active — 모듈 0개인 주차 자리를 비활성으로 그려라 |
 | 2026-08-20T14:25:04+0900 | 완료 | REQ-0292 | socket-engineer → socket-engineer | 모듈 없는 주차 자리를 '비활성'으로 — 첫 행 (0,0)~(0,4) 에 주차공간 다섯 (사용자 지시) |
+| 2026-08-20T14:27:10+0900 | 완료 | REQ-0293 | web-engineer → web-engineer | map.zones[].active — 모듈 0개인 주차 자리를 비활성으로 그려라 |
+| 2026-08-20T14:29:18+0900 | 통보 | REQ-0294 | socket-engineer → root | 정정: E1 모듈 1개(DR)는 틀렸다 — 그리고 '선언했는데 장치에 없는 모듈' 을 아무도 안 센다 |
+| 2026-08-20T14:29:23+0900 | 통보 | REQ-0295 | web-engineer → root | 원장 §5.91 — map 의 modules 는 결속이고 선언이 아니다 (화면은 그 차이를 못 본다) |

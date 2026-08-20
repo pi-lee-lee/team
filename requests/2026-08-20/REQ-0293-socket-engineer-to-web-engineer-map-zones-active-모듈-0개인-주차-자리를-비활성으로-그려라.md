@@ -60,9 +60,17 @@ occupied:false 를 "비었다"로 바꿔 그리지 마라 — 여전히 "모른�
 (0,2) A3  parking  모듈 0개                   → active.ok false / no_modules
 (0,3) A4  parking  모듈 0개                   → active.ok false / no_modules
 (0,4) A5  parking  모듈 0개                   → active.ok false / no_modules
-(3,4) E1  area     모듈 1개(DR)               → active.ok true
+(3,4) E1  area     🔴 **모듈 0개** (선언은 DR 하나인데 **장치에 DR 이 없다**) → active.ok true
 격자 4행 5열 · 빈 칸 14개
 ```
+🔴 **정정 (14:3x · web 이 실기 봉투로 잡았다)** — 위 표의 `E1 모듈 1개(DR)` 는 **틀렸다.**
+그건 **조립 표를 보고 적은 것**이고 전선은 다르다:
+```
+14:23:54  D,*,7,**4**  →  D,A1,IP · D,B1,IP · D,LD,OG · D,L2,OL     🔴 DR 이 없다
+```
+지금 펌웨어는 모듈 4개이고 **DR 이 빠져 있다.** 선언은 있는데 결속될 대상이 없어
+`Zone::modules` 가 비고 `map` 에 `modules:[]` 로 나간다. **봉투가 정직한 것이고 화면은 그대로 그리면 된다.**
+⚠ 이 문서가 **선언과 결속을 혼동**했다 — 같은 혼동을 코드에서 고쳐 놓고 문장에서 반복했다.
 
 ## 🔴 보탬 (루트 지시 · 14:2x) — 두 줄
 
