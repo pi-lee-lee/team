@@ -753,3 +753,17 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-20T13:47:24+0900 | 착수 | REQ-0288 | web-engineer → web-engineer | 격자 칸을 요약만으로 — 모듈이 여러 개면 화면이 늘어나 깨진다 (사용자 확정 ③안) |
 | 2026-08-20T13:50:13+0900 | 진행 | REQ-0272 | socket-engineer → socket-engineer | 🔴 서버를 조립식 구조로 — Parking·Node 클래스 분리 + main.cpp 분리 · 배치 API (사용자 지시) — v2 조립 API 구현 완료(ca7c64e) · 자가검증 148/0 · sync_check 음성대조 복구 · dev 봉투 확인 · 배포는 화면 판본 때문에 루트 확인 대기 |
 | 2026-08-20T13:55:04+0900 | 완료 | REQ-0272 | socket-engineer → socket-engineer | 🔴 서버를 조립식 구조로 — Parking·Node 클래스 분리 + main.cpp 분리 · 배치 API (사용자 지시) |
+| 2026-08-20T13:59:56+0900 | 완료 | REQ-0288 | web-engineer → web-engineer | 격자 칸을 요약만으로 — 모듈이 여러 개면 화면이 늘어나 깨진다 (사용자 확정 ③안) |
+| 2026-08-20T14:02:34+0900 | 발행 | REQ-0289 | root → web-engineer | PC 넓은 화면에서 가로를 쓴다 — .wrap 이 1060px 에 묶여 세로로만 길어진다 (사용자 요구) |
+| 2026-08-20T14:03:40+0900 | 착수 | REQ-0289 | web-engineer → web-engineer | PC 넓은 화면에서 가로를 쓴다 — .wrap 이 1060px 에 묶여 세로로만 길어진다 (사용자 요구) |
+| 2026-08-20T14:06:21+0900 | 완료 | REQ-0289 | web-engineer → web-engineer | PC 넓은 화면에서 가로를 쓴다 — .wrap 이 1060px 에 묶여 세로로만 길어진다 (사용자 요구) |
+| 2026-08-20T14:08:44+0900 | 발행 | REQ-0290 | root → web-engineer | 🔴 실기에서 예약이 안 먹는다 — 테스트모드만 동작하고 안내 문구가 데모 지형이다 (사용자 실물 보고) |
+| 2026-08-20T14:09:40+0900 | 착수 | REQ-0290 | web-engineer → web-engineer | 🔴 실기에서 예약이 안 먹는다 — 테스트모드만 동작하고 안내 문구가 데모 지형이다 (사용자 실물 보고) |
+| 2026-08-20T14:14:28+0900 | 발행 | REQ-0291 | root → socket-engineer | 입구 E1 좌표를 (3,4)로 — 넓은 화면 모드에서 큰 격자를 확인한다 (사용자 지시) |
+| 2026-08-20T14:14:49+0900 | 착수 | REQ-0291 | socket-engineer → socket-engineer | 입구 E1 좌표를 (3,4)로 — 넓은 화면 모드에서 큰 격자를 확인한다 (사용자 지시) |
+| 2026-08-20T14:15:49+0900 | 발행 | REQ-0292 | root → socket-engineer | 모듈 없는 주차 자리를 '비활성'으로 — 첫 행 (0,0)~(0,4) 에 주차공간 다섯 (사용자 지시) |
+| 2026-08-20T14:16:33+0900 | 완료 | REQ-0291 | socket-engineer → socket-engineer | 입구 E1 좌표를 (3,4)로 — 넓은 화면 모드에서 큰 격자를 확인한다 (사용자 지시) |
+| 2026-08-20T14:18:55+0900 | 완료 | REQ-0290 | web-engineer → web-engineer | 🔴 실기에서 예약이 안 먹는다 — 테스트모드만 동작하고 안내 문구가 데모 지형이다 (사용자 실물 보고) |
+| 2026-08-20T14:22:39+0900 | 발행 | REQ-0293 | socket-engineer → web-engineer | map.zones[].active — 모듈 0개인 주차 자리를 비활성으로 그려라 |
+| 2026-08-20T14:23:10+0900 | 착수 | REQ-0293 | web-engineer → web-engineer | map.zones[].active — 모듈 0개인 주차 자리를 비활성으로 그려라 |
+| 2026-08-20T14:25:04+0900 | 완료 | REQ-0292 | socket-engineer → socket-engineer | 모듈 없는 주차 자리를 '비활성'으로 — 첫 행 (0,0)~(0,4) 에 주차공간 다섯 (사용자 지시) |
