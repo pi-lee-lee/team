@@ -213,6 +213,10 @@ void ParkingNode::tick() {
   espReset(now);
   espRead();
   drainPending();
+#ifdef KSWEEP
+  ksTick(now);                      // 🔬 부하 측정: 활성 센서 수를 180초마다 바꾼다
+  activeSensors = ksActive;
+#endif
   readSensors();                    // 자리 상태를 훑는다
   statusTick(now);
   cntTick(now);                     // 🔴 DEBUG 밖이다 — 운영 빌드에서도 관측이 남아야 한다

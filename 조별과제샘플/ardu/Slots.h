@@ -80,10 +80,21 @@ class ParkingNode {
   bool beginDone;
 
   // 센서를 한 번 훑어 점유 비트를 갱신한다
+  // 🔬 **활성 센서 수** — `0` 이면 **전부**(평소 동작). 부하 측정판이 이 값을 낮춰
+  //   "센서 k 개일 때의 부하" 를 만든다. 🔑 등록은 그대로 두고 **읽는 수만** 바꾼다 —
+  //   그것이 실기의 부하와 같다(`D` 프레임에는 전부 실린다).
+  //   ⚠ 평소 빌드에서는 0 이라 아무 영향이 없다.
+  uint8_t activeSensors;
+
   void readSensors() {
     uint16_t m = 0;
-    for (uint8_t i = 0; i < MODULE_N; i++)
-      if (isSensor(i) && readSensor(i)) m |= (uint16_t)1 << i;
+    uint8_t seen = 0;
+    for (uint8_t i = 0; i < MODULE_N; i++) {
+      if (!isSensor(i)) continue;
+      if (activeSensors && seen >= activeSensors) break;   // 🔬 부하 측정: 여기까지만 읽는다
+      seen++;
+      if (readSensor(i)) m |= (uint16_t)1 << i;
+    }
     occMask = m;
   }
 
@@ -130,9 +141,6 @@ class ParkingNode {
         return (uint8_t)((occMask >> i) & 1);           // 그 전엔 **직전 상태 유지**
       }
       noRead[i] = 0;
-#if DEBUG
-      valSeen(i, v);                         // 👁 흔들림 폭 누적 — **진단이라 DEBUG 뒤에 둔다**
-#endif
       const uint16_t th = nearOf(i);
       if (th == 0) return 0;                 // 🔴 문턱이 없으면 **판정 안 한다**(값만 보낸다)
       // 🔴🔴 **히스테리시스** — 문턱 하나로는 진동을 못 막는다(실측: 폭 70/32/23cm 가
@@ -161,25 +169,7 @@ class ParkingNode {
   //     문제없다**(겹치려면 그 사이 값이 한 번도 안 와야 한다).
   uint8_t noReadSlot[MODULE_CAP];
 
-  // ── 👁 **흔들림 폭 진단** — `.near()` 문턱을 값으로 정하기 위한 계측 ────────
-  // 🔴 왜 min/max 인가 : 매 측정을 찍으면 슬롯당 108B 가 늘어 TX 버퍼(64B)를 넘기고
-  //   그 동안 `espRead()` 가 안 돈다(실측: 지금 DEBUG 가 이미 슬롯당 141B).
-  //   min/max 누적은 **슬롯당 0B** 이고 재려는 값(폭)을 직접 준다. RAM 센서당 6B.
-  // ⚠ 이상치 하나가 max 를 잡는다 — **문턱 결정에는 그것이 맞다**(최악을 알아야 한다).
-#if DEBUG
-  uint16_t vMin[MODULE_CAP], vMax[MODULE_CAP], vN[MODULE_CAP];
 
-  void valSeen(uint8_t i, long v) {
-    if (v < 0 || v > 65535L) return;
-    const uint16_t u = (uint16_t)v;
-    if (vN[i] == 0) { vMin[i] = u; vMax[i] = u; }
-    else { if (u < vMin[i]) vMin[i] = u; if (u > vMax[i]) vMax[i] = u; }
-    if (vN[i] < 65535) vN[i]++;
-  }
-  void valStatsReset(void) {
-    for (uint8_t i = 0; i < MODULE_CAP; i++) { vMin[i] = 0; vMax[i] = 0; vN[i] = 0; }
-  }
-#endif   // DEBUG — 흔들림 진단
 
   // ─────────────────────────────────────────────────────────────────────────
   // 수동 오버라이드 — 칸별. 실제 센서값보다 **우선**한다.

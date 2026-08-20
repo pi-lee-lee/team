@@ -2383,6 +2383,58 @@ int main() {
     g_pulseIn = 0; node.occMask = 0; node.noRead[0] = 0;
   }
 
+  // ── [48] 🔬 **`activeSensors` — 부하 측정의 손잡이** ─────────────────────────
+  //   왜: 센서 부하 표(k=2·4·6·8·10·13)를 **굽기 1회**로 재려고 활성 수를 런타임에 바꾼다.
+  //   🔴 이 손잡이가 틀리면 표 전체가 틀린다 — 그런데 **평소 빌드에서는 0 이라 안 밟힌다.**
+  //   🔑 §"시험이 실기 경로를 안 밟으면 그 변경을 검증하지 않는다" — 여기서 밟아 둔다.
+  printf("\n[48] activeSensors — 읽는 센서 수를 제한하는가\n");
+  {
+    node.testArmed = false; node.ovrActive = 0;
+    g_clockAutoAdvance = false;
+    // 센서 둘 다 "찼다" 를 내게 만든다 — 그러면 occMask 비트로 몇 개를 읽었는지 센다
+    sensors.on("A1", readUltrasonic); sensors.nearOn("A1", 60);
+    sensors.on("B1", readB1);         sensors.nearOn("B1", 60);
+    g_pulseIn = 29 * 58;                       // 29cm → 문턱 60 안 → 둘 다 찼다
+    node.occMask = 0;
+    for (uint8_t k = 0; k < MODULE_CAP; k++) node.noRead[k] = 0;
+
+    auto readOnce = [&]() { g_millis += 1300; node.readSensors(); };
+
+    // ① 🔑 **0 = 전부** (평소 동작)
+    node.activeSensors = 0;
+    readOnce();
+    uint8_t ns = 0; for (uint8_t k = 0; k < MODULE_N; k++) if (isSensor(k)) ns++;
+    uint8_t got = 0; for (uint8_t k = 0; k < MODULE_N; k++) if (node.occMask & (1u << k)) got++;
+    printf("      activeSensors=0 → 센서 %u개 중 %u개가 1\n", ns, got);
+    ok(got == ns,         "★★★ `0` 은 **전부**를 읽는다 (평소 빌드에 영향 0)");
+
+    // ② 🔴 **1 로 제한하면 하나만 읽는다**
+    node.activeSensors = 1;
+    readOnce();
+    got = 0; for (uint8_t k = 0; k < MODULE_N; k++) if (node.occMask & (1u << k)) got++;
+    printf("      activeSensors=1 → %u개가 1\n", got);
+    ok(got == 1,          "★★★ `1` 이면 **첫 센서만** 읽는다 (부하가 1개분이다)");
+
+    // ③ 🔑 **등록 순서대로**다 — 첫 센서가 A1(인덱스 0)이어야 한다
+    ok((node.occMask & 1u) != 0,
+                          "★★ 제한은 **등록 순서**를 따른다 (첫 센서 = A1)");
+
+    // ④ 🔴 **음성 대조** — 제한을 풀면 다시 전부다(상태가 안 굳는다)
+    node.activeSensors = 0;
+    readOnce();
+    got = 0; for (uint8_t k = 0; k < MODULE_N; k++) if (node.occMask & (1u << k)) got++;
+    ok(got == ns,         "★★★ 음성 대조: 제한을 풀면 **다시 전부** (상태가 안 굳는다)");
+
+    // ⑤ 🔑 등록 수보다 큰 값은 무해하다 — 표의 마지막 칸(k=13 > 센서 2)에서 그렇게 된다
+    node.activeSensors = 99;
+    readOnce();
+    got = 0; for (uint8_t k = 0; k < MODULE_N; k++) if (node.occMask & (1u << k)) got++;
+    ok(got == ns,         "★★ 등록 수보다 큰 제한은 무해하다 (전부 읽는다)");
+
+    node.activeSensors = 0; g_pulseIn = 0; node.occMask = 0;
+    g_clockAutoAdvance = saveAutoTop;
+  }
+
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }
