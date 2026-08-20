@@ -53,6 +53,14 @@
     --done-line:   #2f6fed;
     --done-ink:    #14448f;
 
+    /* 🔴 비활성 자리(REQ-0296 · 사용자 지시 "회색"). **`--occ-*`(상태 미상)와 값이 달라야 한다** —
+       같으면 *"값을 기다리는 자리"* 와 *"영원히 값이 없는 자리"* 가 구분되지 않는다. */
+    /* 🔴 **무채색이어야 한다** (R=G=B). 사용자가 말한 것은 "회색"이고, 살짝 푸른 회색을 쓰면
+       옆의 `--occ-*`(상태 미상, 푸른 기가 있다)와 눈에서 다시 붙는다. 그래서 채도를 0으로 둔다. */
+    --inact-bg:    #dedede;
+    --inact-line:  #949494;
+    --inact-ink:   #5c5c5c;
+
     --mine:        #7a3ff2;
     --warn-bg:     #fdeaea;
     --warn-line:   #d64545;
@@ -85,6 +93,10 @@
       --done-bg:   #16243d;
       --done-line: #6c9bff;
       --done-ink:  #a9c6ff;
+
+      --inact-bg:   #303030;
+      --inact-line: #767676;
+      --inact-ink:  #b4b4b4;
 
       --mine:      #b18cff;
       --warn-bg:   #331a1a;
@@ -260,14 +272,7 @@
           background: var(--occ-bg); color: var(--occ-ink); }
   /* 선택 표시 — 🔴 색만으로 나르지 않는다. 테두리 링 + 칸 안의 `▸` 글자 + `aria-current`. */
   .zone[aria-current="true"] { outline: 3px solid var(--accent); outline-offset: -3px; }
-  /* 🔴 비활성 자리 (REQ-0293) — **평범한 자리와 눈으로 갈려야 한다.**
-     색만으로 나르지 않는다: 점선 + 흐림 + 사선 무늬 + 칸 안의 `⏸` 문구가 같이 간다.
-     ⚠ 초점·클릭은 막지 않는다 — 눌러서 **왜 못 쓰는지** 오른쪽에서 읽을 수 있어야 한다(§3.2 의 그 이유). */
-  .zone[data-active="0"] {
-    border-style: dashed; opacity: .72;
-    background-image: repeating-linear-gradient(45deg, rgba(127,127,127,.13) 0 5px, rgba(127,127,127,0) 5px 10px);
-  }
-  .zone__inactive { font-size: 10.5px; font-weight: 700; color: var(--warn-ink); }
+  .zone__inactive { font-size: 10.5px; font-weight: 700; }
   .zone:hover { filter: brightness(1.03); }
   .zone[data-usable="0"] { border-style: dotted; color: var(--ink-dim); }   /* 미상 자리 */
   /* 🔑 옛 격자(`.tile`)와 **같은 변수**를 쓴다 — 범례가 두 벌이 되면 색의 뜻이 갈린다. */
@@ -276,6 +281,16 @@
   .zone[data-view="occupied"] { background: var(--occ-bg);  border-color: var(--occ-line);  color: var(--occ-ink); }
   .zone[data-view="done"]     { background: var(--done-bg); border-color: var(--done-line); color: var(--done-ink); }
   .zone[data-view="unknown"]  { background: var(--occ-bg);  border-color: var(--line); color: var(--ink-dim); border-style: dotted; }
+  /* 🔴 **비활성 자리 — 회색** (REQ-0296 · 사용자 지시). 위 `data-view` 규칙들 **뒤에** 있어야 한다:
+     그쪽은 `background` **단축 속성**이라 뒤에 오지 않으면 여기의 무늬가 조용히 지워진다.
+     ⚠ 그래서 여기서는 `background-color` 와 `background-image` 를 **따로** 준다(단축을 쓰면 서로 지운다).
+     🔑 색만으로 나르지 않는다: 회색 + 점선 + 흐림 + 사선 + 칸 안의 `⏸` 문구가 같이 간다.
+        초점·클릭은 막지 않는다 — 눌러서 **왜 못 쓰는지** 오른쪽에서 읽어야 한다(§3.2 의 그 이유). */
+  .zone[data-view="inactive"] {
+    background-color: var(--inact-bg); border-color: var(--inact-line); color: var(--inact-ink);
+    border-style: dashed; opacity: .78;
+    background-image: repeating-linear-gradient(45deg, rgba(127,127,127,.16) 0 5px, rgba(127,127,127,0) 5px 10px);
+  }
   .zone__head { display: flex; align-items: baseline; gap: 6px; }
   /* 표시 이름이 주(主), 날 id 는 부제. 🔴 **부제를 display:none 으로 감추지 마라** —
      로그와 맞추는 유일한 값이고, 감추면 스크린리더에서도 사라진다. */
@@ -369,6 +384,10 @@
   .swatch--occ  { background: var(--occ-bg);  border-color: var(--occ-line); }
   .swatch--done { background: var(--done-bg); border-color: var(--done-line); }
   .swatch--mine { background: transparent;    border-color: var(--mine); }
+  /* 🔑 칸과 **같은 변수**를 쓴다. 견본에 색을 따로 박으면 칸 색을 바꿀 때 범례만 낡는다. */
+  .swatch--inact { background-color: var(--inact-bg); border-color: var(--inact-line); border-style: dashed;
+                   background-image: repeating-linear-gradient(45deg, rgba(127,127,127,.16) 0 3px, rgba(127,127,127,0) 3px 6px); }
+  .swatch--unk   { background: var(--occ-bg); border-color: var(--line); border-style: dotted; }
   .swatch--inject {
     border-color: #c0392b; border-style: dashed;
     background-image: repeating-linear-gradient(45deg, rgba(192,57,43,.5) 0 3px, rgba(192,57,43,0) 3px 6px);
@@ -577,6 +596,13 @@
         <li><span class="swatch swatch--done" aria-hidden="true"></span>예약한 자리에 입차 완료 (1 · 1) — 정상 완료</li>
         <li><span class="swatch swatch--mine" aria-hidden="true"></span>보라 테두리 = 내 예약</li>
         <li><span class="swatch swatch--inject" aria-hidden="true"></span>빨간 빗금 + ⚑주입값 = 테스트 모드로 주입된 가짜 점유값</li>
+        <!-- 🔴 이 둘은 **나란히 있어야 뜻이 산다** (REQ-0296). 따로 떨어뜨리면 읽는 사람이
+             "회색"과 "점선 미상"을 같은 것으로 읽는다 — 그것이 색을 가른 이유 자체를 없앤다. -->
+        <li><span class="swatch swatch--inact" aria-hidden="true"></span>
+            <strong>회색 + 사선 + ⏸</strong> = 모듈이 없어 <strong>사용할 수 없는 자리</strong> —
+            점유는 “모름”이고 <strong>기다려도 값이 오지 않는다</strong> (빈 자리라는 뜻이 아님)</li>
+        <li><span class="swatch swatch--unk" aria-hidden="true"></span>
+            점선 = 상태 <strong>미상</strong> — 모듈은 있는데 값이 <strong>아직</strong> 안 왔다 (오면 채워진다)</li>
         <li><span class="swatch swatch--stale" aria-hidden="true"></span>격자 전체가 흐려지고 ⏱ 표시 = 그 값을 받은 뒤로 <strong>확인된 바 없음</strong> (지금 값이 아닐 수 있음)</li>
       </ul>
     </section>
@@ -3135,9 +3161,11 @@ function zoneHeadEl(z, zs, opts) {
  */
 function zoneView(z, zs) {
   if (!zs) return 'unknown';
-  /* 🔴 **비활성 자리를 초록(빈 자리)으로 칠하지 않는다** (REQ-0293 · socket 조건).
-     모듈이 없으면 점유는 `occupied:false` 로 와도 **모르는 것이 맞다.** 초록은 "비었다"는 주장이다. */
-  if (z.active && z.active.ok === false) return 'unknown';
+  /* 🔴 **비활성 자리는 회색이다** (REQ-0296 · 사용자 지시). 초록(빈 자리)으로 칠하지 않는 것은 그대로다 —
+     모듈이 없으면 점유는 `occupied:false` 로 와도 **모르는 것이 맞다.** 초록은 "비었다"는 주장이다.
+     ⚠ ~~`unknown` 을 돌려주던 것~~ 을 바꿨다: `unknown`(모듈은 있고 값이 안 옴)과 **색이 갈려야 한다.**
+     같은 색이면 *"값을 기다리는 자리"* 와 *"영원히 값이 없는 자리"* 가 구분되지 않는다. */
+  if (z.active && z.active.ok === false) return 'inactive';
   if (z.kind !== 'parking') return '';
   if (zs.occupied && zs.reserved) return 'done';
   if (zs.occupied) return 'occupied';

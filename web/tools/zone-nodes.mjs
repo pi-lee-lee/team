@@ -485,7 +485,7 @@ try {
         화면이 모듈 수를 세고 있으면 여기서 갈린다. */
   if (!LIVE) {
     const ACT = {
-      type: 'map', srv_id: 'T-1', epoch: 11, grid: { rows: 1, cols: 4 },
+      type: 'map', srv_id: 'T-1', epoch: 11, grid: { rows: 1, cols: 5 },
       zones: [
         { id: 'K1', kind: 'parking', cells: [[0, 0]], active: { ok: true, reason: null },
           modules: [{ devid: 'P1', name: 'A1', kind: 'IP', idx: 0 }] },
@@ -495,6 +495,10 @@ try {
         /* 🔴 `active` 키가 **없는** 자리(옛 서버) — 아무 주장도 하지 않아야 한다.
            ⚠ 그리고 **모듈이 0개인데 active 가 없다** → 화면이 modules 를 센다면 여기서 비활성으로 그린다(오답). */
         { id: 'K4', kind: 'parking', cells: [[0, 3]], modules: [] },
+        /* 🔴 **대조군** — `state` 가 아예 안 오는 자리(= `value_state:"unknown"` 계열의 색).
+           REQ-0296 의 요구가 *"이 색과 비활성 색이 갈려야 한다"* 이므로 **둘을 같은 화면에** 둔다. */
+        { id: 'K5', kind: 'parking', cells: [[0, 4]], active: { ok: true, reason: null },
+          modules: [{ devid: 'P1', name: 'C1', kind: 'IP', idx: 1 }] },
       ],
     };
     await evaluate(client, inject(ACT));
@@ -516,7 +520,7 @@ try {
     })()`);
     const keys = Object.keys(av || {});
     const marked = keys.filter((k) => av[k].act === '0');
-    ok('분모: 자리 넷이 다 그려졌다 (' + keys.length + ')', keys.length === 4, JSON.stringify(keys));
+    ok('분모: 자리 다섯이 다 그려졌다 (' + keys.length + ')', keys.length === 5, JSON.stringify(keys));
     ok('🔴 비활성으로 그린 자리 집합 == active.ok:false 인 자리 집합  ' + S(marked),
        setEq(marked, ['K2', 'K3']), JSON.stringify(av));
     ok('🔴 그 집합이 비어 있지 않다 (' + marked.length + ')', marked.length === 2);
@@ -530,12 +534,52 @@ try {
     ok('🔴 비활성 자리를 "빈 자리"로 말하지 않는다 (점유 모름)',
        !!(av.K2 && av.K2.sum === '점유 모름' && av.K3 && av.K3.sum === '점유 모름'),
        JSON.stringify([av.K2 && av.K2.sum, av.K3 && av.K3.sum]));
-    ok('🔴 비활성 자리를 초록(빈 자리)으로 칠하지 않는다',
-       !!(av.K2 && av.K2.view === 'unknown'), JSON.stringify(av.K2));
+    /* 🔴 REQ-0296 로 기대가 바뀌었다: ~~`unknown`~~ → **`inactive`**(회색).
+       사용자 지시이고, 이유는 `unknown`(값이 아직 안 옴)과 **색이 갈려야** 한다는 것이다. */
+    ok('🔴 비활성 자리는 자기 색(inactive)이다 — 초록도 아니고 unknown 과도 다르다',
+       !!(av.K2 && av.K2.view === 'inactive'), JSON.stringify(av.K2));
     ok('활성 주차 자리는 그대로 "빈 자리" 다 (대조군)',
        !!(av.K1 && av.K1.sum === '빈 자리' && av.K1.act === null), JSON.stringify(av.K1));
     ok('접근 이름에 사유가 문장으로 들어간다 (기호만으로 나르지 않는다)',
        !!(av.K2 && /모듈이 없어/.test(av.K2.aria || '')), JSON.stringify(av.K2 && av.K2.aria));
+    /* 🔴 **REQ-0296 의 합격선 — 두 색이 실제로 다른가.** CSS 문자열을 읽으면 "그렇게 적혀 있다"까지고
+       단축 속성 순서 때문에 조용히 지워질 수 있다(실제로 그 함정이 있었다). **계산된 값**으로 잰다.
+       🔑 그리고 회색인지도 값으로 본다: R≈G≈B 이면 회색이다(무채색). */
+    /* 🔴 **두 테마를 다 잰다.** 사용자가 어느 쪽을 쓰는지 모른다 — 한쪽만 재면 다른 쪽이 조용히 깨진다.
+       (실제로 이 하니스는 기본이 어두운 테마였고, 밝은 테마는 한 번도 안 밟혀 있었다.) */
+    for (const theme of ['light', 'dark']) {
+    await client.send('Emulation.setEmulatedMedia',
+      { features: [{ name: 'prefers-color-scheme', value: theme }] });
+    await sleep(120);
+    const col = await evaluate(client, `(() => {
+      const g = (id) => {
+        const c = [...document.querySelectorAll('#zone-grid .zone')].find(z => z.dataset.zone === id);
+        if (!c) return null;
+        const cs = getComputedStyle(c);
+        return { view: c.dataset.view || null, bg: cs.backgroundColor, bd: cs.borderTopColor,
+                 img: cs.backgroundImage === 'none' ? null : 'has-stripes', style: cs.borderTopStyle };
+      };
+      return { inact: g('K2'), unk: g('K5'), free: g('K1') };
+    })()`);
+    console.log('  · 색 → ' + JSON.stringify(col));
+    const rgb = (t) => (String(t).match(/\d+/g) || []).slice(0, 3).map(Number);
+    ok('분모: [' + theme + '] 대조군 둘의 색을 다 읽었다', !!(col && col.inact && col.unk), JSON.stringify(col));
+    ok('🔴 [' + theme + '] 비활성 색 != 상태 미상 색 (REQ-0296 합격선)',
+       !!(col && col.inact && col.unk && col.inact.bg !== col.unk.bg),
+       JSON.stringify([col && col.inact && col.inact.bg, col && col.unk && col.unk.bg])
+       + ' — 같으면 "값을 기다리는 자리"와 "영원히 값이 없는 자리"가 구분되지 않는다');
+    ok('🔴 [' + theme + '] 비활성 색이 **무채색 회색**이다 (R=G=B · 사용자 지시)',
+       (() => { const c = rgb(col && col.inact && col.inact.bg); return c.length === 3 && Math.max(...c) - Math.min(...c) <= 2; })(),
+       JSON.stringify(col && col.inact && col.inact.bg) + ' — 채도가 있으면 옆의 미상 색과 눈에서 다시 붙는다');
+    ok('🔴 [' + theme + '] 회색으로 바꿔도 사선 무늬가 살아 있다 (단축 속성에 지워지지 않았다)',
+       !!(col && col.inact && col.inact.img === 'has-stripes'), JSON.stringify(col && col.inact));
+    ok('[' + theme + '] 점선/파선 구분도 남아 있다 (비활성 dashed · 미상 dotted)',
+       !!(col && col.inact && col.unk && col.inact.style === 'dashed' && col.unk.style === 'dotted'),
+       JSON.stringify([col && col.inact && col.inact.style, col && col.unk && col.unk.style]));
+    }
+    await client.send('Emulation.setEmulatedMedia', { features: [] });
+    await sleep(100);
+
     /* 패널에서도 이유를 읽을 수 있는가 — 사람이 이유를 읽는 자리는 여기다. */
     const pan = await evaluate(client, `(() => {
       const cell = [...document.querySelectorAll('#zone-grid .zone')].find(z => z.dataset.zone === 'K2');
