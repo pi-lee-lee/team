@@ -13,14 +13,23 @@
  * 사용: node web/tools/mod-control.mjs           (--head 로 창을 본다)
  */
 import { launch, evaluate, sleep } from './cdp.mjs';
+import { assertServedIsCurrent } from './screen-build.mjs';
 
 const HEAD = process.argv.includes('--head');
 /* `--file <경로>` — 🔑 **음성 대조용**. 고치기 전 판(예: 배포본)에 대고 돌려
    **이 검사가 실제로 빨강이 되는지** 본다. 실패할 수 없는 검사의 초록은 아무 말도 안 한다(원장 §5.88). */
 const fileArg = (() => { const i = process.argv.indexOf('--file'); return i >= 0 ? process.argv[i + 1] : null; })();
-const URL_ = (fileArg
-  ? new URL('file://' + (fileArg.startsWith('/') ? fileArg : process.cwd() + '/' + fileArg)).href
-  : new URL('../../조별과제샘플/web/index.html', import.meta.url).href) + '?demo=1';
+/* 🔴 `--live <포트>` — **주입하지 않는다.** 실기 서버가 실제로 보낸 `map`·`state` 만 읽는다.
+   주입 모드의 초록은 *"그 자료가 오면 그렇게 그린다"* 이고, 이 모드의 초록은
+   *"지금 실기에서 그렇게 나온다"* 다 — **다른 진술이라 따로 재야 한다.**
+   ⚠ 클릭·하행 0. 순수 관측이다. `--secs <초>` 로 관측 창을 늘린다(기본 30). */
+const LIVE = (() => { const i = process.argv.indexOf('--live'); return i >= 0 ? process.argv[i + 1] : null; })();
+const SECS = (() => { const i = process.argv.indexOf('--secs'); return i >= 0 ? Math.max(5, Number(process.argv[i + 1]) || 0) : 30; })();
+const URL_ = LIVE
+  ? ('http://127.0.0.1:' + LIVE + '/index.html')
+  : ((fileArg
+      ? new URL('file://' + (fileArg.startsWith('/') ? fileArg : process.cwd() + '/' + fileArg)).href
+      : new URL('../../조별과제샘플/web/index.html', import.meta.url).href) + '?demo=1');
 
 let pass = 0, fail = 0, skipped = 0;
 const ok = (n, c, d) => { if (c) { pass++; console.log('  ✅ ' + n); } else { fail++; console.log('  ❌ ' + n + (d ? '\n       → ' + d : '')); } };
@@ -87,9 +96,135 @@ const READ = `(() => {
   return out;
 })()`;
 
+/**
+ * 🔴 **실기 관측** (`--live <포트>`) — 주입·클릭·하행이 하나도 없다.
+ *
+ * 🔑 §6 의 확인 항목 셋 중 **관측만으로 되는 것은 하나**다:
+ *   ✅ `number`·`choice` 모듈에서 `confirmed` 가 `settled` 로 온 적이 없다
+ *   ⏭ `outcome` 이 셋 중 하나로 온다 · 보낸 건수 == `queued+rejected`
+ *      → **하행이 필요하다.** 하행은 실물 조작이라 이 도구가 스스로 걸지 않는다(루트 순서).
+ *        다만 **사람이 화면에서 누른 것**이 이 창에 잡히면 그것으로 잰다.
+ *
+ * ⚠ **분모를 같이 낸다.** `confirmed` 가 닫힌 값으로 한 번도 안 오면 **미측정**이다 —
+ *   그때 초록을 내면 *"서버가 settled 를 안 냈다"* 가 아니라 *"아무 일도 없었다"* 를 초록으로 말한다(원장 §5.88).
+ */
+async function liveSuite(client) {
+  let link = null;
+  for (let i = 0; i < 150; i++) {
+    link = await evaluate(client, `state.link`).catch(() => null);
+    if (link === 'ws') break;
+    await sleep(100);
+  }
+  ok('실기: WS 로 붙었다 (link=' + link + ')', link === 'ws', '데모·폴백이면 서버 자료가 아니다');
+  if (link !== 'ws') { skip('실기 관측 전체', 'WS 가 아니다 — 판정하지 않는다'); return; }
+
+  /* 판본을 **값으로** 찍는다. 알림으로 받지 않는다. */
+  const srvId = await evaluate(client, `state.srvId`).catch(() => null);
+  let live = null;
+  for (let i = 0; i < 100; i++) {
+    live = await evaluate(client, `state.map`).catch(() => null);
+    if (live && Array.isArray(live.zones) && live.zones.length) break;
+    await sleep(100);
+  }
+  ok('실기: 서버가 map 을 보냈다', !!(live && Array.isArray(live.zones) && live.zones.length),
+     '받은 것: ' + JSON.stringify(live));
+  if (!live || !Array.isArray(live.zones) || !live.zones.length) return;
+
+  /* 🔑 `control` 선언은 **서버가 보낸 것에서** 뽑는다. 내가 아는 목록으로 세면 기대값이 피검체에서 온다. */
+  const decl = [];
+  for (const z of live.zones) for (const m of (z.modules || [])) {
+    if (m && m.control && m.control.widget) decl.push({ devid: m.devid, name: m.name, widget: m.control.widget });
+  }
+  const nonToggle = decl.filter((d) => d.widget === 'number' || d.widget === 'choice');
+  console.log('  · 실기 판본 srv_id=' + srvId + ' epoch=' + live.epoch
+            + ' · control 선언 ' + decl.length + '개 (number·choice ' + nonToggle.length + '개) · 관측 ' + SECS + '초');
+
+  ok('🔴 실기에서 control 선언이 온다 (' + decl.length + '개)', decl.length > 0,
+     '서버가 control 을 안 내려보낸다 — 도는 서버 판본을 확인해라');
+
+  /* ── 관측 창 — `state` 를 훑어 `confirmed` 표본을 모은다 ─────────── */
+  const CLOSED = ['pending', 'settled', 'partial', 'mismatch'];   /* 🔑 `unknown` 은 표본이 아니다 */
+  const seen = new Map();      /* devid|name -> Set(confirmed) */
+  const outcomes = new Map();  /* devid|name -> outcome */
+  let frames = 0, lastTs = null;
+  const t0 = Date.now();
+  while (Date.now() - t0 < SECS * 1000) {
+    const snap = await evaluate(client, `(() => {
+      const zs = state.zoneState && state.zoneState.zones;
+      const mods = [];
+      if (Array.isArray(zs)) for (const z of zs) for (const m of (z.modules || []))
+        mods.push({ devid: m.devid, name: m.name, confirmed: m.confirmed === undefined ? null : m.confirmed });
+      const cmds = [];
+      if (state.modCmd && state.modCmd.forEach) state.modCmd.forEach((v, k) => cmds.push({ key: k, outcome: (v && v.outcome) || null }));
+      return { ts: (state.zoneState && state.zoneState.ts_ms) || null, mods: mods, cmds: cmds };
+    })()`).catch(() => null);
+    if (snap) {
+      if (snap.ts !== lastTs) { frames += 1; lastTs = snap.ts; }
+      for (const m of snap.mods) {
+        const k = m.devid + '|' + m.name;
+        if (!seen.has(k)) seen.set(k, new Set());
+        if (m.confirmed !== null) seen.get(k).add(String(m.confirmed));
+      }
+      for (const c of snap.cmds) if (c.outcome) outcomes.set(c.key, c.outcome);
+    }
+    await sleep(500);
+  }
+  ok('실기: state 프레임이 창 안에서 갱신됐다 (' + frames + '판)', frames > 0,
+     'ts_ms 가 안 바뀐다 — state 가 주기적으로 오지 않는다');
+
+  /* 🔴 판정 — **분모부터 센다.** */
+  let sample = 0; const settledAt = [], outside = [];
+  for (const d of nonToggle) {
+    for (const v of (seen.get(d.devid + '|' + d.name) || [])) {
+      if (CLOSED.includes(v)) sample += 1;
+      else if (v !== 'unknown') outside.push(d.name + '=' + v);
+      if (v === 'settled') settledAt.push(d.name + '(' + d.widget + ')');
+    }
+  }
+  if (!nonToggle.length) {
+    skip('🔴 number·choice 모듈에서 settled 가 한 번도 안 온다 (§6)',
+         'number·choice 선언이 0개다 — **분모가 없으면 이 대조는 공허하게 참이 된다**(원장 §5.88)');
+  } else if (sample === 0) {
+    skip('🔴 number·choice 모듈에서 settled 가 한 번도 안 온다 (§6)',
+         'confirmed 가 닫힌 값으로 온 적이 **0건**이다(전부 unknown·부재) — 이 창에서 아무도 하행을 안 걸었다. '
+       + '초록을 내면 "서버가 안 냈다"가 아니라 "아무 일도 없었다"를 초록으로 말하는 것이다');
+  } else {
+    ok('🔴 실기: number·choice 의 confirmed 표본 ' + sample + '건이 전부 settled 가 아니다 (§6)',
+       settledAt.length === 0,
+       '🔴 settled 가 왔다: ' + JSON.stringify(settledAt) + ' — **서버 결함이다**(명세 §4: 판별자는 위젯이다)');
+  }
+  ok('실기: 닫힌 다섯 밖의 confirmed 값이 없다', outside.length === 0, JSON.stringify(outside));
+
+  /* §6 의 나머지 둘 — 하행 표본이 있으면 재고, 없으면 미측정으로 남긴다. */
+  if (outcomes.size === 0) {
+    skip('cmd_result.outcome 이 셋 중 하나로 온다 (§6)',
+         '이 창에서 하행이 0건이다 — 🔴 **하행은 실물 조작이라 이 도구가 스스로 걸지 않는다**(루트 순서). '
+       + '사람이 화면에서 누르면 그것이 이 창에 잡힌다');
+  } else {
+    const bad = [...outcomes.entries()].filter((e) => !['ok', 'rejected', 'no_answer', 'not_sent'].includes(e[1]));
+    ok('실기: outcome 표본 ' + outcomes.size + '건이 모두 아는 갈래다 (ok·rejected·no_answer·not_sent)',
+       bad.length === 0, JSON.stringify(bad));
+  }
+  skip('보낸 건수 == queued + rejected (§6)', '묶음(send_batch)을 이 도구가 스스로 안 보낸다 — 하행이다');
+}
+
 let client = null;
 try {
-  console.log('\n대상: ' + URL_ + '\n(서버 미사용 · 트래픽 0 · 주입)\n');
+  console.log('\n대상: ' + URL_
+            + (LIVE ? '\n(🔴 실기 관측 — 주입 0 · 클릭 0 · 하행 0)\n' : '\n(서버 미사용 · 트래픽 0 · 주입)\n'));
+  /* 🔴 실기면 **브라우저를 띄우기 전에** 판본을 본다. 낡은 판이면 WS 한 개도 안 열고 끝낸다 —
+     붙고 나서 재면 남의 판을 재고 내 것이라고 보고한다(원장 §5.85).
+     🔑 그리고 **판정을 내지 않는다**: 선행 조건이 깨진 자리에 빨강을 내면 엉뚱한 데를 고치게 된다. */
+  if (LIVE) {
+    try {
+      await assertServedIsCurrent('http://127.0.0.1:' + LIVE + '/index.html');
+    } catch (e) {
+      console.log('  ⏭ 실기 관측 전체  → 측정 불가: ' + ((e && e.message) || String(e)));
+      console.log('\n' + '─'.repeat(60));
+      console.log('  0 pass / 0 fail / 1 미측정 — 🔴 판정하지 않는다 (배포가 먼저다)');
+      process.exit(2);
+    }
+  }
   client = await launch({ headless: !HEAD });
   await client.send('Page.enable');
   await client.send('Runtime.enable');
@@ -102,6 +237,15 @@ try {
   }
   ok('화면이 떴다', ready === true);
   if (ready !== true) throw new Error('화면 준비 실패');
+
+  /* 🔴 실기 모드는 **여기서 끝난다** — 이어서 주입하면 실기 자료를 내 주입으로 덮는다. */
+  if (LIVE) {
+    await liveSuite(client);
+    await client.close().catch(() => {});
+    console.log('\n' + '─'.repeat(60));
+    console.log('  ' + pass + ' pass / ' + fail + ' fail / ' + skipped + ' 미측정');
+    process.exit(fail > 0 ? 1 : 0);
+  }
 
   /* 🔑 나가는 프레임을 잡는다 — **"버튼이 있다"가 아니라 "실제로 나갔나"** 를 재기 위해서다. */
   await evaluate(client, `(() => {

@@ -5,7 +5,7 @@ from: socket-engineer
 to: web-engineer
 status: claimed
 created: 2026-08-20T00:24:23+0900
-updated: 2026-08-20T00:24:54+0900
+updated: 2026-08-20T13:41:55+0900
 files: ["docs/net/SPEC-web-control.md", "web/"]
 parent: none
 ---
@@ -83,4 +83,53 @@ confirmed  🔴 화면은 **이 키 하나로 분기한다**
 <!-- 담당자가 여기에 적는다. 처리 후 반드시:
      team/bin/req.sh done REQ-0281 --by web-engineer --note "<한 줄 요약>" -->
 
-_(미처리)_
+### 진행 중 — **완료 기준 셋을 코드로 대조했다** (2026-08-20 13:41 · web)
+
+⚠ **닫지 않는다.** 셋 중 둘은 값으로 섰고 **하나는 실기 관측 항목이라 배포 전에는 못 잰다.**
+
+```
+① control 선언대로 위젯을 그리나        ✅ 실측 — 주입 36 pass / 0 fail
+② cmd_result 셋을 갈라 표시하나          ✅ 실측 — 같은 하니스
+③ 숫자 모듈에서 settled 를 안 받나       🔴 **미측정** — 실기 관측 항목. 화면이 미배포다
+```
+근거: `node web/tools/mod-control.mjs` → **36 pass / 0 fail / 3 미측정**
+(존재/부재 · 위젯 셋 · 모르는 위젯 표시 · 라벨 폴백 셋 · 범위 차단 · 봉투 필드 · partial 문구 ·
+outcome 셋(ok/rejected/no_answer) · 전선 전/후 거절 문구 분리 · 주기 갱신이 입력 칸을 안 덮음)
+
+### 🔴 ③ 은 "안 됐다"가 아니라 **잴 수단이 없었다** — 그래서 만들었다
+
+`mod-control.mjs` 의 skip 문구가 *"`--live` 로 재라"* 였는데 **그 `--live` 가 구현돼 있지 않았다.**
+그대로 두면 ③ 은 영원히 미측정으로 남는다(§"감시할 수 없는 것을 조건으로 적지 마라").
+
+`web/tools/mod-control.mjs` 에 실기 관측 경로를 넣었다 — **주입 0 · 클릭 0 · 하행 0**:
+```
+· 🔴 브라우저를 띄우기 전에 판본을 본다 → 낡으면 WS 한 개도 안 열고 **판정 없이** 끝낸다(exit 2)
+· control 선언을 **서버가 보낸 map 에서** 뽑는다 (기대값을 피검체에서 만들지 않는다)
+· state 를 관측 창(기본 30초) 동안 훑어 number·choice 의 `confirmed` 표본을 모은다
+· 🔴 표본이 **닫힌 값 0건**이면 **미측정** — 하행이 없으면 전부 `unknown` 이라 공허 초록이 된다
+· 하행이 필요한 §6 두 항목(outcome 셋 실물 · 보낸 건수 == queued+rejected)은
+  **이 도구가 스스로 하행을 걸지 않는다**(실물 조작 · 루트 순서). 사람이 누른 것은 창에 잡힌다
+```
+**실행한 것 / 안 한 것을 가른다:**
+```
+✅ 판본 게이트를 실제로 밟았다 — `--live 9990` → 서빙 21b9987f963e ≠ 원본 fd3150fc7a12 →
+   `0 pass / 0 fail / 1 미측정` · exit 2 · 브라우저 미기동
+🔴 관측 본문(표본 수집·판정)은 **아직 한 번도 안 돌았다** — 배포된 화면이 없으면 도달할 수 없다
+✅ 주입 검사 회귀 없음 — 패치 전후 **36 pass / 0 fail / 3 미측정** 동일
+```
+
+### ✅ v2(REQ-0284)가 이 계약을 덮었나 — **아니다**
+`docs/net/SPEC-assembly-v2.md` 마지막 줄이 명시한다:
+`control` · `label` · `send_cmd` · `cmd_result` · `confirmed` **그대로**.
+v2 가 바꾼 것은 자리 쪽(`kind` 가 `parking`/`area` 둘 · `module()` 합침 · 등록 전 `value_total:0`)이고
+**그건 REQ-0284 에서 이미 화면에 반영했다**(`b44ed53` · `508f68c`).
+
+### 남은 것 — 배포 뒤 한 명령
+```
+① root/socket : v2 배포 + 화면 배포(node web/tools/deploy-screen.mjs --deploy --port 9990)
+                ⚠ ~/parking-bin 은 프로젝트 밖이라 **web 이 못 친다**
+② web         : node web/tools/mod-control.mjs --live 9990 --secs 60
+                → 여기서 ③ 이 초록이거나 **미측정**으로 나온다(하행 0건이면 미측정이 정답이다)
+🔴 ③ 을 초록으로 닫으려면 하행 표본이 필요하다 — **누가 언제 무엇을 누르나**는 루트가 정한다
+```
+원장에 남긴 것: `docs/web/LEDGER.md` **§5.90**(판별자는 위젯이다 · 거절 두 갈래 · 부재 주장의 분모).
