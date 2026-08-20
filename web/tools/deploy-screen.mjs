@@ -156,6 +156,32 @@ if (MODE === 'check') {
       const s = await stat(where);
       console.log('  · 서빙본 mtime: ' + s.mtime.toLocaleString('ko-KR') + '  (' + s.size + 'B)');
     } catch {}
+
+    /* ── 🔴 **미배포 목록을 여기서 만든다** (2026-08-20 · 같은 착오를 두 번 하고 넣었다) ──────
+       나는 *"세 판이 쌓였다"* 라고 두 번 적었고 **두 번 다 이미 배포돼 있었다**(REQ-0290 · REQ-0301).
+       원장의 그 문장 그대로다: **"안 했다"는 자기 행동의 기록이지 시스템 상태의 기록이 아니다.**
+       그래서 목록을 **기억이 아니라 표지에서** 만든다 — 서빙본 표지의 커밋과 지금 HEAD 의 차이다.
+       🔑 이건 "재라"는 처방이 아니라 **재는 자리를 만드는 것**이다. 처방은 안 지켜지고 출력은 남는다.
+       ⚠ 표지가 없으면(`__UNSTAMPED__`) 이 계산을 **안 한다** — 기준점이 없으면 목록도 없다(미측정). */
+    const stampGit = (c.stamp && c.stamp.git ? String(c.stamp.git) : '').replace(/\+dirty$/, '');
+    if (!stampGit) {
+      unk('미배포 커밋 목록', '서빙본 표지에 git= 이 없다 — 기준점이 없으면 목록을 만들 수 없다');
+    } else {
+      try {
+        const rel = SOURCE.replace(process.cwd() + '/', '');
+        const { stdout } = await pexec('git', ['log', '--oneline', stampGit + '..HEAD', '--', rel]);
+        const lines = stdout.trim() ? stdout.trim().split('\n') : [];
+        if (!lines.length) {
+          console.log('  ✅ 미배포 커밋 없음 — 서빙본 표지(' + stampGit + ') 이후 이 파일을 바꾼 커밋이 없다');
+        } else {
+          console.log('  🔴 미배포 커밋 ' + lines.length + '건 (' + stampGit + '..HEAD · ' + rel + '):');
+          for (const l of lines) console.log('       ' + l);
+        }
+      } catch (e) {
+        unk('미배포 커밋 목록', 'git 조회 실패: ' + ((e && e.message) || String(e))
+          + ' — 표지 커밋이 이 저장소에 없을 수 있다');
+      }
+    }
   }
 
   console.log('\n' + '─'.repeat(60));
