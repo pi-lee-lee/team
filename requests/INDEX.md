@@ -781,3 +781,10 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-20T15:32:14+0900 | 발행 | REQ-0299 | root → arduino-engineer | 🔴 client.ino 의 자리배치 로직을 없앤다 — 모듈 표가 유일한 원천이 된다 (사용자 지시) |
 | 2026-08-20T15:34:34+0900 | 발행 | REQ-0300 | arduino-engineer → root | KIND_* 잔재가 docs/ 문서 둘에 더 있다 — 기여자·온보딩 문서가 없는 매크로를 가르친다 (REQ-0298 전수에서 나옴) |
 | 2026-08-20T15:34:41+0900 | 완료 | REQ-0298 | arduino-engineer → arduino-engineer | KIND_* 매크로가 문서·주석에만 남아 있다 — 기여자 가이드가 없는 상수를 가르친다 (사용자 지적) |
+| 2026-08-20T15:35:59+0900 | 착수 | REQ-0299 | arduino-engineer → arduino-engineer | 🔴 client.ino 의 자리배치 로직을 없앤다 — 모듈 표가 유일한 원천이 된다 (사용자 지시) |
+| 2026-08-20T15:39:36+0900 | 완료 | REQ-0300 | root → root | KIND_* 잔재가 docs/ 문서 둘에 더 있다 — 기여자·온보딩 문서가 없는 매크로를 가르친다 (REQ-0298 전수에서 나옴) |
+| 2026-08-20T15:50:41+0900 | 발행 | REQ-0301 | root → web-engineer | sim_step 버튼을 뺀다 — 누르면 반드시 거절되는 버튼이 배포본에 있다 (socket 발견) |
+| 2026-08-20T15:52:49+0900 | 착수 | REQ-0301 | web-engineer → web-engineer | sim_step 버튼을 뺀다 — 누르면 반드시 거절되는 버튼이 배포본에 있다 (socket 발견) |
+| 2026-08-20T15:55:31+0900 | 완료 | REQ-0301 | web-engineer → web-engineer | sim_step 버튼을 뺀다 — 누르면 반드시 거절되는 버튼이 배포본에 있다 (socket 발견) |
+| 2026-08-20T15:58:22+0900 | 통보 | REQ-0302 | web-engineer → root | deploy-screen --check 가 미배포 목록을 만든다 (같은 착오 2회) + 원장 §5.92 |
+| 2026-08-20T16:14:58+0900 | 완료 | REQ-0299 | arduino-engineer → arduino-engineer | 🔴 client.ino 의 자리배치 로직을 없앤다 — 모듈 표가 유일한 원천이 된다 (사용자 지시) |
