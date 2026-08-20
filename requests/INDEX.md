@@ -770,3 +770,14 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-20T14:27:10+0900 | 완료 | REQ-0293 | web-engineer → web-engineer | map.zones[].active — 모듈 0개인 주차 자리를 비활성으로 그려라 |
 | 2026-08-20T14:29:18+0900 | 통보 | REQ-0294 | socket-engineer → root | 정정: E1 모듈 1개(DR)는 틀렸다 — 그리고 '선언했는데 장치에 없는 모듈' 을 아무도 안 센다 |
 | 2026-08-20T14:29:23+0900 | 통보 | REQ-0295 | web-engineer → root | 원장 §5.91 — map 의 modules 는 결속이고 선언이 아니다 (화면은 그 차이를 못 본다) |
+| 2026-08-20T14:40:40+0900 | 발행 | REQ-0296 | root → web-engineer | 비활성 자리를 회색으로 — unknown 색과 갈라라 (사용자 지시) |
+| 2026-08-20T14:41:28+0900 | 착수 | REQ-0296 | web-engineer → web-engineer | 비활성 자리를 회색으로 — unknown 색과 갈라라 (사용자 지시) |
+| 2026-08-20T14:44:19+0900 | 완료 | REQ-0296 | web-engineer → web-engineer | 비활성 자리를 회색으로 — unknown 색과 갈라라 (사용자 지시) |
+| 2026-08-20T14:45:48+0900 | 발행 | REQ-0297 | root → web-engineer | 격자 칸에 label 만 — 요약·배지·사유 문구를 패널로 옮긴다 (사용자 지시) |
+| 2026-08-20T14:47:00+0900 | 착수 | REQ-0297 | web-engineer → web-engineer | 격자 칸에 label 만 — 요약·배지·사유 문구를 패널로 옮긴다 (사용자 지시) |
+| 2026-08-20T14:52:14+0900 | 완료 | REQ-0297 | web-engineer → web-engineer | 격자 칸에 label 만 — 요약·배지·사유 문구를 패널로 옮긴다 (사용자 지시) |
+| 2026-08-20T15:27:17+0900 | 발행 | REQ-0298 | root → arduino-engineer | KIND_* 매크로가 문서·주석에만 남아 있다 — 기여자 가이드가 없는 상수를 가르친다 (사용자 지적) |
+| 2026-08-20T15:27:50+0900 | 착수 | REQ-0298 | arduino-engineer → arduino-engineer | KIND_* 매크로가 문서·주석에만 남아 있다 — 기여자 가이드가 없는 상수를 가르친다 (사용자 지적) |
+| 2026-08-20T15:32:14+0900 | 발행 | REQ-0299 | root → arduino-engineer | 🔴 client.ino 의 자리배치 로직을 없앤다 — 모듈 표가 유일한 원천이 된다 (사용자 지시) |
+| 2026-08-20T15:34:34+0900 | 발행 | REQ-0300 | arduino-engineer → root | KIND_* 잔재가 docs/ 문서 둘에 더 있다 — 기여자·온보딩 문서가 없는 매크로를 가르친다 (REQ-0298 전수에서 나옴) |
+| 2026-08-20T15:34:41+0900 | 완료 | REQ-0298 | arduino-engineer → arduino-engineer | KIND_* 매크로가 문서·주석에만 남아 있다 — 기여자 가이드가 없는 상수를 가르친다 (사용자 지적) |

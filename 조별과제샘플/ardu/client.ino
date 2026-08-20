@@ -69,7 +69,7 @@ static_assert(sizeof(DEVICE_ID) > 1 && sizeof(DEVICE_ID) <= 9,
 //
 //   한 줄 = 모듈 하나 :  {"이름", 종류, 핀}
 //     이름 : **자리 id 와 같아야 한다**(2자 + NUL). `A1`·`B3`·`E1` …
-//     종류 : "IP"(`IP` 관측) · "IX"(`IX`) · "OB"(`OB` 명령)
+//     종류 : **첫 글자만 뜻이 있다** — `I`=관측 전용("IP" "IX") · `O`=명령 받음("OG" "OL" "OB")
 //     핀   : 실물이면 핀 번호, 가상이면 `PIN_NONE`
 //
 // ⚠ **이 표는 `FrameCodec.h` 와 `Modules.h` 사이에 있어야 한다** —
