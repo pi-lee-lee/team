@@ -3,9 +3,9 @@ id: REQ-0304
 title: 🔴 모듈 설정을 선언 한 줄로 — 컴포넌트 패턴 (사용자 지시 · REQ-0303 B단계를 대체한다)
 from: root
 to: arduino-engineer
-status: claimed
+status: done
 created: 2026-08-20T17:00:39+0900
-updated: 2026-08-20T17:03:08+0900
+updated: 2026-08-20T17:59:01+0900
 files: ["조별과제샘플/ardu/client.ino"]
 parent: none
 ---
@@ -327,3 +327,76 @@ Ref ParkingNode::actuator(const char (&n)[3]);   // flags=1
 🔴 부팅 검사 : 센서가 앞쪽 연속이 아니면 `[CFG] 🔴 센서를 먼저 등록해라` 를 찍는다
 🔑 `const char (&)[3]` 유지 — 이름 길이를 **타입이 강제한다**(3글자를 주면 컴파일이 그 줄을 짚는다)
 ```
+
+---
+
+## 2단계 결과 — **완료. 굽고 실기에서 확인했다**
+
+```c
+void setup() {
+  Serial.begin(115200);
+  node.begin();
+  node.sensor  ("A1").pin(2);
+  node.sensor  ("B1").pin(9);
+  node.actuator("LD").pin(LED_BUILTIN).on(cmdLed);
+  node.actuator("L2").on(cmdL2);
+}
+void loop() { node.tick(); }
+```
+**배열 없다 · 등록 호출 없다 · `IP`/`OG` 없다 · 전역 객체 없다 · `pinMode` 도 `.pin()` 이 잡는다.**
+
+### 굽기 (17:51:35)
+```
+칩 = f5a3f13 · flash 27,362(84%) · RAM 1,276 · 대조 **27,241B 기준 0 = IDENTICAL**
+🔑 `ramLow` = **537 B** (전 602B) ← 다음 판단의 분모다. 정적 여유 772B 는 다른 수다
+증분 판정 : +64B ÷ **602(굽기 전 기준)** = **10.6%** → 사전 등록 문턱 `≤15%` 안
+```
+
+### 판별자 넷 — `hex` 를 못 쓰는 변경이라 미리 옮겨 뒀다
+```
+✅ stage1_test **311 PASS / 0 FAIL** (0 segfault → 303 → 309 → 311)
+✅ 부팅 표지 실측 : [SENS] A1=핀2 B1=핀9 · proto v1 / 2 sensors / 4 modules · [REG] 54B
+✅ 등록 프레임 : D,*,7,4,6D · D,A1,IP,01 · D,B1,IP,02 · D,LD,OG,68
+✅ flash·RAM 증분을 값으로 (위)
+```
+
+### 🔴 내 예고가 두 곳에서 틀렸다 — 값으로 정정했다
+
+**① 전선 바이트가 바뀌었다.** `D,L2,OL,15` → **`D,L2,OG,1E`**
+```
+기전 : 종류를 둘로 줄이면 `actuator()` 가 `"OG"` 를 고정한다 → `OL` 을 쓰던 `L2` 가 바뀐다
+🔑 **설계는 맞고 예고가 틀렸다.** `kind` 는 **값의 사전**이고 어휘를 줄이면 그 값이 바뀐다
+✅ monitor 의 서버 로그가 같은 값을 냈다 — **전선은 이중으로 덮이는 축**이다
+영향 : 화면 라벨은 안 바뀐다(정본이 `lot.label`) · `MOD_KIND_ORDER` 정렬은 바뀐다(web 통보)
+```
+
+**② `[CFG] begin() 누락` 경고가 거짓 경보였다.** 내가 만든 결함이다
+```
+판정이 `slotStart == 0` 이었고 **부팅 직후 `millis()` 가 0** 이라 세워도 0 이다
+→ `bool beginDone` 플래그로 고쳤다(flash −10B · RAM +1B)
+⚠ **시험이 못 잡았다** — 호스트 가짜 시계는 이미 흘러 있어 그 갈래를 안 밟는다
+✅ 시험에 그 조건을 만들어 넣었다(`g_millis=0` 으로 되돌리고 **음성 대조**까지) → 311 PASS
+🔴 **그 수정은 칩에 없다** — DEFERRED **D7**. 다음 굽기에 싣는다
+```
+
+### `GUIDE.md` — 한 번에 고쳤다
+```
+`setup`/`loop` 절 · 모듈 등록 절을 체이닝으로 · 종류 다섯 표를 **둘**로
+낡은 API 참조(`MODULE_TABLE`·`router.on`·`sensors.on`·`applySensorPinMode`·`KIND_`) **0건**
+상한 8 과 실측 근거(모듈당 9B · `ramLow` 537B)도 적었다
+```
+
+### 실측으로 정한 것 (다시 재지 마라)
+```
+`constexpr` + `PROGMEM` + 함수 포인터 : 된다 (`-std=gnu++11` · 재귀만)
+`const char (&)[3]` : 이름 길이를 **타입이 강제한다**
+모듈 상한 **8** · 절대 상한 **13**(배치 버퍼 `11n+11≤160`)
+`union` 을 **안 썼다** — 라우터 등록표 둘이 사라져 4B/모듈이 회수되므로 문턱을 지켰고,
+  그 결과 **union 안전성 문제가 원천적으로 없어졌다**
+로컬 쓰기 API : ❌ 못 연다 (에코가 `occ` 에 실린다 · 원장 §84)
+```
+
+### 처리 완료 · arduino-engineer · 2026-08-20T17:59:01+0900
+
+컴포넌트 체이닝 완료 · f5a3f13 을 17:51:35 굽기 · IDENTICAL · 311 PASS · ramLow 537B · GUIDE 갱신 · 🔴 예고 둘 정정(전선 D,L2,OL→OG · [CFG] 거짓경보) · beginDone 수정은 D7 로 미탑재
+
