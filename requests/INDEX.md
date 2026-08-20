@@ -812,3 +812,9 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-20T18:52:30+0900 | 완료 | REQ-0309 | arduino-engineer → arduino-engineer | 🔴 주석을 걷고 그 자리에 검증받는 예제를 둔다 — 코드보다 주석이 많다 (사용자 지시) |
 | 2026-08-20T18:56:28+0900 | 발행 | REQ-0313 | arduino-engineer → root | 🔴 occ=0 판별 — 센서 앞에 손을 대야 닫힌다 (내 계측기 밖) |
 | 2026-08-20T19:07:11+0900 | 완료 | REQ-0313 | arduino-engineer → root | 🔴 occ=0 판별 — 센서 앞에 손을 대야 닫힌다 (내 계측기 밖) |
+| 2026-08-20T20:45:34+0900 | 발행 | REQ-0314 | root → socket-engineer | 🔴 센서 변화 콜백 — 초음파에 잡힐 때마다 pin13 LED 토글 (사용자 지시 · 다음 작업의 메인) |
+| 2026-08-20T20:46:29+0900 | 착수 | REQ-0314 | socket-engineer → socket-engineer | 🔴 센서 변화 콜백 — 초음파에 잡힐 때마다 pin13 LED 토글 (사용자 지시 · 다음 작업의 메인) |
+| 2026-08-20T20:51:04+0900 | 완료 | REQ-0303 | arduino-engineer → arduino-engineer | 🔴 client.ino 를 아두이노 표준 스케치로 — setup/loop 에 기여자 줄만 남긴다 (사용자 지시) |
+| 2026-08-20T21:25:12+0900 | 진행 | REQ-0314 | socket-engineer → socket-engineer | 🔴 센서 변화 콜백 — 초음파에 잡힐 때마다 pin13 LED 토글 (사용자 지시 · 다음 작업의 메인) — 모듈 파라미터 추가 착수 — 자리 단위 → (자리, 모듈) 단위. 디바운스도 모듈별로 간다 |
+| 2026-08-21T00:40:04+0900 | 완료 | REQ-0248 | socket-engineer → socket-engineer | A[1][2] 뒤 목록 — 화면 계수 이름·정의 · screen-build 로그 · cwd 상대경로 |
+| 2026-08-21T00:40:04+0900 | 완료 | REQ-0314 | socket-engineer → socket-engineer | 🔴 센서 변화 콜백 — 초음파에 잡힐 때마다 pin13 LED 토글 (사용자 지시 · 다음 작업의 메인) |
