@@ -31,6 +31,19 @@ struct SensorReading {
 //   지금 모든 자리가 그 경우이고, 그래서 이 단계의 거동 변화가 0 이다.
 class ParkingServer;
 
+// 🔴 **센서가 잰 값.** 점유 비트(`occupied`)와 **다른 축**이다 —
+//   비트는 *"문턱을 넘었나"*, 이것은 *"얼마인가"* 다. 한 칸에 합치지 마라.
+// 🔴 **`has` 와 `value` 는 붙어 다녀야 한다.** 갈라 두면 `has` 를 안 보고 `value` 를 쓰는 코드가
+//   반드시 나오고, 그때 **"못 쟀다"가 조용히 `0` 이 된다.**
+// ⚠ 단위는 **기여자의 것**이다 — 서버도 프로토콜도 모른다(초음파는 cm · 조도는 lux).
+//   단위를 알려면 라벨에 담아라: `lot.label("P1","A1","앞쪽 거리(cm)")`
+struct SensorMeasure {
+    bool has;     // 값이 있나. false 면 아래는 **뜻이 없다**
+    long value;   // 장치가 준 정수
+    SensorMeasure() : has(false), value(0) {}
+    SensorMeasure(bool h, long v) : has(h), value(v) {}
+};
+
 // 🔴 **자리 점유가 바뀌면 불린다.** `onCommandResult` 와 같은 계열이다 —
 //   기여자는 훅 하나를 더 배우는 것이 아니라 **같은 모양을 한 번 더 쓴다.**
 //   `spot`     : 자리 id · `module` : **그 값을 말한 센서 모듈 이름**
@@ -43,7 +56,8 @@ class ParkingServer;
 // 🔑 **센서(`I*`)만 온다.** 명령 모듈의 에코는 안 온다 — 안 그러면 자기 명령이 자기를 부른다.
 // ⚠ 서버의 한 박자 안에서 불린다. 오래 걸리는 일을 하지 마라.
 typedef void (*OccupancyFn)(ParkingServer& srv, const std::string& spot,
-                            const std::string& module, bool occupied);
+                            const std::string& module, bool occupied,
+                            const SensorMeasure& measure);
 
 struct SpotBehavior {
     virtual ~SpotBehavior() {}

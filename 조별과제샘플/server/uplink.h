@@ -282,6 +282,33 @@
             write_log_if_changed();
             push_snapshot();
         }
+        // ── §V 센서 값 프레임 `V,<v1>,…,<vk>,<ck>` ─────────────────────────────
+        // 🔴 **위치가 뜻을 정한다** — 항목 i 는 **모듈 idx i** 다(`occ` 비트와 같은 주소 체계).
+        //   각 항목은 hex **3자리** 또는 🔴 **빈 칸(= 못 쟀다)**.
+        // ⚠ **빈 칸을 `0` 으로 읽지 마라.** `0` 은 "0cm" 이고 빈 칸은 **"못 쟀다"** 다 —
+        //   그 둘을 접으면 반사 실패가 조용히 "아주 가깝다" 가 된다.
+        // 🔑 **항목 수를 강제하지 않는다.** 장치 판마다 자리 수가 다를 수 있어(실측: 2칸 판과
+        //   11칸 판이 같은 로그에 있었다) **모듈 수까지만 읽고 나머지는 버린다.**
+        //   너무 적으면 **없는 것으로 둔다** — 조용히 밀려 엉뚱한 모듈에 붙는 것보다 낫다.
+        else if (f[0] == "V") {
+            Node& vn = n;
+            const size_t have = vn.mods.size();
+            size_t used = 0, miss = 0;
+            for (size_t i = 1; i < f.size(); i++) {
+                const size_t idx = i - 1;
+                if (idx >= have || idx >= (size_t)REG_MODS_MAX) break;
+                if (f[i].empty()) {                 // 🔴 못 쟀다 — 값을 지우고 그렇게 기록한다
+                    vn.mod_val_has[idx] = false; miss++;
+                    continue;
+                }
+                char* endp = 0;
+                const long v = strtol(f[i].c_str(), &endp, 16);
+                if (endp == f[i].c_str() || (endp && *endp)) { vmalformed++; continue; }
+                vn.mod_val[idx] = v; vn.mod_val_has[idx] = true; vn.mod_val_ms[idx] = now_ms();
+                used++;
+            }
+            vframes++; vvalues += (long long)used; vmissing += (long long)miss;
+        }
         // ── §5 등록 프레임 `D` ─────────────────────────────────────────────────
         // 🔴 **관측이지 제어가 아니다**(Node::reg_* 주석). 하행 경로를 안 바꾼다.
         // ⚠ 이 분기가 없으면 `D` 는 `drop_unknown`("AT 잡음 유입 의심")으로 떨어져

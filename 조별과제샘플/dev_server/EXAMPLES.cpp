@@ -111,7 +111,11 @@ void example_send(ParkingServer& srv) {
 //   🔑 상승·하강 **둘 다** 온다. 한쪽만 쓰려면 `occupied` 로 갈라라.
 //   🔑 **첫 관측에서는 안 불린다** — 기동 직후 값은 변화가 아니라 처음 본 것이다.
 void example_occupancy(ParkingServer& srv, const std::string& spot,
-                       const std::string& module, bool occupied) {
+                       const std::string& module, bool occupied,
+                       const SensorMeasure& measure) {
+    // 🔴 값을 쓰기 전에 **`has` 를 본다.** 없으면 `value` 는 뜻이 없다("못 쟀다"이지 0 이 아니다)
+    if (measure.has) std::cout << module << " = " << measure.value << "\n";
+
     // 🔓 **모듈 단위로 온다.** 한 자리에 센서가 둘이면 각각 불린다 —
     //   합칠지 말지는 **네 선택**이다. 한쪽만 쓰려면 아래를 켜라.
     // if (module != "A1") return;

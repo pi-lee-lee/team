@@ -315,6 +315,59 @@
                 if (!ok42) bad++;
             }
 
+            // ㊸ 🔴🔴 **`V` 센서 값** — 파싱 · 빈 칸 · 형식오류 · 콜백까지 (REQ-0314 후속)
+            //   🔴 이 시험이 없어서 **명세만 있고 구현이 0줄인 채로 "실기 확인" 이라고 보고됐다.**
+            //     전선에 프레임이 보이는 것은 판별자가 아니다 — **파싱됐다는 증거가 판별자다.**
+            {
+                ParkingLot L;
+                L.spot("A1").parking().module("P1", "A1").module("P1", "B1");
+                ParkingServer ps(L);
+                Server t; t.lot_ = &L; t.build_default_zones(); t.init_srv_id();
+                t.park.devid = "P1"; t.park.reg_done = true;
+                t.park.mods.push_back(std::make_pair(std::string("A1"), std::string("IP")));
+                t.park.mods.push_back(std::make_pair(std::string("B1"), std::string("IP")));
+                t.bind_modules(t.park);
+                t.park.mod_bits_n = 2; t.park.mod_bits[0] = 0; t.park.mod_bits[1] = 0;
+                t.owner_ = &ps; t.occ_cb_ = st_occ_probe;
+
+                long long f0 = t.vframes, m0 = t.vmissing, x0 = t.vmalformed;
+                t.on_ard_line(t_line("V,3C0,,"));      // A1=0x3C0(960) · B1 **빈 칸**
+                bool v1 = (t.vframes == f0 + 1 && t.vvalues >= 1 && t.vmissing == m0 + 1
+                           && t.vmalformed == x0);
+                SensorMeasure ma = t.measure_of("P1", "A1");
+                SensorMeasure mb = t.measure_of("P1", "B1");
+                // 🔴 **빈 칸이 `0` 이 되면 안 된다** — `has=false` 여야 한다
+                bool v2 = (ma.has && ma.value == 960) && (!mb.has);
+
+                // 콜백이 값을 받는가 — A1 을 올린다
+                //   🔑 **먼저 한 번 불러 씨를 뿌린다** — 첫 관측은 변화가 아니다(설계).
+                //     안 하면 상승이 "첫 관측" 으로 먹혀서 콜백이 0회다
+                t.notify_occupancy_changes();
+                g_st_occ_n = 0; g_st_occ_has = false; g_st_occ_meas = -1;
+                t.park.mod_bits[0] = 1;
+                t.notify_occupancy_changes();
+                bool v3 = (g_st_occ_n == 1 && g_st_occ_mod == "A1"
+                           && g_st_occ_has && g_st_occ_meas == 960);
+
+                // 🔴 형식오류는 **세고 버린다.** 조용히 0 으로 두지 않는다
+                t.on_ard_line(t_line("V,ZZZ,"));
+                bool v4 = (t.vmalformed == x0 + 1);
+
+                // 🔑 값이 사라지면(빈 칸) 다시 `has=false` 로 **되돌아간다** — 낡은 값이 안 남는다
+                t.on_ard_line(t_line("V,,"));
+                bool v5 = (!t.measure_of("P1", "A1").has);
+                t.occ_cb_ = 0; t.owner_ = 0;
+
+                bool ok43 = v1 && v2 && v3 && v4 && v5;
+                std::cout << (ok43 ? "  ✓ " : "  ✗ ")
+                          << "V 센서값 — 파싱(" << (v1 ? "예" : "아니오")
+                          << ") · 🔴 **빈 칸은 has=false**(" << (v2 ? "예" : "아니오")
+                          << ") · 콜백이 값 960 을 받음(" << (v3 ? "예" : "아니오")
+                          << ") · 형식오류 셈(" << (v4 ? "예" : "아니오")
+                          << ") · 값 사라지면 되돌아감(" << (v5 ? "예" : "아니오") << ")\n";
+                if (!ok43) bad++;
+            }
+
             // ㉕ 🔴 **`state` 봉투와 `actions`** (REQ-0203 4c)
             {
                 Server t; t.build_default_zones(); t.init_srv_id();

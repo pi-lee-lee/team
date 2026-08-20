@@ -105,6 +105,7 @@
                base_valid(false), test_armed(false),
                cmd_cb_(0), cb_ok_(0), cb_rejected_(0), cb_noanswer_(0),
                occ_cb_(0), owner_(0), occ_change_n_(0),
+               vframes(0), vvalues(0), vmissing(0), vmalformed(0),
                ledger_new_(0), ledger_review_(0),
                resync_count(0), no_disk(false),
                soak_start_ms(0), ard_sessions(0), sess_start_ms(0), sess_frames(0),
@@ -368,6 +369,9 @@
         // 🔑 콜백을 등록 안 해도 센다 — 볼 자리를 선택적인 것에 묶지 않는다.
         //   ⚠ 이것은 **센서 비트 변화**만 센다. 명령 모듈의 에코는 여기 안 든다.
         s += " · 점유변화 " + std::to_string(occ_change_n_);
+        s += " · 센서값 " + std::to_string(vvalues)
+           + "/못쟀다 " + std::to_string(vmissing)
+           + (vmalformed > 0 ? (" 🔴형식오류 " + std::to_string(vmalformed)) : "");
         s += " · 묶음미룸 " + std::to_string(batch_deferred)
            + (batch_deferred > 0 ? " 🔴" : "");
         s += " · 조립표문제 " + std::to_string(asm_warn_)

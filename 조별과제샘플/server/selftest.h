@@ -33,9 +33,13 @@ static int         g_st_occ_n = 0;
 static std::string g_st_occ_spot;
 static bool        g_st_occ_val = false;
 static std::string g_st_occ_mod;
+static bool g_st_occ_has = false;
+static long g_st_occ_meas = -1;
 static void st_occ_probe(ParkingServer&, const std::string& spot,
-                         const std::string& module, bool occupied) {
+                         const std::string& module, bool occupied,
+                         const SensorMeasure& m) {
     g_st_occ_n++; g_st_occ_spot = spot; g_st_occ_mod = module; g_st_occ_val = occupied;
+    g_st_occ_has = m.has; g_st_occ_meas = m.has ? m.value : -1;
 }
 
 static int selftest() {

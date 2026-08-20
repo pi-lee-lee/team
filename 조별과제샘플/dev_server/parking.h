@@ -335,7 +335,7 @@ private:
 void buildLot(ParkingLot& lot);              // ① 주차장을 조립한다
 void onTick(ParkingServer& srv);             // ② 한 박자마다 — 명령을 여기서 낸다
 void onCmdResult(const CmdResult& r);        // ③ 명령 결과 — 성공 / 거절 / 무응답
-void onOccupancy(ParkingServer& srv, const std::string& spot,
-                 const std::string& module, bool occupied);   // ④ 점유 변화(모듈 단위)
+void onOccupancy(ParkingServer& srv, const std::string& spot, const std::string& module,
+                 bool occupied, const SensorMeasure& measure);  // ④ 점유 변화(모듈 단위 · 값 포함)
 
 #endif  // PARKING_H

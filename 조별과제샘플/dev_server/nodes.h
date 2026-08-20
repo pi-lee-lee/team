@@ -428,6 +428,18 @@
         }
     }
 
+    // 🔴 그 모듈이 **마지막으로 잰 값**. 없으면 `has=false` — **`0` 으로 접지 않는다.**
+    SensorMeasure measure_of(const std::string& devid, const std::string& name) const {
+        const Node* n = node_by_devid(devid);
+        if (!n) return SensorMeasure();
+        for (size_t k = 0; k < n->mods.size(); k++)
+            if (n->mods[k].first == name) {
+                if (k >= (size_t)REG_MODS_MAX || !n->mod_val_has[k]) return SensorMeasure();
+                return SensorMeasure(true, n->mod_val[k]);
+            }
+        return SensorMeasure();
+    }
+
     // 자리가 **지금** 찼는가. 판단은 그 자리의 `SpotBehavior` 가 한다.
     bool zone_occupied_now(const Zone& z) const {
         std::vector<SensorReading> r; int k = 0, t = 0, o = 0;
@@ -478,7 +490,13 @@
                 occ_change_n_++;                      // 🔑 콜백을 등록 안 해도 센다
                 logf("=", std::string("자리 ") + z.id + " · 모듈 " + ms[m].first
                           + " 점유 " + (now ? "→ 찼다" : "→ 비었다"));
-                if (occ_cb_ && owner_) occ_cb_(*owner_, z.id, ms[m].first, now);
+                if (occ_cb_ && owner_) {
+                    // 🔑 같은 이름이 여러 devid 에 있을 수 있으므로 **자리의 선언에서** 짝을 찾는다
+                    std::string dv;
+                    for (size_t q = 0; q < z.modules.size(); q++)
+                        if (z.modules[q].second == ms[m].first) { dv = z.modules[q].first; break; }
+                    occ_cb_(*owner_, z.id, ms[m].first, now, measure_of(dv, ms[m].first));
+                }
             }
         }
     }

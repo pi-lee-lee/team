@@ -113,7 +113,15 @@ void onCmdResult(const CmdResult& r) {
 //   🔑 **상승·하강 둘 다 온다.** 한쪽만 쓰려면 `occupied` 로 갈라라.
 //   🔑 **첫 관측에서는 안 불린다** — 기동 직후의 값은 변화가 아니라 처음 본 것이다.
 void onOccupancy(ParkingServer& srv, const std::string& spot,
-                 const std::string& module, bool occupied) {
+                 const std::string& module, bool occupied,
+                 const SensorMeasure& measure) {
+    // 🔑 **센서가 잰 값이 같이 온다.** 단위는 네가 안다 — 서버는 모른다(초음파면 cm).
+    //   🔴 `measure.has` 를 **먼저 봐라.** 반사가 없으면 값이 **없다** —
+    //     `0` 이 아니라 **"못 쟀다"** 다. 그 둘을 접으면 "아주 가깝다" 로 오독한다
+    std::cout << "[센서] " << spot << " " << module << " "
+              << (occupied ? "찼다" : "비었다") << " · 값 "
+              << (measure.has ? std::to_string(measure.value) : std::string("못쟀다")) << "\n";
+
     // 🔴 **초음파에 물체가 잡힐 때마다 내장 LED(pin 13)를 토글한다.**
     //   첫 번째 잡힘 → 켜짐 · 두 번째 잡힘 → 꺼짐 · 세 번째 → 켜짐 …
     //   ⚠ **잡힐 때(0→1)만 센다.** 물체가 사라질 때(1→0)는 아무것도 안 한다 —
