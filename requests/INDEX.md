@@ -788,3 +788,11 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-20T15:55:31+0900 | 완료 | REQ-0301 | web-engineer → web-engineer | sim_step 버튼을 뺀다 — 누르면 반드시 거절되는 버튼이 배포본에 있다 (socket 발견) |
 | 2026-08-20T15:58:22+0900 | 통보 | REQ-0302 | web-engineer → root | deploy-screen --check 가 미배포 목록을 만든다 (같은 착오 2회) + 원장 §5.92 |
 | 2026-08-20T16:14:58+0900 | 완료 | REQ-0299 | arduino-engineer → arduino-engineer | 🔴 client.ino 의 자리배치 로직을 없앤다 — 모듈 표가 유일한 원천이 된다 (사용자 지시) |
+| 2026-08-20T16:26:41+0900 | 발행 | REQ-0303 | root → arduino-engineer | 🔴 client.ino 를 아두이노 표준 스케치로 — setup/loop 에 기여자 줄만 남긴다 (사용자 지시) |
+| 2026-08-20T16:28:39+0900 | 착수 | REQ-0303 | arduino-engineer → arduino-engineer | 🔴 client.ino 를 아두이노 표준 스케치로 — setup/loop 에 기여자 줄만 남긴다 (사용자 지시) |
+| 2026-08-20T17:00:40+0900 | 발행 | REQ-0304 | root → arduino-engineer | 🔴 모듈 설정을 선언 한 줄로 — 컴포넌트 패턴 (사용자 지시 · REQ-0303 B단계를 대체한다) |
+| 2026-08-20T17:03:08+0900 | 착수 | REQ-0304 | arduino-engineer → arduino-engineer | 🔴 모듈 설정을 선언 한 줄로 — 컴포넌트 패턴 (사용자 지시 · REQ-0303 B단계를 대체한다) |
+| 2026-08-20T17:03:18+0900 | 통보 | REQ-0305 | web-engineer → root | 원장 §5.93 — 모듈 이름 두 층(폴백 문구 vs 라벨 채우기) · 보류 + 닫는 조건 |
+| 2026-08-20T17:37:24+0900 | 발행 | REQ-0306 | root → socket-engineer | 차단봉을 없앤다 — lot.cpp 의 DR 선언 제거 (사용자 지시) |
+| 2026-08-20T17:38:24+0900 | 착수 | REQ-0306 | socket-engineer → socket-engineer | 차단봉을 없앤다 — lot.cpp 의 DR 선언 제거 (사용자 지시) |
+| 2026-08-20T17:46:11+0900 | 완료 | REQ-0306 | socket-engineer → socket-engineer | 차단봉을 없앤다 — lot.cpp 의 DR 선언 제거 (사용자 지시) |
