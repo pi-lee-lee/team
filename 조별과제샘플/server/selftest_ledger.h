@@ -212,26 +212,53 @@
                 {
                     // ① 같은 센서 이름이 두 자리에 · ② 센서 없는 자리
                     ParkingLot badlot;   // ⚠ `bad` 는 바깥의 실패 계수기다. 가리면 안 된다
-                    badlot.spot("A1").sensor("S1");
-                    badlot.spot("A2").sensor("S1");      // 🔴 같은 이름 — A1 이 이기고 A2 는 못 받는다
-                    badlot.spot("A3");                   // 🔴 센서가 없다
+                    badlot.spot("A1").parking().module("S1");
+                    badlot.spot("A2").parking().module("S1");      // 🔴 같은 이름 — A1 이 이기고 A2 는 못 받는다
+                    badlot.spot("A3").parking();         // 🔴 센서가 없는 **주차** 자리
                     Server t; t.lot_ = &badlot;
                     t.build_default_zones();
                     long long dirty = t.asm_warn_;
 
                     ParkingLot goodlot;
-                    goodlot.spot("A1").sensor("S1");
-                    goodlot.spot("A2").sensor("S2");
-                    goodlot.gate("E1", Gate::IN);        // 입출구는 센서가 없어도 정상이다
+                    goodlot.spot("A1").parking().module("S1");
+                    goodlot.spot("A2").parking().module("S2");
+                    goodlot.spot("E1");                  // 🔑 일반영역(기본값) — 센서가 없어도 정상이다
                     Server u; u.lot_ = &goodlot;
                     u.build_default_zones();
                     long long clean = u.asm_warn_;
 
-                    bool ok = (dirty == 2) && (clean == 0);
-                    std::cout << (ok ? "  ✓ " : "  ✗ ") << "조립 표 검사 — 틀린 표 "
+                    // 🔴 **v2 에서 기대값이 1 로 줄었다. 회귀가 아니다.**
+                    //   `module()` 하나로 합치면서 **선언만 보고는 센서인지 알 수 없게 됐다** →
+                    //   *"센서 없는 주차 자리"* 검사가 **등록(`bind_modules`) 시점으로 옮겨갔다.**
+                    //   조립 시점에 남은 것은 **이름 중복** 하나다.
+                    bool ok = (dirty == 1) && (clean == 0);
+                    std::cout << (ok ? "  ✓ " : "  ✗ ") << "조립 표 검사(선언 시점) — 틀린 표 "
                               << dirty << "건 · 바른 표 " << clean
-                              << "건 (기대 2 · 0 — 입출구는 센서 없어도 정상)\n";
+                              << "건 (기대 1 · 0 — 이름 중복만 선언으로 안다)\n";
                     if (!ok) bad++;
+
+                    // 🔴 **옮겨간 검사를 그 자리에서 다시 잰다. 시험을 지우지 않는다.**
+                    //   등록이 와야 `kind` 첫 글자로 센서를 가른다 — **알 수 있는 가장 이른 시점**이다.
+                    {
+                        long long before = t.asm_warn_;
+                        t.park.devid = "P1";
+                        t.park.mods.push_back(std::make_pair(std::string("S1"), std::string("IP")));
+                        t.bind_modules(t.park);
+                        // A3 는 주차 자리인데 이 노드의 모듈이 하나도 안 붙는다 →
+                        // 🔑 **경고가 안 나야 한다**(다른 노드가 센서를 댈 수 있다).
+                        long long afterA = t.asm_warn_;
+                        // 이제 A3 에 **명령 모듈만** 붙여 본다 → 센서가 0 이므로 **말해야 한다**
+                        badlot.spot("A3").module("P1", "LD");
+                        t.build_default_zones();
+                        t.park.mods.push_back(std::make_pair(std::string("LD"), std::string("OG")));
+                        long long mid = t.asm_warn_;
+                        t.bind_modules(t.park);
+                        bool ok2 = (afterA == before) && (t.asm_warn_ > mid);
+                        std::cout << (ok2 ? "  ✓ " : "  ✗ ")
+                                  << "등록 시점 검사 — 남의 노드면 조용(" << (afterA - before)
+                                  << ") · 명령 모듈만 붙으면 말한다(" << (t.asm_warn_ - mid) << ")\n";
+                        if (!ok2) bad++;
+                    }
                 }
 
                 // ㊷ 🔴 **자가검증은 대장 파일을 안 건드린다** — `no_disk` 가 그 약속이다

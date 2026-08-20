@@ -53,7 +53,7 @@
                 //   ⚠ **쓰이지 않는 일반화는 검증되지 않은 코드다.** 그래서 더하자마자 밟는다.
                 {
                     ParkingLot lt;
-                    lt.spot("A1").sensor("P1", "Q7");   // 🔑 이름이 자리 id 와 **다르다**(2바이트는 지킨다)
+                    lt.spot("A1").parking().module("P1", "Q7");   // 🔑 이름이 자리 id 와 **다르다**(2바이트는 지킨다)
                     Server t; t.lot_ = &lt;
                     t.build_default_zones();
                     t.park.devid = "P1";
@@ -68,7 +68,7 @@
                     // 음성 대조 — **다른 장치의 같은 이름은 안 붙어야 한다**
                     //   ⚠ 이게 없으면 "그냥 이름만 보고 붙은 것"과 구분이 안 된다
                     ParkingLot lt2;
-                    lt2.spot("A1").sensor("P9", "Q7");   // 🔴 P9 를 지정했는데 P1 이 온다
+                    lt2.spot("A1").parking().module("P9", "Q7");   // 🔴 P9 를 지정했는데 P1 이 온다
                     Server u; u.lot_ = &lt2;
                     u.build_default_zones();
                     u.park.devid = "P1";
@@ -91,13 +91,13 @@
                 //   🔑 음성 대조가 핵심이다 — 정상 이름에 뜨면 **늘 뜨는 경고**가 된다.
                 {
                     ParkingLot okLot;
-                    okLot.spot("A1").sensor("P1", "A1").sensor("P1", "B1").actuator("P1", "LD");
+                    okLot.spot("A1").parking().module("P1", "A1").module("P1", "B1").module("P1", "LD");
                     Server a; a.lot_ = &okLot; a.build_default_zones();
 
                     ParkingLot badLot;
-                    badLot.spot("A1").sensor("P1", "LED1")      // 4바이트
-                                     .sensor("P1", "A")         // 1바이트
-                                     .sensor("P1", "가");       // 한글 3바이트
+                    badLot.spot("A1").parking().module("P1", "LED1")   // 4바이트
+                                     .module("P1", "A")        // 1바이트
+                                     .module("P1", "가");      // 한글 3바이트
                     Server b; b.lot_ = &badLot; b.build_default_zones();
 
                     bool ok = (a.asm_warn_ == 0) && (b.asm_warn_ == 3);
@@ -115,9 +115,9 @@
                 //   🔑 그리고 분모가 다르면 "두 경로 일치" 대조가 **항상 불일치이거나 무의미**해진다.
                 {
                     ParkingLot lt;
-                    lt.spot("A1").sensor("P1", "A1");
-                    lt.spot("A3").sensor("P1", "A3");
-                    lt.gate("E1", Gate::IN);              // 입출구는 옛 격자의 자리가 아니다
+                    lt.spot("A1").parking().module("P1", "A1");
+                    lt.spot("A3").parking().module("P1", "A3");
+                    lt.spot("E1");                        // 🔑 일반영역 — 옛 격자의 자리가 아니다
                     Server t; t.lot_ = &lt; t.no_disk = true;
                     t.build_default_zones(); t.init_srv_id();
                     const std::string snap = t.snapshot_json();
@@ -280,8 +280,8 @@
                     };
                     static AndRule g_and;
                     ParkingLot lt;
-                    lt.spot("A1").sensor("P1", "A1").sensor("P1", "B1");            // 기본(OR)
-                    lt.spot("A2").sensor("P1", "A2").sensor("P1", "B2").behavior(g_and);
+                    lt.spot("A1").parking().module("P1", "A1").module("P1", "B1");  // 기본(OR)
+                    lt.spot("A2").parking().module("P1", "A2").module("P1", "B2").behavior(g_and);
                     Server t; t.lot_ = &lt;
                     t.build_default_zones();
 

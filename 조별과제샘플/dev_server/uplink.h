@@ -349,7 +349,6 @@
                                     rid_release(drid);
                                 } else ++it;
                             }
-                            gate_want.clear();
                             break;
                         }
                 }

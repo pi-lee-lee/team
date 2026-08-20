@@ -232,17 +232,26 @@ static ProcessInit g_process_init;
 //   🔑 그래서 **사용 코드가 먼저 돌고** 내부는 나중에 정리된다.
 
 // 🔑 셋 다 **한 곳으로 모은다** — 규칙이 세 곳에 생기면 갈린다.
-Spot& Spot::sensor(const std::string& name) {
+// 🔴 v2 — `sensor()`/`actuator()` 를 `module()` 하나로 합쳤다(2026-08-20).
+//   센서/명령 구분은 **장치가 등록에서 말하는 `kind` 첫 글자**가 한다.
+Spot& Spot::module(const std::string& devid, const std::string& name) {
+    lot_->areas_[idx_].modules.push_back(ParkingLot::Attach(devid, name));
+    return *this;
+}
+Spot& Spot::module(const std::string& name) {
     // devid 를 안 준 형태 = "아무 장치나 그 이름을 가진 것"
-    lot_->areas_[idx_].modules.push_back(ParkingLot::Attach("", name, false));
+    lot_->areas_[idx_].modules.push_back(ParkingLot::Attach("", name));
     return *this;
 }
-Spot& Spot::sensor(const std::string& devid, const std::string& name) {
-    lot_->areas_[idx_].modules.push_back(ParkingLot::Attach(devid, name, false));
+Spot& Spot::parking() {
+    lot_->areas_[idx_].kind = "parking";
     return *this;
 }
-Spot& Spot::actuator(const std::string& devid, const std::string& name) {
-    lot_->areas_[idx_].modules.push_back(ParkingLot::Attach(devid, name, true));
+Spot& Spot::at(int row, int col) {
+    // ⚠ 음수는 **자동 배치**로 되돌린다. 0-기준 격자라 음수 자리는 없다.
+    ParkingLot::Area& a = lot_->areas_[idx_];
+    a.row = (row < 0) ? -1 : row;
+    a.col = (col < 0) ? -1 : col;
     return *this;
 }
 
@@ -254,17 +263,14 @@ Spot& Spot::behavior(SpotBehavior& b) {
 Spot ParkingLot::spot(const std::string& id) {
     for (size_t i = 0; i < areas_.size(); i++)
         if (areas_[i].id == id) return Spot(this, i);      // 같은 자리를 두 번 불러도 안전하다
-    Area a; a.id = id; a.kind = "parking";
+    // 🔴 **기본은 "area"(일반영역)다.** 주차 자리로 만들려면 `.parking()` 을 **적어야** 한다 —
+    //   안 적었을 때 **점유·예약이 안 생기는 쪽**이 조용히 틀리지 않는다.
+    Area a; a.id = id; a.kind = "area";
     areas_.push_back(a);
     return Spot(this, areas_.size() - 1);
 }
 
-void ParkingLot::gate(const std::string& id, Gate::Kind kind) {
-    for (size_t i = 0; i < areas_.size(); i++)
-        if (areas_[i].id == id) { areas_[i].kind = (kind == Gate::IN) ? "entrance" : "exit"; return; }
-    Area a; a.id = id; a.kind = (kind == Gate::IN) ? "entrance" : "exit";
-    areas_.push_back(a);
-}
+// 🔴 `ParkingLot::gate()` 가 여기 있었다. **없앴다**(v2) — `spot(...).label("입구")` 로 만든다.
 
 Spot& Spot::label(const std::string& text) {
     lot_->areas_[idx_].label = text;

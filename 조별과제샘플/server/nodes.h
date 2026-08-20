@@ -230,21 +230,11 @@
                              "지금 " + std::to_string(nm.size()) + "바이트");
             }
 
-        // ② **센서가 하나도 없는 주차 자리** — 점유를 영원히 모른다(`value_state: unknown` 고정).
-        //    ⚠ 화면에는 자리가 보이는데 값이 안 채워진다 → *"센서가 고장났나"* 를 쫓게 된다
-        for (size_t i = 0; i < as.size(); i++) {
-            if (as[i].kind != "parking") continue;      // 입출구는 센서가 없어도 된다
-            // 🔑 **센서만 센다.** 차단봉만 붙은 자리는 점유를 말할 수 없는 게 당연하다.
-            bool hasSensor = false;
-            for (size_t k = 0; k < as[i].modules.size(); k++)
-                if (!as[i].modules[k].actuator) { hasSensor = true; break; }
-            if (hasSensor) continue;
-            asm_warn_++;
-            logf("🔴", "조립 표 — 자리 " + as[i].id + " 에 **센서가 하나도 없다.** "
-                       "화면에는 자리가 보이지만 점유는 **영원히 `unknown`** 이다 "
-                       "(고장이 아니라 선언이 빈 것이다). "
-                       "`lot.spot(\"" + as[i].id + "\").sensor(\"...\")` 로 붙여라");
-        }
+        // 🔴 **② 검사가 여기 있었다 — 조립 시점에는 이제 못 한다** (v2 · 2026-08-20)
+        //   `sensor()`/`actuator()` 를 `module()` 로 합치면서 **선언만 보고는 무엇이 센서인지 모른다.**
+        //   센서 여부는 **장치 등록(`D`)의 `kind` 첫 글자**가 말한다.
+        //   → 같은 검사를 `bind_modules()`(등록 뒤)로 옮겼다. **지우지 않았다.**
+        //   🔑 늦어진 것이 아니라 **알 수 있는 가장 이른 시점으로 옮긴 것**이다.
 
         if (asm_warn_ == 0)
             logf("=", "조립 표 검사 — 자리 " + std::to_string(as.size()) + "개 · 문제 없음");
@@ -259,10 +249,55 @@
         //   조립 표가 있으면 **그것이 지형이다**. 없으면 기본 지형(자가검증은 표 없이 돈다).
         if (lot_ && !lot_->empty()) {
             const std::vector<ParkingLot::Area>& as = lot_->areas();
+            // 🔴 **격자 위치** (v2 · 2026-08-20)
+            //   `at(행,열)` 을 준 자리는 그 자리에, **안 준 자리는 선언 순서대로 자동 배치**한다.
+            //   ⚠ 자동 배치가 `at()` 이 이미 쓴 칸을 덮지 않게 **쓴 칸을 먼저 모아 두고 피한다** —
+            //     안 그러면 `at()` 을 쓴 사람이 **자기가 안 만든 겹침**을 보게 된다.
+            std::set<std::pair<int,int> > taken;
+            for (size_t i = 0; i < as.size(); i++)
+                if (as[i].row >= 0 && as[i].col >= 0)
+                    taken.insert(std::make_pair(as[i].row, as[i].col));
+            int auto_n = 0;
             for (size_t i = 0; i < as.size(); i++) {
                 Zone z; z.id = as[i].id; z.kind = as[i].kind;
-                z.cells.push_back(std::make_pair((int)(i / grid_cols), (int)(i % grid_cols)));
+                int r, c;
+                if (as[i].row >= 0 && as[i].col >= 0) { r = as[i].row; c = as[i].col; }
+                else {
+                    do { r = auto_n / grid_cols; c = auto_n % grid_cols; auto_n++; }
+                    while (taken.count(std::make_pair(r, c)));
+                    taken.insert(std::make_pair(r, c));
+                }
+                z.cells.push_back(std::make_pair(r, c));
                 lot.add(z);
+            }
+            // 🔴 **격자 크기를 자리에서 계산한다.** 화면이 상수로 갖지 않게.
+            {
+                int mr = 0, mc = 0;
+                for (size_t i = 0; i < lot.zones().size(); i++)
+                    for (size_t k = 0; k < lot.zones()[i].cells.size(); k++) {
+                        if (lot.zones()[i].cells[k].first  + 1 > mr) mr = lot.zones()[i].cells[k].first + 1;
+                        if (lot.zones()[i].cells[k].second + 1 > mc) mc = lot.zones()[i].cells[k].second + 1;
+                    }
+                if (mr > 0) grid_rows = mr;
+                if (mc > 0) grid_cols = mc;
+            }
+            // ⚠ **겹치면 말한다. 막지 않는다** — 겹침은 표시 문제이고 서버 동작은 멀쩡하다.
+            //   🔴 다만 증상이 *가려짐* 이라 조용하다. 그래서 **두 자리 id 를 지목**한다.
+            //   🔑 그리고 화면에서도 말한다(web) — **로그를 보는 사람과 화면을 보는 사람이 다르다.**
+            {
+                std::map<std::pair<int,int>, std::string> seen;
+                for (size_t i = 0; i < lot.zones().size(); i++) {
+                    const std::pair<int,int>& c = lot.zones()[i].cells[0];
+                    std::map<std::pair<int,int>, std::string>::iterator it = seen.find(c);
+                    if (it == seen.end()) { seen[c] = lot.zones()[i].id; continue; }
+                    asm_warn_++;
+                    char b[192];
+                    snprintf(b, sizeof(b),
+                             "조립 표 — 자리 `%s` 와 `%s` 가 **같은 칸 (%d,%d)** 에 있다. "
+                             "화면에서 하나가 가려진다. `at(행,열)` 을 확인해라",
+                             it->second.c_str(), lot.zones()[i].id.c_str(), c.first, c.second);
+                    logf("🔴", b);
+                }
             }
             validate_assembly();      // 🔴 선언이 틀렸으면 **여기서 말한다**
             bump_epoch("조립 표에서 지형 구성");
@@ -372,6 +407,30 @@
                            + " · 자리 결속이 아직 이름 기반이라 생기는 한계다(REQ-0260)");
         }
         check_dup_names(n);
+        // 🔴 **센서가 하나도 없는 주차 자리** — 조립 시점에서 여기로 **옮겨 온 검사**다(v2).
+        //   `module()` 하나로 합치면서 **선언만 보고는 센서인지 알 수 없게 됐다.**
+        //   장치가 `kind` 첫 글자로 말해 주는 **지금이 알 수 있는 가장 이른 시점**이다.
+        //   ⚠ 점유를 영원히 모르면 화면에 자리는 보이는데 값이 안 채워진다 →
+        //     *"센서가 고장났나"* 를 쫓게 된다. 그래서 **선언이 빈 것**이라고 말해 준다.
+        for (size_t zi = 0; zi < lot.zones().size(); zi++) {
+            const Zone& z = lot.zones()[zi];
+            if (z.kind != "parking") continue;          // 일반영역은 센서가 없어도 된다
+            bool anyMine = false, hasSensor = false;
+            for (size_t m = 0; m < z.modules.size(); m++) {
+                if (z.modules[m].first != n.devid) continue;
+                anyMine = true;
+                for (size_t k = 0; k < n.mods.size(); k++)
+                    if (n.mods[k].first == z.modules[m].second
+                        && !n.mods[k].second.empty() && n.mods[k].second[0] == 'I') hasSensor = true;
+            }
+            // 🔑 **이 노드의 모듈이 하나도 안 붙은 자리는 건너뛴다** — 다른 노드가 센서를
+            //   대고 있을 수 있다. 안 건너뛰면 **노드가 늘 때마다 거짓 경고**가 뜬다.
+            if (!anyMine || hasSensor) continue;
+            asm_warn_++;
+            logf("🔴", "자리 " + z.id + " 에 **센서가 하나도 없다**(노드 " + n.devid + " 기준). "
+                       "화면에는 자리가 보이지만 점유는 **영원히 `unknown`** 이다 "
+                       "— 고장이 아니라 선언이 빈 것이다");
+        }
         // 🔴🔴 **어느 자리에도 안 붙은 모듈을 *말한다*.** (2026-08-19 · 루트 지시)
         //
         //   `Modules.h` 주석이 이미 경고하고 있었다: *"이름은 자리 id 와 같아야 한다 —

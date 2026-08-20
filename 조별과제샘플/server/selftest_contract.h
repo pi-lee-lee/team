@@ -43,7 +43,11 @@
                 static const char* stateKeys[] = {
                     "\"type\":\"state\"", "\"srv_id\":", "\"epoch\":", "\"ts_ms\":",
                     "\"zones\":[", "\"id\":", "\"occupied\":", "\"reserved\":",
-                    "\"actions\":", "\"completion\":", "\"modules\":[",
+                    // 🔴 `"completion":` 이 여기 있었다. **2026-08-20 에 계약에서 뺐다** —
+                    //   게이트 조작을 없앤 뒤로 `gate_want` 를 쓰는 곳이 없어져
+                    //   `settled`·`mismatch` 가 **도달 불가**가 됐다. 답은 모듈의 `confirmed` 다.
+                    //   🔑 **이 시험이 빨강이 된 것이 회귀가 아니라 *계약이 바뀌었다* 는 신호였다.**
+                    "\"actions\":", "\"modules\":[",
                     "\"devid\":", "\"name\":", "\"idx\":", "\"value\":", "\"known\":"
                 };
                 bool ok35 = true; std::string missing;
@@ -252,7 +256,7 @@
             //     **구현하면서 찾았다. 명세를 고쳤다.**
             {
                 ParkingLot L;
-                L.spot("A1").sensor("P1", "A1").actuator("P1", "LD").actuator("P1", "L2");
+                L.spot("A1").parking().module("P1", "A1").module("P1", "LD").module("P1", "L2");
                 L.control("P1", "LD").toggle();
                 L.label("P1", "LD", "등");
                 L.control("P1", "L2").number(0, 9999999);

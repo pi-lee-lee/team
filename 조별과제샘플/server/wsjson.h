@@ -213,8 +213,11 @@
                     for (size_t k = 0; k < mn->mods.size(); k++)
                         if (mn->mods[k].first == z.modules[m].second) { mi = (int)k; break; }
                 if (mi < 0) continue;
-                // 🔑 **점유 센서만 센다.** 차단봉(OB)은 자리 점유를 말하지 않는다(명세 §8.1).
-                if (!mn || mn->mods[mi].second != "IP") continue;
+                // 🔑 **점유 센서만 센다.** 명령 모듈(`O…`)은 자리 점유를 말하지 않는다(명세 §8.1).
+                // 🔴 **첫 글자만 본다** (v2 · 2026-08-20). 전에는 `!= "IP"` 로 **통째로** 비교했다 —
+                //   그러면 기여자가 `IQ`(관측·다른 종류)를 써도 **점유에서 조용히 빠진다.**
+                //   계약은 **첫 글자 `I`/`O`** 뿐이고 나머지는 기여자 자유다.
+                if (!mn || mn->mods[mi].second.empty() || mn->mods[mi].second[0] != 'I') continue;
                 v_total++;
                 const bool known = (mi < mn->mod_bits_n);
                 const bool val   = known && mn->mod_bits[mi];
@@ -267,56 +270,21 @@
                 } else {
                     emit_action(o, first, "cancel",  blk);
                 }
-            } else if (z.kind == "entrance" || z.kind == "exit") {
-                // 🔴🔴 **`open_gate`/`close_gate` 를 여기서 뺐다** (2026-08-20 · 사용자가 실기에서 잡았다)
-                //
-                //   ```
-                //   06:22:18 open_gate  → G,236,4,**1**, → A,236,G4,**0** ✅
-                //   06:22:24 close_gate → G,237,4,**0**, → A,237,G4,**3** ❌ 장치가 거절
-                //   ```
-                //   장치의 `DR` 표는 **1=열기 · 2=닫기** 이고 `0` 은 표에 없다. **장치가 맞다.**
-                //
-                // 🔴 **뿌리는 값이 아니라 *뜻을 정하는 주체* 다.**
-                //   `lot.control(...).choice(...)` → 뜻을 **기여자**가 정한다
-                //   게이트 내장 버튼               → 뜻을 **서버**가 정했다(1/0)
-                //   > 우리 계약은 *"값의 뜻을 서버도 프로토콜도 모른다"* 인데
-                //   > **게이트 경로만 그 밖에 있었다.** 열기(=1)가 우연히 같아 안 보였고 닫기에서 갈렸다.
-                //
-                // 🔴 그리고 더 나쁜 것: **`dispatch_gate` 는 `ControlDecl` 을 한 번도 안 본다.**
-                //   범위 검사·선택지 검사를 **통째로 우회**한다. 기여자가 선언하지 않은 값이
-                //   화면 버튼 하나로 전선에 나갈 수 있었다.
-                //
-                // ⚠ **`lot.gate()` 자체는 그대로다.** 이건 버튼만 주는 것이 아니라
-                //   *"이 자리는 주차 자리가 아니다"* 를 뜻한다(점유 판정·예약·격자에서 빠진다).
-                //   **뺀 것은 그 둘 중 *명령* 쪽뿐이다.**
-                //
-                // 🔑 **이제 모듈에 명령하는 길은 하나다: `lot.control(...)`.** 예외가 없다.
-                (void)blk;
             }
+            // 🔴 v2 : 자리 종류가 **`"parking"` / `"area"`** 둘뿐이다.
+            //   `area` 에는 자리 단위 조작이 없다 — 조작은 **모듈의 `control` 선언**이 나른다.
+            (void)blk;
             o << "}";
-            // §3.5 완료 판정 — 🔴 **ACK 이 아니라 `S` 의 에코 비트로 판정한다.**
-            //   ACK 은 *"명령이 도착해 적용됐다"* 까지다. **실제로 열렸는지는 장치가 매 슬롯 에코한다.**
-            //   ⚠ ACK 으로 판정하면 장치가 받고 **못 움직였을 때** 화면이 "열렸다"로 그린다 — `거짓 완료`.
-            //   🔑 에코가 성립하는 조건: **비교할 값이 매 슬롯 온다**(원장 §8.21 이 실측한 그 조건).
-            //   값 셋만 쓴다: `pending`(내가 건 명령이 아직 있다) · `settled`(에코가 있다) · `unknown`(모른다).
-            {
-                bool any_pending = false;
-                for (std::map<uint16_t, Pending>::iterator it = pend.begin(); it != pend.end(); ++it)
-                    if (it->second.kind == 'G' && it->second.slot == z.id) any_pending = true;
-                const int gi = gate_index_of(z);
-                // **닫힌 집합 넷**: `pending` · `settled` · `mismatch` · `unknown`
-                //   pending  — 내가 건 명령이 아직 떠 있다
-                //   settled  — 마지막으로 **요청한 값과 에코가 같다**
-                //   🔴 mismatch — 요청과 에코가 **다르다.** 장치가 못 했거나 되돌아갔다.
-                //                **이 값이 없으면 거짓 완료가 `settled` 로 보인다.**
-                //   unknown  — 이 세션에 명령한 적이 없거나 비트를 못 읽었다
-                const char* comp = "unknown";
-                std::map<int,int>::const_iterator wi = gate_want.find(gi);
-                if (any_pending)                                  comp = "pending";
-                else if (gi >= 0 && gi < park.mod_bits_n && wi != gate_want.end())
-                    comp = (park.mod_bits[gi] == wi->second) ? "settled" : "mismatch";
-                o << ",\"completion\":\"" << comp << "\",\"modules\":[";
-            }
+            // 🔴 **자리의 `completion` 이 여기 있었다. 2026-08-20 에 없앴다.**
+            //   게이트 내장 조작을 없앤 뒤로 **`gate_want` 에 값을 쓰는 곳이 하나도 없다** →
+            //   `settled`·`mismatch` 가 **도달 불가**가 되어 `pending`/`unknown` 만 남았다.
+            //   실기 실측도 `unknown` 뿐이었다.
+            //   🔴 **닫힌 집합 넷이라고 적어 둔 계약이 일어날 수 없는 상태 둘을 계속 말하고 있었다.**
+            //
+            // 🔑 그리고 애초에 **자리 단위로 답할 수 없는 물음**이었다 —
+            //   자리는 모듈이 여럿인데 `completion` 은 **하나**였다.
+            //   답은 이제 **모듈마다의 `confirmed`** 가 나른다.
+            o << ",\"modules\":[";
             for (size_t m = 0; m < z.modules.size(); m++) {
                 if (m) o << ",";
                 // 🔴 **이제 값이 있다** — `S` 의 비트열에서 뽑는다(비트 `idx`).

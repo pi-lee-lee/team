@@ -106,16 +106,9 @@
     // ⚠ **이 함수는 주차 노드만 본다. 그대로 둔다** — 보조 노드는 **상행 전용**이라
     //   하행 경로가 없다. 없는 노드에 조작 색인을 만들어 주면 **누를 수 있는 버튼**이 생기고
     //   눌러도 아무 일이 안 난다. 🔑 §"조용히 성공으로 답하지 않는 것이 지금의 정답" 그대로다.
-    int gate_index_of(const Zone& z) const {
-        for (size_t m = 0; m < z.modules.size(); m++) {
-            if (z.modules[m].first != park.devid) continue;      // 지금은 주차 노드만 명령을 받는다
-            const std::string& nm = z.modules[m].second;
-            for (size_t i = 0; i < park.mods.size(); i++)
-                if (park.mods[i].first == nm && kind_commandable(park.mods[i].second))
-                    return (int)i;
-        }
-        return -1;
-    }
+    // 🔴 `gate_index_of()` 가 여기 있었다. **2026-08-20 에 없앴다** —
+    //   유일한 호출자였던 자리 `completion` 이 사라지면서 **호출자가 0 이 됐다.**
+    //   ⚠ 호출자 없는 코드는 **있는 것처럼 읽힌다.** 남기지 않는다.
     // 🔴 **명령 결과를 알린다** — 갈래 셋을 여기 한 곳에서 만든다.
     //   🔑 한 곳에서 만들어야 세 갈래가 **같은 모양**으로 나간다. 흩어지면 칸이 갈린다.
     void notify_cmd(const Pending& p, CmdResult::Kind k, int devResult) {
@@ -312,7 +305,7 @@
     //   장치의 기여자 표는 `1=열기 · 2=닫기` 였다. **닫기에서 갈려 장치가 거절했다**(실기).
     //   ⚠ 남겨 두지 않았다 — 호출자 없는 코드는 **있는 것처럼 읽힌다.**
     //   지금 모듈에 명령하는 길은 `send_to_module()` 하나다.
-    //   ⚠ `gate_want` 는 이제 채워지지 않는다 → 게이트 자리의 `completion` 은 `unknown` 이다.
+    //   ⚠ 자리 단위 `completion` 도 같이 없앴다 — 답은 **모듈의 `confirmed`** 가 나른다.
     //     **그게 맞다.** 그 자리에 서버가 정한 명령이 더는 없다. 값은 모듈의 `confirmed` 가 나른다.
 
     static std::string sim_prefix(const Pending& p) {
