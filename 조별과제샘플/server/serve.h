@@ -166,10 +166,13 @@
             // **몇 바이트였는지**를 못 봤다 — `AT+CIPSEND` 잘림 시험에서 그것이 측정값이다.
             if (line.size() + 1 > (size_t)MAX_LINE) {
                 drop_overlong++;
-                char b[96];
-                snprintf(b, sizeof(b), "상한(%dB) 초과 줄 — 버림 · **rx=%zuB**",
+                // 🔴 이름이 `b` 였다 — **바깥의 수신 버퍼 `b` 를 가리고 있었다**(`-Wshadow`).
+                //   여기서 누가 `recv(fd, b, sizeof(b))` 를 쓰면 **96바이트짜리로 읽는다.**
+                //   ⚠ 컴파일은 통과한다. **가려진 이름은 틀렸을 때 조용하다.**
+                char msg[96];
+                snprintf(msg, sizeof(msg), "상한(%dB) 초과 줄 — 버림 · **rx=%zuB**",
                          MAX_LINE, line.size());
-                logf("!", b);
+                logf("!", msg);
                 continue;
             }
                             if (!line.empty()) on_ard_line(park, line);
@@ -235,13 +238,13 @@
 
                 // ---------- 보조 노드 (REQ-0083) — **상행 전용**
                 {
-                    std::vector<std::string> dead;
+                    std::vector<std::string> dead_devs;
                     for (std::map<std::string, AuxNode>::iterator it = aux.begin(); it != aux.end(); ++it) {
                         AuxNode& a = it->second;
                         if (a.fd == BAD_SOCK || !FD_ISSET(a.fd, &rd)) continue;
                         char b[1024];
                         int r = (int)recv(a.fd, b, sizeof(b), 0);
-                        if (r <= 0) { dead.push_back(it->first); continue; }
+                        if (r <= 0) { dead_devs.push_back(it->first); continue; }
                         a.buf.append(b, r);
                         size_t i;
                         while ((i = a.buf.find('\n')) != std::string::npos) {
@@ -284,12 +287,12 @@
                         }
                         if (a.buf.size() > (size_t)MAX_LINE * 2) { a.drops++; a.buf.clear(); }
                     }
-                    for (size_t k = 0; k < dead.size(); k++) {
-                        logf("-AUX", "보조 노드 " + dead[k] + " 연결 종료 — 프레임 "
-                                     + std::to_string(aux[dead[k]].frames)
-                                     + " · 버린줄 " + std::to_string(aux[dead[k]].drops));
-                        if (aux[dead[k]].fd != BAD_SOCK) closesock(aux[dead[k]].fd);
-                        aux.erase(dead[k]);
+                    for (size_t k = 0; k < dead_devs.size(); k++) {
+                        logf("-AUX", "보조 노드 " + dead_devs[k] + " 연결 종료 — 프레임 "
+                                     + std::to_string(aux[dead_devs[k]].frames)
+                                     + " · 버린줄 " + std::to_string(aux[dead_devs[k]].drops));
+                        if (aux[dead_devs[k]].fd != BAD_SOCK) closesock(aux[dead_devs[k]].fd);
+                        aux.erase(dead_devs[k]);
                     }
                 }
                 // 준비된 fd 를 먼저 모은 뒤 처리한다. 순회 중에 conns 를 건드리면

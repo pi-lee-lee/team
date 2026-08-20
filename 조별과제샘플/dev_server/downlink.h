@@ -376,7 +376,7 @@
             // ⚠ **탐침 크기로 쏜다**(4건 아님) — 증거가 없는 자리다.
             flush_downq("S 가 안 온다 — 창 포기(탐침)", true, DOWN_PROBE_N);
         }
-        std::vector<uint16_t> dead;
+        std::vector<uint16_t> dead_rids;
         for (std::map<uint16_t, Pending>::iterator it = pend.begin(); it != pend.end(); ++it) {
             Pending& p = it->second;
             // 🔴 **큐에서 기다리는 동안은 ACK 시계가 안 돈다.** 안 그러면 전선에 나가기도 전에
@@ -389,7 +389,7 @@
                 send_err(p.ws_fd, p.browser_rid, "ack_timeout", "센서가 응답하지 않습니다");
                 // 🔴 **무응답 — 재전송을 다 쓰고도 답이 없다.** 거절과 **다른 사건**이다.
                 if (p.kind == 'G') notify_cmd(p, CmdResult::NO_ANSWER, -1);
-                dead.push_back(it->first);
+                dead_rids.push_back(it->first);
                 continue;
             }
             p.tries++;
@@ -424,11 +424,11 @@
             // 서버가 스스로 거절한 건에 붙이면 **로그에 거짓 문장이 남고 `ack_fail_count` 도 오염된다.**
             // 08-17 07:54:40 줄이 정확히 그 형태였다. 같은 것을 새 코드에 만들지 않는다.
             if (!enqueue_down(p, build_line(line), false, true)) {
-                dead.push_back(it->first);   // ⚠ 루프 안에서 erase 하면 반복자가 무효화된다
+                dead_rids.push_back(it->first);   // ⚠ 루프 안에서 erase 하면 반복자가 무효화된다
                 continue;
             }
         }
-        for (size_t i = 0; i < dead.size(); i++) { pend.erase(dead[i]); rid_release(dead[i]); }
+        for (size_t i = 0; i < dead_rids.size(); i++) { pend.erase(dead_rids[i]); rid_release(dead_rids[i]); }
     }
 
     // 그 자리에 아직 ACK 를 못 받은 요청이 있는가.

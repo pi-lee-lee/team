@@ -149,7 +149,7 @@
                  why, downq.size(), downq_bytes);
         logf("✂", b);
         q_dropped_link += (long long)downq.size();
-        // 🔴 **먼저 떼어낸다.** `send_err` 가 `dead` 를 건드리고, 실패 경로가 다시
+        // 🔴 **먼저 떼어낸다.** `send_err` 가 `dead_conns` 를 건드리고, 실패 경로가 다시
         // `end_ard_session` → `clear_downq` 로 들어올 수 있다. 비운 뒤에 답하면 재진입이 안전하다.
         std::vector<DownQ> tmp;
         tmp.swap(downq);
@@ -382,19 +382,24 @@
         f += payload;
         // 실패하면 여기서 erase 하지 않는다 — broadcast 순회 중이면 반복자가 무효화된다
         // (예전에 SIGSEGV 를 냈던 바로 그 실수다). 표시만 해 두고 루프 끝에서 거둔다.
-        if (!send_raw(fd, f.data(), f.size(), "WS 클라이언트")) dead.push_back(fd);
+        if (!send_raw(fd, f.data(), f.size(), "WS 클라이언트")) dead_conns.push_back(fd);
     }
     void ws_broadcast(const std::string& payload) {
         for (std::map<sock_t, Conn>::iterator it = conns.begin(); it != conns.end(); ++it)
             if (it->second.kind == Conn::WS) ws_send(it->first, payload);
     }
-    std::vector<sock_t> dead;      // 전송 실패로 끊어야 할 연결. 루프 끝에서 거둔다
+    // 🔴 **이름이 `dead` 였다. 2026-08-20 에 바꿨다** (`-Wshadow` · REQ-0272 concern `server-wire`)
+    //   같은 이름이 **셋**이었다: 이 멤버(연결) · `downlink.h` 의 지역(rid) · `serve.h` 의 지역(장치id)
+    //   🔴 셋 다 **정수 계열 컨테이너**라 잘못 써도 **컴파일이 통과한다.**
+    //   ⚠ 그때도 코드는 맞았다 — 지역이 이겨서 의도대로 돌았다. **위험은 *다음 편집* 이었다.**
+    //   🔑 이 부류의 네 번째다(`n` · `kind` · `slot` · `dead`).
+    std::vector<sock_t> dead_conns;      // 전송 실패로 끊어야 할 연결. 루프 끝에서 거둔다
     void reap_dead() {
-        for (size_t i = 0; i < dead.size(); i++) {
-            sock_t fd = dead[i];
+        for (size_t i = 0; i < dead_conns.size(); i++) {
+            sock_t fd = dead_conns[i];
             if (conns.count(fd)) { closesock(fd); conns.erase(fd); logf("-WS", "전송 실패로 연결 종료"); }
             if (phones.count(fd)) { closesock(fd); phones.erase(fd); }
         }
-        dead.clear();
+        dead_conns.clear();
     }
 
