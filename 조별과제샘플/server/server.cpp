@@ -339,6 +339,8 @@ long long ParkingServer::nowMs() const { return now_ms(); }
 void ParkingServer::onCommandResult(CmdResultFn fn) { p_->srv.cmd_cb_ = fn; }
 void ParkingServer::onOccupancyChanged(OccupancyFn fn) { p_->srv.occ_cb_ = fn; }
 void ParkingServer::onSensorValue(SensorValueFn fn) { p_->srv.val_cb_ = fn; }
+// 🔑 표지 `▸` 는 **기여자 줄**이다 — 엔진 줄(`=` · `!` · `←ARD` …)과 grep 으로 갈린다
+void ParkingServer::log(const std::string& msg) const { logf("▸", msg); }
 bool ParkingServer::deviceReady(const std::string& devid) const {
     const Node* n = p_->srv.node_by_devid(devid);
     return n && n->reg_done;

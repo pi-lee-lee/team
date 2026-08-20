@@ -122,7 +122,9 @@ void onSensorValue(ParkingServer& srv, const std::string& spot,
     //   거르면 그 값은 **어디에도 안 남는다** — 로그가 유일한 관측 자리이고,
     //   장치 쪽에서 보려면 시리얼을 잡아야 하는데 **그건 개입이다.**
     //   🔑 **거르는 것은 *보내는* 쪽이지 *찍는* 쪽이 아니다.**
-    std::cout << "[값] " << module << " " << value << "\n";
+    // 🔴 `std::cout` 이 아니라 `srv.log()` 다 — **서버 줄과 같은 시각 형식**이어야
+    //   "그 값이 어느 슬롯이었나" 를 대조할 수 있다. 시각이 없으면 값이 있어도 판정을 못 한다.
+    srv.log("[값] " + module + " " + std::to_string(value));
 
     if (module != "B1") return;              // 🔓 **보낼** 대상만 (거르는 것은 네 몫이다)
 
