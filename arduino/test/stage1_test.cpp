@@ -1606,6 +1606,13 @@ int main() {
       //   네 핀을 전수로 묻는다 — 하나가 빠지면 그 모듈만 조용히 안 듣는다.
       ok(g_pinMode[US_TRIG] == OUTPUT && g_pinMode[US_ECHO] == INPUT,
                             "★★★ 초음파 Trig=OUTPUT · Echo=INPUT");
+      // 🔴 **핀 번호를 리터럴로 박는다.** `g_pinMode[B1_TRIG]` 만 보면 **자기끼리 대조**라
+      //   상수가 99 로 바뀌어도 통과한다. 물어야 하는 것은 *"사용자가 배선한 핀과 같은가"* 다.
+      //   출처 : 사용자 2026-08-20 "트리거가 11 에코가 10 하나 더달았다" · A1 은 "에코가 4번핀 트리거 2번핀"
+      ok(US_TRIG == 2 && US_ECHO == 4,
+                            "★★★ A1 초음파 핀이 배선과 같다 (Trig 2 · Echo 4)");
+      ok(B1_TRIG == 11 && B1_ECHO == 10,
+                            "★★★ B1 초음파 핀이 배선과 같다 (Trig 11 · Echo 10)");
       ok(g_pinMode[B1_TRIG] == OUTPUT && g_pinMode[B1_ECHO] == INPUT,
                             "★★★ 두 번째 초음파 B1 Trig=OUTPUT · Echo=INPUT");
       ok(g_pinMode[LD_PIN] == OUTPUT,

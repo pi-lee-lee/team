@@ -65,7 +65,7 @@ static_assert(sizeof(DEVICE_ID) > 1 && sizeof(DEVICE_ID) <= 9,
 //   → **간격을 두고 값을 캐시한다.** 200ms 면 자리 상태 변화를 놓치지 않으면서
 //     블로킹이 전체 시간의 12% 아래로 떨어진다.
 // ─────────────────────────────────────────────────────────────────────────
-#define US_TRIG        2        // 🔓 Trig — 출력
+#define US_TRIG        2        // 🔓 Trig — 출력. 출처: 사용자 "에코가 4번핀 트리거 2번핀"
 #define US_ECHO        4        // 🔓 Echo — 입력
 #define US_NEAR_CM     60      // 이보다 가까우면 "차가 있다"
 // 🔴 타임아웃은 **문턱에서 나온다** — 60cm 보다 먼 것은 어차피 "비었다"다.
@@ -101,8 +101,8 @@ static bool readUltrasonic() {
 //   다만 둘까지는 복사가 더 읽기 쉽다(핀이 함수 안에 그대로 보인다).
 // 🔴 예산을 세라 : 초음파 하나가 6.96ms 다. **연속 66ms** 가 상한이고 그것의 50%(33ms)를 쓴다
 //   → 지금 둘 = 14ms. `GUIDE.md` §4 의 표가 그 수를 준다.
-#define B1_TRIG 11
-#define B1_ECHO 10
+#define B1_TRIG 11   // 배선 출처: 사용자 2026-08-20 "트리거가 11 에코가 10 하나 더달았다"
+#define B1_ECHO 10   // ⚠ 배선은 코드로 검증할 수 없다 — 사람만 안다
 static bool readB1() {
   static uint32_t lastAt  = 0;
   static bool     lastVal = false;
