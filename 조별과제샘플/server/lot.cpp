@@ -37,7 +37,7 @@ void buildLot(ParkingLot& lot) {
         .module("P1", "L2");             //   표시기
 
     lot.spot("E1")                       // 일반영역 — `parking()` 을 안 적었다
-        .at(0, 2)
+        .at(3, 4)
         .label("입구")
         .module("P1", "DR");             // 차단봉
 
