@@ -83,17 +83,34 @@ const ST = {
   ],
 };
 
+/* 🔴 **자리 상세는 우측 패널에 있다** (REQ-0288 - 격자 칸은 요약만 그린다).
+   그래서 자리마다 **그 칸을 눌러** 패널을 그린 뒤 읽는다. 누르는 것은 앱의 선택 경로 그대로다 -
+   두 번째 경로를 만들면 그것이 곧 두 번째 판정자다.
+   ⚠ 클릭이 격자를 통째로 다시 만들므로 **NodeList 를 들고 순회하면 안 된다.** id 목록을 먼저 뜨고
+   매번 다시 찾는다. (역따옴표 금지 - 이 문자열 자체가 템플릿 리터럴이다. 원장 5.49) */
 const readZones = `(() => {
+  const grid = document.getElementById('zone-grid');
+  const panel = document.getElementById('zone-detail');
+  /* 🔴 없으면 **왜 없는지 말한다.** null 을 그냥 들고 가면 다음 사람이 TypeError 를 보고
+     '하니스가 깨졌다' 로 읽는다. 실제 원인은 '이 화면이 REQ-0288 이전 판' 이다. */
+  if (!panel) throw new Error('이 화면에 #zone-detail 패널이 없다 - REQ-0288 이전 판이다(격자 칸에 모듈이 들어 있던 판). 배포/사본을 갱신해라');
+  const cellOf = (id) => [...grid.querySelectorAll('.zone')].find(z => z.dataset.zone === id);
+  const ids = [...grid.querySelectorAll('.zone')].map(z => z.dataset.zone);
   const out = {};
-  for (const z of document.querySelectorAll('#zone-grid .zone')) {
-    /* 🔑 dataset.zone 으로 센다. .zone__id 의 글자를 키로 쓰면 표시가 바뀔 때 조용히 깨진다.
-       (역따옴표 금지 — 이 문자열 자체가 템플릿 리터럴이다. 원장 5.49) */
-    const id = z.dataset.zone;
-    out[id] = (out[id] ? (out[id].dup = (out[id].dup || 1) + 1, out[id]) : {
+  for (const id of ids) {
+    if (out[id]) { out[id].dup = (out[id].dup || 1) + 1; continue; }
+    const cell = cellOf(id);
+    if (!cell) continue;
+    cell.click();                          /* 이 자리를 패널에 띄운다 */
+    out[id] = {
       dup: 1,
-      name: (z.querySelector('.zone__name') || {}).textContent || null,
-      idText: (z.querySelector('.zone__id') || {}).textContent || null,
-      nodes: [...z.querySelectorAll('.znode:not(.znode--empty)')].map(n => ({
+      /* 이름·id·배지·겹침 경고는 **칸**이 그린다 */
+      name: (cell.querySelector('.zone__name') || {}).textContent || null,
+      idText: (cell.querySelector('.zone__id') || {}).textContent || null,
+      badgeText: (cell.querySelector('.zone__badge') || {}).textContent || null,
+      overlapText: (cell.querySelector('.zone__overlap') || {}).textContent || null,
+      /* 노드 박스·모듈 행·조작 버튼은 **패널**이 그린다 */
+      nodes: [...panel.querySelectorAll('.znode:not(.znode--empty)')].map(n => ({
         devid: n.dataset.devid,
         headText: (n.querySelector('.znode__id') || {}).textContent,
         mods: [...n.querySelectorAll('.zmod')].map(m => ({
@@ -102,13 +119,12 @@ const readZones = `(() => {
           lampLabel: m.querySelector('.zlamp') ? m.querySelector('.zlamp').getAttribute('aria-label') : null,
         })),
       })),
-      emptyBoxes: z.querySelectorAll('.znode--empty').length,
-      emptyText: (z.querySelector('.znode--empty') || {}).textContent || null,
-      overlapText: (z.querySelector('.zone__overlap') || {}).textContent || null,
-      reserveBtns: z.querySelectorAll('.zbtn[data-act="reserve"]').length,
-    });
+      emptyBoxes: panel.querySelectorAll('.znode--empty').length,
+      emptyText: (panel.querySelector('.znode--empty') || {}).textContent || null,
+      reserveBtns: panel.querySelectorAll('.zbtn[data-act="reserve"]').length,
+    };
   }
-  return { zones: out, cont: document.querySelectorAll('#zone-grid .zcell--cont').length };
+  return { zones: out, cont: grid.querySelectorAll('.zcell--cont').length };
 })()`;
 
 let client = null;
@@ -403,14 +419,64 @@ try {
     };
     await evaluate(client, inject(GATE));
     await sleep(120);
+    /* 🔴 조작 버튼은 **패널**에 있다(REQ-0288). 그 자리를 먼저 선택해야 그려진다. */
     const acts = await evaluate(client, `(() => {
-      const z = [...document.querySelectorAll('#zone-grid .zone')].find(e => e.dataset.zone === 'Z2');
-      return z ? [...z.querySelectorAll('.zbtn')].map(b => b.dataset.act) : null;
+      const cell = [...document.querySelectorAll('#zone-grid .zone')].find(e => e.dataset.zone === 'Z2');
+      if (!cell) return null;
+      cell.click();
+      const panel = document.getElementById('zone-detail');
+      return [...panel.querySelectorAll('.zbtn')].map(b => b.dataset.act);
     })()`);
     ok('🔴 서버가 open_gate/close_gate 를 보내도 그려지는 버튼 집합은 {reserve} 뿐이다  ' + S(acts || []),
        Array.isArray(acts) && setEq(acts, ['reserve']),
        '그렸다: ' + S(acts || []) + ' — 게이트 조작은 제거됐다(control 로 통일). '
        + '되살아났으면 ACTION_LABEL 주석을 읽어라: 서버는 닫기=0, 장치는 닫기=2 로 갈렸다');
+  }
+
+  /* ── 🔴 REQ-0288 의 합격선 — **모듈이 몇 개든 칸이 안 변한다** ──────────
+     사용자가 실물에서 관측한 결함이다: 모듈 많은 자리 하나가 grid 행 전체를 늘렸다.
+     🔑 긍정형 + 분모로 쓴다: 칸이 둘 이상 그려졌고, 그 높이가 **같다**. */
+  if (!LIVE) {
+    const fatMods = [];
+    for (let i = 0; i < 10; i++) fatMods.push({ devid: 'P1', name: 'M' + i, kind: 'IP', idx: i });
+    const FAT = {
+      type: 'map', srv_id: 'T-1', epoch: 9, grid: { rows: 1, cols: 2 },
+      zones: [
+        { id: 'FA', kind: 'parking', cells: [[0, 0]], modules: fatMods },
+        { id: 'FB', kind: 'parking', cells: [[0, 1]], modules: [{ devid: 'P1', name: 'N0', kind: 'IP', idx: 0 }] },
+      ],
+    };
+    await evaluate(client, inject(FAT));
+    await sleep(160);
+    const cells = await evaluate(client, `(() => {
+      return [...document.querySelectorAll('#zone-grid .zone')].map((c) => {
+        const r = c.getBoundingClientRect();
+        return { id: c.dataset.zone, h: Math.round(r.height), w: Math.round(r.width),
+                 badge: (c.querySelector('.zone__badge') || {}).textContent || null,
+                 mods: c.querySelectorAll('.zmod').length,
+                 tag: c.tagName };
+      });
+    })()`);
+    const list = Array.isArray(cells) ? cells : [];
+    ok('분모: 칸이 둘 이상 그려졌다 (' + list.length + ')', list.length >= 2, JSON.stringify(list));
+    ok('🔴 모듈 10개 자리와 1개 자리의 **칸 높이가 같다** (REQ-0288 합격선)',
+       list.length >= 2 && list.every((b) => b.h === list[0].h),
+       JSON.stringify(list) + ' — 다르면 행 높이가 다시 내용에 딸린 것이다(grid-auto-rows 를 봐라)');
+    ok('🔴 칸에는 모듈 행이 하나도 없다 — 요약만 그린다',
+       list.length >= 2 && list.every((b) => b.mods === 0), JSON.stringify(list));
+    ok('모듈 수 배지가 칸에 있다 (10 / 1)',
+       list.length >= 2 && /10/.test(list[0].badge || '') && /1/.test(list[1].badge || ''),
+       JSON.stringify(list.map((b) => b.badge)));
+    ok('🔴 칸이 button 이다 (div 로 버튼을 만들지 않는다)',
+       list.length >= 2 && list.every((b) => b.tag === 'BUTTON'), JSON.stringify(list.map((b) => b.tag)));
+    /* 지형이 갈리면 선택이 사라진다 — 그때 **첫 자리로 떨어지는지**를 같이 본다(패널이 비면 조작이 사라진다). */
+    const sel = await evaluate(client, `(() => {
+      const c = document.querySelector('#zone-grid .zone[aria-current="true"]');
+      const panel = document.getElementById('zone-detail');
+      return { sel: c ? c.dataset.zone : null, panelMods: panel.querySelectorAll('.zmod').length };
+    })()`);
+    ok('🔴 옛 선택이 사라지면 첫 자리로 떨어진다 (FA) · 패널에 모듈 10행',
+       sel && sel.sel === 'FA' && sel.panelMods === 10, JSON.stringify(sel));
   }
 
   if (!LIVE) {

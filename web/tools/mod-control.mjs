@@ -74,7 +74,11 @@ const BASE = [
 
 const READ = `(() => {
   const out = {};
-  for (const li of document.querySelectorAll('#zone-grid .zmod')) {
+  /* 🔴 모듈 행과 조작 UI 는 **우측 패널**에 있다 (REQ-0288 - 격자 칸은 요약만).
+     ⚠ 예전 선택자 '#zone-grid .zmod' 는 지금 0개를 돌려준다 - 그러면 아래 대조가 전부
+     공허하게 참이 되거나 통째로 빨강이 된다. 자리가 바뀌면 계측기의 자리도 바꿔야 한다.
+     ⚠ 이 주석은 템플릿 리터럴 안이다 - 역따옴표를 쓰면 문자열이 그 자리에서 끊긴다. */
+  for (const li of document.querySelectorAll('#zone-detail .zmod')) {
     const nm = (li.querySelector('.zctl') || {}).dataset;
     const head = (li.querySelector('.zmod__head') || {}).textContent || '';
     const ctl = li.querySelector('.zctl');

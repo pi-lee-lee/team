@@ -95,8 +95,15 @@ src=973695a76d90 git=be7ba68 at=…          배포본. src 는 정규화 후 �
 없으면 `GET /` 가 404 다. **그 사본의 소유자는 web 이다** — 규칙이 그렇게 열렸다.
 
 ```bash
-node web/tools/deploy-screen.mjs --deploy --target 조별과제샘플/dev_server/index.html
+node web/tools/deploy-screen.mjs --deploy --target 조별과제샘플/dev_server/index.html --no-backup
 ```
+
+🔴 **`--no-backup` 을 빼지 마라** (2026-08-20 에 빼고 돌려서 알았다). 빼면 `index.html.prev-<sha>` 가
+그 폴더에 남는데 — ① **그 폴더는 기여자에게 압축으로 나간다**(백업 파일이 같이 배포된다) ②
+그 파일의 소유권은 `**/dev_server/**` → **socket** 으로 떨어져 **web 이 지우지도 못한다**
+(`index.html` 만 web 소유다. 이름이 다르면 위 규칙에 안 걸린다) ③ **직전 판은 git 이 이미 갖고 있다** —
+추적되는 파일이므로 백업이 안전망도 아니다.
+⚠ 반대로 `~/parking-bin` 배포에는 **절대 쓰지 마라** — 거기는 git 밖이라 `.prev-*` 가 유일한 되돌림이다.
 
 🔴 **왜 socket 이 안 들고 web 이 드나**: **갱신 주체와 소유자를 갈라 놓으면 반드시 낡는다**
 (socket 이 스스로 짚었다). 화면을 고치는 사람이 사본도 갱신해야 안 낡는다.

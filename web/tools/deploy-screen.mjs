@@ -178,8 +178,15 @@ if (MODE === 'deploy') {
     console.log('  ❌ 원본에 `<meta name="screen-build">` 표지가 없다. 먼저 표지를 넣어라.');
     process.exit(2);
   }
-  /* 직전 판을 남긴다 — socket 이 바이너리에 하는 것과 같은 규율(srv_parking.prev-*). */
-  try {
+  /* 직전 판을 남긴다 — socket 이 바이너리에 하는 것과 같은 규율(srv_parking.prev-*).
+     🔴 **`--no-backup` 은 대상이 *git 이 추적하는 파일* 일 때 쓴다** — 직전 판을 git 이 이미 갖고 있고,
+     그때 `.prev-*` 는 안전망이 아니라 **쓰레기**다. 특히 `조별과제샘플/dev_server/` 는
+     **기여자에게 압축으로 나가는 폴더**라 그 안의 백업 파일이 그대로 배포된다.
+     ⚠ 그리고 `.prev-*` 의 소유권은 `**/dev_server/**`(socket) 으로 떨어져 **web 이 지우지도 못한다.**
+     🔑 `~/parking-bin` 처럼 **git 밖 경로**에는 쓰지 마라 — 거기서는 백업이 유일한 되돌림이다. */
+  if (has('--no-backup')) {
+    console.log('  · 직전 판 보관 생략(--no-backup) — git 이 직전 판을 갖고 있는 대상에만 써라');
+  } else try {
     const prev = await readFile(target, 'utf8');
     const prevSha = contentSha(prev);
     if (prevSha !== srcSha) {
