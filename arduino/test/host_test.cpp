@@ -124,7 +124,7 @@ static bool checksumSelfConsistent(const std::string& line) {
 static void pinSimLow(uint8_t i) {
   // §12B.1 이후 시뮬은 자율 전진을 하지 않으므로 값만 내려 두면 그대로 유지된다.
   // (예전에는 simNextAt 마감도 멀리 밀어야 했다 — 그 배열 자체가 사라졌다.)
-  simOcc &= (uint16_t)~((uint16_t)1 << i);
+  node.simOcc &= (uint16_t)~((uint16_t)1 << i);
 }
 
 static std::vector<std::string> splitLine(const std::string& s) {
@@ -208,17 +208,17 @@ int main() {
      "S 프레임 체크섬이 독립 계산과 일치: " + lastStatus());
 
   printf("\n[2] ★ 칸별 오버라이드가 다음 S 프레임에 반영되는가 (완료기준 핵심)\n");
-  slotOverrideClearAll();
+  node.slotOverrideClearAll();
   // §12A.2 주입은 무장 중에만 적용된다. [2]~[9] 는 오버라이드 층 자체를 보는 시험이라
   // 무장 상태로 둔다(실사용에서는 T,A 가 켠다). 해제 상태의 거동은 [11] 에서 따로 본다.
-  testArmed = true;
+  node.testArmed = true;
   // ⚠ 밑에 깔린 소스를 **0 으로 못 박고** 나서 1 을 강제해야 의미가 있다.
   //    가상 시계가 빨리 흘러 시뮬이 거의 모든 칸을 채워 두므로, 그냥 1 을 강제하면
   //    오버라이드가 no-op 이어도 시뮬 때문에 1 이 읽혀 테스트가 통과해 버린다.
   pinSimLow(2);
   spin(200);
   ok(occField(lastStatus())[2] == '0', "먼저: 오버라이드 없이 A3 는 0 이다 (밑바닥 확인)");
-  slotOverrideSet(2, 1);                // A3 = 인덱스 2 를 강제 점유
+  node.slotOverrideSet(2, 1);                // A3 = 인덱스 2 를 강제 점유
   spin(400);
   std::string s1 = lastStatus();
   std::string occ1 = occField(s1);
@@ -226,20 +226,20 @@ int main() {
   ok(occ1.size() == 10 && occ1[2] == '1', "A3(인덱스 2) 강제 점유 → occupied 비트 2 가 1");
   ok(checksumSelfConsistent(s1), "그 S 프레임의 체크섬도 맞다");
 
-  slotOverrideSet(2, 0);                // 같은 칸을 강제 '비움' 으로
+  node.slotOverrideSet(2, 0);                // 같은 칸을 강제 '비움' 으로
   spin(400);
   std::string occ2 = occField(lastStatus());
   printf("        S = %s   (occupied=%s)\n", lastStatus().c_str(), occ2.c_str());
   ok(occ2.size() == 10 && occ2[2] == '0', "A3 강제 해제(0) → occupied 비트 2 가 0");
 
   printf("\n[3] 오버라이드는 칸별이다 — 다른 칸은 영향받지 않는다\n");
-  slotOverrideClearAll();
+  node.slotOverrideClearAll();
   pinSimLow(8);                         // B4 — 이웃. 오버라이드를 걸지 않는다
   pinSimLow(9);                         // B5 — 여기만 강제한다
   spin(200);
   std::string occPre = occField(lastStatus());
   ok(occPre[8] == '0' && occPre[9] == '0', "먼저: B4·B5 둘 다 0 이다 (밑바닥 확인)");
-  slotOverrideSet(9, 1);                // B5 = 인덱스 9 만
+  node.slotOverrideSet(9, 1);                // B5 = 인덱스 9 만
   spin(400);
   std::string occ3 = occField(lastStatus());
   printf("        occupied=%s   (B4=%c, B5=%c)\n", occ3.c_str(), occ3[8], occ3[9]);
@@ -247,8 +247,8 @@ int main() {
   ok(occ3.size() == 10 && occ3[8] == '0', "옆칸 B4(인덱스 8) 는 0 그대로다 — 칸별이다");
 
   printf("\n[4] 소스 REAL — 핀을 LOW 로 당기면 점유로 읽힌다 (SENSOR_ACTIVE_LOW)\n");
-  slotOverrideClearAll();
-  slotSourceSet(0, 1);                              // A1 을 실물 소스로
+  node.slotOverrideClearAll();
+  node.slotSourceSet(0, 1);                              // A1 을 실물 소스로
   ok(g_pinMode[slotPin(0)] == INPUT_PULLUP, "A1 의 핀이 INPUT_PULLUP 으로 잡힌다");
   g_pinLevel[slotPin(0)] = LOW;                     // 차량 있음
   spin(400);
@@ -263,23 +263,23 @@ int main() {
 
   printf("\n[5] 우선순위 — 오버라이드가 실물 소스를 이긴다\n");
   g_pinLevel[slotPin(0)] = HIGH;                    // 실물은 '비어 있음'
-  slotOverrideSet(0, 1);                            // 그런데 강제로 점유
+  node.slotOverrideSet(0, 1);                            // 그런데 강제로 점유
   spin(400);
   std::string occ6 = occField(lastStatus());
   printf("        실물=HIGH(0) 인데 오버라이드=1 → occupied=%s\n", occ6.c_str());
   ok(occ6.size() == 10 && occ6[0] == '1', "오버라이드가 실물보다 우선한다");
 
-  slotOverrideClear(0);                             // 오버라이드만 풀면 실물로 복귀
+  node.slotOverrideClear(0);                             // 오버라이드만 풀면 실물로 복귀
   spin(400);
   std::string occ7 = occField(lastStatus());
   ok(occ7.size() == 10 && occ7[0] == '0', "오버라이드 해제 → 실물 값(0)으로 복귀");
-  slotSourceSet(0, 0);
+  node.slotSourceSet(0, 0);
 
   printf("\n[6] 수신 경로 — +IPD → 예약 → ACK (명세 §6.2 / §8.1)\n");
-  slotOverrideClearAll();
+  node.slotOverrideClearAll();
   // B3(인덱스 7) 를 **비어 있는 상태로 고정**한다. 시뮬이 마침 그 칸에 차를 넣어 두면
   // 명세 §2.4 대로 result=1(이미 점유) 이 나오는 것이 정답이라 예약 성공 경로를 못 본다.
-  slotOverrideSet(7, 0);
+  node.slotOverrideSet(7, 0);
   spin(200);
   size_t before = wifi.sentLines.size();
   deliverIPD("R,42,B3,u17,56");                     // 명세 §8.1 의 그 줄
@@ -287,15 +287,15 @@ int main() {
   std::string ack = lastAck();
   printf("        ACK = %s\n", ack.c_str());
   ok(ack == "A,42,B3,0,06", "R,42,B3,u17,56 → A,42,B3,0,06 (명세 §8.1 과 바이트 일치)");
-  ok((resMask & (1u << 7)) != 0, "B3(인덱스 7) 의 reserved 비트가 켜졌다");
+  ok((node.resMask & (1u << 7)) != 0, "B3(인덱스 7) 의 reserved 비트가 켜졌다");
   (void)before;
 
   printf("\n[7] rid 멱등 — 같은 rid 재수신 시 재적용 없이 같은 ACK (§4.2)\n");
-  uint16_t resBefore = resMask;
+  uint16_t resBefore = node.resMask;
   deliverIPD("R,42,B3,u17,56");                     // 똑같은 줄을 한 번 더
   spin(200);
   ok(lastAck() == "A,42,B3,0,06", "같은 ACK 를 그대로 다시 낸다");
-  ok(resMask == resBefore, "상태를 다시 적용하지 않는다");
+  ok(node.resMask == resBefore, "상태를 다시 적용하지 않는다");
 
   printf("\n[8] 체크섬이 틀린 줄은 버린다 (§2.2 / §6.2 4단계)\n");
   std::string ackBefore = lastAck();
@@ -334,22 +334,22 @@ int main() {
 
   printf("\n[11] 해제 상태 — 주입은 적용되지 않고 S/X 는 result=4 로 거절된다 (§12A.2)\n");
   // 실사용의 해제 상태를 재현한다: T,D 가 무장을 끄고 전 칸 오버라이드를 지운다.
-  testArmed = false;
-  slotOverrideClearAll();
+  node.testArmed = false;
+  node.slotOverrideClearAll();
   spin(200);
-  ok(!testArmed, "해제 상태다 (부팅 직후도 이 상태 — §12A.3)");
+  ok(!node.testArmed, "해제 상태다 (부팅 직후도 이 상태 — §12A.3)");
   ok(tmaskField(lastStatus()).empty(), "해제 중 S 에는 tmask 필드가 없다");
 
   // ★ 안전 방향: 해제 중에는 오버라이드가 남아 있어도 occupied 에 실리면 안 된다.
   //   실리면 tmask 없이 가짜 값이 전선에 나가고, 화면은 그걸 실측으로 믿는다(§12A.6).
   pinSimLow(4);                                        // A5 밑바닥 0
-  slotOverrideSet(4, 1);                               // 해제 중인데 강제로 1
+  node.slotOverrideSet(4, 1);                               // 해제 중인데 강제로 1
   spin(300);
   printf("        해제 중 오버라이드 → occupied=%s  tmask=%s\n",
          occField(lastStatus()).c_str(), tmaskField(lastStatus()).c_str());
   ok(occField(lastStatus())[4] == '0', "해제 중 오버라이드는 occupied 에 실리지 않는다");
   ok(tmaskField(lastStatus()).empty(), "그리고 tmask 도 여전히 없다");
-  slotOverrideClearAll();
+  node.slotOverrideClearAll();
 
   std::string t60 = std::string("T,60,S,A3,1,") + xorCk("T,60,S,A3,1,");
   deliverIPD(t60);
@@ -358,14 +358,14 @@ int main() {
   ok(lastAck() == std::string("A,60,A3,4,") + xorCk("A,60,A3,4,"),
      "무장 전 주입 → result=4 (" + lastAck() + ")");
   ok(lastAck()[lastAck().size() - 3 - 1] == '4', "result 자리가 실제로 4 다");
-  ok(!testArmed, "거절됐으므로 여전히 해제 상태");
+  ok(!node.testArmed, "거절됐으므로 여전히 해제 상태");
 
   printf("\n[12] T 무장 → tmask 가 S 에 실린다\n");
   deliverIPD("T,50,A,??,-,11");                       // 명세 §2.5 의 그 줄
   spin(300);
   printf("        ACK = %s\n", lastAck().c_str());
   ok(lastAck() == "A,50,??,0,74", "무장 ACK 가 명세의 A,50,??,0,74 와 바이트 일치");
-  ok(testArmed, "무장 상태가 됐다");
+  ok(node.testArmed, "무장 상태가 됐다");
   printf("        S = %s\n", lastStatus().c_str());
   ok(tmaskField(lastStatus()) == "0000000000", "무장 직후 tmask = 0000000000 (주입된 칸 없음)");
 
@@ -383,13 +383,13 @@ int main() {
   ok(tmaskField(lastStatus())[3] == '0', "건드리지 않은 A4 의 tmask 비트는 0");
 
   printf("\n[14] T 멱등 — 같은 rid 재수신 시 재적용 없이 같은 ACK (§4.2)\n");
-  slotOverrideSet(3, 1);                               // 캐시 적중이면 이 값이 살아남아야 한다
+  node.slotOverrideSet(3, 1);                               // 캐시 적중이면 이 값이 살아남아야 한다
   spin(200);
-  uint16_t ovrBefore = ovrActive;
+  uint16_t ovrBefore = node.ovrActive;
   deliverIPD("T,52,S,A3,1,6F");                        // 같은 rid 52 를 한 번 더
   spin(200);
   ok(lastAck() == "A,52,A3,0,04", "같은 ACK 를 그대로 다시 낸다");
-  ok(ovrActive == ovrBefore, "상태를 다시 적용하지 않는다");
+  ok(node.ovrActive == ovrBefore, "상태를 다시 적용하지 않는다");
 
   printf("\n[15] T,X — 그 칸만 원래 소스로 (§12A.2)\n");
   deliverIPD("T,54,X,A3,-,7E");                        // 명세 §2.5 의 그 줄
@@ -405,8 +405,8 @@ int main() {
   printf("        ACK = %s\n", lastAck().c_str());
   printf("        S   = %s\n", lastStatus().c_str());
   ok(lastAck() == "A,51,??,0,75", "해제 ACK 는 slot 이 ?? 다");
-  ok(!testArmed, "해제 상태가 됐다");
-  ok(ovrActive == 0, "전 칸 오버라이드가 한 번에 사라졌다 (§12A.2)");
+  ok(!node.testArmed, "해제 상태가 됐다");
+  ok(node.ovrActive == 0, "전 칸 오버라이드가 한 번에 사라졌다 (§12A.2)");
   ok(tmaskField(lastStatus()).empty(), "해제되면 S 에서 tmask 필드가 통째로 빠진다(옛 형식)");
 
   printf("\n[17] ★ tmask 가 바뀌면 하트비트를 기다리지 않고 즉시 나간다 (REQ-0035 ②)\n");
@@ -414,8 +414,8 @@ int main() {
     // 시뮬을 전부 얼려 occupied 가 스스로 바뀌지 못하게 한다 —
     // 안 그러면 "시뮬이 바꿔서 나간 S" 를 "tmask 때문에 나간 S" 로 오독한다.
     freezeAllSims();
-    testArmed = false;
-    slotOverrideClearAll();
+    node.testArmed = false;
+    node.slotOverrideClearAll();
     spin(400);
     // ★ 하트비트 직후로 정렬한다. 임의 지점에서 창을 열면 하트비트가 창 안에 들어와
     //   즉시 전송이 없어도 통과해 버린다 — 그러면 이 시험은 아무것도 증명하지 않는다.
@@ -452,7 +452,7 @@ int main() {
     //    정상 동작해서 무장 명령 자체가 삼켜진다 — 실제로 처음에 그렇게 짜서 5건이 실패했다.
     deliverIPD("T,80,A,??,-," + xorCk("T,80,A,??,-,"));   // 다시 무장 (새 rid)
     spin(200);
-    ok(testArmed, "rid 80 으로 무장됐다 (사전 조건)");
+    ok(node.testArmed, "rid 80 으로 무장됐다 (사전 조건)");
     // rid 90 으로 A3 주입 → 캐시에 (90, A3, 0) 이 남는다
     deliverIPD("T,90,S,A3,1," + xorCk("T,90,S,A3,1,"));
     spin(200);
@@ -493,7 +493,7 @@ int main() {
     // 사전 조건: 무장 + rid 를 하나 소비해 캐시에 넣는다
     deliverIPD("T,100,A,??,-," + xorCk("T,100,A,??,-,"));
     spin(200);
-    ok(testArmed, "rid 100 으로 무장됐다 (사전 조건)");
+    ok(node.testArmed, "rid 100 으로 무장됐다 (사전 조건)");
     deliverIPD("T,101,S,A5,1," + xorCk("T,101,S,A5,1,"));
     spin(200);
     ok(lastAck() == "A,101,A5,0," + xorCk("A,101,A5,0,"), "rid 101 이 A5 로 처리됐다");
@@ -509,7 +509,7 @@ int main() {
     wifi.deliver("CLOSED\r\n");
     spin(3);
     ok(!netOnline, "CLOSED 로 오프라인이 됐다");
-    ok(cacheCount == 0, "CLOSED 시점에 이미 캐시가 비어 있다 — CONNECT 를 기다리지 않았다");
+    ok(ackQ.find(101) < 0, "CLOSED 시점에 rid 101 이 캐시에서 사라졌다 — CONNECT 를 기다리지 않았다");
   }
 
   printf("\n[20] CLOSED→재접속 후 같은 rid 가 새 명령으로 처리된다\n");
@@ -531,7 +531,7 @@ int main() {
     ok(lastAck() == "A,110,A1,0," + xorCk("A,110,A1,0,"), "rid 110 이 A1 로 처리됐다");
     wifi.deliver("ALREADY CONNECTED\r\n");
     spin(50);
-    ok(cacheCount > 0, "ALREADY CONNECTED 로는 캐시가 비지 않는다");
+    ok(ackQ.find(110) >= 0, "ALREADY CONNECTED 로는 rid 110 이 캐시에 남는다");
     deliverIPD("T,110,S,B1,1," + xorCk("T,110,S,B1,1,"));
     spin(200);
     printf("        ALREADY CONNECTED 후 ACK = %s\n", lastAck().c_str());
@@ -632,17 +632,17 @@ int main() {
 
   printf("\n[24] ★ 시뮬은 스스로 전진하지 않는다 — M 트리거만 민다 (§12B.1/.2, REQ-0047)\n");
   {
-    testArmed = false;
-    slotOverrideClearAll();
-    for (uint8_t i = 0; i < SENSOR_N; i++) slotSourceSet(i, 0);
-    resMask = 0;
+    node.testArmed = false;
+    node.slotOverrideClearAll();
+    for (uint8_t i = 0; i < SENSOR_N; i++) node.slotSourceSet(i, 0);
+    node.resMask = 0;
     ok(spinUntilOnline(20000), "온라인 상태다 (사전 조건)");
 
     // (a) 자율 전진이 없다 — 이게 이번 변경의 핵심이다
-    uint16_t before = simOcc;
+    uint16_t before = node.simOcc;
     spinMs(120000);                                  // 가상시각 2분
-    printf("        트리거 없이 2분: simOcc %04X → %04X\n", before, simOcc);
-    ok(simOcc == before, "★ 트리거 없이는 시뮬이 한 비트도 바뀌지 않는다");
+    printf("        트리거 없이 2분: node.simOcc %04X → %04X\n", before, node.simOcc);
+    ok(node.simOcc == before, "★ 트리거 없이는 시뮬이 한 비트도 바뀌지 않는다");
 
     // (b) 명세 §2.5 의 M/ACK 예제 체크섬을 내 계산이 재현하는가
     {
@@ -653,39 +653,39 @@ int main() {
     }
 
     // (c) 트리거 한 번 = 한 칸만 바뀐다
-    uint16_t b1 = simOcc;
+    uint16_t b1 = node.simOcc;
     deliverIPD("M,60,4B");                           // 명세 §2.5 의 그 줄
     spin(300);
     int flipped = 0;
-    for (uint8_t i = 0; i < SENSOR_N; i++) if (((simOcc >> i) & 1) != ((b1 >> i) & 1)) flipped++;
-    printf("        M,60 → simOcc %04X → %04X, ACK=%s\n", b1, simOcc, lastAck().c_str());
+    for (uint8_t i = 0; i < SENSOR_N; i++) if (((node.simOcc >> i) & 1) != ((b1 >> i) & 1)) flipped++;
+    printf("        M,60 → node.simOcc %04X → %04X, ACK=%s\n", b1, node.simOcc, lastAck().c_str());
     ok(flipped == 1, "★ 트리거 한 번에 정확히 한 칸만 바뀐다");
     ok(lastAck()[0] == 'A' && lastAck().find(",0,") != std::string::npos, "ACK result=0");
     // ACK 의 slot 이 실제로 바뀐 칸인가
     uint8_t changedIdx = 0xFF;
-    for (uint8_t i = 0; i < SENSOR_N; i++) if (((simOcc >> i) & 1) != ((b1 >> i) & 1)) changedIdx = i;
+    for (uint8_t i = 0; i < SENSOR_N; i++) if (((node.simOcc >> i) & 1) != ((b1 >> i) & 1)) changedIdx = i;
     std::vector<std::string> af = splitLine(lastAck());
     ok(af.size() == 5 && af[2] == std::string(1, slotCol(changedIdx)) + std::string(1, slotRow(changedIdx)),
        "ACK 의 slot 이 실제로 바뀐 칸이다");
 
     // (d) 멱등 — 같은 rid 재전송이 두 걸음이 되면 안 된다 (§12B.4)
-    uint16_t b2 = simOcc;
+    uint16_t b2 = node.simOcc;
     deliverIPD("M,60,4B");
     spin(300);
-    printf("        같은 rid 재전송 → simOcc %04X (변화 없어야 함), ACK=%s\n", simOcc, lastAck().c_str());
-    ok(simOcc == b2, "★ 같은 rid 재전송은 두 걸음이 되지 않는다");
+    printf("        같은 rid 재전송 → node.simOcc %04X (변화 없어야 함), ACK=%s\n", node.simOcc, lastAck().c_str());
+    ok(node.simOcc == b2, "★ 같은 rid 재전송은 두 걸음이 되지 않는다");
 
     // (e) 예약된 빈칸을 우선 채운다 → occupied=1,reserved=1 도달 (§12B.2)
-    slotOverrideClearAll();
-    resMask = 0;
-    simOcc = 0;                                      // 전 칸 비움
-    resMask |= (uint16_t)1 << 7;                     // B3 예약
+    node.slotOverrideClearAll();
+    node.resMask = 0;
+    node.simOcc = 0;                                      // 전 칸 비움
+    node.resMask |= (uint16_t)1 << 7;                     // B3 예약
     deliverIPD("M,61," + xorCk("M,61,"));
     spin(300);
     printf("        예약 B3 상태에서 M → occupied=%s reserved=%s ACK=%s\n",
            occField(lastStatus()).c_str(), lastStatus().empty() ? "" : splitLine(lastStatus())[3].c_str(),
            lastAck().c_str());
-    ok(((simOcc >> 7) & 1) == 1, "★ 예약된 빈칸 B3 이 먼저 채워졌다");
+    ok(((node.simOcc >> 7) & 1) == 1, "★ 예약된 빈칸 B3 이 먼저 채워졌다");
     ok(occField(lastStatus())[7] == '1' && splitLine(lastStatus())[3][7] == '1',
        "★ occupied=1, reserved=1 조합이 실제로 전선에 나갔다 (§1.1 마지막 행)");
     ok(lastAck().find(",B3,0,") != std::string::npos, "ACK 이 B3 을 가리킨다");
@@ -696,33 +696,33 @@ int main() {
     // (g) 무장 중에도 트리거가 먹는다 ← REQ-0043 잔재 제거의 회귀 방지 핵심
     deliverIPD("T,140,A,??,-," + xorCk("T,140,A,??,-,"));
     spin(300);
-    ok(testArmed, "무장됐다 (사전 조건)");
-    uint16_t b3 = simOcc;
+    ok(node.testArmed, "무장됐다 (사전 조건)");
+    uint16_t b3 = node.simOcc;
     deliverIPD("M,62," + xorCk("M,62,"));
     spin(300);
-    printf("        무장 중 M → simOcc %04X → %04X, ACK=%s\n", b3, simOcc, lastAck().c_str());
-    ok(simOcc != b3, "★ 무장 중에도 트리거가 먹는다 (테스트 모드와 별개 — §12B.3)");
+    printf("        무장 중 M → node.simOcc %04X → %04X, ACK=%s\n", b3, node.simOcc, lastAck().c_str());
+    ok(node.simOcc != b3, "★ 무장 중에도 트리거가 먹는다 (테스트 모드와 별개 — §12B.3)");
     ok(tmaskField(lastStatus()) == "0000000000",
        "★ 시뮬로 바뀐 칸은 tmask 에 들어가지 않는다 (주입이 아니다)");
 
     // (h) 실물 칸은 트리거의 영향을 받지 않는다
     deliverIPD("T,141,D,??,-," + xorCk("T,141,D,??,-,"));
     spin(200);
-    for (uint8_t i = 0; i < SENSOR_N; i++) slotSourceSet(i, 1);   // 전 칸 실물
-    resMask = 0;
-    uint16_t b4 = simOcc;
+    for (uint8_t i = 0; i < SENSOR_N; i++) node.slotSourceSet(i, 1);   // 전 칸 실물
+    node.resMask = 0;
+    uint16_t b4 = node.simOcc;
     deliverIPD("M,63," + xorCk("M,63,"));
     spin(300);
     printf("        전 칸 실물 상태에서 M → ACK=%s\n", lastAck().c_str());
-    ok(simOcc == b4, "실물 칸은 트리거로 바뀌지 않는다");
+    ok(node.simOcc == b4, "실물 칸은 트리거로 바뀌지 않는다");
     ok(lastAck().find(",??,5,") != std::string::npos, "★ 바꿀 시뮬 칸이 없으면 result=5, slot=??");
-    for (uint8_t i = 0; i < SENSOR_N; i++) slotSourceSet(i, 0);   // 원복
+    for (uint8_t i = 0; i < SENSOR_N; i++) node.slotSourceSet(i, 0);   // 원복
   }
 
   printf("\n[25] ★ 연속 전송 실패가 오프라인 전환을 일으킨다 (REQ-0049 ①)\n");
   {
-    testArmed = false;
-    slotOverrideClearAll();
+    node.testArmed = false;
+    node.slotOverrideClearAll();
     ok(spinUntilOnline(20000), "온라인 상태다 (사전 조건)");
     sendFailStreak = 0;
 
@@ -806,11 +806,11 @@ int main() {
     ok(spinUntilOnline(20000), "온라인 (사전 조건)");
     deliverIPD("T,130,A,??,-," + xorCk("T,130,A,??,-,"));
     spin(200);
-    ok(cacheCount > 0, "캐시에 항목이 있다 (사전 조건)");
+    ok(ackQ.find(130) >= 0, "rid 130 이 캐시에 있다 (사전 조건)");
     wifi.deliver("CLOSED\r\n");
     spin(3);
     ok(!netOnline, "CLOSED 로 오프라인이 된다");
-    ok(cacheCount == 0, "CLOSED 는 여전히 캐시를 비운다 (REQ-0036 회귀 없음)");
+    ok(ackQ.find(130) < 0, "CLOSED 는 여전히 캐시를 비운다");
     ok(spinUntilOnline(20000), "복귀한다");
   }
 
@@ -876,7 +876,7 @@ int main() {
     // 캐시에 항목을 넣는다
     deliverIPD("T,150,A,??,-," + xorCk("T,150,A,??,-,"));
     spin(200);
-    ok(cacheCount > 0, "캐시에 항목이 있다 (사전 조건)");
+    ok(ackQ.find(150) >= 0, "rid 150 이 캐시에 있다 (사전 조건)");
 
     // 낡은 소켓 의심이 **없는** 상태에서 ALREADY CONNECTED 가 오는 경우 = 초기 경합
     netOnline = false;
@@ -884,7 +884,7 @@ int main() {
     wifi.deliver("ALREADY CONNECTED\r\n");
     spin(5);
     ok(netOnline, "★ 초기 경합의 ALREADY CONNECTED 는 여전히 온라인으로 받는다");
-    ok(cacheCount > 0, "★ 그리고 캐시를 비우지 않는다 (REQ-0035 [18]-4 불변식 유지)");
+    ok(ackQ.find(150) >= 0, "★ 그리고 rid 150 을 캐시에서 지우지 않는다 (살아 있는 연결의 멱등성)");
 
     // 반대로 낡은 소켓 의심 중이면 온라인으로 올리지 않는다
     netOnline = false;
