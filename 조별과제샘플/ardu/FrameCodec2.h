@@ -114,6 +114,25 @@ static bool sendSlotBatch(uint8_t* ackOut, uint16_t* bytesOut) {
   if (sn == 0) return false;
   uint16_t used = sn;
 
+  // ── 1-b) 🔓 **`V` 프레임 — 센서 값** (서버 명세 §4) ──────────────────────
+  //   🔴 **`S` 바로 뒤에 붙인다.** 명세가 *"`V` 가 `S` 보다 먼저 못 나오면 서버는
+  //     `has=false` 로 본다"* 를 규칙으로 박았고, **같은 배치이므로 순서가 구조로 보장된다.**
+  //   🔑 **큐를 만들지 않는다** — `lastVal` 은 매 슬롯 갱신되는 **현재값**이다.
+  //     자리가 없으면 **버린다.** 늦게 온 값은 "그 순간의 값" 이 아니고, 다음 슬롯에 새 값이 있다.
+  //   ⚠ 그래서 아래 `break` 가 아니라 **조용히 건너뛴다** — ACK 은 밀리지만 `V` 는 안 밀린다.
+  {
+    char vb[40];
+    const uint8_t vn = buildValues(vb, sizeof(vb));
+    if (vn && used + 1 + vn <= BATCH_CAP) {
+      buf[used++] = '\n';
+      memcpy(buf + used, vb, (size_t)vn + 1);    // 🔴 NUL 까지 — 진단 줄이 잔재를 찍지 않게
+      used += vn;
+    }
+#if DEBUG
+    else if (vn) { valDropped++; }               // 👁 자리가 없어 버린 횟수. 분모는 slot 수다
+#endif
+  }
+
   // ── 2) head 쪽에서 **만들 수 없는 것**부터 걷어낸다 ──────────────────────
   //   캐시에서 밀려났으면 내용을 만들 방법이 없다. 큐도 캐시도 FIFO 라 오래된 쪽에서 난다.
   ackQ.dropUnbuildable();          // 🔴 캐시가 있어야 판정되는 일이라 **큐가 스스로 한다**

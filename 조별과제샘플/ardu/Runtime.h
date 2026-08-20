@@ -40,6 +40,13 @@ void ParkingNode::begin() {
   testArmed = false;
   slotOverrideClearAll();
 
+  // 🔴 **`lastVal` 을 "모른다"로 시작한다.** `.bss` 는 0 이고 그것은 **"0cm"** 로 읽힌다 —
+  //   아직 한 번도 안 쟀는데 `V,000,...` 이 나가면 서버가 **가장 가까운 거리**로 본다.
+  //   🔑 §"기본값은 틀렸을 때 어느 쪽이 조용한가로 정한다": `0` 은 조용히 틀리고
+  //     `VAL_NONE` 은 **빈 칸으로 나가 "모른다"를 말한다.**
+  //   ⚠ 실측으로 잡았다 — 시험 로그에 `V,000,000,7A` 가 찍혀 있었다(측정 전 상태).
+  for (uint8_t i = 0; i < MODULE_CAP; i++) lastVal[i] = VAL_NONE;
+
   // ESP 리셋선은 **놓은 상태(하이임피던스)로 시작**한다.
   //   전원 인가 직후 AVR 핀은 원래 INPUT 이라 이미 떠 있지만, **"여기서 명시적으로 놓는다"**를
   //   코드로 남긴다. 🔴 실수로 OUTPUT LOW 로 두면 ESP 가 영원히 리셋에 잡혀 아무 일도 안 난다.
@@ -118,7 +125,15 @@ static void printBootBanner(void) {
     Serial.print(nm); Serial.print('=');
     // 🔴 함수가 없으면 그 센서는 **영원히 0** 이다. 화면에는 "비었다"로 보여 조용하다 —
     //   그래서 이 줄이 그것을 지목한다. `.on(...)` 을 안 부른 것이 유일한 원인이다.
-    Serial.print(senseOf(i) ? F("함수있음") : F("🔴함수없음"));
+    // 🔴 그리고 **값 훅에 문턱이 없으면 판정을 안 한다**(점유 비트가 영원히 0).
+    //   런타임 등록이라 **컴파일이 못 막는다** → 여기서 말한다.
+    if (valOf(i)) {
+      Serial.print(F("값훅"));
+      if (nearOf(i) == 0) Serial.print(F("·🔴문턱없음"));
+      else { Serial.print(F("·<")); Serial.print(nearOf(i)); Serial.print(F("cm")); }
+    } else {
+      Serial.print(senseOf(i) ? F("함수있음") : F("🔴함수없음"));
+    }
     Serial.print(' ');
   }
   Serial.println();

@@ -30,6 +30,11 @@ static uint32_t slotStart   = 0;
 static uint32_t slotNo      = 0;
 static bool     slotSent    = false;   // 이번 슬롯에서 이미 보냈다(슬롯당 정확히 1거래)
 static uint16_t slotOow     = 0;       // 수신 창 **밖**에 하행이 도착한 수 — 설계 위반 계수
-static uint16_t slotMissed  = 0;       // 송신 창을 통째로 놓친 슬롯 수(보낼 기회를 못 씀)
+static uint16_t slotMissed  = 0;
+#if DEBUG
+// 👁 `V` 프레임이 배치에 자리가 없어 버려진 횟수. **분모는 슬롯 수다** —
+//   `0` 혼자 서면 "안 일어났다" 와 "안 센다" 가 안 갈린다(원장 §"분모를 붙여라").
+static uint16_t valDropped = 0;
+#endif       // 송신 창을 통째로 놓친 슬롯 수(보낼 기회를 못 씀)
 
 #include "EspLink_state.h"   // ← EspLink 링크 계층 (REQ-0264). **위치를 옮기지 마라**

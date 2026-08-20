@@ -53,6 +53,11 @@ static_assert(sizeof(DEVICE_ID) > 1 && sizeof(DEVICE_ID) <= 9,
 // 🔑 **함수를 쓰고 아래 `setup()` 에서 한 줄로 붙인다.** 배열도 등록표도 없다.
 // ██████████████████████████████████████████████████████████████████████████
 // ─────────────────────────────────────────────────────────────────────────
+// 🔴 **`Module.h` 를 여기서 먼저 들인다** — 아래 핸들러가 `SENSOR_NO_READING` 을 쓴다.
+//   `#pragma once` 가 있어서 아래 목록의 것과 겹쳐도 안전하고, **목록의 "맨 앞" 불변식도 안 깨진다**
+//   (그 불변식은 *다른 헤더보다 먼저* 라는 뜻이고, 여기서는 그것이 더 강하게 지켜진다).
+#include "Module.h"
+
 // 🔓 **초음파 센서 (HC-SR04)** — Trig 2번 · Echo 4번
 //
 // 🔑 **핀은 이 함수 안의 일이다.** 핀 모드는 `setup()` 에서 `pinMode` 로 잡고
@@ -75,20 +80,22 @@ static_assert(sizeof(DEVICE_ID) > 1 && sizeof(DEVICE_ID) <= 9,
 #define US_TIMEOUT_US  ((unsigned long)US_NEAR_CM * 58UL * 2UL)   // 6,960µs
 #define US_PERIOD_MS   200      // 🔓 재는 간격 (그 사이에는 캐시를 돌려준다)
 
-static bool readUltrasonic() {
-  static uint32_t lastAt  = 0;
-  static bool     lastVal = false;
+// 🔓 **`long` 을 돌려준다** — 문턱 판정은 `setup()` 의 `.near(60)` 이 한다.
+//   🔑 옛 판은 이 함수가 `bool` 을 냈고 문턱이 `#define` 에 숨어 있었다. 이제 등록 줄에 보인다.
+static long readUltrasonic() {
+  static uint32_t lastAt = 0;
+  static long     lastCm = SENSOR_NO_READING;
   const uint32_t now = millis();
-  if (lastAt != 0 && (now - lastAt) < US_PERIOD_MS) return lastVal;   // 캐시
+  if (lastAt != 0 && (now - lastAt) < US_PERIOD_MS) return lastCm;   // 캐시
   lastAt = now;
 
   digitalWrite(US_TRIG, LOW);   delayMicroseconds(2);
   digitalWrite(US_TRIG, HIGH);  delayMicroseconds(10);   // 10µs 펄스가 HC-SR04 규격이다
   digitalWrite(US_TRIG, LOW);
   const uint32_t us = pulseIn(US_ECHO, HIGH, US_TIMEOUT_US);   // 무응답이면 0
-  // 🔴 타임아웃(0)은 **"반사가 없다" = 비었다**로 읽는다. 오류로 읽으면 값이 흔들린다.
-  lastVal = (us != 0) && ((us / 58UL) < US_NEAR_CM);  // 왕복 µs ÷ 58 = cm
-  return lastVal;
+  // 🔴 타임아웃(0)은 **"못 쟀다"** 다. **"0cm" 가 아니다** — 그래서 이름 있는 상수로 답한다.
+  lastCm = (us == 0) ? SENSOR_NO_READING : (long)(us / 58UL);   // 왕복 µs ÷ 58 = cm
+  return lastCm;
 }
 
 // 🔓 **두 번째 초음파 — B1** (Trig 11 · Echo 10)
@@ -103,19 +110,19 @@ static bool readUltrasonic() {
 //   → 지금 둘 = 14ms. `GUIDE.md` §4 의 표가 그 수를 준다.
 #define B1_TRIG 11   // 배선 출처: 사용자 2026-08-20 "트리거가 11 에코가 10 하나 더달았다"
 #define B1_ECHO 10   // ⚠ 배선은 코드로 검증할 수 없다 — 사람만 안다
-static bool readB1() {
-  static uint32_t lastAt  = 0;
-  static bool     lastVal = false;
+static long readB1() {
+  static uint32_t lastAt = 0;
+  static long     lastCm = SENSOR_NO_READING;
   const uint32_t now = millis();
-  if (lastAt != 0 && (now - lastAt) < US_PERIOD_MS) return lastVal;   // 캐시
+  if (lastAt != 0 && (now - lastAt) < US_PERIOD_MS) return lastCm;   // 캐시
   lastAt = now;
 
   digitalWrite(B1_TRIG, LOW);   delayMicroseconds(2);
   digitalWrite(B1_TRIG, HIGH);  delayMicroseconds(10);
   digitalWrite(B1_TRIG, LOW);
   const uint32_t us = pulseIn(B1_ECHO, HIGH, US_TIMEOUT_US);
-  lastVal = (us != 0) && ((us / 58UL) < US_NEAR_CM);
-  return lastVal;
+  lastCm = (us == 0) ? SENSOR_NO_READING : (long)(us / 58UL);
+  return lastCm;
 }
 
 #define LD_PIN LED_BUILTIN            // 🔓 보드에 붙은 13번 LED
@@ -229,8 +236,10 @@ void setup() {
   pinMode(LD_PIN,  OUTPUT);
 
   // 🔓 **내 모듈 — 이름 ↔ 함수, 한 줄에 하나.** 적은 순서가 전선 순서다(섞어 적어도 된다)
-  node.sensor  ("A1").on(readUltrasonic);
-  node.sensor  ("B1").on(readB1);
+  // 🔓 **문턱이 등록 줄에 보인다** — `.near(cm)` 보다 가까우면 "찼다"다.
+  //   🔑 옛 판은 이 판정이 함수 안 `#define` 에 숨어 있었다.
+  node.sensor  ("A1").on(readUltrasonic).near(US_NEAR_CM);
+  node.sensor  ("B1").on(readB1).near(US_NEAR_CM);
   node.actuator("LD").on(cmdLed);
   node.actuator("L2").on(cmdL2);
   SAMPLE_EXTRA_MODULES                        // 회귀 시험만 쓴다. 평소엔 비어 있다

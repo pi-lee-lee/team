@@ -18,6 +18,12 @@
 //   🔑 그래서 핀이 하나든 둘이든(초음파) **등록 모양이 같다.**
 typedef bool (*CommandFn)(uint32_t arg);   // 액추에이터: 반환 true → ACK `result=0` · false → `3`
 typedef bool (*SensorFn)(void);            // 센서: 반환 true = 찼다
+// 🔓 **값을 내는 센서**(초음파처럼 거리를 아는 것). 문턱 판정은 `.near(cm)` 이 한다.
+//   반환 : 측정값(cm 등) · **못 쟀으면 `SENSOR_NO_READING`**
+typedef long (*SensorValueFn)(void);
+// 🔴 **마법값에 이름을 준다.** `0` 은 "0cm" 와 안 갈리고 `-1` 은 이름 없는 마법값이다.
+//   `pulseIn` 이 0 을 돌려주는 것은 *"반사가 없다"* 이고 **"거리가 0"이 아니다.**
+#define SENSOR_NO_READING (-1L)
 
 // ─────────────────────────────────────────────────────────────────────────
 // 🔴 **모듈 상한 8** — 실측으로 정했다(2026-08-20)
@@ -54,7 +60,9 @@ struct Mod {
   char      name[2];   // 전선에 나가는 두 글자
   uint8_t   isAct;     // 1 = 액추에이터(전선 kind `OG`) · 0 = 센서(`IP`)
   CommandFn cmd;       // 액추에이터만 쓴다
-  SensorFn  sense;     // 센서만 쓴다
+  SensorFn  sense;     // 센서만 쓴다 — true/false 를 직접 내는 센서
+  SensorValueFn val;   // 🔓 값을 내는 센서(둘 중 하나만 쓴다)
+  uint16_t  nearCm;    // 🔓 `.near(cm)` 문턱. 0 = **판정 안 함**(값만 보낸다)
 };
 // 🔴 **표는 RAM 이다**(런타임 등록이므로). 전역이라 `.bss` 에서 0 으로 시작한다 —
 //   생성자를 두지 않는 이유는 AVR 전역 생성자가 `main()` 전에 돌기 때문이다.
@@ -63,7 +71,11 @@ struct Mod {
 //   ⚠ 호스트 시험은 이것을 못 잡는다 — 64비트에서는 포인터 정렬 패딩이 그 자리를 채워
 //     `sizeof` 가 24 로 같다. **그래서 이 검사는 실기 빌드에만 있다.**
 #ifdef __AVR__
-static_assert(sizeof(Mod) == 7, "sizeof(Mod) 가 바뀌었다 — 필드를 더했나? 모듈당 RAM 이 는다");
+// 🔴 **11 의 내역** — 안 적으면 다음 사람이 "원래 11" 로 읽는다:
+//   name[2] 2 + isAct 1 + cmd 2 + sense 2 + **val 2** + **nearCm 2** = 11
+//   (AVR 은 정렬이 1바이트라 패딩이 없다. 필드 크기가 그대로 구조체 크기다)
+//   옛 값 7 → 11 : 값 훅(`val`)과 문턱(`nearCm`)이 들어왔다. 실측 RAM **+32B**(8모듈 × 4B)
+static_assert(sizeof(Mod) == 11, "sizeof(Mod) 가 바뀌었다 — 필드를 더했나? 모듈당 RAM 이 는다");
 #endif
 
 static Mod     MODULE_TABLE[MODULE_CAP];
@@ -77,6 +89,8 @@ static inline bool isSensor  (uint8_t i) { return i < MODULE_N && !MODULE_TABLE[
 static inline bool isActuator(uint8_t i) { return i < MODULE_N &&  MODULE_TABLE[i].isAct; }
 static inline CommandFn cmdOf (uint8_t i) { return isActuator(i) ? MODULE_TABLE[i].cmd   : (CommandFn)0; }
 static inline SensorFn  senseOf(uint8_t i) { return isSensor(i)  ? MODULE_TABLE[i].sense : (SensorFn)0; }
+static inline SensorValueFn valOf (uint8_t i) { return isSensor(i) ? MODULE_TABLE[i].val : (SensorValueFn)0; }
+static inline uint16_t  nearOf  (uint8_t i) { return (i < MODULE_N) ? MODULE_TABLE[i].nearCm : 0; }
 static inline char modName0(uint8_t i) { return (i < MODULE_N) ? MODULE_TABLE[i].name[0] : 0; }
 static inline char modName1(uint8_t i) { return (i < MODULE_N) ? MODULE_TABLE[i].name[1] : 0; }
 static inline uint8_t moduleCount(void) { return MODULE_N; }
@@ -91,7 +105,18 @@ class ModRef {
  public:
   explicit ModRef(uint8_t i) : i_(i) {}
   ModRef& on(CommandFn f) { if (i_ < MODULE_N) MODULE_TABLE[i_].cmd   = f; return *this; }
-  ModRef& on(SensorFn  f) { if (i_ < MODULE_N) MODULE_TABLE[i_].sense = f; return *this; }
+  // 🔴 **값 훅과 bool 훅은 배타다.** 하나를 붙이면 다른 하나를 떼어 낸다 —
+  //   둘 다 있으면 `readRealSensor` 가 값 훅을 먼저 보므로 bool 훅이 **조용히 무시된다.**
+  //   🔑 배타로 만들면 그 상태가 **원리적으로 생기지 않는다**
+  //     (§"조건을 확인하는 것보다 조건이 성립할 수밖에 없게 만드는 쪽이 낫다").
+  ModRef& on(SensorFn  f) { if (i_ < MODULE_N) { MODULE_TABLE[i_].sense = f; MODULE_TABLE[i_].val = 0; } return *this; }
+  // 🔓 값을 내는 센서. **오버로드다** — 함수 모양이 다르면 컴파일러가 골라 준다.
+  //   ⚠ `bool(*)()` 와 `long(*)()` 는 함수 포인터라 암시적 변환이 없다 →
+  //     **틀린 종류를 주면 컴파일이 막는다.**
+  ModRef& on(SensorValueFn f) { if (i_ < MODULE_N) { MODULE_TABLE[i_].val = f; MODULE_TABLE[i_].sense = 0; } return *this; }
+  // 🔓 **문턱** — "이 값보다 작으면 찼다". 값 훅에만 뜻이 있다.
+  //   🔑 옛 판은 이 판정이 핸들러 안 `#define` 에 숨어 있었다. 여기 있으면 **등록 줄에 보인다.**
+  ModRef& near(uint16_t cm) { if (i_ < MODULE_N) MODULE_TABLE[i_].nearCm = cm; return *this; }
   uint8_t idx() const { return i_; }
  private:
   uint8_t i_;
@@ -107,5 +132,7 @@ static ModRef modAdd(const char (&name)[3], uint8_t isAct) {
   MODULE_TABLE[i].isAct   = isAct;
   MODULE_TABLE[i].cmd     = 0;
   MODULE_TABLE[i].sense   = 0;
+  MODULE_TABLE[i].val     = 0;
+  MODULE_TABLE[i].nearCm  = 0;
   return ModRef(i);
 }

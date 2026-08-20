@@ -1426,7 +1426,7 @@ int main() {
     //   🔑 옛 핀 대조보다 강하다 — 핀은 틀리면 값이 이상하고, 함수는 **없으면 정상처럼 보인다.**
     bool allBound = true;
     for (uint8_t i = 0; i < MODULE_N; i++) {
-      const bool bound = isSensor(i) ? (senseOf(i) != 0) : (cmdOf(i) != 0);
+      const bool bound = isSensor(i) ? (senseOf(i) != 0 || valOf(i) != 0) : (cmdOf(i) != 0);
       if (!bound) { allBound = false;
         printf("      🔴 i=%u (%c%c): 함수가 없다\n", i, modName0(i), modName1(i)); }
     }
@@ -1622,12 +1622,12 @@ int main() {
                             "★ 안 쓰는 핀(11)은 안 건드렸다");
     }
     // 🔴 전제가 또 바뀌었다 — 이제 **모든 센서에 함수가 있다**(기본 경로가 없어졌다).
-    ok(sensors.at(1) != 0,  "★ 접점 센서(B1)에도 함수가 붙어 있다 — 기본 경로는 없다");
+    ok(sensors.valAt(1) != 0, "★ B1 에도 값 함수가 붙어 있다 — 기본 경로는 없다");
     ok(sensors.on("A1", readUltrasonic),
                             "★★ 이름으로 등록된다 (router.on 과 같은 모양)");
     ok(!sensors.on("ZZ", readUltrasonic),
                             "★★ 표에 없는 이름은 **false** — 조용히 무시하지 않는다");
-    ok(sensors.at(0) == readUltrasonic, "★ 등록된 것이 그 칸에 걸린다");
+    ok(sensors.valAt(0) == readUltrasonic, "★ 등록된 것이 그 칸에 걸린다");
 
     // 🔴 **문턱 판정을 핸들러가 한다** — US_NEAR_CM = 60cm
     g_millis += 1000;  g_pulseIn = 2900;   // 왕복 2900µs / 58 ≈ **50cm** → 60 미만 = 찼다
@@ -1666,7 +1666,7 @@ int main() {
     }
 
     // 뒤 시험에 영향이 없도록 되돌린다 — 0 을 넣으면 그 센서는 늘 0 이 된다
-    sensors.on("A1", 0);
+    sensors.on("A1", (SensorValueFn)0);
     ok(!sensors.at(0),      "★ 0 을 등록하면 함수가 떨어진다");
     ok(node.readSensor(0) == 0,
                             "★★ 함수가 떨어진 센서는 0 이다 — 남은 기본 경로가 없다");
@@ -1916,7 +1916,7 @@ int main() {
                             "★★★ LD 의 에코 비트도 서 있다 — **눈·자리값·에코가 한 사건이다**");
 
     // ⑤ 훅을 떼면 기본 경로로 — 되돌릴 수 있다는 것까지 본다
-    sensors.on("B1", 0);
+    sensors.on("B1", (SensorValueFn)0);
     g_pinLevel[B1_ECHO] = HIGH;                    // 미배선 = 풀업 = HIGH (앞 시험이 바꿨을 수 있다)
     node.readSensors();
     ok((node.occMask & (1u << 1)) == 0,
@@ -2004,10 +2004,10 @@ int main() {
       // 🔴 전수로 묻는다 — 옛 판은 루프가 **마지막** 것만 담아서 "A1 에 붙었나"를 못 물었다.
       uint8_t sens = 0, bound = 0;
       for (uint8_t k = 0; k < MODULE_N; k++)
-        if (isSensor(k)) { sens++; if (sensors.at(k)) bound++; }
+        if (isSensor(k)) { sens++; if (sensors.at(k) || sensors.valAt(k)) bound++; }
       ok(sens > 0,           "★ 분모: 센서가 하나 이상 있다");
       ok(bound == sens,      "★★★ `setup()` 이 **모든 센서에** 함수를 붙인다");
-      ok(sensors.at(0) == readUltrasonic,
+      ok(sensors.valAt(0) == readUltrasonic,
                             "★★ 그 훅이 **샘플의 그 함수**다 — 시험이 복제하지 않는다");
     }
 
@@ -2024,7 +2024,7 @@ int main() {
       }
       ok(everSplit,         "★★★ 훅을 붙이면 두 센서가 **갈리는 순간이 있다**");
       ok(sawHi && sawLo,    "★★ 훅이 찼다/비었다를 **둘 다** 낸다 (값이 고정이 아니다)");
-      sensors.on("A1", 0); sensors.on("B1", 0);
+      sensors.on("A1", (SensorValueFn)0); sensors.on("B1", (SensorValueFn)0);
     }
 
     Serial.out.clear(); Serial.echoToStdout = true;
@@ -2091,7 +2091,7 @@ int main() {
   printf("\n[45] 초음파 블로킹 예산 — 한 슬롯(1.2초) 동안 실제로 몇 번 막히나\n");
   {
     node.testArmed = false; node.ovrActive = 0;
-    // 🔴 **사전 조건을 스스로 세운다.** [43] 이 끝에서 `sensors.on("A1", 0)` 으로 지형을 비우므로
+    // 🔴 **사전 조건을 스스로 세운다.** [43] 이 끝에서 `sensors.on("A1", (SensorValueFn)0)` 으로 지형을 비우므로
     //   그것을 상속하면 이 시험의 분모가 0 이 된다 — 실제로 그렇게 헛통과했다.
     //   🔑 **뒤 시험은 앞 시험의 *정리* 를 상속한다.** 사전 조건을 남에게 기대지 마라.
     sensors.on("A1", readUltrasonic);
@@ -2107,9 +2107,9 @@ int main() {
     // 🔴 센서가 몇이고 그중 몇이 초음파 함수를 쓰나 — 12회의 원인을 여기서 가른다
     { uint8_t ns=0, nus=0;
       for (uint8_t k=0;k<MODULE_N;k++) if (isSensor(k)) { ns++;
-        if (senseOf(k)==readUltrasonic || senseOf(k)==readB1) nus++; }
+        if (valOf(k)==readUltrasonic || valOf(k)==readB1) nus++; }
       printf("      센서 %u개 중 초음파 함수 %u개\n", ns, nus); }
-    ok(isSensor(0) && senseOf(0) == readUltrasonic && isSensor(1) && senseOf(1) == readB1,
+    ok(isSensor(0) && valOf(0) == readUltrasonic && isSensor(1) && valOf(1) == readB1,
                             "★★★ 분모: 센서 **둘 다** 초음파 함수가 붙어 있다 (실기 구성)");
 
     // 🔴 **자동 시계 전진을 끈다.** 이 shim 의 `millis()` 는 호출마다 1ms 를 흘리는데
@@ -2137,7 +2137,7 @@ int main() {
     // ② 기대값을 리터럴로 박는다: 초음파 센서마다 1200/200 = 6회 (+ 첫 회)
     uint8_t nUs = 0;
     for (uint8_t k = 0; k < MODULE_N; k++)
-      if (isSensor(k) && (senseOf(k) == readUltrasonic || senseOf(k) == readB1)) nUs++;
+      if (isSensor(k) && (valOf(k) == readUltrasonic || valOf(k) == readB1)) nUs++;
     ok(g_pulseInCalls <= (unsigned long)(nUs * 7),
                             "★★ 측정 횟수가 (초음파 수 × 7) 이하다 — 200ms 게이트");
     // 🔴 ③ **축을 갈라서 묻는다.** 옛 판은 문턱 60ms 를 **누적** 축에 걸었는데
@@ -2194,6 +2194,67 @@ int main() {
     }
 
     g_pulseIn = 0; g_pulseInCalls = 0; g_pulseInBlockUs = 0;
+  }
+
+  // ── [46] 🔴 **`V` 프레임 — 값이 전선에 나가나** (서버 명세 §4) ──────────────
+  //   왜: 이 프레임은 **오늘 새로 만든 것**이고, 실측 로그에서 `V,000,000` 을 눈으로 보고
+  //   결함을 하나 잡았다(측정 전 `lastVal` 이 `.bss` 0 이라 **"0cm"로 나갔다**).
+  //   🔑 그 갈래를 시험으로 고정한다 — 눈으로 본 것은 다음에 안 본다.
+  printf("\n[46] V 프레임 — 센서 값이 전선에 나가는가\n");
+  {
+    node.testArmed = false; node.ovrActive = 0;
+    sensors.on("A1", readUltrasonic); sensors.nearOn("A1", 60);
+    sensors.on("B1", readB1);         sensors.nearOn("B1", 60);
+    char vb[40];
+
+    // ① 🔴 **측정 전에는 빈 칸이다** — "모른다"를 "0cm"로 말하지 않는다
+    for (uint8_t i = 0; i < MODULE_CAP; i++) node.lastVal[i] = ParkingNode::VAL_NONE;
+    uint8_t vn = buildValues(vb, sizeof(vb));
+    printf("      측정 전 : \"%s\" (%uB)\n", vb, vn);
+    ok(vn && strncmp(vb, "V,,,", 4) == 0,
+                            "★★★ 측정 전에는 **빈 칸**이다 — `V,,,ck` (0cm 가 아니다)");
+
+    // ② 값이 실린다 — hex 3자리
+    node.lastVal[0] = 0x3C0; node.lastVal[1] = 0x05F;
+    vn = buildValues(vb, sizeof(vb));
+    printf("      값 : \"%s\" (%uB)\n", vb, vn);
+    ok(strncmp(vb, "V,3C0,05F,", 10) == 0,
+                            "★★★ hex **3자리**로 실린다 (명세 §4)");
+
+    // ③ 🔴 한쪽만 없으면 그 자리만 빈다
+    node.lastVal[1] = ParkingNode::VAL_NONE;
+    vn = buildValues(vb, sizeof(vb));
+    printf("      한쪽 없음 : \"%s\"\n", vb);
+    ok(strncmp(vb, "V,3C0,,", 7) == 0,
+                            "★★★ 부재는 **그 자리만** 빈다 — `V,3C0,,ck`");
+
+    // ④ 🔴 **센서만 실린다** — 액추에이터는 값이 없다. 항목 수 = 센서 수
+    uint8_t commas = 0; for (const char* q = vb; *q; q++) if (*q == ',') commas++;
+    uint8_t ns = 0; for (uint8_t k = 0; k < MODULE_N; k++) if (isSensor(k)) ns++;
+    printf("      쉼표 %u · 센서 %u · 모듈 %u\n", commas, ns, MODULE_N);
+    ok(commas == (uint8_t)(ns + 1),
+                            "★★★ 항목 수 = **센서 수** (액추에이터는 안 실린다 · +1 은 체크섬 앞)");
+
+    // ⑤ 음성 대조 — 센서가 없으면 프레임 자체를 안 낸다
+    { const uint8_t save = MODULE_N; MODULE_N = 0;
+      ok(buildValues(vb, sizeof(vb)) == 0,
+                            "★★★ 음성 대조: 센서가 0 이면 `V` 를 **안 낸다**");
+      MODULE_N = save; }
+
+    // ⑥ 🔑 `S` 뒤에 붙는가 — 명세가 "V 가 S 보다 먼저 못 나오면 has=false" 를 규칙으로 박았다
+    node.lastVal[0] = 0x100; node.lastVal[1] = 0x200;
+    // 🔴 **선행 조건을 복원한다.** 앞 시험들이 링크를 `T2 초과` 상태로 남겨서
+    //   `sendSlotBatch` 가 아무것도 안 내보냈다(`S` 위치 -1). §"선행 조건이 깨졌으면
+    //   항목 판정을 내지 마라" — 판정을 내는 대신 **조건을 세운다.**
+    awaitingSendOk = false; inSend = false; netOnline = true; sendFailStreak = 0;
+    Serial.out.clear(); wifi.refusePrompt = false;
+    uint8_t nack = 0; uint16_t nb = 0; sendSlotBatch(&nack, &nb);
+    const std::string tx = Serial.out;
+    const size_t ps = tx.find("S,"), pv = tx.find("V,");
+    printf("      배치: S 위치 %zd · V 위치 %zd\n", (ssize_t)ps, (ssize_t)pv);
+    ok(ps != std::string::npos && pv != std::string::npos && ps < pv,
+                            "★★★ 한 배치에서 **`S` 가 `V` 보다 먼저** 나간다");
+    Serial.out.clear();
   }
 
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);

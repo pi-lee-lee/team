@@ -180,12 +180,37 @@ class SensorRouter {
       char n4[4]; moduleNameOf(i, n4);
       if (strcmp(n4, name) == 0) {
         if (!isSensor(i)) return false;        // 센서가 아니다
-        MODULE_TABLE[i].sense = fn; return true;
+        MODULE_TABLE[i].sense = fn; MODULE_TABLE[i].val = 0; return true;   // 🔴 배타
+      }
+    }
+    return false;
+  }
+  // 🔓 **값 훅 오버로드** — `long` 을 내는 센서. 문턱은 `nearOn()` 이 정한다.
+  //   ⚠ `bool(*)()` 와 `long(*)()` 는 함수 포인터라 암시적 변환이 없다 →
+  //     **틀린 종류를 주면 컴파일이 막는다.** 시험이 그것으로 계약 변경을 잡았다.
+  bool on(const char* name, SensorValueFn fn) {
+    for (uint8_t i = 0; i < MODULE_N; i++) {
+      char n4[4]; moduleNameOf(i, n4);
+      if (strcmp(n4, name) == 0) {
+        if (!isSensor(i)) return false;
+        MODULE_TABLE[i].val = fn; MODULE_TABLE[i].sense = 0; return true;   // 🔴 배타
+      }
+    }
+    return false;
+  }
+  // 🔓 문턱. 0 = **판정 안 함**(값만 보낸다 · 부팅 `[SENS]` 가 지목한다)
+  bool nearOn(const char* name, uint16_t cm) {
+    for (uint8_t i = 0; i < MODULE_N; i++) {
+      char n4[4]; moduleNameOf(i, n4);
+      if (strcmp(n4, name) == 0) {
+        if (!isSensor(i)) return false;
+        MODULE_TABLE[i].nearCm = cm; return true;
       }
     }
     return false;
   }
   SensorFn at(uint8_t idx) const { return senseOf(idx); }   // 🔑 종류 확인이 접근자 안에 있다
+  SensorValueFn valAt(uint8_t idx) const { return valOf(idx); }
 };
 static SensorRouter sensors;
 
@@ -284,6 +309,43 @@ static bool hexToBits(const char* in, uint8_t n, uint16_t* out) {
 //   넘칠 일은 없지만 snprintf 반환값을 검사해 넘치면 프레임을 버린다(잘린 줄을 내보내지 않는다).
 // S 프레임 **본문만** 만든다(체크섬 포함, LF 없음). 배치가 이것을 첫 줄로 쓴다.
 //   길이를 돌려준다. 0 이면 만들지 못한 것이다.
+// ═══ 🔓 **`V` 프레임 — 센서가 낸 값** (서버 명세 §4 · 커밋 facd36c) ═══════════
+//   형식 : `V,<v1>,<v2>,…,<vk>,<ck>`
+//     k      : **센서 모듈 수** — 🔴 **센서만 · 등록(`D`) 순서 그대로**
+//     각 항목 : hex **3자리** · 값 없으면 🔴 **빈 칸**
+//     예     : `V,3C0,05F,7A`   ·   둘째가 없으면 `V,3C0,,B2`
+//   ⚠ `seq` 가 없다 — `S` 와 **같은 배치(한 `+IPD`)** 로 나가므로 짝지을 것이 없다.
+//
+// 🔴🔴 **`occ` 와 폭 규칙이 다르다** — `occ` 는 **모듈 전체**, `V` 는 **센서만**이다.
+//   같은 프레임의 두 필드가 다른 폭 규칙을 쓰므로 **읽는 쪽이 헷갈릴 자리**다.
+//   서버가 `k` 를 등록에서 센 센서 수와 대조해 안 맞으면 버린다(명세).
+//
+// 🔴 **왜 `S` 에 안 붙였나** — socket 이 자기 파서에서 찾았다:
+//   `S` 의 index 6 은 **`tmask`(선택 필드)** 다(`buildStatus` 아래를 보라 — `testArmed` 일 때만).
+//   값을 그 뒤에 붙이면 **tmask 를 안 보내는 장치의 첫 값이 index 6 에 와서 tmask 로 읽힌다.**
+//   ⚠ 그리고 **tmask 를 쓰는 장치가 나타날 때까지 아무도 못 본다.**
+//   🔑 안전 방향도 다르다 : `S` 형식을 바꾸면 옛 서버가 **틀리게 읽고**, 모르는 타입은 **안 읽는다.**
+static uint8_t buildValues(char* buf, uint8_t cap) {
+  int n = snprintf(buf, cap, "V");
+  if (n <= 0) return 0;
+  uint8_t k = 0;
+  for (uint8_t i = 0; i < MODULE_N; i++) {
+    if (!isSensor(i)) continue;                  // 🔴 **센서만.** 액추에이터는 값이 없다
+    k++;
+    const uint16_t v = node.lastVal[i];
+    int m;
+    if (v == ParkingNode::VAL_NONE) m = snprintf(buf + n, (unsigned)n < cap ? cap - n : 0, ",");
+    else m = snprintf(buf + n, (unsigned)n < cap ? cap - n : 0, ",%03X", (unsigned int)(v & 0x0FFF));
+    if (m <= 0) return 0;
+    n += m;
+  }
+  if (k == 0) return 0;                          // 센서가 없으면 이 프레임 자체를 안 낸다
+  if ((unsigned)n + 1 + 3 > cap) return 0;
+  n += snprintf(buf + n, cap - n, ",");
+  appendChecksum(buf, (uint8_t)n);
+  return (uint8_t)strlen(buf);
+}
+
 static uint8_t buildStatus(char* buf, uint8_t cap) {
   // 🔴 2026-08-18 — **hex 로 바꿨다** (socket 명세 §5 확정). `n=10` 에서 폭 10 → 3.
   //   ⚠ **셋을 같이 바꾼다.** `occ`·`res`·`tm` 중 하나만 바꾸면 **같은 슬롯을 두고 두 필드가

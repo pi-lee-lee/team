@@ -135,4 +135,40 @@ static void cntTick(uint32_t now) {
   Serial.print(F(" bigoklost="));    Serial.print(okLostBigSnap);
   Serial.print(F(" skip="));         Serial.print(sendSkips);
   Serial.print(F(" online="));       Serial.println(netOnline ? 1 : 0);
+
+// 🔴 **`[CNT]` 줄이 끝난 뒤에 찍는다.** 처음에 이 블록을 `cntTick` 머리에 뒀더니
+//   `[CNT] … cksumng=0` **한가운데로 끼어들어** 줄이 갈라졌다 — 시험 [29] 가 잡았다.
+//   ⚠ 이 파일 위쪽 주석이 정확히 그 경고를 하고 있었다(*"계측기를 고치려다 계측기를 깬 꼴"*).
+//   🔑 **한 줄을 찍는 도중에는 다른 줄을 찍지 마라.** 파서는 줄 단위다.
+#if DEBUG
+  // ── 👁 **[USD] 값 센서의 흔들림 폭** — `.near()` 문턱을 값으로 정하기 위한 계측 ──
+  // 🔴 왜 min/max 인가 : 매 측정을 찍으면 슬롯당 108B 가 늘어 TX 버퍼(64B)를 넘기고
+  //   그 동안 `espRead()` 가 안 돈다(실측: 지금 DEBUG 가 이미 슬롯당 141B).
+  //   min/max 누적은 **슬롯당 0B** 이고 재려는 값(폭)을 직접 준다.
+  // ⚠ **폭이 문턱보다 크면 그 문턱은 못 쓴다** — 고정 물체에서 점유가 깜빡인다.
+  //   `n` 을 같이 찍는 이유: 표본이 적으면 폭이 과소평가된다(§"분모를 붙여라").
+  {
+    bool any = false;
+    for (uint8_t i = 0; i < MODULE_N; i++) {
+      if (!isSensor(i) || !valOf(i)) continue;
+      if (!any) { Serial.print(F("\n[USD]")); any = true; }
+      // 🔑 `moduleNameOf` 는 `Modules.h` 에 있고 그 파일은 **이 파일보다 뒤에** 들어온다.
+      //   `modName0/1` 은 `Module.h`(목록 맨 앞) 것이라 여기서 보인다.
+      Serial.print(' '); Serial.print(modName0(i)); Serial.print(modName1(i)); Serial.print('=');
+      if (node.vN[i] == 0) Serial.print(F("표본0"));
+      else {
+        Serial.print(node.vMin[i]); Serial.print('~'); Serial.print(node.vMax[i]);
+        Serial.print(F("cm 폭")); Serial.print((uint16_t)(node.vMax[i] - node.vMin[i]));
+        Serial.print(F(" n")); Serial.print(node.vN[i]);
+      }
+    }
+    if (any) {
+      Serial.print(F(" · V버림")); Serial.print(valDropped);
+      Serial.print('/'); Serial.print(slotNo);      // 🔑 분모 = 슬롯 수
+      Serial.println();
+    }
+    node.valStatsReset();   // 🔑 **구간별 폭**을 본다. 누적하면 이상치 하나가 영원히 남는다
+  }
+#endif
+
 }
