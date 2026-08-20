@@ -337,6 +337,7 @@ int ParkingServer::maxPerBatch() const { return p_->srv.max_per_batch(); }
 long long ParkingServer::nowMs() const { return now_ms(); }
 void ParkingServer::onCommandResult(CmdResultFn fn) { p_->srv.cmd_cb_ = fn; }
 void ParkingServer::onOccupancyChanged(OccupancyFn fn) { p_->srv.occ_cb_ = fn; }
+void ParkingServer::onSensorValue(SensorValueFn fn) { p_->srv.val_cb_ = fn; }
 bool ParkingServer::deviceReady(const std::string& devid) const {
     const Node* n = p_->srv.node_by_devid(devid);
     return n && n->reg_done;

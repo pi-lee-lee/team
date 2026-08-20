@@ -368,6 +368,46 @@
                 if (!ok43) bad++;
             }
 
+            // ㊹ 🔴🔴 **값 콜백** — 점유가 **안 바뀌어도** 온다 (사용자 지시: 훅 분리)
+            //   🔑 이것이 ㊸·㊷ 와 갈리는 지점이다. 차가 들어오는 동안 점유는 계속 1 이라
+            //     `onOccupancy` 는 **한 번도 안 불린다.** 주차 유도가 그래서 원리적으로 안 됐다.
+            {
+                ParkingLot L;
+                L.spot("A1").parking().module("P1", "A1");
+                ParkingServer ps(L);
+                Server t; t.lot_ = &L; t.build_default_zones(); t.init_srv_id();
+                t.park.devid = "P1"; t.park.reg_done = true;
+                t.park.mods.push_back(std::make_pair(std::string("A1"), std::string("IP")));
+                t.bind_modules(t.park);
+                t.park.mod_bits_n = 1; t.park.mod_bits[0] = 1;   // **계속 찼다** — 점유는 안 바뀐다
+                t.owner_ = &ps; t.occ_cb_ = st_occ_probe; t.val_cb_ = st_val_probe;
+                t.notify_occupancy_changes();                    // 씨 뿌리기(첫 관측)
+                g_st_occ_n = 0; g_st_val_n = 0;
+
+                t.on_ard_line(t_line("V,03C,"));                 // 60
+                bool w1 = (g_st_val_n == 1 && g_st_val_spot == "A1"
+                           && g_st_val_mod == "A1" && g_st_val_v == 60);
+                t.on_ard_line(t_line("V,028,"));                 // 40
+                t.on_ard_line(t_line("V,014,"));                 // 20
+                bool w2 = (g_st_val_n == 3 && g_st_val_v == 20);
+                // 🔴 **핵심**: 값이 셋 왔는데 점유는 한 번도 안 바뀌었다
+                t.notify_occupancy_changes();
+                bool w3 = (g_st_occ_n == 0);
+                // 🔴 **못 쟀다(빈 칸)는 사건이 아니다** — 안 부른다(음성 대조)
+                t.on_ard_line(t_line("V,,"));
+                bool w4 = (g_st_val_n == 3);
+                t.occ_cb_ = 0; t.val_cb_ = 0; t.owner_ = 0;
+
+                bool ok44 = w1 && w2 && w3 && w4;
+                std::cout << (ok44 ? "  ✓ " : "  ✗ ")
+                          << "값 콜백 — 첫 값 60(" << (w1 ? "예" : "아니오")
+                          << ") · 60→40→20 세 번(" << (w2 ? "예" : "아니오")
+                          << ") · 🔴 **그동안 점유 콜백 0회**(" << (w3 ? "예" : "아니오")
+                          << ") · 🔴 **못쟀다는 안 부름**(" << (w4 ? "예" : "아니오")
+                          << ") · 누계 " << g_st_val_n << "\n";
+                if (!ok44) bad++;
+            }
+
             // ㉕ 🔴 **`state` 봉투와 `actions`** (REQ-0203 4c)
             {
                 Server t; t.build_default_zones(); t.init_srv_id();

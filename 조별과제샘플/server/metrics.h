@@ -104,7 +104,7 @@
                ack_unknown_rid(0), ack_slot_mismatch(0), mod_name_conflict(0), mod_dup_name(0), mod_unbound(0), mod_seen_(0), asm_warn_(0), batch_seq_(0), batch_deferred(0), devid_example_(0), sensor_split_now(0), not_reservable_n(0),
                base_valid(false), test_armed(false),
                cmd_cb_(0), cb_ok_(0), cb_rejected_(0), cb_noanswer_(0),
-               occ_cb_(0), owner_(0), occ_change_n_(0),
+               occ_cb_(0), val_cb_(0), owner_(0), occ_change_n_(0),
                vframes(0), vvalues(0), vmissing(0), vmalformed(0),
                ledger_new_(0), ledger_review_(0),
                resync_count(0), no_disk(false),

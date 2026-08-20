@@ -55,6 +55,18 @@ struct SensorMeasure {
 //   🔑 그래서 **콜백은 하나이고 파라미터만 하나 늘었다.** 배우는 것이 안 는다.
 // 🔑 **센서(`I*`)만 온다.** 명령 모듈의 에코는 안 온다 — 안 그러면 자기 명령이 자기를 부른다.
 // ⚠ 서버의 한 박자 안에서 불린다. 오래 걸리는 일을 하지 마라.
+// 🔴 **값이 올 때마다 불린다** — 점유가 안 바뀌어도 온다.
+//   `onOccupancy` 는 **상태가 바뀔 때**의 콜백이고 이것은 **값이 흐를 때**의 콜백이다.
+//   차가 60 → 40 → 20cm 로 들어와도 점유는 계속 1 이라 `onOccupancy` 가 안 불린다 —
+//   🔑 **주차 유도(거리 표시·근접 경고)가 이 콜백의 존재 이유다.**
+//
+// 🔑 **`has` 가 없다.** 값이 있을 때만 부르기 때문이다 — *"못 쟀다"* 는 사건이 아니다.
+// ⚠ 단위는 **기여자의 것**이다(§`SensorMeasure`).
+// ⚠ **자주 불린다** — 슬롯당 센서 수만큼(초당 약 k/1.2회). 여기서 무거운 일을 하면 박자를 먹는다.
+//   거르고 싶으면 **기여자가 거른다.** 서버가 문턱을 정하면 그 문턱을 누가 정하는지가 또 빈 자리가 된다.
+typedef void (*SensorValueFn)(ParkingServer& srv, const std::string& spot,
+                              const std::string& module, long value);
+
 typedef void (*OccupancyFn)(ParkingServer& srv, const std::string& spot,
                             const std::string& module, bool occupied,
                             const SensorMeasure& measure);

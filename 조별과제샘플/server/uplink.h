@@ -306,6 +306,14 @@
                 if (endp == f[i].c_str() || (endp && *endp)) { vmalformed++; continue; }
                 vn.mod_val[idx] = v; vn.mod_val_has[idx] = true; vn.mod_val_ms[idx] = now_ms();
                 used++;
+                // 🔴 **값이 올 때마다 부른다** — 점유가 안 바뀌어도 온다(주차 유도).
+                //   🔑 여기는 `S` 처리보다 **앞**이다(`V` 가 같은 배치에서 먼저 온다) →
+                //     값 콜백이 점유 콜백보다 먼저 불린다. **저장해 뒀다 쓰는 것이 가능하다.**
+                //   ⚠ 자리에 안 붙은 모듈은 부르지 않는다 — 화면에도 없는 것에 콜백만 가면 헷갈린다.
+                if (val_cb_ && owner_ && idx < vn.mods.size()) {
+                    const std::string zid = lot.zoneOfModule(vn.devid, vn.mods[idx].first, lot_);
+                    if (!zid.empty()) val_cb_(*owner_, zid, vn.mods[idx].first, v);
+                }
             }
             vframes++; vvalues += (long long)used; vmissing += (long long)miss;
         }

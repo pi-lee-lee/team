@@ -33,6 +33,14 @@ static int         g_st_occ_n = 0;
 static std::string g_st_occ_spot;
 static bool        g_st_occ_val = false;
 static std::string g_st_occ_mod;
+static int  g_st_val_n = 0;
+static std::string g_st_val_mod, g_st_val_spot;
+static long g_st_val_v = -1;
+static void st_val_probe(ParkingServer&, const std::string& spot,
+                         const std::string& module, long value) {
+    g_st_val_n++; g_st_val_spot = spot; g_st_val_mod = module; g_st_val_v = value;
+}
+
 static bool g_st_occ_has = false;
 static long g_st_occ_meas = -1;
 static void st_occ_probe(ParkingServer&, const std::string& spot,

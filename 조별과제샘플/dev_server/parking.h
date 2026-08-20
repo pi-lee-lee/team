@@ -287,6 +287,26 @@ public:
     //   그리고 여기서 낸 명령은 **그 박자의 창에 실려 나간다.**
     void onOccupancyChanged(OccupancyFn fn);
 
+    // 🔴 **센서 값이 올 때마다 불린다** — **점유가 안 바뀌어도** 온다.
+    //
+    //   ```
+    //   void onValue(ParkingServer& srv, const std::string& spot,
+    //                const std::string& module, long value) {
+    //       if (module != "A1") return;
+    //       srv.send("P1", "L2", value);        // 거리 그대로 표시기에
+    //   }
+    //   srv.onSensorValue(onValue);
+    //   ```
+    //
+    // 🔑 **`onOccupancyChanged` 와 역할이 다르다:**
+    //     `onOccupancyChanged` = **상태가 바뀌었다**(들어왔다/나갔다)
+    //     `onSensorValue`      = **값이 흐른다**(60 → 40 → 20cm) — 주차 유도가 이것이다
+    // 🔑 값이 **있을 때만** 불린다 — *"못 쟀다"* 는 사건이 아니라서 안 부른다.
+    // ⚠ **자주 불린다**(슬롯당 센서 수만큼). 무거운 일을 하지 마라. 거르는 것은 기여자 몫이다.
+    // 🔑 같은 슬롯에서 **이것이 `onOccupancyChanged` 보다 먼저** 불린다 —
+    //   값을 저장해 뒀다가 점유 콜백에서 쓰는 것이 가능하다.
+    void onSensorValue(SensorValueFn fn);
+
     // 🔑 **장치가 붙어서 등록까지 마쳤나.** 명령을 내기 전에 이것부터 봐라 —
     //   안 붙었으면 `send()` 가 `false` 를 내고 로그에 *"노드 `P1` 를 모른다"* 가 찍힌다.
     //   ⚠ **접속만으로는 부족하다.** 등록(`D`)이 끝나야 모듈 이름을 풀 수 있다.
@@ -337,5 +357,7 @@ void onTick(ParkingServer& srv);             // ② 한 박자마다 — 명령�
 void onCmdResult(const CmdResult& r);        // ③ 명령 결과 — 성공 / 거절 / 무응답
 void onOccupancy(ParkingServer& srv, const std::string& spot, const std::string& module,
                  bool occupied, const SensorMeasure& measure);  // ④ 점유 변화(모듈 단위 · 값 포함)
+void onSensorValue(ParkingServer& srv, const std::string& spot,
+                   const std::string& module, long value);      // ⑤ 값이 올 때마다
 
 #endif  // PARKING_H

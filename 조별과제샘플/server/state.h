@@ -294,6 +294,7 @@
     // ── 자리 점유 변화 콜백 (`spot.h` 의 `OccupancyFn`) ─────────────────────
     // 🔑 등록 안 해도 **계수는 센다** — 볼 자리를 선택적인 것에 묶지 않는다.
     OccupancyFn   occ_cb_;
+    SensorValueFn val_cb_;                 // 🔑 값이 올 때마다. 등록 안 해도 계수는 센다
     ParkingServer* owner_;                 // 콜백에 넘길 공개 객체. 없으면 콜백을 안 부른다
     std::map<std::string, bool> occ_prev_; // 자리 id → 직전 점유
     // 🔴 **키가 없으면 "아직 안 봤다" 이고, 그때는 콜백을 안 부른다.**

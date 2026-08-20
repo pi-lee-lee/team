@@ -133,6 +133,22 @@ void example_occupancy(ParkingServer& srv, const std::string& spot,
     //   실제 상태는 다음 `S` 의 에코 비트가 말하고, 그것은 최대 한 슬롯 뒤에 온다.
 }
 
+// ── ⑦-b 🔴 **값이 흐를 때 — 주차 유도** ──────────────────────────────────
+//   🔑 ⑦(점유 변화)과 **다른 사건**이다. 차가 60 → 40 → 20cm 로 들어오는 동안
+//     점유는 계속 "찼다" 라서 ⑦은 **한 번도 안 불린다.** 거리를 보려면 여기다.
+//   ⚠ 값이 **있을 때만** 온다("못 쟀다" 는 사건이 아니다) · **자주 온다**(슬롯당 센서 수만큼)
+void example_sensor_value(ParkingServer& srv, const std::string& spot,
+                          const std::string& module, long value) {
+    (void)spot;
+    if (module != "A1") return;             // 🔓 거르는 것은 네 몫이다
+
+    srv.send("P1", "L2", value);            // 거리를 표시기에 그대로
+
+    // 🔓 또는 거리에 따라 다르게 — **뜻을 정하는 것은 너다**
+    // if (value < 20)      srv.send("P1", "LD", 1);   // 너무 가깝다 → 경고등
+    // else if (value < 60) srv.send("P1", "LD", 0);
+}
+
 // ── ⑧ 명령 결과 — 갈래가 셋이고 고치는 곳이 다르다 ────────────────────────
 //   성공     : 장치가 받았고 콜백이 true 를 냈다
 //   거절     : 장치가 **답했고** 거절했다 → 값·등록을 고쳐라. **재시도는 뜻이 없다**
