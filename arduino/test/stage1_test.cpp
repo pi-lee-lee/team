@@ -2055,6 +2055,28 @@ int main() {
     ok(first.find("[NET] 대상") < 8,
                             "★★★ 배너가 출력의 맨 앞이다 (AT 로그보다 먼저)");
 
+    // 🔴 **`[CFG] begin() 누락` 경고가 거짓 경보를 내지 않는가** — 실기에서 실제로 났다.
+    //   옛 판정은 `slotStart == 0` 이었고 **부팅 직후 `millis()` 가 0** 이라 `begin()` 을 불러도
+    //   경고가 나왔다. 🔑 시험의 가짜 시계는 이미 흘러 있어서 **이 갈래를 못 밟았다** —
+    //   §"시험 경로 ≠ 실기 경로". 그래서 여기서 **시각을 0 으로 되돌려** 그 조건을 만든다.
+    {
+      const unsigned long saveMs = g_millis, saveStart = slotStart;
+      Serial.out.clear();
+      g_millis = 0; slotStart = 0;            // 실기 부팅 직후와 같은 상태
+      node.bannerDone = false;
+      loop();
+      ok(Serial.out.find("[CFG]") == std::string::npos,
+                            "★★★ `begin()` 을 불렀으면 `millis()` 가 0 이어도 경고가 없다 (거짓 경보 회귀)");
+      // 🔴 음성 대조 — 정말 안 불렀으면 경고가 **나와야** 한다
+      Serial.out.clear();
+      node.bannerDone = false; node.beginDone = false;
+      loop();
+      ok(Serial.out.find("[CFG]") != std::string::npos,
+                            "★★★ 음성 대조: `begin()` 을 안 부르면 경고가 나온다 (검사가 실제로 돈다)");
+      node.beginDone = true; g_millis = saveMs; slotStart = saveStart;
+      Serial.out.clear();
+    }
+
     // 두 번째 호출은 배너를 **다시 안 찍는다**
     Serial.out.clear();
     loop();

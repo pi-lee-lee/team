@@ -77,6 +77,12 @@ class ParkingNode {
   //   보고 값을 가른다. `begin()` 에서 찍으면 등록 전이라 **거짓말을 한다.**
   bool bannerDone;
 
+  // 🔴 `begin()` 이 불렸나. **`slotStart == 0` 으로 판정하면 안 된다** —
+  //   `begin()` 이 `slotStart = millis()` 를 세우는데 **부팅 직후 `millis()` 가 0** 이라
+  //   세워도 0 이고, 그러면 "안 불렀다" 와 구별이 안 된다(실제로 거짓 경보가 났다).
+  //   🔑 §"`0` 이 건강인지 못 셈인지" — **`0` 이 두 뜻을 겸하면 별도 플래그를 둔다.**
+  bool beginDone;
+
   // 센서를 한 번 훑어 점유 비트를 갱신한다
   void readSensors() {
     uint16_t m = 0;

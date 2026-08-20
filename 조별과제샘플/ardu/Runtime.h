@@ -20,6 +20,7 @@
 // 코드가 더 안 읽혔다. **드러내 봐야 "지킬 의무" 만 생기고 얻는 것이 없다.**
 // ─────────────────────────────────────────────────────────────────────────
 void ParkingNode::begin() {
+  beginDone = true;
   espInit();                        // UART 를 열고 접속 사다리를 시작만 한다 (여기서 기다리지 않는다)
 
   // 슬롯 위상의 원점. 🔴 **`espInit()` 바로 뒤여야 한다** — 0 으로 두면 첫 `statusTick` 에서
@@ -142,7 +143,9 @@ static void printBootBanner(void) {
     Serial.println(F(" 개를 버렸다 — setup() 의 등록 줄을 줄여라"));
   }
   // 🔴 `begin()` 을 안 불렀으면 링크가 안 선다. **누락은 경고로 잡는다**(순서 의존이 아니다).
-  if (slotStart == 0) Serial.println(F("[CFG] 🔴 setup() 에서 node.begin() 을 먼저 불러라"));
+  //   ⚠ `slotStart == 0` 으로 보면 **거짓 경보**다 — 부팅 직후 `millis()` 가 0 이라
+  //     세워도 0 이다. 그래서 별도 플래그를 본다.
+  if (!node.beginDone) Serial.println(F("[CFG] 🔴 setup() 에서 node.begin() 을 먼저 불러라"));
 
   // ── 부팅 원인 — **추측을 사실로 바꾸는 한 줄**. 왜 재부팅했는지는 여기서만 알 수 있다 ──
   Serial.print(F("[BOOT] 리셋 원인: "));
