@@ -40,6 +40,9 @@
 // ═════════════════════════════════════════════════════════════════════════
 
 #include "Arduino.h"
+// 🔑 `SENSOR_N` 은 없어졌다(등록이 런타임이라 컴파일 상수가 아니다).
+//   시험이 쓰던 자리를 표를 훑어 세는 함수로 바꾼다.
+#define TEST_HAS_SENSOR_COUNT 1
 #include "SoftwareSerial.h"
 
 #include <string>
@@ -77,16 +80,34 @@ uint8_t __heap_start = 0;
 //   밟을 대상이 사라진다. 그 경로들은 **오늘 실제로 결함을 잡은** 시험이라 버릴 수 없다.
 //   🔑 그래서 표는 여기서 늘리고 **핸들러도 여기서 정의한다.** 샘플은 안 건드린다.
 //   ⚠ `L2` 는 **샘플이 다시 가져갔다**(화면 숫자 입력 칸 때문에). 여기서 또 넣으면 **이름 중복**이다.
-#define SAMPLE_EXTRA_MODULES  {"LC", "OL", PIN_NONE}, \
-                              {"DR", "OB",    6},
+//   🔑 체이닝으로 바뀌면서 **등록 줄**이 된다 — 표가 없으니 `setup()` 이 이것을 부른다.
+//   🔴 그래서 **핸들러 전방 선언이 필요하다**: 옛 매크로는 *자료*(표 초기화)였고 지금은 *코드*다.
+//     정의는 이 파일 아래에 있지만 `setup()` 이 그보다 먼저 펼쳐진다.
+static bool cmdLcd(uint32_t arg);
+static bool cmdDoor(uint32_t arg);
+// 🔴 **시험 지형이 실기 상한(8)보다 크다** — 8모듈 + 아래 시험들이 임시로 더 등록한다.
+//   호스트에는 RAM 제약이 없으므로 여기서 올린다. `Module.h` 의 `#ifndef` 가 받는다.
+//   ⚠ 실기 빌드의 8 은 `ramLow` 602B 실측으로 정한 값이다. **그것을 바꾸는 것이 아니다.**
+#define MODULE_CAP 12
+#define SAMPLE_EXTRA_MODULES  node.actuator("LC").on(cmdLcd); \
+                              node.actuator("DR").pin(6).on(cmdDoor);
 #define PIN_SAMPLE_DOOR 6
 // 🔓 **샘플 액추에이터도 켜서 빌드한다** — 안 켜면 `cmdLed`/`cmdLcd`/`cmdDoor` 가
 //   **한 번도 컴파일되지 않는다.** 샘플 코드는 아무도 안 돌려 보면 조용히 썩는다.
 
 #ifndef SKETCH_PATH
 #define SKETCH_PATH "../../조별과제샘플/ardu/client.ino"
+
 #endif
 #include SKETCH_PATH
+
+// 🔑 `SENSOR_N` 은 없어졌다 — 등록이 런타임이라 컴파일 상수가 아니다.
+//   시험이 쓰던 자리를 표를 훑어 세는 함수로 바꾼다.
+static uint8_t sensorCount() {
+  uint8_t n = 0;
+  for (uint8_t i = 0; i < MODULE_N; i++) if (isSensor(i)) n++;
+  return n;
+}
 
 // ═════════════════════════════════════════════════════════════════════════
 // 🔴 **시험용 핸들러** — 샘플에서 뺀 것들이 여기 산다.
@@ -1167,9 +1188,9 @@ int main() {
       ok(strcmp(o, "18B") == 0,
                             "★★ 전선에서는 슬롯 i = 비트 (n-1-i) (0x18B) — 반대다"); }
 
-    // ⚠ 축 3 의 기대: **거동 변화 0**. moduleCount 가 지금은 SENSOR_N 과 같아야 한다
-    // ✏️ 2026-08-19 가상 모듈이 들어와 moduleCount() > SENSOR_N 이 됐다
-    ok(moduleCount() >= SENSOR_N,
+    // ⚠ 축 3 의 기대: **거동 변화 0**. moduleCount 가 지금은 sensorCount() 과 같아야 한다
+    // ✏️ 2026-08-19 가상 모듈이 들어와 moduleCount() > sensorCount() 이 됐다
+    ok(moduleCount() >= sensorCount(),
                             "★★ 표가 실물 자리를 전부 앞쪽에 포함한다");
   }
 
@@ -1376,8 +1397,8 @@ int main() {
   //   🔑 **기대가 "아무 일도 안 일어난다"인 축은 바이트로 못 박지 않으면 검증이 없다.**
   printf("\n[34] 모듈 표 도입 — 거동 변화 0 (바이트 대조)\n");
   {
-    // ✏️ 2026-08-19 — 가상 모듈이 들어와 `moduleCount() > SENSOR_N` 이 됐다
-    ok(moduleCount() >= SENSOR_N,
+    // ✏️ 2026-08-19 — 가상 모듈이 들어와 `moduleCount() > sensorCount()` 이 됐다
+    ok(moduleCount() >= sensorCount(),
                             "★★ 표가 실물 자리를 전부 포함한다");
     ok(MODULE_N == 8,       "★ 표 길이가 8 이다 (센서 2 + 명령 4 + 가상 2)");
 
@@ -1389,10 +1410,10 @@ int main() {
     //   (겸해서 옛 계산식과의 동일성도 본다 — 표 도입이 무해했다는 증거)
     // ✏️ 2026-08-19 — **샘플 구성(자리 A1 · 센서 둘)** 으로 다시 박았다.
     //   옛 값은 10칸 장치(`A1~A5,B1~B5`)였다. **주석 처리된 A2~B5 를 풀면 그 값으로 돌아온다.**
-    static const char* EXPECT[SENSOR_N] = {"A1","B1"};
+    static const char* EXPECT[MODULE_CAP] = {"A1","B1"};   // 🔑 크기는 상한. 값은 둘뿐이다
     // ⚠ **실물 열 개만 본다** — 가상 모듈(E1·X1)은 아래에서 따로 검사한다
     bool allName = true;
-    for (uint8_t i = 0; i < SENSOR_N; i++) {
+    for (uint8_t i = 0; i < MODULE_N; i++) {
       char nm[4]; moduleNameOf(i, nm);
       if (strcmp(nm, EXPECT[i]) != 0) { allName = false;
         printf("      🔴 i=%u: 표 '%s' 대 기대 '%s'\n", i, nm, EXPECT[i]); }
@@ -1400,13 +1421,13 @@ int main() {
     ok(allName,             "★★ 두 이름이 옛 계산식과 같다 (A1·B1 — 서버의 자리 id 와 동일해야 한다)");
 
     // ② 핀이 SLOT_PIN 과 같은가 — **표와 핀 표가 갈리면 엉뚱한 칸을 읽는다**
-    // ⚠ **실물 범위(SENSOR_N)까지만 돈다** — 가상 모듈은 핀이 없고
-    //   `SLOT_PIN[]` 은 크기가 `SENSOR_N` 이라 그 밖은 배열 밖 읽기다.
+    // ⚠ **실물 범위(sensorCount())까지만 돈다** — 가상 모듈은 핀이 없고
+    //   `SLOT_PIN[]` 은 크기가 `sensorCount()` 이라 그 밖은 배열 밖 읽기다.
     bool allPin = true;
-    for (uint8_t i = 0; i < SENSOR_N; i++)
-      if (pgm_read_byte(&MODULE_TABLE[i].pin) != sensorPin(i)) { allPin = false;
+    for (uint8_t i = 0; i < MODULE_N; i++)
+      if (pgm_read_byte(&MODULE_TABLE[i].pin) != modPin(i)) { allPin = false;
         printf("      🔴 i=%u: 표 핀 %u 대 SLOT_PIN %u\n", i,
-               pgm_read_byte(&MODULE_TABLE[i].pin), sensorPin(i)); }
+               pgm_read_byte(&MODULE_TABLE[i].pin), modPin(i)); }
     ok(allPin,              "★★ 표의 핀이 SLOT_PIN 과 전부 같다 (이행 중 두 표가 공존한다)");
 
     // ③ 🔴 **전선에 나가는 바이트가 그대로인가** — 이 축의 최종 판정이다
@@ -1742,21 +1763,25 @@ int main() {
     printf("\n[37] 모듈 표 파생 — 센서 수 · 핀 · 자리 토큰\n");
 
     // 센서 수는 컴파일 시점에 표에서 센다. 여기서 **손으로 다시 세어** 대조한다.
+    // 🔴 옛 판은 "앞쪽 `I*` 연속 줄 수" 를 셌다 — **그 불변식이 없어졌다.**
+    //   지금은 센서가 표 어디에 있어도 되고, `isSensor()` 가 종류를 판정한다.
     uint8_t handCount = 0;
-    while (handCount < MODULE_N &&
-           (char)pgm_read_byte(&MODULE_TABLE[handCount].kind[0]) == 'I') handCount++;
-    ok(SENSOR_N == handCount,
-                            "★★★ SENSOR_N 이 표의 `I*` 연속 줄 수와 같다 (컴파일 시점 파생)");
+    for (uint8_t k = 0; k < MODULE_N; k++) {
+      char k4[4]; moduleKindOf(k, k4);
+      if (k4[0] == 'I') handCount++;
+    }
+    ok(sensorCount() == handCount,
+                            "★★★ sensorCount() 가 전선 kind 첫 글자 `I` 인 줄 수와 같다");
     // 🔴 분모 확인 — 센서만 있거나 액추에이터만 있으면 아래 음성 대조가 성립하지 않는다
-    ok(SENSOR_N >= 1 && SENSOR_N < MODULE_N,
+    ok(sensorCount() >= 1 && sensorCount() < MODULE_N,
                             "★ 표에 센서와 액추에이터가 둘 다 있다 (아래 검사의 사전 조건)");
 
     // 핀이 표에서 온다
     bool pinsMatch = true;
-    for (uint8_t i = 0; i < SENSOR_N; i++)
-      if (sensorPin(i) != pgm_read_byte(&MODULE_TABLE[i].pin)) pinsMatch = false;
-    ok(pinsMatch,           "★★ sensorPin() 이 표의 `pin` 칸을 그대로 돌려준다");
-    ok(sensorPin(SENSOR_N) == PIN_NONE,
+    for (uint8_t i = 0; i < MODULE_N; i++)
+      if (modPin(i) != pgm_read_byte(&MODULE_TABLE[i].pin)) pinsMatch = false;
+    ok(pinsMatch,           "★★ modPin() 이 표의 `pin` 칸을 그대로 돌려준다");
+    ok(modPin(sensorCount()) == PIN_NONE,
                             "★★ 센서 범위 밖은 PIN_NONE — 범위 가드가 산다");
 
     // 자리 토큰(전선 ACK 이 되비추는 두 글자)이 표의 이름에서 온다
@@ -1770,8 +1795,8 @@ int main() {
     // 🔴 **음성 대조** — 액추에이터 이름으로는 자리를 찾을 수 없어야 한다.
     //   찾히면 `LD` 에 예약(R)이 걸리고, 그 비트는 자리 점유 비트와 겹친다.
     {
-      char a0 = (char)pgm_read_byte(&MODULE_TABLE[SENSOR_N].name[0]);
-      char a1 = (char)pgm_read_byte(&MODULE_TABLE[SENSOR_N].name[1]);
+      char a0 = (char)pgm_read_byte(&MODULE_TABLE[sensorCount()].name[0]);
+      char a1 = (char)pgm_read_byte(&MODULE_TABLE[sensorCount()].name[1]);
       ok(sensorIndexOf(a0, a1) == 0xFF,
                             "★★★ 액추에이터 이름으로는 자리를 못 찾는다 (예약이 안 걸린다)");
     }
@@ -1779,7 +1804,7 @@ int main() {
     // 🔴 이 장치는 **시뮬 점유 상태를 갖지 않는다.** 핀이 없으면 늘 0 이다 —
     //   가짜 점유를 만들지 않는다. 차 없이 시험할 수단은 오버라이드(`T` 프레임)다.
     node.testArmed = false; node.ovrActive = 0;
-    ok(node.readSensor(SENSOR_N) == 0,
+    ok(node.readSensor(sensorCount()) == 0,
                             "★★ 핀 없는 칸은 0 이다 (장치가 점유를 지어내지 않는다)");
   }
 
@@ -1795,9 +1820,9 @@ int main() {
     node.begin();
     {
       uint8_t pinned = 0;
-      for (uint8_t i = 0; i < SENSOR_N; i++) if (sensorPin(i) != PIN_NONE) pinned++;
+      for (uint8_t i = 0; i < MODULE_N; i++) if (modPin(i) != PIN_NONE) pinned++;
       ok(pinned >= 1,       "★★ 기본 구성에서 핀을 적은 칸이 **하나 이상** 있다 — 0 이면 훅이 죽는다");
-      ok(g_pinMode[sensorPin(0)] == INPUT_PULLUP,
+      ok(g_pinMode[modPin(0)] == INPUT_PULLUP,
                             "★★ 핀을 적은 칸의 핀 모드를 `begin()` 이 잡는다");
     }
     ok(!sensors.at(0),      "★ 등록 전에는 훅이 없다 (기본 digitalRead 경로)");
@@ -1832,19 +1857,27 @@ int main() {
     ok(node.readRealSensor(0) == 0,
                             "★★ 200ms 가 지나면 새로 잰다 — **영구 고착이 아니다**");
 
-    // 🔴 등록된 칸은 기본 핀 모드를 **안 건드린다** (초음파는 trig/echo 가 갈린다)
-    g_pinMode[sensorPin(0)] = 0xEE;          // 표지를 박아 둔다
-    node.applySensorPinMode(0);
-    ok(g_pinMode[sensorPin(0)] == 0xEE,
-                            "★★ 훅이 있는 칸에는 INPUT_PULLUP 을 안 건다 (기여자 몫이다)");
+    // 🔴 **계약이 바뀌었다**: 핀 모드는 `.pin()` 이 그 자리에서 잡는다.
+    //   훅만 쓰는 센서는 `.pin()` 을 **안 부르면** 되고, 그러면 아무 핀도 안 건드린다 —
+    //   초음파처럼 trig/echo 가 갈린 장치는 핸들러가 직접 잡는다.
+    //   🔑 옛 판은 `applySensorPinMode()` 가 훅 여부를 보고 건너뛰었다. 지금은 **부르지 않는 것**이 그 뜻이다.
+    {
+      const uint8_t before = g_pinMode[7];
+      node.sensor("ZQ").on(ultrasonicRead);      // `.pin()` 없이 등록
+      ok(g_pinMode[7] == before,
+                            "★★ `.pin()` 을 안 부르면 어떤 핀 모드도 안 건드린다 (기여자 몫이다)");
+      ok(modPin(MODULE_N - 1) == PIN_NONE,
+                            "★ 그 칸의 핀은 PIN_NONE 이다");
+    }
 
     // 뒤 시험에 영향이 없도록 되돌린다 — 0 을 넣으면 기본 경로로 돌아간다
     sensors.on("A1", 0);
     ok(!sensors.at(0),      "★ 0 을 등록하면 기본 경로로 돌아간다");
-    node.applySensorPinMode(0);
-    ok(g_pinMode[sensorPin(0)] == INPUT_PULLUP,
-                            "★★ 훅을 떼면 기본 INPUT_PULLUP 이 다시 걸린다");
-    node.begin();      // 소스를 표에서 다시 파생시킨다
+    // 🔑 핀 모드를 다시 걸려면 `.pin()` 을 다시 부른다 — 그것이 이제 유일한 경로다.
+    g_pinMode[2] = 0xEE;
+    node.sensor("ZR").pin(2);
+    ok(g_pinMode[2] == INPUT_PULLUP,
+                            "★★ 센서의 `.pin()` 은 INPUT_PULLUP 을 건다");
   }
 
   // ── [39] 🔴 **거절이 조용하지 않은가** — 로그가 셋을 갈라 주는가 ──────────────
@@ -2055,7 +2088,7 @@ int main() {
                             "★★ 되읽기 훅이 B1 에 붙는다 (`setup()` 과 같은 등록)");
     ok(sensors.at(1) == readLedBack, "★ 그 칸에 걸렸다");
     // A1(핀 2)은 훅이 없다 → 기본 경로. 미배선이면 INPUT_PULLUP 이라 HIGH → ACTIVE_LOW 로 0
-    g_pinLevel[sensorPin(0)] = HIGH;
+    g_pinLevel[modPin(0)] = HIGH;
 
     char gg[28];
     // ① LED 끄기 → 자리는 비어 있어야 한다
@@ -2091,7 +2124,7 @@ int main() {
 
     // ⑤ 훅을 떼면 기본 경로로 — 되돌릴 수 있다는 것까지 본다
     sensors.on("B1", 0);
-    g_pinLevel[sensorPin(1)] = HIGH;                 // 미배선 = 풀업 = HIGH (앞 시험이 바꿨을 수 있다)
+    g_pinLevel[modPin(1)] = HIGH;                 // 미배선 = 풀업 = HIGH (앞 시험이 바꿨을 수 있다)
     node.readSensors();
     ok((node.occMask & (1u << 1)) == 0,
                             "★★ 훅을 떼면 B1 이 핀 9(미배선 → 0)로 돌아간다");
@@ -2172,7 +2205,7 @@ int main() {
       for (uint8_t k = 0; k < MODULE_N; k++) if (sensors.at(k)) noSampleHook = false;
       ok(noSampleHook,      "★★ setup() 은 센서 훅을 **안 붙인다** — 붙일 실물이 없다");
     }
-    ok(sensorPin(0) != PIN_NONE,
+    ok(modPin(0) != PIN_NONE,
                             "★★ 그래도 핀은 적혀 있다 — 센서를 달면 **바로 읽힌다**");
 
     // ④ 🔴 훅을 붙이면 **두 센서가 갈릴 수 있는가** — 서버의 OR/AND 판정이 갈리려면 필요하다

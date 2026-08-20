@@ -1,65 +1,103 @@
 #pragma once
 // ═════════════════════════════════════════════════════════════════════════
-// Module.h — 🔓 **모듈 표에 쓰는 것들**: `SENSOR` · `ACTUATOR` · `PIN_NONE`
+// Module.h — 🔓 **모듈 등록**: `node.sensor("A1").pin(2)` · `node.actuator("LD").pin(13).on(cmdLed)`
 //   ⚙ 응용 성질 — 잠금 대상이 아니다
 //
-// 🔓 **기여자는 이 파일을 열지 않아도 된다.** `client.ino` 의 표에 이 둘을 쓸 뿐이다.
+// 🔓 **기여자는 이 파일을 열지 않아도 된다.** `setup()` 에서 위 두 줄 모양만 쓴다.
 //
-// 🔴 **왜 `client.ino` 가 아니라 여기인가**: 아두이노는 `.ino` 의 함수 정의마다
-//   **프로토타입을 파일 머리에 자동 삽입한다.** `SENSOR`/`ACTUATOR` 가 `.ino` 에 있으면
-//   그 선언이 `struct ModuleDef` **앞**에 끼어들어 `'ModuleDef' does not name a type` 이 난다.
-//   → **타입과 팩토리는 헤더에.** 표와 핸들러만 `.ino` 에 남는다.
+// 🔴 **왜 `client.ino` 가 아니라 여기인가**: 아두이노는 `.ino` 의 함수 정의마다 프로토타입을
+//   파일 머리에 자동 삽입한다. 타입·빌더가 `.ino` 에 있으면 그 선언이 `struct` 앞에 끼어들어
+//   `'Mod' does not name a type` 이 난다. **타입과 빌더는 헤더에.**
 // ═════════════════════════════════════════════════════════════════════════
-// 🔴🔴 **위치를 옮기지 마라.** `client.ino` 의 **모듈 표 바로 앞**에서 `#include` 된다.
+// 🔴🔴 **위치를 옮기지 마라.** `client.ino` 의 `#include` 목록 **맨 앞**이다 —
+//   `Slots.h`(`ParkingNode`)와 `Modules.h`(라우터)가 이 표를 읽는다.
 
-#define PIN_NONE 0xFF     // 핀 없음(가상 모듈·표시기처럼 핀이 필요 없는 것)
+#define PIN_NONE 0xFF     // 핀 없음(표시기처럼 핀이 필요 없는 모듈)
+
+// 🔓 모듈이 하는 일. 표에 함수 이름을 적으면 그것이 등록이다.
+typedef bool (*CommandFn)(uint32_t arg);   // 액추에이터: 반환 true → ACK `result=0` · false → `3`
+typedef bool (*SensorFn)(uint8_t pin);     // 센서: 반환 true = 찼다 (안 주면 `digitalRead(핀)`)
+
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴 **모듈 상한 8** — 실측으로 정했다(2026-08-20)
+//   `ramLow`(실행 중 최저 여유) **602B** 대비 : 8모듈 **10.6%** · 16모듈 21.2%
+//   ⚠ 컴파일러가 말하는 정적 여유 834B 는 **예산이 아니다** — 스택이 232B 내려간다
+//   상한을 늘리려면 **`ramLow` 를 다시 재라**(부팅 70초 뒤 `[RAM]` 줄).
+// ─────────────────────────────────────────────────────────────────────────
+// ⚠ `#ifndef` 인 이유: **회귀 시험이 더 많은 모듈로 지형을 만든다.** 호스트에는 RAM 제약이 없다.
+//   🔴 실기 빌드에서는 이 값을 바꾸지 마라 — 위 실측이 8 을 정했다.
+#ifndef MODULE_CAP
+#define MODULE_CAP 8
+#endif
 
 // 회귀 시험만 쓰는 확장점. 기본은 **비어 있다** — 샘플에는 아무 영향이 없다.
-//   시험 하네스가 이것을 정의해 자기 모듈을 더 넣는다. 그래야 `client.ino` 에
+//   시험 하네스가 이것을 정의해 자기 모듈을 더 등록한다. 그래야 `client.ino` 에
 //   시험용 `#if` 를 두지 않고도 명령 경로를 계속 밟을 수 있다.
-//   ⚠ **샘플 코드에서는 이 이름을 쓰지 마라.** 자기 모듈은 표에 직접 적는다.
+//   ⚠ **샘플 코드에서는 이 이름을 쓰지 마라.** 자기 모듈은 `setup()` 에 직접 적는다.
 #ifndef SAMPLE_EXTRA_MODULES
 #define SAMPLE_EXTRA_MODULES
 #endif
 
-// 표에 적는 두 종류의 함수. 🔴 **표보다 앞에 있어야 한다** — 표가 이 타입을 쓴다.
-typedef bool (*CommandFn)(uint32_t arg);   // `O*` 모듈: 반환 true → ACK `result=0` · false → `3`
-typedef bool (*SensorFn)(uint8_t pin);     // `I*` 모듈: 반환 true = 찼다 (비우면 `digitalRead`)
+struct Mod {
+  char      name[2];   // 전선에 나가는 두 글자
+  uint8_t   pin;       // PIN_NONE 이면 핀 없음
+  uint8_t   isAct;     // 1 = 액추에이터(전선 kind `OG`) · 0 = 센서(`IP`)
+  CommandFn cmd;       // 액추에이터만 쓴다
+  SensorFn  sense;     // 센서만 쓴다
+};
+// 🔴 **표는 RAM 이다**(런타임 등록이므로). 전역이라 `.bss` 에서 0 으로 시작한다 —
+//   생성자를 두지 않는 이유는 AVR 전역 생성자가 `main()` 전에 돌기 때문이다.
+static Mod     MODULE_TABLE[MODULE_CAP];
+static uint8_t MODULE_N;        // 등록된 수. `D,*,7,<n>` 의 `n` 이고 `occ` 비트열 폭이다
+static uint8_t modOverflowed;   // 상한을 넘겨 버린 등록 수 — 부팅에서 문장으로 말한다
 
-struct ModuleDef {
-  char    name[3];      // "A1" + NUL — 명칭이자 **지금은 자리 결속 키다**(위 경고)
-  char    kind[4];      // 🔴 **첫 글자만 뜻이 있다**: `I`=관측 전용 · `O`=명령 받음
-                        //   둘째 글자부터는 자유다(서버는 안 본다). 2~3글자 + NUL
-  uint8_t pin;
-  // 🔓 **이 모듈이 하는 일.** 비워 두면(`0`) 기본 동작이다 —
-  //   `cmd` 가 없으면 명령에 `result=3`(수행 불가), `sense` 가 없으면 `digitalRead(pin)`.
-  //   🔑 표가 `PROGMEM` 이라 **함수 포인터도 플래시다. RAM 을 먹지 않는다.**
-  CommandFn cmd;
-  SensorFn  sense;
+// ── 접근자 — 🔴 **`cmd`/`sense` 를 만지는 곳은 이 둘뿐이다** ────────────────
+//   센서 칸의 `cmd` 나 액추에이터 칸의 `sense` 는 **늘 0** 이지만(전역 0 시작),
+//   그래도 여기서 종류를 확인한다. **판정이 한 곳에 있으면 두 곳이 갈릴 일이 없다.**
+static inline bool isSensor  (uint8_t i) { return i < MODULE_N && !MODULE_TABLE[i].isAct; }
+static inline bool isActuator(uint8_t i) { return i < MODULE_N &&  MODULE_TABLE[i].isAct; }
+static inline CommandFn cmdOf (uint8_t i) { return isActuator(i) ? MODULE_TABLE[i].cmd   : (CommandFn)0; }
+static inline SensorFn  senseOf(uint8_t i) { return isSensor(i)  ? MODULE_TABLE[i].sense : (SensorFn)0; }
+static inline uint8_t   modPin (uint8_t i) { return (i < MODULE_N) ? MODULE_TABLE[i].pin : PIN_NONE; }
+static inline char modName0(uint8_t i) { return (i < MODULE_N) ? MODULE_TABLE[i].name[0] : 0; }
+static inline char modName1(uint8_t i) { return (i < MODULE_N) ? MODULE_TABLE[i].name[1] : 0; }
+static inline uint8_t moduleCount(void) { return MODULE_N; }
+
+// ─────────────────────────────────────────────────────────────────────────
+// 🔓 빌더 — `node.sensor("A1").pin(2)` 의 `.pin(2)` 를 받는 임시 객체
+//   🔑 **정적 RAM 을 안 쓴다.** 내부가 인덱스 하나이고 스택에 산다.
+//   ⚠ `on()` 은 **오버로드**다 — 센서에는 `SensorFn`, 액추에이터에는 `CommandFn` 이 붙는다.
+//     기여자는 `on` 하나만 기억하면 되고 **틀린 종류를 주면 컴파일이 막는다.**
+// ─────────────────────────────────────────────────────────────────────────
+class ModRef {
+ public:
+  explicit ModRef(uint8_t i) : i_(i) {}
+  // 🔴 핀 모드를 **여기서** 잡는다. `setup()` 안이면 코어 `init()` 이 이미 돌았으므로
+  //   `node.begin()` 과의 순서에 **의존하지 않는다.**
+  ModRef& pin(uint8_t p) {
+    if (i_ < MODULE_N) {
+      MODULE_TABLE[i_].pin = p;
+      if (p != PIN_NONE) pinMode(p, MODULE_TABLE[i_].isAct ? OUTPUT : INPUT_PULLUP);
+    }
+    return *this;
+  }
+  ModRef& on(CommandFn f) { if (i_ < MODULE_N) MODULE_TABLE[i_].cmd   = f; return *this; }
+  ModRef& on(SensorFn  f) { if (i_ < MODULE_N) MODULE_TABLE[i_].sense = f; return *this; }
+  uint8_t idx() const { return i_; }
+ private:
+  uint8_t i_;
 };
 
-// ██████████████████████████████████████████████████████████████████████████
-// █  🔓  **표에 쓰는 것은 둘이다 — 아두이노의 INPUT / OUTPUT 과 1:1 이다**    █
-// ██████████████████████████████████████████████████████████████████████████
-//
-//   SENSOR  ("A1", 2)                 ← 핀을 **읽는다**.  `pinMode(2, INPUT_PULLUP)` 을 대신한다
-//   ACTUATOR("LD", 13, cmdLed)        ← 핀에 **쓴다**.    `pinMode(13, OUTPUT)` 을 대신한다
-//
-// 🔑 **이 둘만 알면 된다.** 종류가 늘어도 여기는 안 바뀐다 —
-//   화면에 보일 이름은 **서버 조립 표**가 정한다: `lot.label("P1", "LD", "안내등")`.
-//
-// ⚠ **이름은 정확히 2글자다.** 3글자를 주면 **컴파일이 막는다** —
-//   `const char (&)[3]` 이라 타입이 그것을 강제한다(주석이 아니라 컴파일러가 말해 준다).
-//
-// 🔴 센서 훅은 **선택**이다: `SENSOR("A1", 2, myRead)` — 안 주면 `digitalRead(핀)` 이 기본이다.
-//   액추에이터 핸들러는 **필수**다 — 없으면 명령에 `result=3`(수행 불가)로 답할 뿐이다.
-//
-// 🔮 그 밖의 종류가 필요하면 리터럴로도 쓸 수 있다: `{"E1", "OB", PIN_NONE, gateE1, 0}`.
-//   전선 `kind` 를 직접 정하는 것이고, **화면 라벨 폴백**에만 쓰인다(정본은 위 `lot.label`).
-// ██████████████████████████████████████████████████████████████████████████
-static constexpr ModuleDef SENSOR(const char (&name)[3], uint8_t pin, SensorFn sense = 0) {
-  return ModuleDef{ {name[0], name[1], 0}, {'I','P',0,0}, pin, 0, sense };
-}
-static constexpr ModuleDef ACTUATOR(const char (&name)[3], uint8_t pin, CommandFn cmd) {
-  return ModuleDef{ {name[0], name[1], 0}, {'O','G',0,0}, pin, cmd, 0 };
+// 등록 — 🔴 **호출 순서가 전선 `idx` 이고 `occ` 비트 위치다.**
+//   ⚠ 센서·액추에이터를 섞어 적어도 된다(순서 불변식이 없다).
+static ModRef modAdd(const char (&name)[3], uint8_t isAct) {
+  if (MODULE_N >= MODULE_CAP) { if (modOverflowed < 255) modOverflowed++; return ModRef(0xFF); }
+  const uint8_t i = MODULE_N++;
+  MODULE_TABLE[i].name[0] = name[0];
+  MODULE_TABLE[i].name[1] = name[1];
+  MODULE_TABLE[i].pin     = PIN_NONE;
+  MODULE_TABLE[i].isAct   = isAct;
+  MODULE_TABLE[i].cmd     = 0;
+  MODULE_TABLE[i].sense   = 0;
+  return ModRef(i);
 }

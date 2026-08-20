@@ -31,18 +31,9 @@ void ParkingNode::begin() {
   // ⚠ `MODULE_TABLE` 에서 아날로그 핀을 센서로 쓰면 그 핀을 여기 쓰지 마라.
   randomSeed((unsigned long)analogRead(A1) ^ micros());
 
-  // 센서: 핀을 적은 칸의 입력 모드를 잡는다. 훅이 등록된 칸은 건드리지 않는다.
-  for (uint8_t i = 0; i < SENSOR_N; i++) applySensorPinMode(i);
-
-  // 🔓 **액추에이터: 표에 핀을 적었으면 `OUTPUT` 으로 잡는다.**
-  //   🔑 센서와 같은 규칙이다 — **핀을 적었으면 쓰겠다는 뜻이다.** 기여자가 또 잡을 이유가 없다.
-  //   ⚠ 다른 모드가 필요한 장치(서보·I2C·시리얼)는 두 길이 있다:
-  //     ① 표의 핀을 `PIN_NONE` 으로 두고 핸들러가 알아서 한다
-  //     ② `setup()` 에서 `pinMode` 를 다시 불러 덮는다 (이 뒤에 돈다)
-  for (uint8_t i = SENSOR_N; i < MODULE_N; i++) {
-    const uint8_t pin = pgm_read_byte(&MODULE_TABLE[i].pin);
-    if (pin != PIN_NONE) pinMode(pin, OUTPUT);
-  }
+  // 🔑 **핀 모드는 여기서 안 잡는다.** 등록이 이 뒤에 오므로 잡을 대상이 없다 —
+  //   `node.sensor("A1").pin(2)` 의 `.pin()` 이 그 자리에서 잡는다.
+  //   ⚠ 그래서 `begin()` 과 등록의 **순서 의존이 없다**(`pinMode` 는 코어 `init()` 만 요구한다).
 
   // 재부팅하면 테스트 오버라이드는 사라진다 — 서버가 다시 내려보내지 않는다(예약과 정반대).
   // 전역이라 어차피 0 이지만, **"여기서 버린다"를 코드로 남겨 둔다.**
@@ -121,23 +112,37 @@ static void printBootBanner(void) {
 
   // 🔴 **내 센서가 실제로 읽히는가** — 이 줄이 그 답이다.
   Serial.print(F("\n[SENS] "));
-  for (uint8_t i = 0; i < SENSOR_N; i++) {
+  for (uint8_t i = 0; i < MODULE_N; i++) {
+    if (!isSensor(i)) continue;
     char nm[4]; moduleNameOf(i, nm);
     Serial.print(nm); Serial.print('=');
-    if (sensorPin(i) == PIN_NONE)              Serial.print(F("안읽음"));
-    else if (sensors.at(i))                    Serial.print(F("훅"));
-    else { Serial.print(F("핀")); Serial.print(sensorPin(i)); }
+    if (modPin(i) == PIN_NONE && !senseOf(i))   Serial.print(F("안읽음"));
+    else if (senseOf(i))                        Serial.print(F("훅"));
+    else { Serial.print(F("핀")); Serial.print(modPin(i)); }
     Serial.print(' ');
   }
   Serial.println();
 
   // 🔴 **둘은 다른 값이다. 하나만 찍으면 오독된다.**
-  //     `SENSOR_N`      = **센서 수**  — 표에서 `I` 로 시작하는 줄 수
+  //     센서 수         = 등록된 것 중 `sensor()` 로 붙인 것
   //     `moduleCount()` = **모듈 수**  — 센서 + 액추에이터. `D,*,<drain>,<n>` 의 `n` 이 이것이다
   //   ⚠ **자리 수는 안 찍는다.** 장치는 자리 배치를 모른다 — 서버 조립 표가 정한다.
   Serial.print(F("\n[PARKING NODE] proto v1 / "));
-  Serial.print(SENSOR_N);          Serial.print(F(" sensors / "));
+  { uint8_t sn = 0; for (uint8_t i = 0; i < MODULE_N; i++) if (isSensor(i)) sn++;
+    Serial.print(sn); }             Serial.print(F(" sensors / "));
   Serial.print(moduleCount());     Serial.println(F(" modules / dev=" DEVICE_ID));
+
+  // 🔴 상한(MODULE_CAP)을 넘겨 버린 등록이 있으면 **문장으로 말한다.**
+  //   ⚠ 조용히 버리면 기여자는 "내 모듈이 왜 안 뜨지" 를 서버·화면에서 찾는다.
+  if (modOverflowed) {
+    Serial.print(F("[CFG] 🔴 모듈 상한 "));
+    Serial.print(MODULE_CAP);
+    Serial.print(F(" 을 넘겨 "));
+    Serial.print(modOverflowed);
+    Serial.println(F(" 개를 버렸다 — setup() 의 등록 줄을 줄여라"));
+  }
+  // 🔴 `begin()` 을 안 불렀으면 링크가 안 선다. **누락은 경고로 잡는다**(순서 의존이 아니다).
+  if (slotStart == 0) Serial.println(F("[CFG] 🔴 setup() 에서 node.begin() 을 먼저 불러라"));
 
   // ── 부팅 원인 — **추측을 사실로 바꾸는 한 줄**. 왜 재부팅했는지는 여기서만 알 수 있다 ──
   Serial.print(F("[BOOT] 리셋 원인: "));
@@ -164,6 +169,14 @@ static void printBootBanner(void) {
   Serial.println(ENABLE_WDT ? F("켬") : F("끔"));
 }
 #endif
+
+// ─────────────────────────────────────────────────────────────────────────
+// 🔓 모듈 등록 — `node.sensor("A1").pin(2)` · `node.actuator("LD").pin(13).on(cmdLed)`
+//   🔴 **호출 순서가 전선 `idx` 이고 `occ` 비트 위치다.** 센서·액추에이터를 섞어도 된다 —
+//     `occ` 비트를 센서는 값으로, 액추에이터는 에코로 세우므로 **겹치지 않는다.**
+// ─────────────────────────────────────────────────────────────────────────
+ModRef ParkingNode::sensor  (const char (&name)[3]) { return modAdd(name, 0); }
+ModRef ParkingNode::actuator(const char (&name)[3]) { return modAdd(name, 1); }
 
 // ─────────────────────────────────────────────────────────────────────────
 // 한 박자 — 🔴 **네 단계의 순서는 고정이다.** 호출자가 바꿀 수 있는 것이 없다

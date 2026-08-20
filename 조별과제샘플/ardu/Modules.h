@@ -48,7 +48,7 @@
 //   표에 17번째가 들어오는 순간 `1u << 16` 이 **아무 일도 안 하고** 그 자리가 조용히 사라진다 —
 //   **길이도 체크섬도 통과한다.** 표를 만든 이득("한 줄만 고치면 된다")이
 //   그대로 결함의 배달 경로가 되는 자리라, 여기서 빌드를 깨는 것이 유일한 방어다.
-static_assert(MODULE_N <= 16,
+static_assert(MODULE_CAP <= 16,
               "마스크가 uint16_t 다 — 17번째 모듈은 조용히 사라진다. 마스크 폭을 먼저 늘려라");
 // 🔴 **센서(`I*`)는 표의 앞쪽에 연속으로 둔다.** 센서 수를 그 연속 구간으로 세기 때문에,
 //   중간에 액추에이터가 끼면 그 뒤 센서가 **센서 수 밖으로 밀려 조용히 안 읽힌다.**
@@ -62,11 +62,11 @@ static_assert(MODULE_N <= 16,
 //   ⚠ **`MODULE_N <= 16`(마스크 폭)보다 이쪽이 먼저 걸린다.** 둘 다 필요하다.
 //   🔮 `n > 13` 이 필요해지면 **등록을 두 슬롯에 나눠 보내는 구현**이 먼저다. 지금은 안 만든다 —
 //      쓰이지 않는 일반화는 검증되지 않은 코드다.
-static_assert(11 * MODULE_N + 11 <= 160,
+static_assert(11 * MODULE_CAP + 11 <= 160,
               "등록이 한 배치(BATCH_CAP)에 안 들어간다 — n<=13 이거나 두 슬롯 분할이 먼저다");
 
 // ★ **표 하나가 `n` 의 원천이다.** 폭·뒤집기 축·등록 줄 수가 전부 이 값을 따라간다.
-static uint8_t moduleCount(void) { return MODULE_N; }
+// `moduleCount()` 는 `Module.h` 에 있다 — 표와 같은 자리여야 한다.
 
 #if VIRTUAL_MODULES
 // ─────────────────────────────────────────────────────────────────────────
@@ -92,7 +92,7 @@ static uint8_t moduleCount(void) { return MODULE_N; }
 class VirtualGates {
  public:
   bool     manual;      // 첫 명령을 받았나 (받으면 자율 정지)
-  uint16_t state;       // 비트 i = MODULE_TABLE 의 SENSOR_N+i 번째가 열렸나
+  uint16_t state;       // 비트 i = 이 가상 차단봉 묶음의 i 번째가 열렸나
 
   // 자율 패턴 — `slotNo` 는 부팅부터 세므로 리셋하면 위상이 처음으로 돌아간다(재현 가능)
   bool autoOpen(uint8_t k, uint32_t slotNo) const {
@@ -125,8 +125,8 @@ static const uint8_t GATE_BASE = (uint8_t)(MODULE_N - GATE_N);
 #endif
 
 static void moduleNameOf(uint8_t i, char* out4) {
-  out4[0] = (char)pgm_read_byte(&MODULE_TABLE[i].name[0]);
-  out4[1] = (char)pgm_read_byte(&MODULE_TABLE[i].name[1]);
+  out4[0] = modName0(i);
+  out4[1] = modName1(i);
   out4[2] = '\0';
 }
 
@@ -136,13 +136,14 @@ static void moduleNameOf(uint8_t i, char* out4) {
 //   🔑 이유: ACK 은 "받았다"이지 "됐다"가 아니다. **도달 확인은 다음 `S` 의 마스크 변화로 한다.**
 // ⚠ `out4` 는 **4바이트**여야 한다 — 가상 접미(`OBV`)가 3글자다.
 static void moduleKindOf(uint8_t i, char* out4) {
-  for (uint8_t k = 0; k < 3; k++) {
-    const char c = (char)pgm_read_byte(&MODULE_TABLE[i].kind[k]);
-    out4[k] = c;
-    if (c == '\0') return;
-  }
-
-  out4[3] = '\0';
+  // 🔴 표는 `isAct` 한 비트만 갖는다. 전선 `kind` 두 글자는 여기서 만든다.
+  //   ⚠ 서버·화면은 **첫 글자만** 동작에 쓴다(`kind[0]=='O'`). 둘째 글자는 화면 라벨의
+  //     **폴백**일 뿐이고 정본은 서버 조립 표의 `lot.label(...)` 이다.
+  //   그래서 기여자에게 종류를 다섯 고르게 하지 않는다 — `sensor`/`actuator` 둘이다.
+  out4[0] = MODULE_TABLE[i].isAct ? 'O' : 'I';
+  out4[1] = MODULE_TABLE[i].isAct ? 'G' : 'P';
+  out4[2] = 0;
+  out4[3] = 0;
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -170,33 +171,26 @@ static void moduleKindOf(uint8_t i, char* out4) {
 
 class CommandRouter {
  public:
-  // 이름으로 등록한다. 표에 없는 이름이면 false — **조용히 무시하지 않는다.**
-  // 🔴 **명령을 받을 수 있는 모듈에만 붙는다** — `kind` 첫 글자가 `O` 여야 한다.
-  //   왜 막나: 센서 이름에 붙이면 아래 **에코 비트가 그 자리의 실제 점유 비트와 겹친다.**
-  //   그러면 명령 한 번이 "차가 들어왔다"로 보고된다. **조용히 틀린 자료를 만든다.**
+  // 🔴 **등록표가 없다.** 표에 함수를 적는 것이 등록이고, 이 `on()` 은 **그 표를 고친다** —
+  //   `node.actuator("LD").on(cmdLed)` 와 같은 자리에 쓴다. 진실이 하나다.
+  //   ⚠ 표에 없는 이름이면 false. **조용히 무시하지 않는다.**
+  //   🔴 액추에이터에만 붙는다 — 센서에 붙이면 **에코 비트가 그 자리의 점유 비트와 겹쳐**
+  //     명령 한 번이 "차가 들어왔다"로 보고된다. 조용히 틀린 자료를 만든다.
   bool on(const char* name, CommandFn fn) {
     for (uint8_t i = 0; i < MODULE_N; i++) {
       char n4[4];
       moduleNameOf(i, n4);
       if (strcmp(n4, name) == 0) {
-        char k4[4]; moduleKindOf(i, k4);
-        if (k4[0] != 'O') return false;      // 명령 대상이 아니다
-        fn_[i] = fn; return true;
+        if (!isActuator(i)) return false;      // 명령 대상이 아니다
+        MODULE_TABLE[i].cmd = fn; return true;
       }
     }
     return false;
   }
-  // 전선에서 온 `idx` 로 부른다. 등록이 없으면 false → 호출부가 `result=3` 으로 답한다.
+  // 전선에서 온 `idx` 로 부른다. 핸들러가 없으면 false → 호출부가 `result=3` 으로 답한다.
   // 🔴 **성공했을 때만 에코를 갱신한다.** 거절된 명령은 상태를 안 바꾼다.
-  // 표에 적힌 핸들러 — 🔴 **이것이 기본이고 `on()` 은 그 위의 런타임 덮어쓰기다.**
-  //   진실이 둘이 아니다: 표가 원천이고 `on()` 은 시험·예외용 오버라이드다.
-  static CommandFn tableCmd(uint8_t idx) {
-    return (idx < MODULE_N) ? (CommandFn)pgm_read_ptr(&MODULE_TABLE[idx].cmd) : (CommandFn)0;
-  }
-
   bool dispatch(uint8_t idx, uint32_t arg) {
-    if (idx >= MODULE_N) return false;
-    CommandFn f = fn_[idx] ? fn_[idx] : tableCmd(idx);
+    CommandFn f = cmdOf(idx);                  // 🔑 종류 확인이 이 접근자 안에 있다
     if (f == 0) return false;
     curEcho_ = (arg != 0);                 // 기본값 — 핸들러가 `echoIs()` 로 덮을 수 있다
     if (!f(arg)) return false;             // 🔴 거절된 명령은 상태를 안 바꾼다
@@ -206,35 +200,20 @@ class CommandRouter {
   }
 
   // 🔴 **핸들러 안에서 부른다 — "이 명령 뒤 내 모듈은 켜진 상태인가"를 직접 정한다.**
-  //
-  //   기본값은 `arg != 0` 이고, **on/off 모듈에는 그것으로 맞는다.**
-  //   ⚠ **동작 명령 모듈에는 안 맞는다**: `DR` 의 명령표가 `1=열기 2=닫기` 라면
-  //     **문을 닫는 `arg=2` 도 `!= 0` 이라 에코가 켜진 채**가 된다 — 서버는 열린 줄 안다.
-  //   🔑 그래서 **뜻을 아는 쪽이 정한다**: `router.echoIs(a == 1);`
-  //
-  //   판별자: **명령표에 "끄는 값"이 0 말고 따로 있으면 이 함수를 불러라.**
+  //   기본값은 `arg != 0` 이다. 그것과 다른 모듈(예: 닫기가 1)이 이 함수를 쓴다.
   void echoIs(bool on) { curEcho_ = on; }
-  // 🔴 표에 적힌 것도 "있다" 다 — 등록 호출 없이 표만 쓰는 것이 기본 경로이므로.
-  bool has(uint8_t idx) const { return idx < MODULE_N && (fn_[idx] != 0 || tableCmd(idx) != 0); }
+  bool has(uint8_t idx) const { return cmdOf(idx) != 0; }
 
   // ═══ 🔴 **액추에이터 에코** — `S` 의 자리 비트열에 실려 나간다 ═══════════════
   //   서버는 **`ACK` 이 아니라 이 비트**로 "명령이 먹었나"를 안다.
   //   `ACK result=0` 은 *"콜백이 true 를 냈다"* 이고, 이 비트는 *"장치가 그 값을 갖고 있다"* 다.
-  //
-  // ⚠⚠ **둘 다 "물리적으로 그렇게 됐다"는 아니다.** 차단봉이 걸려 있어도 콜백은 true 를 내고
-  //   이 비트도 선다. **물리 확인이 필요하면 리밋 스위치를 `I*` 모듈로 한 줄 더 붙여라** —
-  //   그건 센서이므로 **지금 구조로 이미 된다.**
-  //
-  // ⚠ **비트는 숫자를 못 나른다.** `LC` 에 1234567 을 보내도 이 비트는 "0이 아니다"만 말한다.
-  //   전선 비용이 **0B** 인 대신 그 한계를 진다 — 그 비트는 이미 필드 안에 있었고 늘 0 이었을 뿐이다.
+  //   ⚠ **로컬 조작 API 를 열면 이 비트가 거짓이 된다** — 그래서 안 열었다(원장 §84).
   uint16_t echoMask() const { return echo_; }
 
  private:
-  CommandFn fn_[MODULE_N];   // ⚠ 생성자 없음 — 전역은 `.bss` 로 0(=미등록) 시작이다
   uint16_t  echo_;           // 비트 i = 모듈 i 가 지금 "켜진" 상태인가 (에코)
-  bool      curEcho_;        // 지금 처리 중인 명령의 에코값. `echoIs()` 가 덮는다
+  bool      curEcho_;
 };
-
 static CommandRouter router;
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -249,29 +228,24 @@ static CommandRouter router;
 // ═════════════════════════════════════════════════════════════════════════
 class SensorRouter {
  public:
-  // 이름으로 등록한다 — **전선의 `idx`(표 순서)가 아니라 이름이다.**
-  //   표를 고치면 idx 는 밀리지만 이름은 안 밀린다.
-  // 반환 false = **표에 그 이름이 없다.** 조용히 무시하지 않는다.
+  // 🔴 **등록표가 없다.** 표의 `sense` 칸을 고친다 — `node.sensor("A1").on(myRead)` 와 같은 자리.
+  //   반환 false = **표에 그 이름이 없다.** 조용히 무시하지 않는다.
   bool on(const char* name, SensorFn fn) {
     for (uint8_t i = 0; i < MODULE_N; i++) {
       char n4[4]; moduleNameOf(i, n4);
-      if (strcmp(n4, name) == 0) { fn_[i] = fn; return true; }
+      if (strcmp(n4, name) == 0) {
+        if (!isSensor(i)) return false;        // 센서가 아니다
+        MODULE_TABLE[i].sense = fn; return true;
+      }
     }
     return false;
   }
-  // 🔴 표가 기본, `on()` 이 오버라이드 — 명령 쪽과 같은 규칙이다.
-  SensorFn at(uint8_t idx) const {
-    if (idx >= MODULE_N) return (SensorFn)0;
-    if (fn_[idx]) return fn_[idx];
-    return (SensorFn)pgm_read_ptr(&MODULE_TABLE[idx].sense);
-  }
- private:
-  SensorFn fn_[MODULE_N];
+  SensorFn at(uint8_t idx) const { return senseOf(idx); }   // 🔑 종류 확인이 접근자 안에 있다
 };
 static SensorRouter sensors;
 
 // `Slots.h` 가 선언만 해 둔 것의 **정의**. 자리 인덱스 = 모듈 인덱스다(센서가 표 앞쪽에 온다).
-static SensorFn sensorFnOf(uint8_t idx) { return sensors.at(idx); }
+// `sensorFnOf` 는 없앴다 — `senseOf(idx)`(`Module.h`)가 그 일을 한다.
 
 // 등록 배치를 만든다. 성공하면 길이, 실패하면 0.
 //   ⚠ **`D` 여러 줄 + `S` 는 상한을 넘는다.** 그래서 명세가 *"첫 슬롯은 `D` 만"* 으로 정했다.
@@ -380,7 +354,7 @@ static uint8_t buildStatus(char* buf, uint8_t cap) {
   uint16_t occOut = node.occMask;
 #if VIRTUAL_MODULES
   // 🔴 가상 차단봉은 **표의 맨 끝 두 칸**이다. 그 자리를 `MODULE_N` 에서 거꾸로 센다.
-  //   ⚠ **"`SENSOR_N` 뒤는 전부 차단봉"으로 세지 마라.** 센서와 차단봉 사이에 다른 모듈
+  //   ⚠ **"센서 뒤는 전부 차단봉"으로 세지 마라.** 센서와 차단봉 사이에 다른 모듈
   //     (액추에이터 등)이 끼면 그 모듈의 비트에 차단봉 상태가 얹혀 **없는 조작이 보고된다.**
   for (uint8_t k = 0; k < GATE_N; k++)
     if (gates.isOpen(k, slotNo)) occOut |= (uint16_t)(1u << (GATE_BASE + k));
