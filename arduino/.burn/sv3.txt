@@ -1,0 +1,8 @@
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:2110:23: error: comparison of distinct pointer types ('SensorFn' (aka 'bool (*)()') and 'long (*)()')
+ 2110 |         if (senseOf(k)==readUltrasonic || senseOf(k)==readB1) nus++; }
+      |             ~~~~~~~~~~^ ~~~~~~~~~~~~~~
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:2110:53: error: comparison of distinct pointer types ('SensorFn' (aka 'bool (*)()') and 'long (*)()')
+ 2110 |         if (senseOf(k)==readUltrasonic || senseOf(k)==readB1) nus++; }
+      |                                           ~~~~~~~~~~^ ~~~~~~
+2 errors generated.
+🔴 정의 안 된 매크로가 #if 에 있다 — 그 블록은 조용히 빠진다

@@ -1,0 +1,56 @@
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:1626:25: error: cannot initialize a parameter of type 'SensorFn' (aka 'bool (*)()') with an lvalue of type 'long ()': different return type ('bool' vs 'long')
+ 1626 |     ok(sensors.on("A1", readUltrasonic),
+      |                         ^~~~~~~~~~~~~~
+/Users/idong-u/learn/arduino/test/../../조별과제샘플/ardu/Modules.h:178:38: note: passing argument to parameter 'fn' here
+  178 |   bool on(const char* name, SensorFn fn) {
+      |                                      ^
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:1628:26: error: cannot initialize a parameter of type 'SensorFn' (aka 'bool (*)()') with an lvalue of type 'long ()': different return type ('bool' vs 'long')
+ 1628 |     ok(!sensors.on("ZZ", readUltrasonic),
+      |                          ^~~~~~~~~~~~~~
+/Users/idong-u/learn/arduino/test/../../조별과제샘플/ardu/Modules.h:178:38: note: passing argument to parameter 'fn' here
+  178 |   bool on(const char* name, SensorFn fn) {
+      |                                      ^
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:1630:22: error: comparison of distinct pointer types ('SensorFn' (aka 'bool (*)()') and 'long (*)()')
+ 1630 |     ok(sensors.at(0) == readUltrasonic, "★ 등록된 것이 그 칸에 걸린다");
+      |        ~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~~
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:1673:22: error: cannot initialize a parameter of type 'SensorFn' (aka 'bool (*)()') with an lvalue of type 'long ()': different return type ('bool' vs 'long')
+ 1673 |     sensors.on("A1", readUltrasonic);        // 🔑 지형을 원래대로 되돌린다
+      |                      ^~~~~~~~~~~~~~
+/Users/idong-u/learn/arduino/test/../../조별과제샘플/ardu/Modules.h:178:38: note: passing argument to parameter 'fn' here
+  178 |   bool on(const char* name, SensorFn fn) {
+      |                                      ^
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:2010:24: error: comparison of distinct pointer types ('SensorFn' (aka 'bool (*)()') and 'long (*)()')
+ 2010 |       ok(sensors.at(0) == readUltrasonic,
+      |          ~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~~
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:2097:22: error: cannot initialize a parameter of type 'SensorFn' (aka 'bool (*)()') with an lvalue of type 'long ()': different return type ('bool' vs 'long')
+ 2097 |     sensors.on("A1", readUltrasonic);
+      |                      ^~~~~~~~~~~~~~
+/Users/idong-u/learn/arduino/test/../../조별과제샘플/ardu/Modules.h:178:38: note: passing argument to parameter 'fn' here
+  178 |   bool on(const char* name, SensorFn fn) {
+      |                                      ^
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:2098:22: error: cannot initialize a parameter of type 'SensorFn' (aka 'bool (*)()') with an lvalue of type 'long ()': different return type ('bool' vs 'long')
+ 2098 |     sensors.on("B1", readB1);               // 🔴 **실기 구성이다** — 둘 다 초음파(Trig 11 · Echo 10)
+      |                      ^~~~~~
+/Users/idong-u/learn/arduino/test/../../조별과제샘플/ardu/Modules.h:178:38: note: passing argument to parameter 'fn' here
+  178 |   bool on(const char* name, SensorFn fn) {
+      |                                      ^
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:2110:23: error: comparison of distinct pointer types ('SensorFn' (aka 'bool (*)()') and 'long (*)()')
+ 2110 |         if (senseOf(k)==readUltrasonic || senseOf(k)==readB1) nus++; }
+      |             ~~~~~~~~~~^ ~~~~~~~~~~~~~~
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:2110:53: error: comparison of distinct pointer types ('SensorFn' (aka 'bool (*)()') and 'long (*)()')
+ 2110 |         if (senseOf(k)==readUltrasonic || senseOf(k)==readB1) nus++; }
+      |                                           ~~~~~~~~~~^ ~~~~~~
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:2112:34: error: comparison of distinct pointer types ('SensorFn' (aka 'bool (*)()') and 'long (*)()')
+ 2112 |     ok(isSensor(0) && senseOf(0) == readUltrasonic && isSensor(1) && senseOf(1) == readB1,
+      |                       ~~~~~~~~~~ ^  ~~~~~~~~~~~~~~
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:2112:81: error: comparison of distinct pointer types ('SensorFn' (aka 'bool (*)()') and 'long (*)()')
+ 2112 |     ok(isSensor(0) && senseOf(0) == readUltrasonic && isSensor(1) && senseOf(1) == readB1,
+      |                                                                      ~~~~~~~~~~ ^  ~~~~~~
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:2140:38: error: comparison of distinct pointer types ('SensorFn' (aka 'bool (*)()') and 'long (*)()')
+ 2140 |       if (isSensor(k) && (senseOf(k) == readUltrasonic || senseOf(k) == readB1)) nUs++;
+      |                           ~~~~~~~~~~ ^  ~~~~~~~~~~~~~~
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:2140:70: error: comparison of distinct pointer types ('SensorFn' (aka 'bool (*)()') and 'long (*)()')
+ 2140 |       if (isSensor(k) && (senseOf(k) == readUltrasonic || senseOf(k) == readB1)) nUs++;
+      |                                                           ~~~~~~~~~~ ^  ~~~~~~
+13 errors generated.
+🔴 정의 안 된 매크로가 #if 에 있다 — 그 블록은 조용히 빠진다

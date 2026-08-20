@@ -1,0 +1,44 @@
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:1669:13: error: call to member function 'on' is ambiguous
+ 1669 |     sensors.on("A1", 0);
+      |     ~~~~~~~~^~
+/Users/idong-u/learn/arduino/test/../../조별과제샘플/ardu/Modules.h:178:8: note: candidate function
+  178 |   bool on(const char* name, SensorFn fn) {
+      |        ^
+/Users/idong-u/learn/arduino/test/../../조별과제샘플/ardu/Modules.h:191:8: note: candidate function
+  191 |   bool on(const char* name, SensorValueFn fn) {
+      |        ^
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:1919:13: error: call to member function 'on' is ambiguous
+ 1919 |     sensors.on("B1", 0);
+      |     ~~~~~~~~^~
+/Users/idong-u/learn/arduino/test/../../조별과제샘플/ardu/Modules.h:178:8: note: candidate function
+  178 |   bool on(const char* name, SensorFn fn) {
+      |        ^
+/Users/idong-u/learn/arduino/test/../../조별과제샘플/ardu/Modules.h:191:8: note: candidate function
+  191 |   bool on(const char* name, SensorValueFn fn) {
+      |        ^
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:2027:15: error: call to member function 'on' is ambiguous
+ 2027 |       sensors.on("A1", 0); sensors.on("B1", 0);
+      |       ~~~~~~~~^~
+/Users/idong-u/learn/arduino/test/../../조별과제샘플/ardu/Modules.h:178:8: note: candidate function
+  178 |   bool on(const char* name, SensorFn fn) {
+      |        ^
+/Users/idong-u/learn/arduino/test/../../조별과제샘플/ardu/Modules.h:191:8: note: candidate function
+  191 |   bool on(const char* name, SensorValueFn fn) {
+      |        ^
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:2027:36: error: call to member function 'on' is ambiguous
+ 2027 |       sensors.on("A1", 0); sensors.on("B1", 0);
+      |                            ~~~~~~~~^~
+/Users/idong-u/learn/arduino/test/../../조별과제샘플/ardu/Modules.h:178:8: note: candidate function
+  178 |   bool on(const char* name, SensorFn fn) {
+      |        ^
+/Users/idong-u/learn/arduino/test/../../조별과제샘플/ardu/Modules.h:191:8: note: candidate function
+  191 |   bool on(const char* name, SensorValueFn fn) {
+      |        ^
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:2110:23: error: comparison of distinct pointer types ('SensorFn' (aka 'bool (*)()') and 'long (*)()')
+ 2110 |         if (senseOf(k)==readUltrasonic || senseOf(k)==readB1) nus++; }
+      |             ~~~~~~~~~~^ ~~~~~~~~~~~~~~
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:2110:53: error: comparison of distinct pointer types ('SensorFn' (aka 'bool (*)()') and 'long (*)()')
+ 2110 |         if (senseOf(k)==readUltrasonic || senseOf(k)==readB1) nus++; }
+      |                                           ~~~~~~~~~~^ ~~~~~~
+6 errors generated.
+🔴 정의 안 된 매크로가 #if 에 있다 — 그 블록은 조용히 빠진다
