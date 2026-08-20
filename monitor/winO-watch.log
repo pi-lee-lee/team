@@ -1,0 +1,67 @@
+07:15:36  «watch» 시작 — 로그=monitor/serial-winO.log 주기=120s 판정선 bigfill>=300
+07:15:36  «watch» 기준 epoch=62347/b0d58d9 · 화면=1(최대 1)
+07:15:36  «watch» 살아있음 탭=1 rx=0B · up=540 · bigfill=2/300 **흔적**(판정선 미달) · cksumng=0 · 화면=1(최대 1)
+07:15:55  «watch» 시작 — 로그=monitor/serial-winO.log 주기=120s 판정선 bigfill>=300
+07:15:55  «watch» 기준 epoch=62347/b0d58d9 · 화면=1(최대 1)
+07:15:56  «watch» 살아있음 탭=1 rx=기준(첫주기·비교대상없음) · up=540 · bigfill=2/300 **흔적**(판정선 미달) · cksumng=0 · 화면=1(최대 1)
+07:17:56  «watch» 살아있음 탭=1 rx=20306B · up=660 · bigfill=2/300 **흔적**(판정선 미달) · cksumng=0 · 화면=1(최대 1) · 🔴 사건: okto 1→2
+07:17:57  «watch» 시작 — 로그=monitor/serial-winO.log 주기=60s 판정선 bigfill>=300
+07:17:57  «watch» 기준 epoch=62347/b0d58d9 · 화면=1(최대 1)
+07:17:57  «watch» 살아있음 탭=1 rx=기준(첫주기·비교대상없음) · up=660 · bigfill=2/300 **흔적**(판정선 미달) · cksumng=0 · 화면=1(최대 1)
+07:18:58  «watch» 살아있음 탭=1 rx=10264B · up=720 · bigfill=2/300 **흔적**(판정선 미달) · cksumng=0 · 화면=1(최대 1)
+07:19:58  «watch» 살아있음 탭=1 rx=30352B · up=780 · bigfill=4/300 **흔적**(판정선 미달) · cksumng=0 · 화면=9(최대 9)
+07:20:21  «watch» 시작 — 로그=monitor/serial-winO.log 주기=20s 판정선 bigfill>=300
+07:20:21  «watch» 기준 epoch=62347/b0d58d9 · 화면=9(최대 9)
+07:20:22  «watch» 살아있음 탭=1 rx=기준(첫주기·비교대상없음) · up=840 · bigfill=34/300 **흔적**(판정선 미달) · cksumng=12 · 화면=9(최대 9)
+07:20:42  «watch» 살아있음 탭=1 rx=11212B · up=840 · bigfill=34/300 **흔적**(판정선 미달) · cksumng=12 · 화면=9(최대 9)
+07:21:02  «watch» 살아있음 탭=1 rx=10225B · up=900 · bigfill=72/300 **흔적**(판정선 미달) · cksumng=19 · 화면=9(최대 9) · 🔴 사건: ssovf 12→19
+07:21:23  «watch» 살아있음 탭=1 rx=12193B · up=900 · bigfill=72/300 **흔적**(판정선 미달) · cksumng=19 · 화면=9(최대 9)
+07:21:43  «watch» 살아있음 탭=1 rx=11304B · up=900 · bigfill=72/300 **흔적**(판정선 미달) · cksumng=19 · 화면=9(최대 9)
+07:22:03  «watch» 살아있음 탭=1 rx=6979B · up=960 · bigfill=106/300 **흔적**(판정선 미달) · cksumng=25 · 화면=9(최대 9) · 🔴 사건: okto 3→4, ssovf 19→25
+07:22:24  «watch» 살아있음 탭=1 rx=6399B · up=960 · bigfill=106/300 **흔적**(판정선 미달) · cksumng=25 · 화면=9(최대 9)
+07:22:44  «watch» 살아있음 탭=1 rx=11031B · up=960 · bigfill=106/300 **흔적**(판정선 미달) · cksumng=25 · 화면=9(최대 9)
+07:23:04  «watch» 살아있음 탭=1 rx=12425B · up=1020 · bigfill=133/300 **흔적**(판정선 미달) · cksumng=31 · 화면=9(최대 9) · 🔴 사건: drop 1→2, esprst 1→2, stuck 1→2, smiss 1→2, ssovf 25→31
+07:23:25  «watch» 살아있음 탭=1 rx=8739B · up=1020 · bigfill=133/300 **흔적**(판정선 미달) · cksumng=31 · 화면=9(최대 9)
+07:23:45  «watch» 살아있음 탭=1 rx=11122B · up=1020 · bigfill=133/300 **흔적**(판정선 미달) · cksumng=31 · 화면=9(최대 9)
+07:24:05  «watch» 살아있음 탭=1 rx=6247B · up=1080 · bigfill=155/300 **흔적**(판정선 미달) · cksumng=40 · 화면=9(최대 9) · 🔴 사건: drop 2→3, stuck 2→3, okto 4→6, ssovf 31→40, online 1→0
+07:24:26  «watch» 살아있음 탭=1 rx=3787B · up=1080 · bigfill=155/300 **흔적**(판정선 미달) · cksumng=40 · 화면=9(최대 9)
+07:24:46  «watch» 살아있음 탭=1 rx=10810B · up=1080 · bigfill=155/300 **흔적**(판정선 미달) · cksumng=40 · 화면=9(최대 9)
+07:25:06  «watch» 살아있음 탭=1 rx=12255B · up=1140 · bigfill=180/300 **흔적**(판정선 미달) · cksumng=45 · 화면=9(최대 9) · 🔴 사건: esprst 2→3, ssovf 40→45, online 0→1
+07:25:27  «watch» 살아있음 탭=1 rx=11017B · up=1140 · bigfill=180/300 **흔적**(판정선 미달) · cksumng=45 · 화면=9(최대 9)
+07:25:47  «watch» 살아있음 탭=1 rx=10656B · up=1140 · bigfill=180/300 **흔적**(판정선 미달) · cksumng=45 · 화면=9(최대 9)
+07:26:07  «watch» 살아있음 탭=1 rx=11544B · up=1200 · bigfill=217/300 **흔적**(판정선 미달) · cksumng=56 · 화면=9(최대 9) · 🔴 사건: ssovf 45→56
+07:26:28  «watch» 살아있음 탭=1 rx=11293B · up=1200 · bigfill=217/300 **흔적**(판정선 미달) · cksumng=56 · 화면=9(최대 9)
+07:26:48  «watch» 살아있음 탭=1 rx=11290B · up=1200 · bigfill=217/300 **흔적**(판정선 미달) · cksumng=56 · 화면=9(최대 9)
+07:27:08  «watch» 살아있음 탭=1 rx=11895B · up=1260 · bigfill=252/300 **흔적**(판정선 미달) · cksumng=70 · 화면=9(최대 9) · 🔴 사건: ssovf 56→70
+07:27:29  «watch» 살아있음 탭=1 rx=8093B · up=1260 · bigfill=252/300 **흔적**(판정선 미달) · cksumng=70 · 화면=9(최대 9)
+07:27:49  «watch» 살아있음 탭=1 rx=9996B · up=1260 · bigfill=252/300 **흔적**(판정선 미달) · cksumng=70 · 화면=9(최대 9)
+07:28:09  «watch» 살아있음 탭=1 rx=12290B · up=1320 · bigfill=280/300 **흔적**(판정선 미달) · cksumng=81 · 화면=9(최대 9) · 🔴 사건: ssovf 70→81
+07:28:30  «watch» 살아있음 탭=1 rx=11454B · up=1320 · bigfill=280/300 **흔적**(판정선 미달) · cksumng=81 · 화면=9(최대 9)
+07:28:50  «watch» 살아있음 탭=1 rx=10402B · up=1320 · bigfill=280/300 **흔적**(판정선 미달) · cksumng=81 · 화면=9(최대 9)
+07:29:10  «watch» 살아있음 탭=1 rx=11609B · up=1380 · bigfill=312/300 판정가능 · cksumng=93 · 화면=9(최대 9) · 🔴 사건: ssovf 81→93
+07:29:10  🔴🔴 «watch» **정지선 도달** bigfill=312 >= 300 — .team/STOP-O 생성했다
+07:29:31  «watch» 살아있음 탭=1 rx=10694B · up=1380 · bigfill=312/300 판정가능 · cksumng=93 · 화면=9(최대 9)
+07:29:51  «watch» 살아있음 탭=1 rx=10399B · up=1380 · bigfill=312/300 판정가능 · cksumng=93 · 화면=9(최대 9)
+07:30:11  «watch» 살아있음 탭=1 rx=2982B · up=1440 · bigfill=343/300 판정가능 · cksumng=99 · 화면=9(최대 9) · 🔴 사건: drop 3→4, esprst 3→4, stuck 3→4, okto 6→7, ssovf 93→99, online 1→0
+07:30:32  «watch» 살아있음 탭=1 rx=1959B · up=1440 · bigfill=343/300 판정가능 · cksumng=99 · 화면=9(최대 9)
+07:30:52  «watch» 살아있음 탭=1 rx=2230B · up=1440 · bigfill=343/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+07:31:12  «watch» 살아있음 탭=1 rx=4094B · up=1500 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9) · 🔴 사건: smiss 2→3, online 0→1
+07:31:33  «watch» 살아있음 탭=1 rx=3515B · up=1500 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+07:31:53  «watch» 살아있음 탭=1 rx=3216B · up=1500 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+07:32:13  «watch» 살아있음 탭=1 rx=3893B · up=1560 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+07:32:33  «watch» 살아있음 탭=1 rx=3540B · up=1560 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+07:32:54  «watch» 살아있음 탭=1 rx=3294B · up=1560 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+07:33:14  «watch» 살아있음 탭=1 rx=3893B · up=1620 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+07:33:34  «watch» 살아있음 탭=1 rx=3417B · up=1620 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+07:33:55  «watch» 살아있음 탭=1 rx=3216B · up=1620 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+07:34:15  «watch» 살아있음 탭=1 rx=4094B · up=1680 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+07:34:35  «watch» 살아있음 탭=1 rx=3303B · up=1680 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+07:34:56  «watch» 살아있음 탭=1 rx=3330B · up=1680 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+07:35:16  «watch» 살아있음 탭=1 rx=3815B · up=1740 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+07:35:36  «watch» 살아있음 탭=1 rx=3495B · up=1740 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+07:35:57  «watch» 살아있음 탭=1 rx=3417B · up=1740 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+07:36:17  «watch» 살아있음 탭=1 rx=3893B · up=1800 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+07:36:37  «watch» 살아있음 탭=1 rx=3216B · up=1800 · bigfill=344/300 판정가능 · cksumng=99 · 화면=1(최대 9)
+10:16:39  «watch» 시작 — 로그=monitor/serial-winP.log 주기=60s 판정선 bigfill>=300
+10:16:40  «watch» 기준 epoch=64096/fceadf3 · 화면=3(최대 3)
+10:16:40  «watch» 살아있음 탭=1 rx=기준(첫주기·비교대상없음) · up=60 · bigfill=1/300 **흔적**(판정선 미달) · cksumng=0 · 화면=3(최대 3)

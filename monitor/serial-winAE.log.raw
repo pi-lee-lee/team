@@ -1,0 +1,4757 @@
+
+[NET] 대상 192.168.35.21:8888
+
+[SENS] A1=훅 B1=훅  ⚠ 샘플 훅 = 시뮬/LED되읽기 (배선 없음)
+
+[PARKING NODE] proto v1 / 1 spots / 2 sensors / 6 modules / dev=P1
+[BOOT] 리셋 원인: 불명 (부트로더가 MCUSR 을 지우고 넘어왔다)
+[BOOT] 사다리 4단(ESP 하드리셋선) 미배선 — A2 를 ESP RST 에 물리고 ESP_RST_WIRED=1 · 6단(워치독) 끔
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=2 사다리=0/0 rx=45 lines=4 up=3s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="SK_WiFiGIGA50DC_2.4G","2011050796"" (44)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=6s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=9s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=12s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=15s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=18s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=21s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=24s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=27s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=30s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=33s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 1회 · 결합유지 없음 · 현재 0단(0회 누적)
+[LADDER] ↑↑ 단 상승 → 1단
+[LADDER] 1단 조치: 시리얼 드레인 0바이트 버림 + 줄 조립 초기화
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=3 사다리=1/0 rx=147 lines=10 up=36s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[NET] CIFSR 3회 소진 — 그러나 busy 거부였다. IP 소실로 세지 않는다
+[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 33s · 연속 1회 · 결합유지 없음 · 현재 1단(0회 누적)
+[LADDER] 1단 조치: 시리얼 드레인 22바이트 버림 + 줄 조립 초기화
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="SK_WiFiGIGA50DC_2.4G","2011050796"" (44)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=39s
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=42s
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=45s
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=48s
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=51s
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=54s
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=57s
+[CNT] up=60 drop=0 esprst=0 hwrst=0/0 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=50 oow=0 smiss=0 ssovf=0 cksumng=0 okstream=0 penddrop=0 pendfill=0 bigfill=0 bigdrop=0 bigokst=0 oklost=0 bigoklost=0 skip=0 online=0
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=60s
+[RAM] 최저 여유 65535 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=63s
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=66s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 2회 · 결합유지 없음 · 현재 1단(1회 누적)
+[LADDER] ↑↑ 단 상승 → 2단
+[NET] 7 GMR (펌웨어 판 — 진단)
+[AT] "AT+GMR" (6)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=8 사다리=2/0 rx=225 lines=14 up=69s
+[NET] 8 CWCOUNTRY (채널 12/13 우회 시도 — 진단)
+[AT] "AT+CWCOUNTRY_DEF=0,"KR",1,13" (28)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[NET] 9 CWLAP (주변 AP 목록 — 진단)
+[AT] "AT+CWLAP" (8)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=2 사다리=2/0 rx=289 lines=18 up=72s
+[DIAG] offline step=2 사다리=2/0 rx=289 lines=18 up=75s
+[DIAG] offline step=2 사다리=2/0 rx=289 lines=18 up=78s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="SK_WiFiGIGA50DC_2.4G","2011050796"" (44)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=81s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=84s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=87s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=90s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=93s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=96s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=99s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=102s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=105s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=108s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 3회 · 결합유지 없음 · 현재 2단(0회 누적)
+[LADDER] 2단 조치: 5초 쉬고 AT+CWQAP 로 결합을 명시적으로 끊은 뒤 다시 붙는다
+[DIAG] offline step=10 사다리=2/1 rx=347 lines=20 up=111s
+[DIAG] offline step=10 사다리=2/1 rx=347 lines=20 up=114s
+[NET] 10 CWQAP (결합 해제 — 사다리 2단)
+[AT] "AT+CWQAP\x1A" (9)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=2 사다리=2/1 rx=369 lines=22 up=117s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="SK_WiFiGIGA50DC_2.4G","2011050796"" (44)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[CNT] up=120 drop=0 esprst=0 hwrst=0/0 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=100 oow=0 smiss=0 ssovf=0 cksumng=0 okstream=0 penddrop=0 pendfill=0 bigfill=0 bigdrop=0 bigokst=0 oklost=0 bigoklost=0 skip=0 online=0
+[RAM] 최저 여유 65535 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=2/1 rx=427 lines=24 up=120s
+[DIAG] offline step=2 사다리=2/1 rx=427 lines=24 up=123s
+[DIAG] offline step=2 사다리=2/1 rx=427 lines=24 up=126s
+[DIAG] offline step=2 사다리=2/1 rx=427 lines=24 up=129s
+[DIAG] offline step=2 사다리=2/1 rx=427 lines=24 up=132s
+[DIAG] offline step=2 사다리=2/1 rx=427 lines=24 up=135s
+[DIAG] offline step=2 사다리=2/1 rx=427 lines=24 up=138s
+[DIAG] offline step=2 사다리=2/1 rx=427 lines=24 up=141s
+[DIAG] offline step=2 사다리=2/1 rx=427 lines=24 up=144s
+[DIAG] offline step=2 사다리=2/1 rx=427 lines=24 up=147s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 4회 · 결합유지 없음 · 현재 2단(1회 누적)
+[LADDER] ↑↑ 단 상승 → 3단
+[LADDER] 3단 조치: 15초 쉬고 AT+RST (모듈 소프트 리셋)
+[DIAG] offline step=0 사다리=3/0 rx=427 lines=24 up=150s
+[DIAG] offline step=0 사다리=3/0 rx=427 lines=24 up=153s
+[DIAG] offline step=0 사다리=3/0 rx=427 lines=24 up=156s
+[DIAG] offline step=0 사다리=3/0 rx=427 lines=24 up=159s
+[DIAG] offline step=0 사다리=3/0 rx=427 lines=24 up=162s
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=1 사다리=3/0 rx=447 lines=26 up=165s
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="SK_WiFiGIGA50DC_2.4G","2011050796"" (44)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=2 사다리=3/0 rx=530 lines=30 up=168s
+[DIAG] offline step=2 사다리=3/0 rx=530 lines=30 up=171s
+[DIAG] offline step=2 사다리=3/0 rx=530 lines=30 up=174s
+[DIAG] offline step=2 사다리=3/0 rx=530 lines=30 up=177s
+[CNT] up=180 drop=0 esprst=0 hwrst=0/0 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=150 oow=0 smiss=0 ssovf=0 cksumng=0 okstream=0 penddrop=0 pendfill=0 bigfill=0 bigdrop=0 bigokst=0 oklost=0 bigoklost=0 skip=0 online=0
+[RAM] 최저 여유 65535 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=3/0 rx=530 lines=30 up=180s
+[DIAG] offline step=2 사다리=3/0 rx=530 lines=30 up=183s
+[DIAG] offline step=2 사다리=3/0 rx=530 lines=30 up=186s
+
+[NET] 대상 192.168.35.21:8888
+
+[SENS] A1=훅 B1=훅  ⚠ 샘플 훅 = 시뮬/LED되읽기 (배선 없음)
+
+[PARKING NODE] proto v1 / 1 spots / 2 sensors / 6 modules / dev=P1
+[BOOT] 리셋 원인: 불명 (부트로더가 MCUSR 을 지우고 넘어왔다)
+[BOOT] 사다리 4단(ESP 하드리셋선) 미배선 — A2 를 ESP RST 에 물리고 ESP_RST_WIRED=1 · 6단(워치독) 끔
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=2 사다리=0/0 rx=45 lines=4 up=3s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="SK_WiFiGIGA50DC_2.4G","2011050796"" (44)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=6s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=9s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=12s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=15s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=18s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=21s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=24s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=27s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=30s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=33s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 1회 · 결합유지 없음 · 현재 0단(0회 누적)
+[LADDER] ↑↑ 단 상승 → 1단
+[LADDER] 1단 조치: 시리얼 드레인 0바이트 버림 + 줄 조립 초기화
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=3 사다리=1/0 rx=147 lines=10 up=36s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[NET] CIFSR 3회 소진 — 그러나 busy 거부였다. IP 소실로 세지 않는다
+[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 33s · 연속 1회 · 결합유지 없음 · 현재 1단(0회 누적)
+[LADDER] 1단 조치: 시리얼 드레인 22바이트 버림 + 줄 조립 초기화
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="SK_WiFiGIGA50DC_2.4G","2011050796"" (44)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=39s
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=42s
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=45s
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=48s
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=51s
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=54s
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=57s
+[CNT] up=60 drop=0 esprst=0 hwrst=0/0 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=50 oow=0 smiss=0 ssovf=0 cksumng=0 okstream=0 penddrop=0 pendfill=0 bigfill=0 bigdrop=0 bigokst=0 oklost=0 bigoklost=0 skip=0 online=0
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=60s
+[RAM] 최저 여유 65535 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=63s
+[DIAG] offline step=2 사다리=1/1 rx=205 lines=12 up=66s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 2회 · 결합유지 없음 · 현재 1단(1회 누적)
+[LADDER] ↑↑ 단 상승 → 2단
+[NET] 7 GMR (펌웨어 판 — 진단)
+[AT] "AT+GMR" (6)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=8 사다리=2/0 rx=225 lines=14 up=69s
+[NET] 8 CWCOUNTRY (채널 12/13 우회 시도 — 진단)
+[AT] "AT+CWCOUNTRY_DEF=0,"KR",1,13" (28)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[NET] 9 CWLAP (주변 AP 목록 — 진단)
+[AT] "AT+CWLAP" (8)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=2 사다리=2/0 rx=289 lines=18 up=72s
+[DIAG] offline step=2 사다리=2/0 rx=289 lines=18 up=75s
+[DIAG] offline step=2 사다리=2/0 rx=289 lines=18 up=78s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="SK_WiFiGIGA50DC_2.4G","2011050796"" (44)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=81s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=84s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=87s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=90s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=93s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=96s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=99s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=102s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=105s
+[DIAG] offline step=2 사다리=2/0 rx=347 lines=20 up=108s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 3회 · 결합유지 없음 · 현재 2단(0회 누적)
+[LADDER] 2단 조치: 5초 쉬고 AT+CWQAP 로 결합을 명시적으로 끊은 뒤 다시 붙는다
+[DIAG] offline step=10 사다리=2/1 rx=347 lines=20 up=111s
+[DIAG] offline step=10 사다리=2/1 rx=347 lines=20 up=114s
+
+[NET] 대상 192.168.35.21:8888
+
+[SENS] A1=훅 B1=훅  ⚠ 샘플 훅 = 시뮬/LED되읽기 (배선 없음)
+
+[PARKING NODE] proto v1 / 1 spots / 2 sensors / 6 modules / dev=P1
+[BOOT] 리셋 원인: 불명 (부트로더가 MCUSR 을 지우고 넘어왔다)
+[BOOT] 사다리 4단(ESP 하드리셋선) 미배선 — A2 를 ESP RST 에 물리고 ESP_RST_WIRED=1 · 6단(워치독) 끔
+[NET] 0 RST
+[NET] 1 CWMODE=1
+[DIAG] offline step=2 사다리=0/0 rx=44 lines=0 up=3s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[DIAG] offline step=2 사다리=0/0 rx=44 lines=0 up=6s
+[DIAG] offline step=2 사다리=0/0 rx=44 lines=0 up=9s
+[AT] "AT+RST\x82\x82\xF2\x9F\xA1\x12\x12\x87\x196\x8A\xA3\xFF\x87\xF0\x8D\xA1\xC5\xC1C\x18V\x9A\xD2\x07\xF0\x92\x87\x1A\xDA\x92\xC1\x07\xF0\x12\x87\xFC" (43)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[DIAG] offline step=2 사다리=0/0 rx=127 lines=2 up=12s
+[AT] "" (0)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[DIAG] offline step=2 사다리=0/0 rx=210 lines=4 up=15s
+[AT] "" (0)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[DIAG] offline step=2 사다리=0/0 rx=297 lines=6 up=18s
+[AT] "" (0)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[AT] "" (0)
+[DIAG] offline step=2 사다리=0/0 rx=464 lines=9 up=21s
+[AT] "" (0)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[DIAG] offline step=2 사다리=0/0 rx=546 lines=11 up=24s
+[DIAG] offline step=2 사다리=0/0 rx=546 lines=11 up=27s
+[DIAG] offline step=2 사다리=0/0 rx=546 lines=11 up=30s
+[DIAG] offline step=2 사다리=0/0 rx=546 lines=11 up=33s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 1회 · 결합유지 없음 · 현재 0단(0회 누적)
+[LADDER] ↑↑ 단 상승 → 1단
+[LADDER] 1단 조치: 시리얼 드레인 0바이트 버림 + 줄 조립 초기화
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.35.79" (13)
+[NET] ★ IP 확보: 192.168.35.79
+[AT] "OK" (2)
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 적용됨 → CIPSTART
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.35.21",8888" (38)
+[AT] "OK" (2)
+[AT] "Linked" (6)
+[NET] online (CONNECT) + 캐시 비움
+[TX] S,0,20,00,36,P1,05
+[SLOT] n=30 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19" (13)
+[AT] " S,0,20,00,36,P1,05" (19)
+[AT] "SEND OK" (7)
+[TX] D,*,7,6,6F
+D,A1,IP,01
+D,B1,IP,02
+D,LD,OG,68
+D,LC,OL,64
+D,DR,OB,73
+D,L2,OL,15
+[REG] 등록 전송 76B
+[SLOT] n=31 tx=76 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=77" (13)
+[AT] " D,*,7,6,6FD,A1,IP,01D,B1,IP,02D,LD,OG,68D,LC,OL,64D,DR,OB,73D,L2,OL,15" (71)
+[AT] "SEND OK" (7)
+[TX] S,2,00,00,38,P1,0B
+[SLOT] n=32 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19" (13)
+[AT] " S,2,00,00,38,P1,0B" (19)
+[AT] "SEND OK" (7)
+[TX] S,3,00,00,39,P1,0B
+[SLOT] n=33 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19" (13)
+[AT] " S,3,00,00,39,P1,0B" (19)
+[AT] "SEND OK" (7)
+[TX] S,4,00,00,40,P1,02
+[SLOT] n=34 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19" (13)
+[AT] " S,4,00,00,40,P1,02" (19)
+[AT] "SEND OK" (7)
+[TX] S,5,00,00,42,P1,01
+[SLOT] n=35 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19" (13)
+[AT] " S,5,00,00,42,P1,01" (19)
+[AT] "SEND OK" (7)
+[TX] S,6,00,00,43,P1,03
+[SLOT] n=36 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19" (13)
+[AT] " S,6,00,00,43,P1,03" (19)
+[AT] "SEND OK" (7)
+[TX] S,7,00,00,44,P1,05
+[SLOT] n=37 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19" (13)
+[AT] " S,7,00,00,44,P1,05" (19)
+[AT] "SEND OK" (7)
+[TX] S,8,00,00,45,P1,0B
+[SLOT] n=38 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19" (13)
+[AT] " S,8,00,00,45,P1,0B" (19)
+[AT] "SEND OK" (7)
+[TX] S,9,00,00,46,P1,09
+[SLOT] n=39 tx=18 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=19" (13)
+[AT] " S,9,00,00,46,P1,09" (19)
+[AT] "SEND OK" (7)
+[TX] S,10,00,00,48,P1,3F
+[SLOT] n=40 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,10,00,00,48,P1,3F" (20)
+[AT] "SEND OK" (7)
+[TX] S,11,20,00,49,P1,3D
+[SLOT] n=41 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,11,20,00,49,P1,3D" (20)
+[AT] "SEND OK" (7)
+[TX] S,12,20,00,50,P1,36
+[SLOT] n=42 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,12,20,00,50,P1,36" (20)
+[AT] "SEND OK" (7)
+[TX] S,13,20,00,51,P1,36
+[SLOT] n=43 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,13,20,00,51,P1,36" (20)
+[AT] "SEND OK" (7)
+[TX] S,14,20,00,52,P1,32
+[SLOT] n=44 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,14,20,00,52,P1,32" (20)
+[AT] "SEND OK" (7)
+[TX] S,15,20,00,54,P1,35
+[SLOT] n=45 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,15,20,00,54,P1,35" (20)
+[AT] "SEND OK" (7)
+[TX] S,16,20,00,55,P1,37
+[SLOT] n=46 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,16,20,00,55,P1,37" (20)
+[AT] "SEND OK" (7)
+[TX] S,17,20,00,56,P1,35
+[SLOT] n=47 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,17,20,00,56,P1,35" (20)
+[AT] "SEND OK" (7)
+[TX] S,18,20,00,57,P1,3B
+[SLOT] n=48 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,18,20,00,57,P1,3B" (20)
+[AT] "SEND OK" (7)
+[TX] S,19,20,00,58,P1,35
+[SLOT] n=49 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,19,20,00,58,P1,35" (20)
+[AT] "SEND OK" (7)
+[TX] S,20,20,00,60,P1,34
+[SLOT] n=50 tx=19 ack=0 due=0 r=1
+[CNT] up=60 drop=0 esprst=0 hwrst=0/0 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=50 oow=0 smiss=1 ssovf=0 cksumng=0 okstream=20 penddrop=0 pendfill=21 bigfill=1 bigdrop=0 bigokst=1 oklost=0 bigoklost=0 skip=0 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,20,20,00,60,P1,34" (20)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=20" (13)
+[TX] S,21,00,00,61,P1,36
+[SLOT] n=51 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,21,00,00,61,P1,36" (20)
+[AT] "SEND OK" (7)
+[TX] S,22,00,00,62,P1,36
+[SLOT] n=52 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,22,00,00,62,P1,36" (20)
+[AT] "SEND OK" (7)
+[TX] S,23,00,00,63,P1,36
+[SLOT] n=53 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,23,00,00,63,P1,36" (20)
+[AT] "SEND OK" (7)
+[TX] S,24,00,00,64,P1,36
+[SLOT] n=54 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,24,00,00,64,P1,36" (20)
+[AT] "SEND OK" (7)
+[LADDER] ↓ 30초 연속 온라인 — 사다리를 0단으로 내린다 (직전 1단)
+[TX] S,25,00,00,66,P1,35
+[SLOT] n=55 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,25,00,00,66,P1,35" (20)
+[AT] "SEND OK" (7)
+[TX] S,26,00,00,67,P1,37
+[SLOT] n=56 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,26,00,00,67,P1,37" (20)
+[AT] "SEND OK" (7)
+[TX] S,27,00,00,68,P1,39
+[SLOT] n=57 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,27,00,00,68,P1,39" (20)
+[AT] "SEND OK" (7)
+[TX] S,28,00,00,69,P1,37
+[SLOT] n=58 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,28,00,00,69,P1,37" (20)
+[AT] "SEND OK" (7)
+[TX] S,29,00,00,70,P1,3E
+[SLOT] n=59 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,29,00,00,70,P1,3E" (20)
+[AT] "SEND OK" (7)
+[TX] S,30,00,00,72,P1,34
+[SLOT] n=60 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,30,00,00,72,P1,34" (20)
+[AT] "SEND OK" (7)
+[TX] S,31,20,00,73,P1,36
+[SLOT] n=61 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,31,20,00,73,P1,36" (20)
+[AT] "SEND OK" (7)
+[TX] S,32,20,00,74,P1,32
+[SLOT] n=62 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,32,20,00,74,P1,32" (20)
+[AT] "SEND OK" (7)
+[TX] S,33,20,00,75,P1,32
+[SLOT] n=63 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,33,20,00,75,P1,32" (20)
+[AT] "SEND OK" (7)
+[TX] S,34,20,00,76,P1,36
+[SLOT] n=64 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,34,20,00,76,P1,36" (20)
+[AT] "SEND OK" (7)
+[TX] S,35,20,00,78,P1,39
+[SLOT] n=65 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,35,20,00,78,P1,39" (20)
+[AT] "SEND OK" (7)
+[TX] S,36,20,00,79,P1,3B
+[SLOT] n=66 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,36,20,00,79,P1,3B" (20)
+[AT] "SEND OK" (7)
+[TX] S,37,20,00,80,P1,3C
+[SLOT] n=67 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,37,20,00,80,P1,3C" (20)
+[AT] "SEND OK" (7)
+[TX] S,38,20,00,81,P1,32
+[SLOT] n=68 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,38,20,00,81,P1,32" (20)
+[AT] "SEND OK" (7)
+[TX] S,39,20,00,82,P1,30
+[SLOT] n=69 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,39,20,00,82,P1,30" (20)
+[AT] "SEND OK" (7)
+[TX] S,40,20,00,84,P1,38
+[SLOT] n=70 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,40,20,00,84,P1,38" (20)
+[AT] "SEND OK" (7)
+[TX] S,41,00,00,85,P1,3A
+[SLOT] n=71 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,41,00,00,85,P1,3A" (20)
+[AT] "SEND OK" (7)
+[TX] S,42,00,00,86,P1,3A
+[SLOT] n=72 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,42,00,00,86,P1,3A" (20)
+[AT] "SEND OK" (7)
+[TX] S,43,00,00,87,P1,3A
+[SLOT] n=73 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,43,00,00,87,P1,3A" (20)
+[AT] "SEND OK" (7)
+[TX] S,44,00,00,88,P1,32
+[SLOT] n=74 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,44,00,00,88,P1,32" (20)
+[AT] "SEND OK" (7)
+[TX] S,45,00,00,90,P1,3A
+[SLOT] n=75 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,45,00,00,90,P1,3A" (20)
+[AT] "SEND OK" (7)
+[TX] S,46,00,00,91,P1,38
+[SLOT] n=76 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,46,00,00,91,P1,38" (20)
+[AT] "SEND OK" (7)
+[TX] S,47,00,00,92,P1,3A
+[SLOT] n=77 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,47,00,00,92,P1,3A" (20)
+[AT] "SEND OK" (7)
+[TX] S,48,00,00,93,P1,34
+[SLOT] n=78 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,48,00,00,93,P1,34" (20)
+[AT] "SEND OK" (7)
+[TX] S,49,00,00,94,P1,32
+[SLOT] n=79 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,49,00,00,94,P1,32" (20)
+[AT] "SEND OK" (7)
+[TX] S,50,00,00,96,P1,38
+[SLOT] n=80 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,50,00,00,96,P1,38" (20)
+[AT] "SEND OK" (7)
+[TX] S,51,20,00,97,P1,3A
+[SLOT] n=81 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,51,20,00,97,P1,3A" (20)
+[AT] "SEND OK" (7)
+[TX] S,52,20,00,98,P1,36
+[SLOT] n=82 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,52,20,00,98,P1,36" (20)
+[AT] "SEND OK" (7)
+[TX] S,53,20,00,99,P1,36
+[SLOT] n=83 tx=19 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=20" (13)
+[AT] " S,53,20,00,99,P1,36" (20)
+[AT] "SEND OK" (7)
+[TX] S,54,20,00,100,P1,00
+[SLOT] n=84 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,54,20,00,100,P1,00" (21)
+[AT] "SEND OK" (7)
+[TX-RESYNC] 프롬프트 놓침 → 더미 21바이트로 스트림 복구(서버는 이 줄을 버린다)
+[TX-DROP] S,55,20,00,102,P1,03
+[NET] 전송 실패 1/3
+[SLOT] n=85 tx=20 ack=0 due=0 r=0
+[TX-RESYNC] 프롬프트 놓침 → 더미 21바이트로 스트림 복구(서버는 이 줄을 버린다)
+[TX-DROP] S,55,20,00,103,P1,02
+[NET] 전송 실패 2/3
+[SLOT] n=86 tx=20 ack=0 due=0 r=0
+[TX-RESYNC] 프롬프트 놓침 → 더미 21바이트로 스트림 복구(서버는 이 줄을 버린다)
+[TX-DROP] S,55,20,00,104,P1,05
+[NET] 전송 실패 3/3
+[NET] 전송 3회 연속 실패 → 오프라인 전환. 낡은 소켓부터 닫는다(CIPCLOSE)
+[SLOT] n=87 tx=20 ack=0 due=0 r=0
+[DIAG] offline step=6 사다리=0/0 rx=3283 lines=184 up=104s
+[NET] 6 CIPCLOSE (낡은 소켓 닫기)
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[DIAG] offline step=3 사다리=0/0 rx=3283 lines=184 up=107s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[DIAG] offline step=3 사다리=0/0 rx=3283 lines=184 up=110s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[NET] ★ ESP 가 IP 를 잃었다 — 모듈 리셋으로 본다. 누적 사건 1
+[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 106s · 연속 0회 · 결합유지 76s · 현재 0단(0회 누적)
+[LADDER] ↑↑ 단 상승 → 1단
+[LADDER] 1단 조치: 시리얼 드레인 0바이트 버림 + 줄 조립 초기화
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[DIAG] offline step=2 사다리=1/0 rx=3283 lines=184 up=113s
+[DIAG] offline step=2 사다리=1/0 rx=3283 lines=184 up=116s
+[DIAG] offline step=2 사다리=1/0 rx=3283 lines=184 up=119s
+[CNT] up=120 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=100 oow=0 smiss=1 ssovf=0 cksumng=0 okstream=55 penddrop=0 pendfill=55 bigfill=1 bigdrop=0 bigokst=1 oklost=0 bigoklost=0 skip=0 online=0
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=1/0 rx=3283 lines=184 up=122s
+[DIAG] offline step=2 사다리=1/0 rx=3283 lines=184 up=125s
+[DIAG] offline step=2 사다리=1/0 rx=3283 lines=184 up=128s
+[DIAG] offline step=2 사다리=1/0 rx=3283 lines=184 up=131s
+[DIAG] offline step=2 사다리=1/0 rx=3283 lines=184 up=134s
+[DIAG] offline step=2 사다리=1/0 rx=3283 lines=184 up=137s
+[DIAG] offline step=2 사다리=1/0 rx=3283 lines=184 up=140s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 1회 · 결합유지 없음 · 현재 1단(0회 누적)
+[LADDER] 1단 조치: 시리얼 드레인 0바이트 버림 + 줄 조립 초기화
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[DIAG] offline step=3 사다리=1/1 rx=3283 lines=184 up=143s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[DIAG] offline step=3 사다리=1/1 rx=3283 lines=184 up=146s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 35s · 연속 1회 · 결합유지 없음 · 현재 1단(1회 누적)
+[LADDER] ↑↑ 단 상승 → 2단
+[LADDER] 2단 조치: 5초 쉬고 AT+CWQAP 로 결합을 명시적으로 끊은 뒤 다시 붙는다
+[DIAG] offline step=10 사다리=2/0 rx=3283 lines=184 up=149s
+[NET] 10 CWQAP (결합 해제 — 사다리 2단)
+[DIAG] offline step=2 사다리=2/0 rx=3283 lines=184 up=152s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[DIAG] offline step=2 사다리=2/0 rx=3283 lines=184 up=155s
+[DIAG] offline step=2 사다리=2/0 rx=3283 lines=184 up=158s
+[DIAG] offline step=2 사다리=2/0 rx=3283 lines=184 up=161s
+[DIAG] offline step=2 사다리=2/0 rx=3283 lines=184 up=164s
+[DIAG] offline step=2 사다리=2/0 rx=3283 lines=184 up=167s
+[DIAG] offline step=2 사다리=2/0 rx=3283 lines=184 up=170s
+[DIAG] offline step=2 사다리=2/0 rx=3283 lines=184 up=173s
+[DIAG] offline step=2 사다리=2/0 rx=3283 lines=184 up=176s
+[DIAG] offline step=2 사다리=2/0 rx=3283 lines=184 up=179s
+[CNT] up=180 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=150 oow=0 smiss=1 ssovf=0 cksumng=0 okstream=55 penddrop=0 pendfill=55 bigfill=1 bigdrop=0 bigokst=1 oklost=0 bigoklost=0 skip=0 online=0
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=2/0 rx=3283 lines=184 up=182s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 2회 · 결합유지 없음 · 현재 2단(0회 누적)
+[DIAG] offline step=7 사다리=2/1 rx=3283 lines=184 up=185s
+[NET] 7 GMR (펌웨어 판 — 진단)
+[NET] 8 CWCOUNTRY (채널 12/13 우회 시도 — 진단)
+[DIAG] offline step=9 사다리=2/1 rx=3283 lines=184 up=188s
+[NET] 9 CWLAP (주변 AP 목록 — 진단)
+[DIAG] offline step=2 사다리=2/1 rx=3283 lines=184 up=191s
+[DIAG] offline step=2 사다리=2/1 rx=3283 lines=184 up=194s
+[DIAG] offline step=2 사다리=2/1 rx=3283 lines=184 up=197s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[DIAG] offline step=2 사다리=2/1 rx=3283 lines=184 up=200s
+[DIAG] offline step=2 사다리=2/1 rx=3283 lines=184 up=203s
+[AT] "\x82\x82\xF2\x9F\xA1\x12\x13\x87\x196\x8A\xA3\xFF\x87\xF0\x8D\xA1\xC5\xC1C\x18V\x9A\xD2\x07\xF0\x92\x87\x1A\xDA\x92\xC1\x07\xF0\x12\x87\xFC" (37)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[DIAG] offline step=2 사다리=2/1 rx=3404 lines=186 up=206s
+[AT] "" (0)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[DIAG] offline step=2 사다리=2/1 rx=3449 lines=188 up=209s
+[DIAG] offline step=2 사다리=2/1 rx=3449 lines=188 up=212s
+[DIAG] offline step=2 사다리=2/1 rx=3449 lines=188 up=215s
+[DIAG] offline step=2 사다리=2/1 rx=3451 lines=188 up=218s
+[DIAG] offline step=2 사다리=2/1 rx=3451 lines=188 up=221s
+[DIAG] offline step=2 사다리=2/1 rx=3451 lines=188 up=224s
+[DIAG] offline step=2 사다리=2/1 rx=3451 lines=188 up=227s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 3회 · 결합유지 없음 · 현재 2단(1회 누적)
+[LADDER] ↑↑ 단 상승 → 3단
+[LADDER] 3단 조치: 15초 쉬고 AT+RST (모듈 소프트 리셋)
+[DIAG] offline step=0 사다리=3/0 rx=3451 lines=188 up=230s
+[DIAG] offline step=0 사다리=3/0 rx=3451 lines=188 up=233s
+[DIAG] offline step=0 사다리=3/0 rx=3451 lines=188 up=236s
+[DIAG] offline step=0 사다리=3/0 rx=3451 lines=188 up=239s
+[CNT] up=240 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=200 oow=0 smiss=1 ssovf=0 cksumng=0 okstream=55 penddrop=0 pendfill=55 bigfill=1 bigdrop=0 bigokst=1 oklost=0 bigoklost=0 skip=0 online=0
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=0 사다리=3/0 rx=3451 lines=188 up=242s
+[NET] 0 RST
+[AT] "" (0)
+[AT] "OK" (2)
+[AT] "`B\xD6\x86@\xF9Rc\xE2\xFCR\x8B:\x97`@\xCE\xFF\xCA\xC9\xA5\x9D\x1C\xFF\xC2I\x81" (27)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "no change" (9)
+[DIAG] offline step=2 사다리=3/0 rx=3563 lines=194 up=245s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="SK_WiFiGIGA50DC_2.4G","2011050796"" (44)
+[DIAG] offline step=2 사다리=3/0 rx=3610 lines=195 up=248s
+[AT] "OK" (2)
+[NET] CWJAP OK — 결합됐다. IP 를 실제로 받았는지 CIFSR 로 확인한다
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.35.79" (13)
+[NET] ★ IP 확보: 192.168.35.79
+[AT] "OK" (2)
+[DIAG] offline step=4 사다리=3/0 rx=3648 lines=199 up=251s
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 적용됨 → CIPSTART
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.35.21",8888" (38)
+[AT] "OK" (2)
+[AT] "Linked" (6)
+[NET] online (CONNECT) + 캐시 비움
+[TX] S,55,00,00,252,P1,07
+[SLOT] n=210 tx=20 ack=0 due=338 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,55,00,00,252,P1,07" (21)
+[AT] "SEND OK" (7)
+[TX] D,*,7,6,6F
+D,A1,IP,01
+D,B1,IP,02
+D,LD,OG,68
+D,LC,OL,64
+D,DR,OB,73
+D,L2,OL,15
+[REG] 등록 전송 76B
+[SLOT] n=211 tx=76 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=77" (13)
+[AT] " D,*,7,6,6FD,A1,IP,01D,B1,IP,02D,LD,OG,68D,LC,OL,64D,DR,OB,73D,L2,OL,15" (71)
+[AT] "SEND OK" (7)
+[TX] S,57,00,00,254,P1,03
+[SLOT] n=212 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,57,00,00,254,P1,03" (21)
+[AT] "SEND OK" (7)
+[TX] S,58,00,00,255,P1,0D
+[SLOT] n=213 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,58,00,00,255,P1,0D" (21)
+[AT] "SEND OK" (7)
+[TX] S,59,00,00,256,P1,0F
+[SLOT] n=214 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,59,00,00,256,P1,0F" (21)
+[AT] "SEND OK" (7)
+[TX] S,60,00,00,258,P1,0B
+[SLOT] n=215 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,60,00,00,258,P1,0B" (21)
+[AT] "SEND OK" (7)
+[TX] S,61,00,00,259,P1,0B
+[SLOT] n=216 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,61,00,00,259,P1,0B" (21)
+[AT] "SEND OK" (7)
+[TX] S,62,00,00,260,P1,02
+[SLOT] n=217 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,62,00,00,260,P1,02" (21)
+[AT] "SEND OK" (7)
+[TX] S,63,00,00,261,P1,02
+[SLOT] n=218 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,63,00,00,261,P1,02" (21)
+[AT] "SEND OK" (7)
+[TX] S,64,00,00,262,P1,06
+[SLOT] n=219 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,64,00,00,262,P1,06" (21)
+[AT] "SEND OK" (7)
+[TX] S,65,00,00,264,P1,01
+[SLOT] n=220 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,65,00,00,264,P1,01" (21)
+[AT] "SEND OK" (7)
+[TX] S,66,20,00,265,P1,01
+[SLOT] n=221 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,66,20,00,265,P1,01" (21)
+[AT] "SEND OK" (7)
+[TX] S,67,20,00,266,P1,03
+[SLOT] n=222 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,67,20,00,266,P1,03" (21)
+[AT] "SEND OK" (7)
+[TX] S,68,20,00,267,P1,0D
+[SLOT] n=223 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,68,20,00,267,P1,0D" (21)
+[AT] "SEND OK" (7)
+[TX] S,69,20,00,268,P1,03
+[SLOT] n=224 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,69,20,00,268,P1,03" (21)
+[AT] "SEND OK" (7)
+[TX] S,70,20,00,270,P1,02
+[SLOT] n=225 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,70,20,00,270,P1,02" (21)
+[AT] "SEND OK" (7)
+[TX] S,71,20,00,271,P1,02
+[SLOT] n=226 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,71,20,00,271,P1,02" (21)
+[AT] "SEND OK" (7)
+[TX] S,72,20,00,272,P1,02
+[SLOT] n=227 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,72,20,00,272,P1,02" (21)
+[AT] "SEND OK" (7)
+[TX] S,73,20,00,273,P1,02
+[SLOT] n=228 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,73,20,00,273,P1,02" (21)
+[AT] "SEND OK" (7)
+[TX] S,74,20,00,274,P1,02
+[SLOT] n=229 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,74,20,00,274,P1,02" (21)
+[AT] "SEND OK" (7)
+[TX] S,75,20,00,276,P1,01
+[SLOT] n=230 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,75,20,00,276,P1,01" (21)
+[AT] "SEND OK" (7)
+[TX] S,76,00,00,277,P1,01
+[SLOT] n=231 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,76,00,00,277,P1,01" (21)
+[AT] "SEND OK" (7)
+[TX] S,77,00,00,278,P1,0F
+[SLOT] n=232 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,77,00,00,278,P1,0F" (21)
+[AT] "SEND OK" (7)
+[TX] S,78,00,00,279,P1,01
+[SLOT] n=233 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,78,00,00,279,P1,01" (21)
+[AT] "SEND OK" (7)
+[TX] S,79,00,00,280,P1,06
+[SLOT] n=234 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,79,00,00,280,P1,06" (21)
+[AT] "SEND OK" (7)
+[TX] S,80,00,00,282,P1,02
+[SLOT] n=235 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,80,00,00,282,P1,02" (21)
+[AT] "SEND OK" (7)
+[LADDER] ↓ 30초 연속 온라인 — 사다리를 0단으로 내린다 (직전 3단)
+[TX] S,81,00,00,283,P1,02
+[SLOT] n=236 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,81,00,00,283,P1,02" (21)
+[AT] "SEND OK" (7)
+[TX] S,82,00,00,284,P1,06
+[SLOT] n=237 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,82,00,00,284,P1,06" (21)
+[AT] "SEND OK" (7)
+[TX] S,83,00,00,285,P1,06
+[SLOT] n=238 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,83,00,00,285,P1,06" (21)
+[AT] "SEND OK" (7)
+[TX] S,84,00,00,286,P1,02
+[SLOT] n=239 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,84,00,00,286,P1,02" (21)
+[AT] "SEND OK" (7)
+[TX] S,85,00,00,288,P1,0D
+[SLOT] n=240 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,85,00,00,288,P1,0D" (21)
+[AT] "SEND OK" (7)
+[TX] S,86,20,00,289,P1,0D
+[SLOT] n=241 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,86,20,00,289,P1,0D" (21)
+[AT] "SEND OK" (7)
+[TX] S,87,20,00,290,P1,04
+[SLOT] n=242 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,87,20,00,290,P1,04" (21)
+[AT] "SEND OK" (7)
+[TX] S,88,20,00,291,P1,0A
+[SLOT] n=243 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,88,20,00,291,P1,0A" (21)
+[AT] "SEND OK" (7)
+[TX] S,89,20,00,292,P1,08
+[SLOT] n=244 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,89,20,00,292,P1,08" (21)
+[AT] "SEND OK" (7)
+[TX] S,90,20,00,294,P1,06
+[SLOT] n=245 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,90,20,00,294,P1,06" (21)
+[AT] "SEND OK" (7)
+[TX] S,91,20,00,295,P1,06
+[SLOT] n=246 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,91,20,00,295,P1,06" (21)
+[AT] "SEND OK" (7)
+[TX] S,92,20,00,296,P1,06
+[SLOT] n=247 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,92,20,00,296,P1,06" (21)
+[AT] "SEND OK" (7)
+[TX] S,93,20,00,297,P1,06
+[SLOT] n=248 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,93,20,00,297,P1,06" (21)
+[AT] "SEND OK" (7)
+[TX] S,94,20,00,298,P1,0E
+[SLOT] n=249 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,94,20,00,298,P1,0E" (21)
+[AT] "SEND OK" (7)
+[TX] S,95,20,00,300,P1,0F
+[SLOT] n=250 tx=20 ack=0 due=0 r=1
+[CNT] up=300 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=250 oow=0 smiss=1 ssovf=0 cksumng=0 okstream=95 penddrop=0 pendfill=96 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=0 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,95,20,00,300,P1,0F" (21)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=21" (13)
+[TX] S,96,00,00,301,P1,0F
+[SLOT] n=251 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,96,00,00,301,P1,0F" (21)
+[AT] "SEND OK" (7)
+[TX] S,97,00,00,302,P1,0D
+[SLOT] n=252 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,97,00,00,302,P1,0D" (21)
+[AT] "SEND OK" (7)
+[TX] S,98,00,00,303,P1,03
+[SLOT] n=253 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,98,00,00,303,P1,03" (21)
+[AT] "SEND OK" (7)
+[TX] S,99,00,00,304,P1,05
+[SLOT] n=254 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,99,00,00,304,P1,05" (21)
+[AT] "SEND OK" (7)
+[TX] S,100,00,00,306,P1,36
+[SLOT] n=255 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,100,00,00,306,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,101,00,00,307,P1,36
+[SLOT] n=256 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,101,00,00,307,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,102,00,00,308,P1,3A
+[SLOT] n=257 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,102,00,00,308,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,103,00,00,309,P1,3A
+[SLOT] n=258 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,103,00,00,309,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,104,00,00,310,P1,35
+[SLOT] n=259 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,104,00,00,310,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,105,00,00,312,P1,36
+[SLOT] n=260 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,105,00,00,312,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,106,20,00,313,P1,36
+[SLOT] n=261 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,106,20,00,313,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,107,20,00,314,P1,30
+[SLOT] n=262 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,107,20,00,314,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,108,20,00,315,P1,3E
+[SLOT] n=263 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,108,20,00,315,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,109,20,00,316,P1,3C
+[SLOT] n=264 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,109,20,00,316,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,110,20,00,318,P1,3A
+[SLOT] n=265 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,110,20,00,318,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,111,20,00,319,P1,3A
+[SLOT] n=266 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,111,20,00,319,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,112,20,00,320,P1,33
+[SLOT] n=267 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,112,20,00,320,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,113,20,00,321,P1,33
+[SLOT] n=268 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,113,20,00,321,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,114,20,00,322,P1,37
+[SLOT] n=269 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,114,20,00,322,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,115,20,00,324,P1,30
+[SLOT] n=270 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,115,20,00,324,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,116,00,00,325,P1,30
+[SLOT] n=271 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,116,00,00,325,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,117,00,00,326,P1,32
+[SLOT] n=272 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,117,00,00,326,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,118,00,00,327,P1,3C
+[SLOT] n=273 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,118,00,00,327,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,119,00,00,328,P1,32
+[SLOT] n=274 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,119,00,00,328,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,120,00,00,330,P1,31
+[SLOT] n=275 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,120,00,00,330,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,121,00,00,331,P1,31
+[SLOT] n=276 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,121,00,00,331,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,122,00,00,332,P1,31
+[SLOT] n=277 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,122,00,00,332,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,123,00,00,333,P1,31
+[SLOT] n=278 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,123,00,00,333,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,124,00,00,334,P1,31
+[SLOT] n=279 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,124,00,00,334,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,125,00,00,336,P1,32
+[SLOT] n=280 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,125,00,00,336,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,126,20,00,337,P1,32
+[SLOT] n=281 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,126,20,00,337,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,127,20,00,338,P1,3C
+[SLOT] n=282 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,127,20,00,338,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,128,20,00,339,P1,32
+[SLOT] n=283 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,128,20,00,339,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,129,20,00,340,P1,3D
+[SLOT] n=284 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,129,20,00,340,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,130,20,00,342,P1,37
+[SLOT] n=285 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,130,20,00,342,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,131,20,00,343,P1,37
+[SLOT] n=286 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,131,20,00,343,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,132,20,00,344,P1,33
+[SLOT] n=287 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,132,20,00,344,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,133,20,00,345,P1,33
+[SLOT] n=288 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,133,20,00,345,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,134,20,00,346,P1,37
+[SLOT] n=289 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,134,20,00,346,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,135,20,00,348,P1,38
+[SLOT] n=290 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,135,20,00,348,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,136,00,00,349,P1,38
+[SLOT] n=291 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,136,00,00,349,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,137,00,00,350,P1,31
+[SLOT] n=292 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,137,00,00,350,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,138,00,00,351,P1,3F
+[SLOT] n=293 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,138,00,00,351,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,139,00,00,352,P1,3D
+[SLOT] n=294 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,139,00,00,352,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,140,00,00,354,P1,35
+[SLOT] n=295 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,140,00,00,354,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,141,00,00,355,P1,35
+[SLOT] n=296 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,141,00,00,355,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,142,00,00,356,P1,35
+[SLOT] n=297 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,142,00,00,356,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,143,00,00,357,P1,35
+[SLOT] n=298 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,143,00,00,357,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,144,00,00,358,P1,3D
+[SLOT] n=299 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,144,00,00,358,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,145,00,00,360,P1,37
+[SLOT] n=300 tx=21 ack=0 due=0 r=1
+[CNT] up=360 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=300 oow=0 smiss=1 ssovf=0 cksumng=0 okstream=145 penddrop=0 pendfill=146 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=0 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,145,00,00,360,P1,37" (22)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=22" (13)
+[TX] S,146,20,00,361,P1,37
+[SLOT] n=301 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,146,20,00,361,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,147,20,00,362,P1,35
+[SLOT] n=302 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,147,20,00,362,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,148,20,00,363,P1,3B
+[SLOT] n=303 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,148,20,00,363,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,149,20,00,364,P1,3D
+[SLOT] n=304 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,149,20,00,364,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,150,20,00,366,P1,37
+[SLOT] n=305 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,150,20,00,366,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,151,20,00,367,P1,37
+[SLOT] n=306 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,151,20,00,367,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,152,20,00,368,P1,3B
+[SLOT] n=307 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,152,20,00,368,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,153,20,00,369,P1,3B
+[SLOT] n=308 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,153,20,00,369,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,154,20,00,370,P1,34
+[SLOT] n=309 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,154,20,00,370,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,155,20,00,372,P1,37
+[SLOT] n=310 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,155,20,00,372,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,156,00,00,373,P1,37
+[SLOT] n=311 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,156,00,00,373,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,157,00,00,374,P1,31
+[SLOT] n=312 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,157,00,00,374,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,158,00,00,375,P1,3F
+[SLOT] n=313 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,158,00,00,375,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,159,00,00,376,P1,3D
+[SLOT] n=314 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,159,00,00,376,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,160,00,00,378,P1,39
+[SLOT] n=315 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,160,00,00,378,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,161,00,00,379,P1,39
+[SLOT] n=316 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,161,00,00,379,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,162,00,00,380,P1,3C
+[SLOT] n=317 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,162,00,00,380,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,163,00,00,381,P1,3C
+[SLOT] n=318 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,163,00,00,381,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,164,00,00,382,P1,38
+[SLOT] n=319 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,164,00,00,382,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,165,00,00,384,P1,3F
+[SLOT] n=320 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,165,00,00,384,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,166,20,00,385,P1,3F
+[SLOT] n=321 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,166,20,00,385,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,167,20,00,386,P1,3D
+[SLOT] n=322 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,167,20,00,386,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,168,20,00,387,P1,33
+[SLOT] n=323 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,168,20,00,387,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,169,20,00,388,P1,3D
+[SLOT] n=324 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,169,20,00,388,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,170,20,00,390,P1,3C
+[SLOT] n=325 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,170,20,00,390,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,171,20,00,391,P1,3C
+[SLOT] n=326 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,171,20,00,391,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,172,20,00,392,P1,3C
+[SLOT] n=327 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,172,20,00,392,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,173,20,00,393,P1,3C
+[SLOT] n=328 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,173,20,00,393,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,174,20,00,394,P1,3C
+[SLOT] n=329 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,174,20,00,394,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,175,20,00,396,P1,3F
+[SLOT] n=330 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,175,20,00,396,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,176,00,00,397,P1,3F
+[SLOT] n=331 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,176,00,00,397,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,177,00,00,398,P1,31
+[SLOT] n=332 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,177,00,00,398,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,178,00,00,399,P1,3F
+[SLOT] n=333 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,178,00,00,399,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,179,00,00,400,P1,39
+[SLOT] n=334 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,179,00,00,400,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,180,00,00,402,P1,3D
+[SLOT] n=335 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,180,00,00,402,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,181,00,00,403,P1,3D
+[SLOT] n=336 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,181,00,00,403,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,182,00,00,404,P1,39
+[SLOT] n=337 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,182,00,00,404,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,183,00,00,405,P1,39
+[SLOT] n=338 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,183,00,00,405,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,184,00,00,406,P1,3D
+[SLOT] n=339 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,184,00,00,406,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,185,00,00,408,P1,32
+[SLOT] n=340 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,185,00,00,408,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,186,20,00,409,P1,32
+[SLOT] n=341 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,186,20,00,409,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,187,20,00,410,P1,3B
+[SLOT] n=342 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,187,20,00,410,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,188,20,00,411,P1,35
+[SLOT] n=343 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,188,20,00,411,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,189,20,00,412,P1,37
+[SLOT] n=344 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,189,20,00,412,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,190,20,00,414,P1,39
+[SLOT] n=345 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,190,20,00,414,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,191,20,00,415,P1,39
+[SLOT] n=346 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,191,20,00,415,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,192,20,00,416,P1,39
+[SLOT] n=347 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,192,20,00,416,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,193,20,00,417,P1,39
+[SLOT] n=348 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,193,20,00,417,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,194,20,00,418,P1,31
+[SLOT] n=349 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,194,20,00,418,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,195,20,00,420,P1,3B
+[SLOT] n=350 tx=21 ack=0 due=0 r=1
+[CNT] up=420 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=350 oow=0 smiss=1 ssovf=0 cksumng=0 okstream=195 penddrop=0 pendfill=196 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=0 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,195,20,00,420,P1,3B" (22)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=22" (13)
+[TX] S,196,00,00,421,P1,3B
+[SLOT] n=351 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,196,00,00,421,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,197,00,00,422,P1,39
+[SLOT] n=352 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,197,00,00,422,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,198,00,00,423,P1,37
+[SLOT] n=353 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,198,00,00,423,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,199,00,00,424,P1,31
+[SLOT] n=354 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,199,00,00,424,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,200,00,00,426,P1,30
+[SLOT] n=355 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,200,00,00,426,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,201,00,00,427,P1,30
+[SLOT] n=356 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,201,00,00,427,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,202,00,00,428,P1,3C
+[SLOT] n=357 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,202,00,00,428,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,203,00,00,429,P1,3C
+[SLOT] n=358 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,203,00,00,429,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,204,00,00,430,P1,33
+[SLOT] n=359 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,204,00,00,430,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,205,00,00,432,P1,30
+[SLOT] n=360 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,205,00,00,432,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,206,20,00,433,P1,30
+[SLOT] n=361 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,206,20,00,433,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,207,20,00,434,P1,36
+[SLOT] n=362 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,207,20,00,434,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,208,20,00,435,P1,38
+[SLOT] n=363 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,208,20,00,435,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,209,20,00,436,P1,3A
+[SLOT] n=364 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,209,20,00,436,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,210,20,00,438,P1,3C
+[SLOT] n=365 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,210,20,00,438,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,211,20,00,439,P1,3C
+[SLOT] n=366 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,211,20,00,439,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,212,20,00,440,P1,31
+[SLOT] n=367 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,212,20,00,440,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,213,20,00,441,P1,31
+[SLOT] n=368 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,213,20,00,441,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,214,20,00,442,P1,35
+[SLOT] n=369 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,214,20,00,442,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,215,20,00,444,P1,32
+[SLOT] n=370 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,215,20,00,444,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,216,00,00,445,P1,32
+[SLOT] n=371 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,216,00,00,445,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,217,00,00,446,P1,30
+[SLOT] n=372 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,217,00,00,446,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,218,00,00,447,P1,3E
+[SLOT] n=373 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,218,00,00,447,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,219,00,00,448,P1,30
+[SLOT] n=374 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=375 tx=21 ack=0 due=0 r=0
+[AT] " S,219,00,00,448,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,220,00,00,451,P1,32
+[SLOT] n=376 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,220,00,00,451,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,221,00,00,452,P1,30
+[SLOT] n=377 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,221,00,00,452,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,222,00,00,453,P1,32
+[SLOT] n=378 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,222,00,00,453,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,223,00,00,454,P1,34
+[SLOT] n=379 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,223,00,00,454,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,224,00,00,456,P1,31
+[SLOT] n=380 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,224,00,00,456,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,225,20,00,457,P1,33
+[SLOT] n=381 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,225,20,00,457,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,226,20,00,458,P1,3F
+[SLOT] n=382 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,226,20,00,458,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,227,20,00,459,P1,3F
+[SLOT] n=383 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,227,20,00,459,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,228,20,00,460,P1,3A
+[SLOT] n=384 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,228,20,00,460,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,229,20,00,462,P1,39
+[SLOT] n=385 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,229,20,00,462,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,230,20,00,463,P1,30
+[SLOT] n=386 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,230,20,00,463,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,231,20,00,464,P1,36
+[SLOT] n=387 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,231,20,00,464,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,232,20,00,465,P1,34
+[SLOT] n=388 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,232,20,00,465,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,233,20,00,466,P1,36
+[SLOT] n=389 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,233,20,00,466,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,234,20,00,468,P1,3F
+[SLOT] n=390 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,234,20,00,468,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,235,00,00,469,P1,3D
+[SLOT] n=391 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,235,00,00,469,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,236,00,00,470,P1,36
+[SLOT] n=392 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,236,00,00,470,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,237,00,00,471,P1,36
+[SLOT] n=393 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,237,00,00,471,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,238,00,00,472,P1,3A
+[SLOT] n=394 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,238,00,00,472,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,239,00,00,474,P1,3D
+[SLOT] n=395 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,239,00,00,474,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,240,00,00,475,P1,32
+[SLOT] n=396 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,240,00,00,475,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,241,00,00,476,P1,30
+[SLOT] n=397 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,241,00,00,476,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,242,00,00,477,P1,32
+[SLOT] n=398 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,242,00,00,477,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,243,00,00,478,P1,3C
+[SLOT] n=399 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,243,00,00,478,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,244,00,00,480,P1,3C
+[SLOT] n=400 tx=21 ack=0 due=0 r=1
+[CNT] up=480 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=400 oow=0 smiss=1 ssovf=0 cksumng=0 okstream=244 penddrop=0 pendfill=245 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=1 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,244,00,00,480,P1,3C" (22)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=22" (13)
+[TX] S,245,20,00,481,P1,3E
+[SLOT] n=401 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,245,20,00,481,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,246,20,00,482,P1,3E
+[SLOT] n=402 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,246,20,00,482,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,247,20,00,483,P1,3E
+[SLOT] n=403 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,247,20,00,483,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,248,20,00,484,P1,36
+[SLOT] n=404 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,248,20,00,484,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,249,20,00,486,P1,35
+[SLOT] n=405 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,249,20,00,486,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,250,20,00,487,P1,3C
+[SLOT] n=406 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,250,20,00,487,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,251,20,00,488,P1,32
+[SLOT] n=407 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,251,20,00,488,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,252,20,00,489,P1,30
+[SLOT] n=408 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,252,20,00,489,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,253,20,00,490,P1,39
+[SLOT] n=409 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,253,20,00,490,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,254,20,00,492,P1,3C
+[SLOT] n=410 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,254,20,00,492,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,255,00,00,493,P1,3E
+[SLOT] n=411 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,255,00,00,493,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,256,00,00,494,P1,3A
+[SLOT] n=412 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,256,00,00,494,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,257,00,00,495,P1,3A
+[SLOT] n=413 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,257,00,00,495,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,258,00,00,496,P1,36
+[SLOT] n=414 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,258,00,00,496,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,259,00,00,498,P1,39
+[SLOT] n=415 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,259,00,00,498,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,260,00,00,499,P1,32
+[SLOT] n=416 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,260,00,00,499,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,261,00,00,500,P1,32
+[SLOT] n=417 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,261,00,00,500,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,262,00,00,501,P1,30
+[SLOT] n=418 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,262,00,00,501,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,263,00,00,502,P1,32
+[SLOT] n=419 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,263,00,00,502,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,264,00,00,504,P1,33
+[SLOT] n=420 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,264,00,00,504,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,265,20,00,505,P1,31
+[SLOT] n=421 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,265,20,00,505,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,266,20,00,506,P1,31
+[SLOT] n=422 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,266,20,00,506,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,267,20,00,507,P1,31
+[SLOT] n=423 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,267,20,00,507,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,268,20,00,508,P1,31
+[SLOT] n=424 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,268,20,00,508,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,269,20,00,510,P1,39
+[SLOT] n=425 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,269,20,00,510,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,270,20,00,511,P1,30
+[SLOT] n=426 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,270,20,00,511,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,271,20,00,512,P1,32
+[SLOT] n=427 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,271,20,00,512,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,272,20,00,513,P1,30
+[SLOT] n=428 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,272,20,00,513,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,273,20,00,514,P1,36
+[SLOT] n=429 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,273,20,00,514,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,274,20,00,516,P1,33
+[SLOT] n=430 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,274,20,00,516,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,275,00,00,517,P1,31
+[SLOT] n=431 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,275,00,00,517,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,276,00,00,518,P1,3D
+[SLOT] n=432 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,276,00,00,518,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,277,00,00,519,P1,3D
+[SLOT] n=433 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,277,00,00,519,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,278,00,00,520,P1,38
+[SLOT] n=434 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,278,00,00,520,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,279,00,00,522,P1,3B
+[SLOT] n=435 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,279,00,00,522,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,280,00,00,523,P1,3C
+[SLOT] n=436 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,280,00,00,523,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,281,00,00,524,P1,3A
+[SLOT] n=437 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,281,00,00,524,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,282,00,00,525,P1,38
+[SLOT] n=438 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,282,00,00,525,P1,38" (22)
+[AT] "SEND OK" (7)
+[AT] "+IPD,11:G,4,2,1,70" (18)
+[SLOT-OOW] +101ms
+[G] idx=2 arg=1
+[AT] "OK" (2)
+[TX] S,283,18,00,526,P1,33
+A,4,G2,0,30
+[SLOT] n=439 tx=33 ack=1 due=0 r=1
+[AT] "AT+CIPSEND=34" (13)
+[AT] " S,283,18,00,526,P1,33A,4,G2,0,30" (33)
+[AT] "SEND OK" (7)
+[TX] S,284,18,00,528,P1,3A
+[SLOT] n=440 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,284,18,00,528,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,285,38,00,529,P1,38
+[SLOT] n=441 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,285,38,00,529,P1,38" (22)
+[AT] "SEND OK" (7)
+[AT] "+IPD,11:G,5,2,0,70" (18)
+[SLOT-OOW] +106ms
+[G] idx=2 arg=0
+[AT] "OK" (2)
+[TX] S,286,20,00,530,P1,3A
+A,5,G2,0,31
+[SLOT] n=442 tx=33 ack=1 due=0 r=1
+[AT] "AT+CIPSEND=34" (13)
+[AT] " S,286,20,00,530,P1,3AA,5,G2,0,31" (33)
+[AT] "SEND OK" (7)
+[TX] S,287,20,00,531,P1,3A
+[SLOT] n=443 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,287,20,00,531,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,288,20,00,532,P1,36
+[SLOT] n=444 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,288,20,00,532,P1,36" (22)
+[AT] "SEND OK" (7)
+[AT] "+IPD,11:G,6,4,1,74" (18)
+[SLOT-OOW] +101ms
+[DR] arg=1
+[G] idx=4 arg=1
+[AT] "OK" (2)
+[TX] S,289,22,00,534,P1,33
+A,6,G4,0,34
+[SLOT] n=445 tx=33 ack=1 due=0 r=1
+[AT] "AT+CIPSEND=34" (13)
+[AT] " S,289,22,00,534,P1,33A,6,G4,0,34" (33)
+[AT] "SEND OK" (7)
+[TX] S,290,22,00,535,P1,3A
+[SLOT] n=446 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,290,22,00,535,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,291,22,00,536,P1,38
+[SLOT] n=447 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,291,22,00,536,P1,38" (22)
+[AT] "SEND OK" (7)
+[AT] "+IPD,11:G,7,4,2,76" (18)
+[SLOT-OOW] +116ms
+[DR] arg=2
+[G] idx=4 arg=2
+[AT] "OK" (2)
+[TX] S,292,20,00,537,P1,38
+A,7,G4,0,35
+[SLOT] n=448 tx=33 ack=1 due=0 r=1
+[AT] "AT+CIPSEND=34" (13)
+[AT] " S,292,20,00,537,P1,38A,7,G4,0,35" (33)
+[AT] "SEND OK" (7)
+[TX] S,293,20,00,538,P1,36
+[SLOT] n=449 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,293,20,00,538,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,294,20,00,540,P1,3E
+[SLOT] n=450 tx=21 ack=0 due=0 r=1
+[CNT] up=540 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=450 oow=4 smiss=1 ssovf=0 cksumng=0 okstream=294 penddrop=0 pendfill=295 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=1 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,294,20,00,540,P1,3E" (22)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=22" (13)
+[TX] S,295,00,00,541,P1,3C
+[SLOT] n=451 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,295,00,00,541,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,296,00,00,542,P1,3C
+[SLOT] n=452 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,296,00,00,542,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,297,00,00,543,P1,3C
+[SLOT] n=453 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,297,00,00,543,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,298,00,00,544,P1,34
+[SLOT] n=454 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,298,00,00,544,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,299,00,00,546,P1,37
+[SLOT] n=455 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,299,00,00,546,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,300,00,00,547,P1,37
+[SLOT] n=456 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,300,00,00,547,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,301,00,00,548,P1,39
+[SLOT] n=457 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,301,00,00,548,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,302,00,00,549,P1,3B
+[SLOT] n=458 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,302,00,00,549,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,303,00,00,550,P1,32
+[SLOT] n=459 tx=21 ack=0 due=0 r=1
+[AT] "\xFDAT+CIPSEND=22" (14)
+[AT] " S,303,00,00,550,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,304,00,00,552,P1,37
+[SLOT] n=460 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,304,00,00,552,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,305,20,00,553,P1,35
+[SLOT] n=461 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,305,20,00,553,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,306,20,00,554,P1,31
+[SLOT] n=462 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,306,20,00,554,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,307,20,00,555,P1,31
+[SLOT] n=463 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,307,20,00,555,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,308,20,00,556,P1,3D
+[SLOT] n=464 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,308,20,00,556,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,309,20,00,558,P1,32
+[SLOT] n=465 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,309,20,00,558,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,310,20,00,559,P1,3B
+[SLOT] n=466 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,310,20,00,559,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,311,20,00,560,P1,30
+[SLOT] n=467 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,311,20,00,560,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,312,20,00,561,P1,32
+[SLOT] n=468 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,312,20,00,561,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,313,20,00,562,P1,30
+[SLOT] n=469 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,313,20,00,562,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,314,20,00,564,P1,31
+[SLOT] n=470 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,314,20,00,564,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,315,00,00,565,P1,33
+[SLOT] n=471 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,315,00,00,565,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,316,00,00,566,P1,33
+[SLOT] n=472 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,316,00,00,566,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,317,00,00,567,P1,33
+[SLOT] n=473 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,317,00,00,567,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,318,00,00,568,P1,33
+[SLOT] n=474 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,318,00,00,568,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,319,00,00,570,P1,3B
+[SLOT] n=475 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,319,00,00,570,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,320,00,00,571,P1,30
+[SLOT] n=476 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,320,00,00,571,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,321,00,00,572,P1,32
+[SLOT] n=477 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,321,00,00,572,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,322,00,00,573,P1,30
+[SLOT] n=478 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,322,00,00,573,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,323,00,00,574,P1,36
+[SLOT] n=479 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,323,00,00,574,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,324,00,00,576,P1,33
+[SLOT] n=480 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,324,00,00,576,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,325,20,00,577,P1,31
+[SLOT] n=481 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,325,20,00,577,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,326,20,00,578,P1,3D
+[SLOT] n=482 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,326,20,00,578,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,327,20,00,579,P1,3D
+[SLOT] n=483 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,327,20,00,579,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,328,20,00,580,P1,34
+[SLOT] n=484 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,328,20,00,580,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,329,20,00,582,P1,37
+[SLOT] n=485 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,329,20,00,582,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,330,20,00,583,P1,3E
+[SLOT] n=486 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,330,20,00,583,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,331,20,00,584,P1,38
+[SLOT] n=487 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,331,20,00,584,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,332,20,00,585,P1,3A
+[SLOT] n=488 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,332,20,00,585,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,333,20,00,586,P1,38
+[SLOT] n=489 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,333,20,00,586,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,334,20,00,588,P1,31
+[SLOT] n=490 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,334,20,00,588,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,335,00,00,589,P1,33
+[SLOT] n=491 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,335,00,00,589,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,336,00,00,590,P1,38
+[SLOT] n=492 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,336,00,00,590,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,337,00,00,591,P1,38
+[SLOT] n=493 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,337,00,00,591,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,338,00,00,592,P1,34
+[SLOT] n=494 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,338,00,00,592,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,339,00,00,594,P1,33
+[SLOT] n=495 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,339,00,00,594,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,340,00,00,595,P1,3C
+[SLOT] n=496 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,340,00,00,595,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,341,00,00,596,P1,3E
+[SLOT] n=497 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,341,00,00,596,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,342,00,00,597,P1,3C
+[SLOT] n=498 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,342,00,00,597,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,343,00,00,598,P1,32
+[SLOT] n=499 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,343,00,00,598,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,344,00,00,600,P1,37
+[SLOT] n=500 tx=21 ack=0 due=0 r=1
+[CNT] up=600 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=500 oow=4 smiss=1 ssovf=0 cksumng=0 okstream=344 penddrop=0 pendfill=345 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=1 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,344,00,00,600,P1,37" (22)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=22" (13)
+[TX] S,345,20,00,601,P1,35
+[SLOT] n=501 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,345,20,00,601,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,346,20,00,602,P1,35
+[SLOT] n=502 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,346,20,00,602,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,347,20,00,603,P1,35
+[SLOT] n=503 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,347,20,00,603,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,348,20,00,604,P1,3D
+[SLOT] n=504 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,348,20,00,604,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,349,20,00,606,P1,3E
+[SLOT] n=505 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,349,20,00,606,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,350,20,00,607,P1,37
+[SLOT] n=506 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,350,20,00,607,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,351,20,00,608,P1,39
+[SLOT] n=507 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,351,20,00,608,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,352,20,00,609,P1,3B
+[SLOT] n=508 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,352,20,00,609,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,353,20,00,610,P1,32
+[SLOT] n=509 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,353,20,00,610,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,354,20,00,612,P1,37
+[SLOT] n=510 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,354,20,00,612,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,355,00,00,613,P1,35
+[SLOT] n=511 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,355,00,00,613,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,356,00,00,614,P1,31
+[SLOT] n=512 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,356,00,00,614,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,357,00,00,615,P1,31
+[SLOT] n=513 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,357,00,00,615,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,358,00,00,616,P1,3D
+[SLOT] n=514 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,358,00,00,616,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,359,00,00,618,P1,32
+[SLOT] n=515 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,359,00,00,618,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,360,00,00,619,P1,39
+[SLOT] n=516 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,360,00,00,619,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,361,00,00,620,P1,32
+[SLOT] n=517 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,361,00,00,620,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,362,00,00,621,P1,30
+[SLOT] n=518 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,362,00,00,621,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,363,00,00,622,P1,32
+[SLOT] n=519 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,363,00,00,622,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,364,00,00,624,P1,33
+[SLOT] n=520 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,364,00,00,624,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,365,20,00,625,P1,31
+[SLOT] n=521 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,365,20,00,625,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,366,20,00,626,P1,31
+[SLOT] n=522 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,366,20,00,626,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,367,20,00,627,P1,31
+[SLOT] n=523 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,367,20,00,627,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,368,20,00,628,P1,31
+[SLOT] n=524 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,368,20,00,628,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,369,20,00,630,P1,39
+[SLOT] n=525 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,369,20,00,630,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,370,20,00,631,P1,30
+[SLOT] n=526 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,370,20,00,631,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,371,20,00,632,P1,32
+[SLOT] n=527 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,371,20,00,632,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,372,20,00,633,P1,30
+[SLOT] n=528 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,372,20,00,633,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,373,20,00,634,P1,36
+[SLOT] n=529 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,373,20,00,634,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,374,20,00,636,P1,33
+[SLOT] n=530 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,374,20,00,636,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,375,00,00,637,P1,31
+[SLOT] n=531 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,375,00,00,637,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,376,00,00,638,P1,3D
+[SLOT] n=532 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,376,00,00,638,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,377,00,00,639,P1,3D
+[SLOT] n=533 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,377,00,00,639,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,378,00,00,640,P1,3C
+[SLOT] n=534 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,378,00,00,640,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,379,00,00,642,P1,3F
+[SLOT] n=535 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,379,00,00,642,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,380,00,00,643,P1,38
+[SLOT] n=536 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,380,00,00,643,P1,38" (22)
+[AT] "SEND OK" (7)
+[AT] "+IPD,11:G,8,4,2,79" (18)
+[SLOT-OOW] +102ms
+[DR] arg=2
+[G] idx=4 arg=2
+[AT] "OK" (2)
+[TX] S,381,00,00,644,P1,3E
+A,8,G4,0,3A
+[SLOT] n=537 tx=33 ack=1 due=0 r=1
+[AT] "AT+CIPSEND=34" (13)
+[AT] " S,381,00,00,644,P1,3EA,8,G4,0,3A" (33)
+[AT] "SEND OK" (7)
+[TX] S,382,00,00,645,P1,3C
+[SLOT] n=538 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,382,00,00,645,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,383,00,00,646,P1,3E
+[SLOT] n=539 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,383,00,00,646,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,384,00,00,648,P1,37
+[SLOT] n=540 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,384,00,00,648,P1,37" (22)
+[AT] "SEND OK" (7)
+[AT] "+IPD,11:G,9,4,1,7B" (18)
+[SLOT-OOW] +146ms
+[DR] arg=1
+[G] idx=4 arg=1
+[AT] "OK" (2)
+[TX] S,385,22,00,649,P1,37
+A,9,G4,0,3B
+[SLOT] n=541 tx=33 ack=1 due=0 r=1
+[AT] "AT+CIPSEND=34" (13)
+[AT] " S,385,22,00,649,P1,37A,9,G4,0,3B" (33)
+[AT] "SEND OK" (7)
+[TX] S,386,22,00,650,P1,3C
+[SLOT] n=542 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,386,22,00,650,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,387,22,00,651,P1,3C
+[SLOT] n=543 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,387,22,00,651,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,388,22,00,652,P1,30
+[SLOT] n=544 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,388,22,00,652,P1,30" (22)
+[AT] "SEND OK" (7)
+[AT] "+IPD,12:G,10,2,1,45" (19)
+[SLOT-OOW] +107ms
+[G] idx=2 arg=1
+[AT] "OK" (2)
+[TX] S,389,3A,00,654,P1,45
+A,10,G2,0,05
+[SLOT] n=545 tx=34 ack=1 due=0 r=1
+[AT] "AT+CIPSEND=35" (13)
+[AT] " S,389,3A,00,654,P1,45A,10,G2,0,05" (34)
+[AT] "SEND OK" (7)
+[TX] S,390,3A,00,655,P1,4C
+[SLOT] n=546 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,390,3A,00,655,P1,4C" (22)
+[AT] "SEND OK" (7)
+[AT] "+IPD,12:G,11,2,0,45" (19)
+[SLOT-OOW] +105ms
+[G] idx=2 arg=0
+[AT] "OK" (2)
+[TX] S,391,22,00,656,P1,3C
+A,11,G2,0,04
+[SLOT] n=547 tx=34 ack=1 due=0 r=1
+[AT] "AT+CIPSEND=35" (13)
+[AT] " S,391,22,00,656,P1,3CA,11,G2,0,04" (34)
+[AT] "SEND OK" (7)
+[TX] S,392,22,00,657,P1,3E
+[SLOT] n=548 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,392,22,00,657,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,393,22,00,658,P1,30
+[SLOT] n=549 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,393,22,00,658,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,394,22,00,660,P1,3C
+[SLOT] n=550 tx=21 ack=0 due=0 r=1
+[CNT] up=660 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=550 oow=8 smiss=1 ssovf=0 cksumng=0 okstream=394 penddrop=0 pendfill=395 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=1 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,394,22,00,660,P1,3C" (22)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=22" (13)
+[TX] S,395,02,00,661,P1,3E
+[SLOT] n=551 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,395,02,00,661,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,396,02,00,662,P1,3E
+[SLOT] n=552 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,396,02,00,662,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,397,02,00,663,P1,3E
+[SLOT] n=553 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,397,02,00,663,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,398,02,00,664,P1,36
+[SLOT] n=554 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,398,02,00,664,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,399,02,00,666,P1,35
+[SLOT] n=555 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,399,02,00,666,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,400,02,00,667,P1,33
+[SLOT] n=556 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,400,02,00,667,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,401,02,00,668,P1,3D
+[SLOT] n=557 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,401,02,00,668,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,402,02,00,669,P1,3F
+[SLOT] n=558 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,402,02,00,669,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,403,02,00,670,P1,36
+[SLOT] n=559 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,403,02,00,670,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,404,02,00,672,P1,33
+[SLOT] n=560 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,404,02,00,672,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,405,22,00,673,P1,31
+[SLOT] n=561 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,405,22,00,673,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,406,22,00,674,P1,35
+[SLOT] n=562 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,406,22,00,674,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,407,22,00,675,P1,35
+[SLOT] n=563 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,407,22,00,675,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,408,22,00,676,P1,39
+[SLOT] n=564 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,408,22,00,676,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,409,22,00,678,P1,36
+[SLOT] n=565 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,409,22,00,678,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,410,22,00,679,P1,3F
+[SLOT] n=566 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,410,22,00,679,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,411,22,00,680,P1,38
+[SLOT] n=567 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,411,22,00,680,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,412,22,00,681,P1,3A
+[SLOT] n=568 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,412,22,00,681,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,413,22,00,682,P1,38
+[SLOT] n=569 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,413,22,00,682,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,414,22,00,684,P1,39
+[SLOT] n=570 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,414,22,00,684,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,415,02,00,685,P1,3B
+[SLOT] n=571 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,415,02,00,685,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,416,02,00,686,P1,3B
+[SLOT] n=572 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,416,02,00,686,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,417,02,00,687,P1,3B
+[SLOT] n=573 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,417,02,00,687,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,418,02,00,688,P1,3B
+[SLOT] n=574 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,418,02,00,688,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,419,02,00,690,P1,33
+[SLOT] n=575 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,419,02,00,690,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,420,02,00,691,P1,38
+[SLOT] n=576 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,420,02,00,691,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,421,02,00,692,P1,3A
+[SLOT] n=577 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,421,02,00,692,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,422,02,00,693,P1,38
+[SLOT] n=578 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,422,02,00,693,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,423,02,00,694,P1,3E
+[SLOT] n=579 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,423,02,00,694,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,424,02,00,696,P1,3B
+[SLOT] n=580 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,424,02,00,696,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,425,22,00,697,P1,39
+[SLOT] n=581 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,425,22,00,697,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,426,22,00,698,P1,35
+[SLOT] n=582 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,426,22,00,698,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,427,22,00,699,P1,35
+[SLOT] n=583 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,427,22,00,699,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,428,22,00,700,P1,3B
+[SLOT] n=584 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,428,22,00,700,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,429,22,00,702,P1,38
+[SLOT] n=585 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,429,22,00,702,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,430,22,00,703,P1,31
+[SLOT] n=586 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,430,22,00,703,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,431,22,00,704,P1,37
+[SLOT] n=587 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,431,22,00,704,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,432,22,00,705,P1,35
+[SLOT] n=588 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,432,22,00,705,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,433,22,00,706,P1,37
+[SLOT] n=589 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,433,22,00,706,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,434,22,00,708,P1,3E
+[SLOT] n=590 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,434,22,00,708,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,435,02,00,709,P1,3C
+[SLOT] n=591 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,435,02,00,709,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,436,02,00,710,P1,37
+[SLOT] n=592 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,436,02,00,710,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,437,02,00,711,P1,37
+[SLOT] n=593 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,437,02,00,711,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,438,02,00,712,P1,3B
+[SLOT] n=594 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,438,02,00,712,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,439,02,00,714,P1,3C
+[SLOT] n=595 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,439,02,00,714,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,440,02,00,715,P1,33
+[SLOT] n=596 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,440,02,00,715,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,441,02,00,716,P1,31
+[SLOT] n=597 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,441,02,00,716,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,442,02,00,717,P1,33
+[SLOT] n=598 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,442,02,00,717,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,443,02,00,718,P1,3D
+[SLOT] n=599 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,443,02,00,718,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,444,02,00,720,P1,31
+[SLOT] n=600 tx=21 ack=0 due=0 r=1
+[CNT] up=720 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=600 oow=8 smiss=1 ssovf=0 cksumng=0 okstream=444 penddrop=0 pendfill=445 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=1 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,444,02,00,720,P1,31" (22)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=22" (13)
+[TX] S,445,22,00,721,P1,33
+[SLOT] n=601 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,445,22,00,721,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,446,22,00,722,P1,33
+[SLOT] n=602 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,446,22,00,722,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,447,22,00,723,P1,33
+[SLOT] n=603 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,447,22,00,723,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,448,22,00,724,P1,3B
+[SLOT] n=604 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,448,22,00,724,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,449,22,00,726,P1,38
+[SLOT] n=605 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,449,22,00,726,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,450,22,00,727,P1,31
+[SLOT] n=606 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,450,22,00,727,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,451,22,00,728,P1,3F
+[SLOT] n=607 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,451,22,00,728,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,452,22,00,729,P1,3D
+[SLOT] n=608 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,452,22,00,729,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,453,22,00,730,P1,34
+[SLOT] n=609 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,453,22,00,730,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,454,22,00,732,P1,31
+[SLOT] n=610 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,454,22,00,732,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,455,02,00,733,P1,33
+[SLOT] n=611 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,455,02,00,733,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,456,02,00,734,P1,37
+[SLOT] n=612 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,456,02,00,734,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,457,02,00,735,P1,37
+[SLOT] n=613 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,457,02,00,735,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,458,02,00,736,P1,3B
+[SLOT] n=614 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,458,02,00,736,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,459,02,00,738,P1,34
+[SLOT] n=615 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,459,02,00,738,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,460,02,00,739,P1,3F
+[SLOT] n=616 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,460,02,00,739,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,461,02,00,740,P1,30
+[SLOT] n=617 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,461,02,00,740,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,462,02,00,741,P1,32
+[SLOT] n=618 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,462,02,00,741,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,463,02,00,742,P1,30
+[SLOT] n=619 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,463,02,00,742,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,464,02,00,744,P1,31
+[SLOT] n=620 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,464,02,00,744,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,465,22,00,745,P1,33
+[SLOT] n=621 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,465,22,00,745,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,466,22,00,746,P1,33
+[SLOT] n=622 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,466,22,00,746,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,467,22,00,747,P1,33
+[SLOT] n=623 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,467,22,00,747,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,468,22,00,748,P1,33
+[SLOT] n=624 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,468,22,00,748,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,469,22,00,750,P1,3B
+[SLOT] n=625 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,469,22,00,750,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,470,22,00,751,P1,32
+[SLOT] n=626 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,470,22,00,751,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,471,22,00,752,P1,30
+[SLOT] n=627 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,471,22,00,752,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,472,22,00,753,P1,32
+[SLOT] n=628 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,472,22,00,753,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,473,22,00,754,P1,34
+[SLOT] n=629 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,473,22,00,754,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,474,22,00,756,P1,31
+[SLOT] n=630 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,474,22,00,756,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,475,02,00,757,P1,33
+[SLOT] n=631 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,475,02,00,757,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,476,02,00,758,P1,3F
+[SLOT] n=632 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,476,02,00,758,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,477,02,00,759,P1,3F
+[SLOT] n=633 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,477,02,00,759,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,478,02,00,760,P1,3A
+[SLOT] n=634 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,478,02,00,760,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,479,02,00,762,P1,39
+[SLOT] n=635 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,479,02,00,762,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,480,02,00,763,P1,3E
+[SLOT] n=636 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,480,02,00,763,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,481,02,00,764,P1,38
+[SLOT] n=637 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,481,02,00,764,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,482,02,00,765,P1,3A
+[SLOT] n=638 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,482,02,00,765,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,483,02,00,766,P1,38
+[SLOT] n=639 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,483,02,00,766,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,484,02,00,768,P1,31
+[SLOT] n=640 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,484,02,00,768,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,485,22,00,769,P1,33
+[SLOT] n=641 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,485,22,00,769,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,486,22,00,770,P1,38
+[SLOT] n=642 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,486,22,00,770,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,487,22,00,771,P1,38
+[SLOT] n=643 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,487,22,00,771,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,488,22,00,772,P1,34
+[SLOT] n=644 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,488,22,00,772,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,489,22,00,774,P1,33
+[SLOT] n=645 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,489,22,00,774,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,490,22,00,775,P1,3A
+[SLOT] n=646 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,490,22,00,775,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,491,22,00,776,P1,38
+[SLOT] n=647 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,491,22,00,776,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,492,22,00,777,P1,3A
+[SLOT] n=648 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,492,22,00,777,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,493,22,00,778,P1,34
+[SLOT] n=649 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,493,22,00,778,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,494,22,00,780,P1,34
+[SLOT] n=650 tx=21 ack=0 due=0 r=1
+[CNT] up=780 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=650 oow=8 smiss=1 ssovf=0 cksumng=0 okstream=494 penddrop=0 pendfill=495 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=1 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,494,22,00,780,P1,34" (22)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=22" (13)
+[TX] S,495,02,00,781,P1,36
+[SLOT] n=651 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,495,02,00,781,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,496,02,00,782,P1,36
+[SLOT] n=652 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,496,02,00,782,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,497,02,00,783,P1,36
+[SLOT] n=653 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,497,02,00,783,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,498,02,00,784,P1,3E
+[SLOT] n=654 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,498,02,00,784,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,499,02,00,786,P1,3D
+[SLOT] n=655 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,499,02,00,786,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,500,02,00,787,P1,3D
+[SLOT] n=656 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,500,02,00,787,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,501,02,00,788,P1,33
+[SLOT] n=657 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,501,02,00,788,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,502,02,00,789,P1,31
+[SLOT] n=658 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,502,02,00,789,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,503,02,00,790,P1,38
+[SLOT] n=659 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,503,02,00,790,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,504,02,00,792,P1,3D
+[SLOT] n=660 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,504,02,00,792,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,505,22,00,793,P1,3F
+[SLOT] n=661 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,505,22,00,793,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,506,22,00,794,P1,3B
+[SLOT] n=662 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,506,22,00,794,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,507,22,00,795,P1,3B
+[SLOT] n=663 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,507,22,00,795,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,508,22,00,796,P1,37
+[SLOT] n=664 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,508,22,00,796,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,509,22,00,798,P1,38
+[SLOT] n=665 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,509,22,00,798,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,510,22,00,799,P1,31
+[SLOT] n=666 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,510,22,00,799,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,511,22,00,800,P1,3F
+[SLOT] n=667 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,511,22,00,800,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,512,22,00,801,P1,3D
+[SLOT] n=668 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,512,22,00,801,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,513,22,00,802,P1,3F
+[SLOT] n=669 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,513,22,00,802,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,514,22,00,804,P1,3E
+[SLOT] n=670 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,514,22,00,804,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,515,02,00,805,P1,3C
+[SLOT] n=671 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,515,02,00,805,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,516,02,00,806,P1,3C
+[SLOT] n=672 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,516,02,00,806,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,517,02,00,807,P1,3C
+[SLOT] n=673 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,517,02,00,807,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,518,02,00,808,P1,3C
+[SLOT] n=674 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,518,02,00,808,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,519,02,00,810,P1,34
+[SLOT] n=675 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,519,02,00,810,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,520,02,00,811,P1,3F
+[SLOT] n=676 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,520,02,00,811,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,521,02,00,812,P1,3D
+[SLOT] n=677 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,521,02,00,812,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,522,02,00,813,P1,3F
+[SLOT] n=678 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,522,02,00,813,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,523,02,00,814,P1,39
+[SLOT] n=679 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,523,02,00,814,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,524,02,00,816,P1,3C
+[SLOT] n=680 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,524,02,00,816,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,525,22,00,817,P1,3E
+[SLOT] n=681 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,525,22,00,817,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,526,22,00,818,P1,32
+[SLOT] n=682 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,526,22,00,818,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,527,22,00,819,P1,32
+[SLOT] n=683 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,527,22,00,819,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,528,22,00,820,P1,37
+[SLOT] n=684 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,528,22,00,820,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,529,22,00,822,P1,34
+[SLOT] n=685 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,529,22,00,822,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,530,22,00,823,P1,3D
+[SLOT] n=686 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,530,22,00,823,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,531,22,00,824,P1,3B
+[SLOT] n=687 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,531,22,00,824,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,532,22,00,825,P1,39
+[SLOT] n=688 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,532,22,00,825,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,533,22,00,826,P1,3B
+[SLOT] n=689 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,533,22,00,826,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,534,22,00,828,P1,32
+[SLOT] n=690 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,534,22,00,828,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,535,02,00,829,P1,30
+[SLOT] n=691 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,535,02,00,829,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,536,02,00,830,P1,3B
+[SLOT] n=692 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,536,02,00,830,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,537,02,00,831,P1,3B
+[SLOT] n=693 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,537,02,00,831,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,538,02,00,832,P1,37
+[SLOT] n=694 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,538,02,00,832,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,539,02,00,834,P1,30
+[SLOT] n=695 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,539,02,00,834,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,540,02,00,835,P1,3F
+[SLOT] n=696 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,540,02,00,835,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,541,02,00,836,P1,3D
+[SLOT] n=697 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,541,02,00,836,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,542,02,00,837,P1,3F
+[SLOT] n=698 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,542,02,00,837,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,543,02,00,838,P1,31
+[SLOT] n=699 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,543,02,00,838,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,544,02,00,840,P1,39
+[SLOT] n=700 tx=21 ack=0 due=0 r=1
+[CNT] up=840 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=700 oow=8 smiss=1 ssovf=0 cksumng=0 okstream=544 penddrop=0 pendfill=545 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=1 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,544,02,00,840,P1,39" (22)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=22" (13)
+[TX] S,545,22,00,841,P1,3B
+[SLOT] n=701 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,545,22,00,841,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,546,22,00,842,P1,3B
+[SLOT] n=702 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,546,22,00,842,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,547,22,00,843,P1,3B
+[SLOT] n=703 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,547,22,00,843,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,548,22,00,844,P1,33
+[SLOT] n=704 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,548,22,00,844,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,549,22,00,846,P1,30
+[SLOT] n=705 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,549,22,00,846,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,550,22,00,847,P1,39
+[SLOT] n=706 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,550,22,00,847,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,551,22,00,848,P1,37
+[SLOT] n=707 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,551,22,00,848,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,552,22,00,849,P1,35
+[SLOT] n=708 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,552,22,00,849,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,553,22,00,850,P1,3C
+[SLOT] n=709 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,553,22,00,850,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,554,22,00,852,P1,39
+[SLOT] n=710 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,554,22,00,852,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,555,02,00,853,P1,3B
+[SLOT] n=711 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,555,02,00,853,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,556,02,00,854,P1,3F
+[SLOT] n=712 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,556,02,00,854,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,557,02,00,855,P1,3F
+[SLOT] n=713 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,557,02,00,855,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,558,02,00,856,P1,33
+[SLOT] n=714 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,558,02,00,856,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,559,02,00,858,P1,3C
+[SLOT] n=715 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,559,02,00,858,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,560,02,00,859,P1,37
+[SLOT] n=716 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,560,02,00,859,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,561,02,00,860,P1,3C
+[SLOT] n=717 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,561,02,00,860,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,562,02,00,861,P1,3E
+[SLOT] n=718 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,562,02,00,861,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,563,02,00,862,P1,3C
+[SLOT] n=719 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,563,02,00,862,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,564,02,00,864,P1,3D
+[SLOT] n=720 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,564,02,00,864,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,565,22,00,865,P1,3F
+[SLOT] n=721 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,565,22,00,865,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,566,22,00,866,P1,3F
+[SLOT] n=722 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,566,22,00,866,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,567,22,00,867,P1,3F
+[SLOT] n=723 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,567,22,00,867,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,568,22,00,868,P1,3F
+[SLOT] n=724 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,568,22,00,868,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,569,22,00,870,P1,37
+[SLOT] n=725 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,569,22,00,870,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,570,22,00,871,P1,3E
+[SLOT] n=726 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,570,22,00,871,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,571,22,00,872,P1,3C
+[SLOT] n=727 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,571,22,00,872,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,572,22,00,873,P1,3E
+[SLOT] n=728 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,572,22,00,873,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,573,22,00,874,P1,38
+[SLOT] n=729 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,573,22,00,874,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,574,22,00,876,P1,3D
+[SLOT] n=730 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,574,22,00,876,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,575,02,00,877,P1,3F
+[SLOT] n=731 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,575,02,00,877,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,576,02,00,878,P1,33
+[SLOT] n=732 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,576,02,00,878,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,577,02,00,879,P1,33
+[SLOT] n=733 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,577,02,00,879,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,578,02,00,880,P1,3A
+[SLOT] n=734 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,578,02,00,880,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,579,02,00,882,P1,39
+[SLOT] n=735 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,579,02,00,882,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,580,02,00,883,P1,3E
+[SLOT] n=736 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,580,02,00,883,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,581,02,00,884,P1,38
+[SLOT] n=737 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,581,02,00,884,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,582,02,00,885,P1,3A
+[SLOT] n=738 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,582,02,00,885,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,583,02,00,886,P1,38
+[SLOT] n=739 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,583,02,00,886,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,584,02,00,888,P1,31
+[SLOT] n=740 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,584,02,00,888,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,585,22,00,889,P1,33
+[SLOT] n=741 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,585,22,00,889,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,586,22,00,890,P1,38
+[SLOT] n=742 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,586,22,00,890,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,587,22,00,891,P1,38
+[SLOT] n=743 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,587,22,00,891,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,588,22,00,892,P1,34
+[SLOT] n=744 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,588,22,00,892,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,589,22,00,894,P1,33
+[SLOT] n=745 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,589,22,00,894,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,590,22,00,895,P1,3A
+[SLOT] n=746 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,590,22,00,895,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,591,22,00,896,P1,38
+[SLOT] n=747 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,591,22,00,896,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,592,22,00,897,P1,3A
+[SLOT] n=748 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,592,22,00,897,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,593,22,00,898,P1,34
+[SLOT] n=749 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,593,22,00,898,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,594,22,00,900,P1,33
+[SLOT] n=750 tx=21 ack=0 due=0 r=1
+[CNT] up=900 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=750 oow=8 smiss=1 ssovf=0 cksumng=0 okstream=594 penddrop=0 pendfill=595 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=1 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,594,22,00,900,P1,33" (22)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=22" (13)
+[TX] S,595,02,00,901,P1,31
+[SLOT] n=751 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,595,02,00,901,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,596,02,00,902,P1,31
+[SLOT] n=752 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,596,02,00,902,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,597,02,00,903,P1,31
+[SLOT] n=753 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,597,02,00,903,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,598,02,00,904,P1,39
+[SLOT] n=754 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,598,02,00,904,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,599,02,00,906,P1,3A
+[SLOT] n=755 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,599,02,00,906,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,600,02,00,907,P1,38
+[SLOT] n=756 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,600,02,00,907,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,601,02,00,908,P1,36
+[SLOT] n=757 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,601,02,00,908,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,602,02,00,909,P1,34
+[SLOT] n=758 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,602,02,00,909,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,603,02,00,910,P1,3D
+[SLOT] n=759 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,603,02,00,910,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,604,02,00,912,P1,38
+[SLOT] n=760 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,604,02,00,912,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,605,22,00,913,P1,3A
+[SLOT] n=761 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,605,22,00,913,P1,3A" (22)
+[AT] "SEND OK" (7)
+[TX] S,606,22,00,914,P1,3E
+[SLOT] n=762 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,606,22,00,914,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,607,22,00,915,P1,3E
+[SLOT] n=763 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,607,22,00,915,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,608,22,00,916,P1,32
+[SLOT] n=764 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,608,22,00,916,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,609,22,00,918,P1,3D
+[SLOT] n=765 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,609,22,00,918,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,610,22,00,919,P1,34
+[SLOT] n=766 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,610,22,00,919,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,611,22,00,920,P1,3F
+[SLOT] n=767 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,611,22,00,920,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,612,22,00,921,P1,3D
+[SLOT] n=768 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,612,22,00,921,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,613,22,00,922,P1,3F
+[SLOT] n=769 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,613,22,00,922,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,614,22,00,924,P1,3E
+[SLOT] n=770 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,614,22,00,924,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,615,02,00,925,P1,3C
+[SLOT] n=771 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,615,02,00,925,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,616,02,00,926,P1,3C
+[SLOT] n=772 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,616,02,00,926,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,617,02,00,927,P1,3C
+[SLOT] n=773 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,617,02,00,927,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,618,02,00,928,P1,3C
+[SLOT] n=774 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,618,02,00,928,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,619,02,00,930,P1,34
+[SLOT] n=775 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,619,02,00,930,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,620,02,00,931,P1,3F
+[SLOT] n=776 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,620,02,00,931,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,621,02,00,932,P1,3D
+[SLOT] n=777 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,621,02,00,932,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,622,02,00,933,P1,3F
+[SLOT] n=778 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,622,02,00,933,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,623,02,00,934,P1,39
+[SLOT] n=779 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,623,02,00,934,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,624,02,00,936,P1,3C
+[SLOT] n=780 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,624,02,00,936,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,625,22,00,937,P1,3E
+[SLOT] n=781 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,625,22,00,937,P1,3E" (22)
+[AT] "SEND OK" (7)
+[TX] S,626,22,00,938,P1,32
+[SLOT] n=782 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,626,22,00,938,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,627,22,00,939,P1,32
+[SLOT] n=783 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,627,22,00,939,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,628,22,00,940,P1,33
+[SLOT] n=784 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,628,22,00,940,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,629,22,00,942,P1,30
+[SLOT] n=785 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,629,22,00,942,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,630,22,00,943,P1,39
+[SLOT] n=786 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,630,22,00,943,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,631,22,00,944,P1,3F
+[SLOT] n=787 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,631,22,00,944,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,632,22,00,945,P1,3D
+[SLOT] n=788 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,632,22,00,945,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,633,22,00,946,P1,3F
+[SLOT] n=789 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,633,22,00,946,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,634,22,00,948,P1,36
+[SLOT] n=790 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,634,22,00,948,P1,36" (22)
+[AT] "SEND OK" (7)
+[TX] S,635,02,00,949,P1,34
+[SLOT] n=791 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,635,02,00,949,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,636,02,00,950,P1,3F
+[SLOT] n=792 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,636,02,00,950,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,637,02,00,951,P1,3F
+[SLOT] n=793 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,637,02,00,951,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,638,02,00,952,P1,33
+[SLOT] n=794 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,638,02,00,952,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,639,02,00,954,P1,34
+[SLOT] n=795 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,639,02,00,954,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,640,02,00,955,P1,3B
+[SLOT] n=796 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,640,02,00,955,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,641,02,00,956,P1,39
+[SLOT] n=797 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,641,02,00,956,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,642,02,00,957,P1,3B
+[SLOT] n=798 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,642,02,00,957,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,643,02,00,958,P1,35
+[SLOT] n=799 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,643,02,00,958,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,644,02,00,960,P1,39
+[SLOT] n=800 tx=21 ack=0 due=0 r=1
+[CNT] up=960 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=800 oow=8 smiss=1 ssovf=0 cksumng=0 okstream=644 penddrop=0 pendfill=645 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=1 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,644,02,00,960,P1,39" (22)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=22" (13)
+[TX] S,645,22,00,961,P1,3B
+[SLOT] n=801 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,645,22,00,961,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,646,22,00,962,P1,3B
+[SLOT] n=802 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,646,22,00,962,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,647,22,00,963,P1,3B
+[SLOT] n=803 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,647,22,00,963,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,648,22,00,964,P1,33
+[SLOT] n=804 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,648,22,00,964,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,649,22,00,966,P1,30
+[SLOT] n=805 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,649,22,00,966,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,650,22,00,967,P1,39
+[SLOT] n=806 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,650,22,00,967,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,651,22,00,968,P1,37
+[SLOT] n=807 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,651,22,00,968,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,652,22,00,969,P1,35
+[SLOT] n=808 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,652,22,00,969,P1,35" (22)
+[AT] "SEND OK" (7)
+[TX] S,653,22,00,970,P1,3C
+[SLOT] n=809 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,653,22,00,970,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,654,22,00,972,P1,39
+[SLOT] n=810 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,654,22,00,972,P1,39" (22)
+[AT] "SEND OK" (7)
+[TX] S,655,02,00,973,P1,3B
+[SLOT] n=811 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,655,02,00,973,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,656,02,00,974,P1,3F
+[SLOT] n=812 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,656,02,00,974,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,657,02,00,975,P1,3F
+[SLOT] n=813 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,657,02,00,975,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,658,02,00,976,P1,33
+[SLOT] n=814 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,658,02,00,976,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,659,02,00,978,P1,3C
+[SLOT] n=815 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,659,02,00,978,P1,3C" (22)
+[AT] "SEND OK" (7)
+[TX] S,660,02,00,979,P1,37
+[SLOT] n=816 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,660,02,00,979,P1,37" (22)
+[AT] "SEND OK" (7)
+[TX] S,661,02,00,980,P1,30
+[SLOT] n=817 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,661,02,00,980,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,662,02,00,981,P1,32
+[SLOT] n=818 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,662,02,00,981,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,663,02,00,982,P1,30
+[SLOT] n=819 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,663,02,00,982,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,664,02,00,984,P1,31
+[SLOT] n=820 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,664,02,00,984,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,665,22,00,985,P1,33
+[SLOT] n=821 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,665,22,00,985,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,666,22,00,986,P1,33
+[SLOT] n=822 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,666,22,00,986,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,667,22,00,987,P1,33
+[SLOT] n=823 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,667,22,00,987,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,668,22,00,988,P1,33
+[SLOT] n=824 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,668,22,00,988,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,669,22,00,990,P1,3B
+[SLOT] n=825 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,669,22,00,990,P1,3B" (22)
+[AT] "SEND OK" (7)
+[TX] S,670,22,00,991,P1,32
+[SLOT] n=826 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,670,22,00,991,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,671,22,00,992,P1,30
+[SLOT] n=827 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,671,22,00,992,P1,30" (22)
+[AT] "SEND OK" (7)
+[TX] S,672,22,00,993,P1,32
+[SLOT] n=828 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,672,22,00,993,P1,32" (22)
+[AT] "SEND OK" (7)
+[TX] S,673,22,00,994,P1,34
+[SLOT] n=829 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,673,22,00,994,P1,34" (22)
+[AT] "SEND OK" (7)
+[TX] S,674,22,00,996,P1,31
+[SLOT] n=830 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,674,22,00,996,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,675,02,00,997,P1,33
+[SLOT] n=831 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,675,02,00,997,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,676,02,00,998,P1,3F
+[SLOT] n=832 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,676,02,00,998,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,677,02,00,999,P1,3F
+[SLOT] n=833 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,677,02,00,999,P1,3F" (22)
+[AT] "SEND OK" (7)
+[TX] S,678,02,00,1000,P1,08
+[SLOT] n=834 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,678,02,00,1000,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,679,02,00,1002,P1,0B
+[SLOT] n=835 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,679,02,00,1002,P1,0B" (23)
+[AT] "SEND OK" (7)
+[TX] S,680,02,00,1003,P1,0C
+[SLOT] n=836 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,680,02,00,1003,P1,0C" (23)
+[AT] "SEND OK" (7)
+[TX] S,681,02,00,1004,P1,0A
+[SLOT] n=837 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,681,02,00,1004,P1,0A" (23)
+[AT] "SEND OK" (7)
+[TX] S,682,02,00,1005,P1,08
+[SLOT] n=838 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,682,02,00,1005,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,683,02,00,1006,P1,0A
+[SLOT] n=839 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,683,02,00,1006,P1,0A" (23)
+[AT] "SEND OK" (7)
+[TX] S,684,02,00,1008,P1,03
+[SLOT] n=840 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,684,02,00,1008,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,685,22,00,1009,P1,01
+[SLOT] n=841 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,685,22,00,1009,P1,01" (23)
+[AT] "SEND OK" (7)
+[TX] S,686,22,00,1010,P1,0A
+[SLOT] n=842 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,686,22,00,1010,P1,0A" (23)
+[AT] "SEND OK" (7)
+[TX] S,687,22,00,1011,P1,0A
+[SLOT] n=843 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,687,22,00,1011,P1,0A" (23)
+[AT] "SEND OK" (7)
+[TX] S,688,22,00,1012,P1,06
+[SLOT] n=844 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,688,22,00,1012,P1,06" (23)
+[AT] "SEND OK" (7)
+[TX] S,689,22,00,1014,P1,01
+[SLOT] n=845 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,689,22,00,1014,P1,01" (23)
+[AT] "SEND OK" (7)
+[TX] S,690,22,00,1015,P1,08
+[SLOT] n=846 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,690,22,00,1015,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,691,22,00,1016,P1,0A
+[SLOT] n=847 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,691,22,00,1016,P1,0A" (23)
+[AT] "SEND OK" (7)
+[TX] S,692,22,00,1017,P1,08
+[SLOT] n=848 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,692,22,00,1017,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,693,22,00,1018,P1,06
+[SLOT] n=849 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,693,22,00,1018,P1,06" (23)
+[AT] "SEND OK" (7)
+[TX] S,694,22,00,1020,P1,0A
+[SLOT] n=850 tx=22 ack=0 due=0 r=1
+[CNT] up=1020 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=850 oow=8 smiss=1 ssovf=0 cksumng=0 okstream=694 penddrop=0 pendfill=695 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=1 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,694,22,00,1020,P1,0A" (23)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=23" (13)
+[TX] S,695,02,00,1021,P1,08
+[SLOT] n=851 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,695,02,00,1021,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,696,02,00,1022,P1,08
+[SLOT] n=852 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,696,02,00,1022,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,697,02,00,1023,P1,08
+[SLOT] n=853 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,697,02,00,1023,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,698,02,00,1024,P1,00
+[SLOT] n=854 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,698,02,00,1024,P1,00" (23)
+[AT] "SEND OK" (7)
+[TX] S,699,02,00,1026,P1,03
+[SLOT] n=855 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,699,02,00,1026,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,700,02,00,1027,P1,03
+[SLOT] n=856 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,700,02,00,1027,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,701,02,00,1028,P1,0D
+[SLOT] n=857 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,701,02,00,1028,P1,0D" (23)
+[AT] "SEND OK" (7)
+[TX] S,702,02,00,1029,P1,0F
+[SLOT] n=858 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,702,02,00,1029,P1,0F" (23)
+[AT] "SEND OK" (7)
+[TX] S,703,02,00,1030,P1,06
+[SLOT] n=859 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,703,02,00,1030,P1,06" (23)
+[AT] "SEND OK" (7)
+[TX] S,704,02,00,1032,P1,03
+[SLOT] n=860 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,704,02,00,1032,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,705,22,00,1033,P1,01
+[SLOT] n=861 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,705,22,00,1033,P1,01" (23)
+[AT] "SEND OK" (7)
+[TX] S,706,22,00,1034,P1,05
+[SLOT] n=862 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,706,22,00,1034,P1,05" (23)
+[AT] "SEND OK" (7)
+[TX] S,707,22,00,1035,P1,05
+[SLOT] n=863 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,707,22,00,1035,P1,05" (23)
+[AT] "SEND OK" (7)
+[TX] S,708,22,00,1036,P1,09
+[SLOT] n=864 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,708,22,00,1036,P1,09" (23)
+[AT] "SEND OK" (7)
+[TX] S,709,22,00,1038,P1,06
+[SLOT] n=865 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,709,22,00,1038,P1,06" (23)
+[AT] "SEND OK" (7)
+[TX] S,710,22,00,1039,P1,0F
+[SLOT] n=866 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,710,22,00,1039,P1,0F" (23)
+[AT] "SEND OK" (7)
+[TX] S,711,22,00,1040,P1,00
+[SLOT] n=867 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,711,22,00,1040,P1,00" (23)
+[AT] "SEND OK" (7)
+[TX] S,712,22,00,1041,P1,02
+[SLOT] n=868 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,712,22,00,1041,P1,02" (23)
+[AT] "SEND OK" (7)
+[TX] S,713,22,00,1042,P1,00
+[SLOT] n=869 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,713,22,00,1042,P1,00" (23)
+[AT] "SEND OK" (7)
+[TX] S,714,22,00,1044,P1,01
+[SLOT] n=870 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,714,22,00,1044,P1,01" (23)
+[AT] "SEND OK" (7)
+[TX] S,715,02,00,1045,P1,03
+[SLOT] n=871 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,715,02,00,1045,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,716,02,00,1046,P1,03
+[SLOT] n=872 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,716,02,00,1046,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,717,02,00,1047,P1,03
+[SLOT] n=873 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,717,02,00,1047,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,718,02,00,1048,P1,03
+[SLOT] n=874 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,718,02,00,1048,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,719,02,00,1050,P1,0B
+[SLOT] n=875 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,719,02,00,1050,P1,0B" (23)
+[AT] "SEND OK" (7)
+[TX] S,720,02,00,1051,P1,00
+[SLOT] n=876 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,720,02,00,1051,P1,00" (23)
+[AT] "SEND OK" (7)
+[TX] S,721,02,00,1052,P1,02
+[SLOT] n=877 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,721,02,00,1052,P1,02" (23)
+[AT] "SEND OK" (7)
+[TX] S,722,02,00,1053,P1,00
+[SLOT] n=878 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,722,02,00,1053,P1,00" (23)
+[AT] "SEND OK" (7)
+[TX] S,723,02,00,1054,P1,06
+[SLOT] n=879 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,723,02,00,1054,P1,06" (23)
+[AT] "SEND OK" (7)
+[TX] S,724,02,00,1056,P1,03
+[SLOT] n=880 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,724,02,00,1056,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,725,22,00,1057,P1,01
+[SLOT] n=881 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,725,22,00,1057,P1,01" (23)
+[AT] "SEND OK" (7)
+[TX] S,726,22,00,1058,P1,0D
+[SLOT] n=882 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,726,22,00,1058,P1,0D" (23)
+[AT] "SEND OK" (7)
+[TX] S,727,22,00,1059,P1,0D
+[SLOT] n=883 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,727,22,00,1059,P1,0D" (23)
+[AT] "SEND OK" (7)
+[TX] S,728,22,00,1060,P1,08
+[SLOT] n=884 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,728,22,00,1060,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,729,22,00,1062,P1,0B
+[SLOT] n=885 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,729,22,00,1062,P1,0B" (23)
+[AT] "SEND OK" (7)
+[TX] S,730,22,00,1063,P1,02
+[SLOT] n=886 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,730,22,00,1063,P1,02" (23)
+[AT] "SEND OK" (7)
+[TX] S,731,22,00,1064,P1,04
+[SLOT] n=887 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,731,22,00,1064,P1,04" (23)
+[AT] "SEND OK" (7)
+[TX] S,732,22,00,1065,P1,06
+[SLOT] n=888 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,732,22,00,1065,P1,06" (23)
+[AT] "SEND OK" (7)
+[TX] S,733,22,00,1066,P1,04
+[SLOT] n=889 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,733,22,00,1066,P1,04" (23)
+[AT] "SEND OK" (7)
+[TX] S,734,22,00,1068,P1,0D
+[SLOT] n=890 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,734,22,00,1068,P1,0D" (23)
+[AT] "SEND OK" (7)
+[TX] S,735,02,00,1069,P1,0F
+[SLOT] n=891 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,735,02,00,1069,P1,0F" (23)
+[AT] "SEND OK" (7)
+[TX] S,736,02,00,1070,P1,04
+[SLOT] n=892 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,736,02,00,1070,P1,04" (23)
+[AT] "SEND OK" (7)
+[TX] S,737,02,00,1071,P1,04
+[SLOT] n=893 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,737,02,00,1071,P1,04" (23)
+[AT] "SEND OK" (7)
+[TX] S,738,02,00,1072,P1,08
+[SLOT] n=894 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,738,02,00,1072,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,739,02,00,1074,P1,0F
+[SLOT] n=895 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,739,02,00,1074,P1,0F" (23)
+[AT] "SEND OK" (7)
+[TX] S,740,02,00,1075,P1,00
+[SLOT] n=896 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,740,02,00,1075,P1,00" (23)
+[AT] "SEND OK" (7)
+[TX] S,741,02,00,1076,P1,02
+[SLOT] n=897 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,741,02,00,1076,P1,02" (23)
+[AT] "SEND OK" (7)
+[TX] S,742,02,00,1077,P1,00
+[SLOT] n=898 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,742,02,00,1077,P1,00" (23)
+[AT] "SEND OK" (7)
+[TX] S,743,02,00,1078,P1,0E
+[SLOT] n=899 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,743,02,00,1078,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,744,02,00,1080,P1,0E
+[SLOT] n=900 tx=22 ack=0 due=0 r=1
+[CNT] up=1080 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=900 oow=8 smiss=1 ssovf=0 cksumng=0 okstream=744 penddrop=0 pendfill=745 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=1 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,744,02,00,1080,P1,0E" (23)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=23" (13)
+[TX] S,745,22,00,1081,P1,0C
+[SLOT] n=901 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,745,22,00,1081,P1,0C" (23)
+[AT] "SEND OK" (7)
+[TX] S,746,22,00,1082,P1,0C
+[SLOT] n=902 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,746,22,00,1082,P1,0C" (23)
+[AT] "SEND OK" (7)
+[TX] S,747,22,00,1083,P1,0C
+[SLOT] n=903 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,747,22,00,1083,P1,0C" (23)
+[AT] "SEND OK" (7)
+[TX] S,748,22,00,1084,P1,04
+[SLOT] n=904 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,748,22,00,1084,P1,04" (23)
+[AT] "SEND OK" (7)
+[TX] S,749,22,00,1086,P1,07
+[SLOT] n=905 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,749,22,00,1086,P1,07" (23)
+[AT] "SEND OK" (7)
+[TX] S,750,22,00,1087,P1,0E
+[SLOT] n=906 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,750,22,00,1087,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,751,22,00,1088,P1,00
+[SLOT] n=907 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,751,22,00,1088,P1,00" (23)
+[AT] "SEND OK" (7)
+[TX] S,752,22,00,1089,P1,02
+[SLOT] n=908 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,752,22,00,1089,P1,02" (23)
+[AT] "SEND OK" (7)
+[TX] S,753,22,00,1090,P1,0B
+[SLOT] n=909 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,753,22,00,1090,P1,0B" (23)
+[AT] "SEND OK" (7)
+[TX] S,754,22,00,1092,P1,0E
+[SLOT] n=910 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,754,22,00,1092,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,755,02,00,1093,P1,0C
+[SLOT] n=911 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,755,02,00,1093,P1,0C" (23)
+[AT] "SEND OK" (7)
+[TX] S,756,02,00,1094,P1,08
+[SLOT] n=912 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,756,02,00,1094,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,757,02,00,1095,P1,08
+[SLOT] n=913 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,757,02,00,1095,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,758,02,00,1096,P1,04
+[SLOT] n=914 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,758,02,00,1096,P1,04" (23)
+[AT] "SEND OK" (7)
+[TX] S,759,02,00,1098,P1,0B
+[SLOT] n=915 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,759,02,00,1098,P1,0B" (23)
+[AT] "SEND OK" (7)
+[TX] S,760,02,00,1099,P1,00
+[SLOT] n=916 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,760,02,00,1099,P1,00" (23)
+[AT] "SEND OK" (7)
+[TX] S,761,02,00,1100,P1,00
+[SLOT] n=917 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,761,02,00,1100,P1,00" (23)
+[AT] "SEND OK" (7)
+[TX] S,762,02,00,1101,P1,02
+[SLOT] n=918 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,762,02,00,1101,P1,02" (23)
+[AT] "SEND OK" (7)
+[TX] S,763,02,00,1102,P1,00
+[SLOT] n=919 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,763,02,00,1102,P1,00" (23)
+[AT] "SEND OK" (7)
+[TX] S,764,02,00,1104,P1,01
+[SLOT] n=920 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,764,02,00,1104,P1,01" (23)
+[AT] "SEND OK" (7)
+[TX] S,765,22,00,1105,P1,03
+[SLOT] n=921 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,765,22,00,1105,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,766,22,00,1106,P1,03
+[SLOT] n=922 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,766,22,00,1106,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,767,22,00,1107,P1,03
+[SLOT] n=923 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,767,22,00,1107,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,768,22,00,1108,P1,03
+[SLOT] n=924 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,768,22,00,1108,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,769,22,00,1110,P1,0B
+[SLOT] n=925 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,769,22,00,1110,P1,0B" (23)
+[AT] "SEND OK" (7)
+[TX] S,770,22,00,1111,P1,02
+[SLOT] n=926 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,770,22,00,1111,P1,02" (23)
+[AT] "SEND OK" (7)
+[TX] S,771,22,00,1112,P1,00
+[SLOT] n=927 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,771,22,00,1112,P1,00" (23)
+[AT] "SEND OK" (7)
+[TX] S,772,22,00,1113,P1,02
+[SLOT] n=928 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,772,22,00,1113,P1,02" (23)
+[AT] "SEND OK" (7)
+[TX] S,773,22,00,1114,P1,04
+[SLOT] n=929 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,773,22,00,1114,P1,04" (23)
+[AT] "SEND OK" (7)
+[TX] S,774,22,00,1116,P1,01
+[SLOT] n=930 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,774,22,00,1116,P1,01" (23)
+[AT] "SEND OK" (7)
+[TX] S,775,02,00,1117,P1,03
+[SLOT] n=931 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,775,02,00,1117,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,776,02,00,1118,P1,0F
+[SLOT] n=932 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,776,02,00,1118,P1,0F" (23)
+[AT] "SEND OK" (7)
+[TX] S,777,02,00,1119,P1,0F
+[SLOT] n=933 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,777,02,00,1119,P1,0F" (23)
+[AT] "SEND OK" (7)
+[TX] S,778,02,00,1120,P1,0A
+[SLOT] n=934 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,778,02,00,1120,P1,0A" (23)
+[AT] "SEND OK" (7)
+[TX] S,779,02,00,1122,P1,09
+[SLOT] n=935 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,779,02,00,1122,P1,09" (23)
+[AT] "SEND OK" (7)
+[TX] S,780,02,00,1123,P1,0E
+[SLOT] n=936 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,780,02,00,1123,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,781,02,00,1124,P1,08
+[SLOT] n=937 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,781,02,00,1124,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,782,02,00,1125,P1,0A
+[SLOT] n=938 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,782,02,00,1125,P1,0A" (23)
+[AT] "SEND OK" (7)
+[TX] S,783,02,00,1126,P1,08
+[SLOT] n=939 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,783,02,00,1126,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,784,02,00,1128,P1,01
+[SLOT] n=940 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,784,02,00,1128,P1,01" (23)
+[AT] "SEND OK" (7)
+[TX] S,785,22,00,1129,P1,03
+[SLOT] n=941 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,785,22,00,1129,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,786,22,00,1130,P1,08
+[SLOT] n=942 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,786,22,00,1130,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,787,22,00,1131,P1,08
+[SLOT] n=943 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,787,22,00,1131,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,788,22,00,1132,P1,04
+[SLOT] n=944 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,788,22,00,1132,P1,04" (23)
+[AT] "SEND OK" (7)
+[TX] S,789,22,00,1134,P1,03
+[SLOT] n=945 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,789,22,00,1134,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,790,22,00,1135,P1,0A
+[SLOT] n=946 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,790,22,00,1135,P1,0A" (23)
+[AT] "SEND OK" (7)
+[TX] S,791,22,00,1136,P1,08
+[SLOT] n=947 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,791,22,00,1136,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,792,22,00,1137,P1,0A
+[SLOT] n=948 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,792,22,00,1137,P1,0A" (23)
+[AT] "SEND OK" (7)
+[TX] S,793,22,00,1138,P1,04
+[SLOT] n=949 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,793,22,00,1138,P1,04" (23)
+[AT] "SEND OK" (7)
+[TX] S,794,22,00,1140,P1,0C
+[SLOT] n=950 tx=22 ack=0 due=0 r=1
+[CNT] up=1140 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=950 oow=8 smiss=1 ssovf=0 cksumng=0 okstream=794 penddrop=0 pendfill=795 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=1 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,794,22,00,1140,P1,0C" (23)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=23" (13)
+[TX] S,795,02,00,1141,P1,0E
+[SLOT] n=951 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,795,02,00,1141,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,796,02,00,1142,P1,0E
+[SLOT] n=952 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,796,02,00,1142,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,797,02,00,1143,P1,0E
+[SLOT] n=953 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,797,02,00,1143,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,798,02,00,1144,P1,06
+[SLOT] n=954 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,798,02,00,1144,P1,06" (23)
+[AT] "SEND OK" (7)
+[TX] S,799,02,00,1146,P1,05
+[SLOT] n=955 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,799,02,00,1146,P1,05" (23)
+[AT] "SEND OK" (7)
+[TX] S,800,02,00,1147,P1,0B
+[SLOT] n=956 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,800,02,00,1147,P1,0B" (23)
+[AT] "SEND OK" (7)
+[TX] S,801,02,00,1148,P1,05
+[SLOT] n=957 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,801,02,00,1148,P1,05" (23)
+[AT] "SEND OK" (7)
+[TX] S,802,02,00,1149,P1,07
+[SLOT] n=958 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,802,02,00,1149,P1,07" (23)
+[AT] "SEND OK" (7)
+[TX] S,803,02,00,1150,P1,0E
+[SLOT] n=959 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=960 tx=22 ack=0 due=0 r=0
+[AT] " S,803,02,00,1150,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,804,22,00,1153,P1,08
+[SLOT] n=961 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,804,22,00,1153,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,805,22,00,1154,P1,0E
+[SLOT] n=962 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,805,22,00,1154,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,806,22,00,1155,P1,0C
+[SLOT] n=963 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,806,22,00,1155,P1,0C" (23)
+[AT] "SEND OK" (7)
+[TX] S,807,22,00,1156,P1,0E
+[SLOT] n=964 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,807,22,00,1156,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,808,22,00,1158,P1,0F
+[SLOT] n=965 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,808,22,00,1158,P1,0F" (23)
+[AT] "SEND OK" (7)
+[TX] S,809,22,00,1159,P1,0F
+[SLOT] n=966 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,809,22,00,1159,P1,0F" (23)
+[AT] "SEND OK" (7)
+[TX] S,810,22,00,1160,P1,0D
+[SLOT] n=967 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,810,22,00,1160,P1,0D" (23)
+[AT] "SEND OK" (7)
+[TX] S,811,22,00,1161,P1,0D
+[SLOT] n=968 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,811,22,00,1161,P1,0D" (23)
+[AT] "SEND OK" (7)
+[TX] S,812,22,00,1162,P1,0D
+[SLOT] n=969 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,812,22,00,1162,P1,0D" (23)
+[AT] "SEND OK" (7)
+[TX] S,813,22,00,1164,P1,0A
+[SLOT] n=970 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,813,22,00,1164,P1,0A" (23)
+[AT] "SEND OK" (7)
+[TX] S,814,02,00,1165,P1,0E
+[SLOT] n=971 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,814,02,00,1165,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,815,02,00,1166,P1,0C
+[SLOT] n=972 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,815,02,00,1166,P1,0C" (23)
+[AT] "SEND OK" (7)
+[TX] S,816,02,00,1167,P1,0E
+[SLOT] n=973 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,816,02,00,1167,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,817,02,00,1168,P1,00
+[SLOT] n=974 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,817,02,00,1168,P1,00" (23)
+[AT] "SEND OK" (7)
+[TX] S,818,02,00,1170,P1,06
+[SLOT] n=975 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,818,02,00,1170,P1,06" (23)
+[AT] "SEND OK" (7)
+[TX] S,819,02,00,1171,P1,06
+[SLOT] n=976 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,819,02,00,1171,P1,06" (23)
+[AT] "SEND OK" (7)
+[TX] S,820,02,00,1172,P1,0F
+[SLOT] n=977 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,820,02,00,1172,P1,0F" (23)
+[AT] "SEND OK" (7)
+[TX] S,821,02,00,1173,P1,0F
+[SLOT] n=978 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,821,02,00,1173,P1,0F" (23)
+[AT] "SEND OK" (7)
+[TX] S,822,02,00,1174,P1,0B
+[SLOT] n=979 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,822,02,00,1174,P1,0B" (23)
+[AT] "SEND OK" (7)
+[TX] S,823,02,00,1176,P1,08
+[SLOT] n=980 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,823,02,00,1176,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,824,22,00,1177,P1,0C
+[SLOT] n=981 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,824,22,00,1177,P1,0C" (23)
+[AT] "SEND OK" (7)
+[TX] S,825,22,00,1178,P1,02
+[SLOT] n=982 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,825,22,00,1178,P1,02" (23)
+[AT] "SEND OK" (7)
+[TX] S,826,22,00,1179,P1,00
+[SLOT] n=983 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,826,22,00,1179,P1,00" (23)
+[AT] "SEND OK" (7)
+[TX] S,827,22,00,1180,P1,07
+[SLOT] n=984 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,827,22,00,1180,P1,07" (23)
+[AT] "SEND OK" (7)
+[TX] S,828,22,00,1182,P1,0A
+[SLOT] n=985 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,828,22,00,1182,P1,0A" (23)
+[AT] "SEND OK" (7)
+[TX] S,829,22,00,1183,P1,0A
+[SLOT] n=986 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,829,22,00,1183,P1,0A" (23)
+[AT] "SEND OK" (7)
+[TX] S,830,22,00,1184,P1,05
+[SLOT] n=987 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,830,22,00,1184,P1,05" (23)
+[AT] "SEND OK" (7)
+[TX] S,831,22,00,1185,P1,05
+[SLOT] n=988 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,831,22,00,1185,P1,05" (23)
+[AT] "SEND OK" (7)
+[TX] S,832,22,00,1186,P1,05
+[SLOT] n=989 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,832,22,00,1186,P1,05" (23)
+[AT] "SEND OK" (7)
+[TX] S,833,22,00,1188,P1,0A
+[SLOT] n=990 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,833,22,00,1188,P1,0A" (23)
+[AT] "SEND OK" (7)
+[TX] S,834,02,00,1189,P1,0E
+[SLOT] n=991 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,834,02,00,1189,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,835,02,00,1190,P1,07
+[SLOT] n=992 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,835,02,00,1190,P1,07" (23)
+[AT] "SEND OK" (7)
+[TX] S,836,02,00,1191,P1,05
+[SLOT] n=993 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,836,02,00,1191,P1,05" (23)
+[AT] "SEND OK" (7)
+[TX] S,837,02,00,1192,P1,07
+[SLOT] n=994 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,837,02,00,1192,P1,07" (23)
+[AT] "SEND OK" (7)
+[TX] S,838,02,00,1194,P1,0E
+[SLOT] n=995 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,838,02,00,1194,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,839,02,00,1195,P1,0E
+[SLOT] n=996 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,839,02,00,1195,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,840,02,00,1196,P1,03
+[SLOT] n=997 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,840,02,00,1196,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,841,02,00,1197,P1,03
+[SLOT] n=998 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,841,02,00,1197,P1,03" (23)
+[AT] "SEND OK" (7)
+[TX] S,842,02,00,1198,P1,0F
+[SLOT] n=999 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,842,02,00,1198,P1,0F" (23)
+[AT] "SEND OK" (7)
+[TX] S,843,02,00,1200,P1,0C
+[SLOT] n=1000 tx=22 ack=0 due=0 r=1
+[CNT] up=1200 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=1000 oow=8 smiss=1 ssovf=0 cksumng=0 okstream=843 penddrop=0 pendfill=844 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=2 online=1
+[RAM] 최저 여유 555 B · 프롬프트 재동기 3회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,843,02,00,1200,P1,0C" (23)
+[AT] "SEND OK" (7)
+[TX] S,844,22,00,1201,P1,08
+[SLOT] n=1001 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,844,22,00,1201,P1,08" (23)
+[AT] "SEND OK" (7)
+[TX] S,845,22,00,1202,P1,0A
+[SLOT] n=1002 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,845,22,00,1202,P1,0A" (23)
+[AT] "SEND OK" (7)

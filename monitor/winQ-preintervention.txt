@@ -1,0 +1,39 @@
+# 창 Q 개입 전 스냅샷 — 사용자 ESP-01 결선 확인(12:14:01) 직전
+# 뜬 시각: 2026-08-19 12:14:47
+
+## 장치 [CNT] 마지막 3줄
+12:12:35  [CNT] up=480 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=400 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+12:13:35  [CNT] up=540 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=450 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+12:14:35  [CNT] up=600 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=500 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+
+## LADDER 실패 전수 (단별 원문)
+12:04:55  [LADDER] 실패(CWJAP FAIL) CWJAP소요 17s · 연속 0회 · 결합유지 8s · 현재 0단(0회 누적)
+12:05:11  [LADDER] 실패(CWJAP FAIL) CWJAP소요 15s · 연속 1회 · 결합유지 없음 · 현재 1단(0회 누적)
+12:05:16  [LADDER] 실패(CWJAP FAIL) CWJAP소요 20s · 연속 1회 · 결합유지 없음 · 현재 1단(1회 누적)
+12:05:54  [LADDER] 실패(CWJAP FAIL) CWJAP소요 31s · 연속 0회 · 결합유지 26s · 현재 2단(0회 누적)
+12:06:15  [LADDER] 실패(CWJAP FAIL) CWJAP소요 15s · 연속 1회 · 결합유지 없음 · 현재 2단(1회 누적)
+12:07:09  [LADDER] 실패(CWJAP FAIL) CWJAP소요 34s · 연속 0회 · 결합유지 25s · 현재 3단(0회 누적)
+12:07:59  [LADDER] 실패(CWJAP FAIL) CWJAP소요 31s · 연속 0회 · 결합유지 26s · 현재 3단(1회 누적)
+12:08:50  [LADDER] 실패(CWJAP FAIL) CWJAP소요 17s · 연속 0회 · 결합유지 12s · 현재 4단(0회 누적)
+12:10:06  [LADDER] 실패(CWJAP FAIL) CWJAP소요 42s · 연속 0회 · 결합유지 27s · 현재 4단(1회 누적)
+12:11:26  [LADDER] 실패(CWJAP FAIL) CWJAP소요 15s · 연속 1회 · 결합유지 없음 · 현재 5단(0회 누적)
+12:12:45  [LADDER] 실패(CWJAP FAIL) CWJAP소요 15s · 연속 2회 · 결합유지 없음 · 현재 5단(1회 누적)
+12:13:06  [LADDER] 실패(CWJAP FAIL) CWJAP소요 15s · 연속 3회 · 결합유지 없음 · 현재 5단(2회 누적)
+12:14:25  [LADDER] 실패(CWJAP FAIL) CWJAP소요 15s · 연속 4회 · 결합유지 없음 · 현재 5단(3회 누적)
+
+## online / IP 확보 전수
+12:04:47  [NET] ★ IP 확보: 192.168.0.214
+12:05:27  [NET] ★ IP 확보: 192.168.0.214
+12:05:28  [NET] online (CONNECT) + 캐시 비움
+12:06:43  [NET] ★ IP 확보: 192.168.0.214
+12:06:45  [NET] online (CONNECT) + 캐시 비움
+12:07:32  [NET] ★ IP 확보: 192.168.0.214
+12:07:34  [NET] online (CONNECT) + 캐시 비움
+12:08:37  [NET] ★ IP 확보: 192.168.0.214
+12:08:38  [NET] online (CONNECT) + 캐시 비움
+12:09:39  [NET] ★ IP 확보: 192.168.0.214
+12:09:39  [NET] online (CONNECT) + 캐시 비움
+
+## 서버 소크 요약 마지막 2줄
+2026-08-19 12:13:37  ⏱ 소크 00:13:01 · 세션 6회(현재 끊김) · 프레임 142 · 최대공백 25.0초@2026-08-19 12:08:18 · 재부팅감지 6(새연결 6 / uptime추론 0) · 재연결내역(재부팅 1/링크재접속 4/미상 1) · 오프라인 7회 · 링크없음 00:09:28 · 버린줄 0(체크섬 0/과길이 0/모름 0/잡음 0) · 승격전버림 0(버퍼비움 0) · 재전송 0 · ACK실패 0 · 배치 0(줄 0/미룬창 0/창포기 0/창놓침 0) · 큐넘침 0(건수축 0/장치없음 0/중복 0/링크버림 0) · 등록 완료 6(형식오류 0/질의 0/포기 0/폭불일치 0/미해독 6) · devid거절 0/유예교체 0 · S최대 25B/가정 60B · 대기 0줄(0B/768B) · 왕복 최대 0ms(마지막 0/n=0) · W_srv 550ms · 복구 6회(같은연결 1/재연결 5) 중앙 47.1초 최악 220.0초 · 🔴미복구 1회(진행 214.5초) · 회수 4(유휴 0/keepalive 4) · G 띄움 0·도달 0·응답 0·거절 0 · 순서변경 0 · 비자리예약 0 · 센서갈림 0자리 · 이름충돌 0 · 화면 3(최대 4) · 치유 0/58 · 예약미해독 6 · rid 발행 0(다음 372/1000 영속) 격리 0 건너뜀 0 강제 0 · ACK 미상rid 0 자리불일치 0
+2026-08-19 12:14:37  ⏱ 소크 00:14:01 · 세션 6회(현재 끊김) · 프레임 142 · 최대공백 25.0초@2026-08-19 12:08:18 · 재부팅감지 6(새연결 6 / uptime추론 0) · 재연결내역(재부팅 1/링크재접속 4/미상 1) · 오프라인 7회 · 링크없음 00:10:29 · 버린줄 0(체크섬 0/과길이 0/모름 0/잡음 0) · 승격전버림 0(버퍼비움 0) · 재전송 0 · ACK실패 0 · 배치 0(줄 0/미룬창 0/창포기 0/창놓침 0) · 큐넘침 0(건수축 0/장치없음 0/중복 0/링크버림 0) · 등록 완료 6(형식오류 0/질의 0/포기 0/폭불일치 0/미해독 6) · devid거절 0/유예교체 0 · S최대 25B/가정 60B · 대기 0줄(0B/768B) · 왕복 최대 0ms(마지막 0/n=0) · W_srv 550ms · 복구 6회(같은연결 1/재연결 5) 중앙 47.1초 최악 220.0초 · 🔴미복구 1회(진행 274.7초) · 회수 4(유휴 0/keepalive 4) · G 띄움 0·도달 0·응답 0·거절 0 · 순서변경 0 · 비자리예약 0 · 센서갈림 0자리 · 이름충돌 0 · 화면 3(최대 4) · 치유 0/58 · 예약미해독 6 · rid 발행 0(다음 372/1000 영속) 격리 0 건너뜀 0 강제 0 · ACK 미상rid 0 자리불일치 0

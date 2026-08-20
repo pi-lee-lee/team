@@ -39,27 +39,32 @@ for ln in open(LOG, encoding="utf-8", errors="replace"):
 norm = inv = noecho = 0
 inv_t2 = norm_t2 = noecho_t2 = 0
 inv_times, invsizes, normsizes = [], Counter(), Counter()
+# 🔴 2026-08-19 추가(덧붙이기만) — 기존 계수·출력은 한 글자도 안 바꿨다.
+#    창 O 판정에서 "`>=64B` 대역의 T2 수"를 못 내 미상으로 남긴 구멍을 메운다.
+t2_by_size, all_by_size = Counter(), Counter()
 noecho_times, noechosizes = [], Counter()
 i = 0
 while i < len(ev):
     k = ev[i][1]
     if k == "echo" and i + 1 < len(ev) and ev[i+1][1] == "cmd":
         inv += 1; inv_times.append(ev[i][0]); invsizes[ev[i+1][2]] += 1
+        _sz = ev[i+1][2]; all_by_size[_sz] += 1
         j = i + 2
         seen_t2 = False
         while j < len(ev) and ev[j][1] not in ("cmd", "echo"):
             if ev[j][1] == "t2": seen_t2 = True
             j += 1
-        if seen_t2: inv_t2 += 1
+        if seen_t2: inv_t2 += 1; t2_by_size[_sz] += 1
         i = j
     elif k == "cmd" and i + 1 < len(ev) and ev[i+1][1] == "echo":
         norm += 1; normsizes[ev[i][2]] += 1
+        _sz = ev[i][2]; all_by_size[_sz] += 1
         j = i + 2
         seen_t2 = False
         while j < len(ev) and ev[j][1] not in ("cmd", "echo"):
             if ev[j][1] == "t2": seen_t2 = True
             j += 1
-        if seen_t2: norm_t2 += 1
+        if seen_t2: norm_t2 += 1; t2_by_size[_sz] += 1
         i = j
     elif k == "cmd":
         # 🔴 `cmd` 뒤에 에코가 안 붙는다 = **에코 실종/지연**. 종전 판은 이것을 분모에서
@@ -71,7 +76,8 @@ while i < len(ev):
             if ev[j][1] == "echo": break
             j += 1
         noecho += 1; noecho_times.append(ev[i][0]); noechosizes[ev[i][2]] += 1
-        if seen_t2: noecho_t2 += 1
+        _sz = ev[i][2]; all_by_size[_sz] += 1
+        if seen_t2: noecho_t2 += 1; t2_by_size[_sz] += 1
         i = j if j > i else i + 1
     else:
         i += 1
@@ -93,6 +99,18 @@ print("  뒤집힌 거래 중 T2   : %d / %d" % (inv_t2, inv))
 print("  에코실종 거래 중 T2 : %d / %d   ← 🔴 이 갈래가 새로 보인다" % (noecho_t2, noecho))
 print("  에코실종 크기 분포  : %s" % dict(noechosizes.most_common(8)))
 print("  정상  거래 중 T2   : %d / %d" % (norm_t2, norm))
+print()
+print("## 🔴 대역별 T2 — **크기 대역으로 귀속한다** (2026-08-19 추가)")
+BANDS = [("<48", lambda n: n < 48), ("48~63", lambda n: 48 <= n < 64), (">=64", lambda n: n >= 64)]
+for name, f in BANDS:
+    tot_b = sum(v for k, v in all_by_size.items() if f(k))
+    t2_b  = sum(v for k, v in t2_by_size.items() if f(k))
+    if tot_b == 0:
+        print("  %-6s 거래 0 — 🔴 **표본 없음. 판정 불가**(건강 아님)" % name)
+    else:
+        print("  %-6s T2 **%d / %d** = %.2f%%" % (name, t2_b, tot_b, 100.0 * t2_b / tot_b))
+print("  ⚠ 분모는 **CIPSEND 거래**(정상순서+뒤집힘+에코실종 전부)다. 갈래별 표와 같은 모집단이다")
+print("  ⚠ 크기는 `AT+CIPSEND=<n>` 의 n 이다 — 상행 프레임 크기이지 하행이 아니다")
 print()
 print("## 읽는 법")
 print("· 뒤집힘이 T2 거래에만 몰리면 **기전 후보**다. 정상 거래에도 흔하면 원인이 아니다")

@@ -1,0 +1,10 @@
+=== 창 AC 마감 freeze (22:31:04) ===
+--- 창 전체 (21:57:28~) ---
+  🔴 깨진 나가는 AT **2 / 1659** = 0.12%   (①비출력 2 + ②출력가능 0)
+CIPSEND 1659 · SEND OK 1661 · +IPD 18
+esprst esprst=0 · busy p 0 · CIFSR0 0 · LADDER실패 0 · T2 0 · SLOT-OOW 18
+--- 🔴 22:00:07 이후 무자극 구간만 ---
+줄수     7826 · +IPD 0 · CIPSEND 1539 · SEND OK 1543
+busy p 0 · T2 0 · LADDER실패 0
+--- 최종 CNT ---
+22:30:36  [CNT] up=1980 drop=0 esprst=0 hwrst=0/0 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=1650 oow=18 smiss=2 ssovf=0 cksumng=0 okstream=1635 penddrop=0 pendfill=1638 bigfill=3 bigdrop=0 bigokst=3 oklost=0 bigoklost=0 skip=2 online=1

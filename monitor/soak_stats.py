@@ -40,7 +40,10 @@ TS_RE = re.compile(rb"^(\d{2}):(\d{2}):(\d{2})\s\s?")
 # ── 로그 계약 v0.1 대응 (REQ-0107 에서 socket-engineer 와 확정) ──────────
 # 새 형식은 **모든 줄에 날짜**가 붙고, 기동 시 기계 판독용 경계 줄을 찍는다.
 #   2026-08-16 15:47:19  +? 연결 수락 …
-#   === INSTANCE logfmt=2 pid=… start=<ISO8601> bin=… build=… ports=… offset=0 ===
+#   === INSTANCE logfmt=2 pid=… start=<ISO8601> bin=… build=… ports=… default=yes|no ===
+#   ⚠ 2026-08-20: `offset=` 이 **`default=`** 로 이름이 바뀌었다(포트 재배치 · build=ac63183).
+#     🔑 **이 파서는 안 깨진다** — 아래 `KV_RE` 가 키를 특정하지 않고 **모든 `k=v` 를 일반으로** 잡는다.
+#     그래서 새 키가 생기면 그냥 들어온다. **키 이름을 박아 뒀으면 조용히 못 찾았을 자리다**
 #   === INSTANCE-END … reason=… frames=… sessions=… ===
 #
 # ⚠ 설계 원칙: **날짜 없는 옛 로그의 집계 결과가 한 글자도 달라지면 안 된다.**

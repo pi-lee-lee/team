@@ -1,0 +1,21 @@
+=== 창 AD 전반부 freeze (socket 되돌리기 개입 전 · 22:43:59) ===
+실질 t0 22:40:56(탭개방 DTR) · 서버 배포 22:38:18 → 22:42:25 재배포(600d94c+fire)
+--- ㉠ 판정 자료 ---
+22:42:32  [AT] "+IPD,64:G,468,2,1,7E" (20)
+22:42:32  [G] idx=2 arg=1
+22:42:32  [LC] 1234567
+22:42:32  [G] idx=3 arg=1234567
+22:42:32  [DR] arg=1
+22:42:32  [G] idx=4 arg=1
+22:42:32  [L2] 7654321
+22:42:32  [G] idx=5 arg=7654321
+22:42:34  A,468,G2,0,3E
+22:42:34  A,469,G3,0,3E
+22:42:34  A,470,G4,0,31
+22:42:34  A,471,G5,0,315
+'G,' 담은 +IPD 1 · +IPD 전체 1 · [G] 4
+--- 계수 ---
+22:43:58  [CNT] up=180 drop=0 esprst=0 hwrst=0/0 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=150 oow=1 smiss=2 ssovf=0 cksumng=0 okstream=139 penddrop=0 pendfill=140 bigfill=3 bigdrop=0 bigokst=3 oklost=0 bigoklost=0 skip=1 online=1
+--- 배경 ---
+  🔴 깨진 나가는 AT **0 / 140** = 0.00%   (①비출력 0 + ②출력가능 0)
+busy p 0 · CIFSR0 0 · LADDER실패 0 · T2 0 · SLOT-OOW 1

@@ -1,0 +1,13 @@
+# 창 U 이후 · 굽기 직전 얼림 — 이 구간은 굽기로 사라진다
+# 뜬 시각: 2026-08-19 16:13:41
+
+## 마지막 [CNT] 원문 (arduino 요청 · 가공 없음)
+16:12:54  [CNT] up=4500 drop=4 esprst=4 hwrst=0/0 resync=6 sendfail=0 okto=8 stuck=2 ackq=0 ackdrop=0 ackstale=4 slot=3750 oow=343 smiss=3 ssovf=10 cksumng=10 okstream=3462 penddrop=7 pendfill=3466 bigfill=335 bigdrop=3 bigokst=335 oklost=0 bigoklost=0 skip=62 online=0
+
+## 구간 차분 — 주입 종료(15:46:40) 이후
+CIFSR 0.0.0.0 총 : 6
+LADDER 실패 총   : 11
+T2 총            : 2
+busy p 총        : 0   ← 0 이면 전부 자력 회복
+깨진 나가는 AT   : 0
+부팅 횟수        : 1  ← 1 이면 굽기 없었다

@@ -1,0 +1,18 @@
+=== 창 AE 마감 freeze (08-20 07:17:48) ===
+t0 06:52:24(탭개방) · 🔴 06:57:41 사용자 개입 경계(케이블 교체+리셋 추정)
+--- 06:57:41 이후 (유효 구간) ---
+부팅 1 · CWJAP송신 1 → OK 1 · busy_p 0
+CIPSEND 846 · SEND OK 848 · +IPD 8 · 등록 2
+CIFSR0 0 · LADDER실패 6 · T2 0
+  🔴 깨진 나가는 AT **0 / 846** = 0.00%   (①비출력 0 + ②출력가능 0)
+--- 최종 CNT ---
+07:17:44  [CNT] up=1200 drop=1 esprst=1 hwrst=0/0 resync=3 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=1000 oow=8 smiss=1 ssovf=0 cksumng=0 okstream=843 penddrop=0 pendfill=844 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=2 online=1
+--- 전체 창 ---
+줄수     4787 · 부팅 3
+  🔴 깨진 나가는 AT **1 / 846** = 0.12%   (①비출력 1 + ②출력가능 0)
+
+=== 이동 정지 (2026-08-20 07:2x) ===
+🔴 창 AF 는 **시작하지 않았다** — 굽기 중에 자리이동 예고가 왔다
+   사전 등록 `PREREG-2026-08-20-winAF.md` 는 작성됐고 **자료는 0바이트**다
+   ⚠ "측정했는데 결과 없음"이 아니라 **"측정을 시작하지 않았다"**
+내 탭 반납 : 07:17:48 (그 뒤 다시 안 열었다)

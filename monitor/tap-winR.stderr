@@ -1,0 +1,2 @@
+«tap» 포트 /dev/cu.usbmodem21201 를 잡았다 · pid 30515 · 표식 /Users/idong-u/learn/monitor/PORT-IN-USE.txt
+«tap» 5회 재시도 후 포기: SerialException: [Errno 2] could not open port /dev/cu.usbmodem21201: [Errno 2] No such file or directory: '/dev/cu.usbmodem21201'

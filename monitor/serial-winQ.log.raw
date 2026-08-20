@@ -1,0 +1,1764 @@
+
+[PARKING NODE] proto v1 / 10 slots / dev=P1
+[BOOT] 리셋 원인: 불명 (부트로더가 MCUSR 을 지우고 넘어왔다)
+[BOOT] 사다리 4단(ESP 하드리셋선) 미배선 — A2 를 ESP RST 에 물리고 ESP_RST_WIRED=1 · 6단(워치독) 끔
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "OK" (2)
+[AT] "bB\xD6\x86@\xF9Rc\xE2\xFER\x89:\x97`B\xCE\xFF\xCA\xC9\xA5\x9D\x1C\xFF\xC2I\x8D" (27)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "no change" (9)
+[DIAG] offline step=2 사다리=0/0 rx=112 lines=6 up=3s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 사다리=0/0 rx=147 lines=7 up=6s
+[DIAG] offline step=2 사다리=0/0 rx=147 lines=7 up=9s
+[DIAG] offline step=2 사다리=0/0 rx=147 lines=7 up=12s
+[AT] "OK" (2)
+[NET] CWJAP OK — 결합됐다. IP 를 실제로 받았는지 CIFSR 로 확인한다
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.0.214" (13)
+[NET] ★ IP 확보: 192.168.0.214
+[AT] "OK" (2)
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 적용됨 → CIPSTART
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.0.29",9991" (37)
+[DIAG] offline step=5 사다리=0/0 rx=245 lines=14 up=15s
+[AT] "ERROR" (5)
+[AT] "Unlink" (6)
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[NET] ★ ESP 가 IP 를 잃었다 — 모듈 리셋으로 본다. 누적 사건 1
+[AT] "OK" (2)
+[DIAG] offline step=3 사다리=0/0 rx=288 lines=19 up=18s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[AT] "OK" (2)
+[DIAG] offline step=3 사다리=0/0 rx=314 lines=22 up=21s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 17s · 연속 0회 · 결합유지 8s · 현재 0단(0회 누적)
+[LADDER] ↑↑ 단 상승 → 1단
+[LADDER] 1단 조치: 시리얼 드레인 26바이트 버림 + 줄 조립 초기화
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 사다리=1/0 rx=349 lines=23 up=24s
+[DIAG] offline step=2 사다리=1/0 rx=349 lines=23 up=27s
+[DIAG] offline step=2 사다리=1/0 rx=349 lines=23 up=30s
+[DIAG] offline step=2 사다리=1/0 rx=349 lines=23 up=33s
+[DIAG] offline step=2 사다리=1/0 rx=349 lines=23 up=36s
+[AT] "FAIL" (4)
+[NET] ★ CWJAP 실패 1회 (구형 펌웨어는 사유를 주지 않는다)
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 15s · 연속 1회 · 결합유지 없음 · 현재 1단(0회 누적)
+[LADDER] 1단 조치: 시리얼 드레인 0바이트 버림 + 줄 조립 초기화
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[AT] "OK" (2)
+[DIAG] offline step=3 사다리=1/1 rx=383 lines=27 up=39s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[AT] "OK" (2)
+[DIAG] offline step=3 사다리=1/1 rx=409 lines=30 up=42s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 20s · 연속 1회 · 결합유지 없음 · 현재 1단(1회 누적)
+[LADDER] ↑↑ 단 상승 → 2단
+[LADDER] 2단 조치: 5초 쉬고 AT+CWQAP 로 결합을 명시적으로 끊은 뒤 다시 붙는다
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[AT] "OK" (2)
+[DIAG] offline step=10 사다리=2/0 rx=435 lines=33 up=45s
+[DIAG] offline step=10 사다리=2/0 rx=435 lines=33 up=48s
+[NET] 10 CWQAP (결합 해제 — 사다리 2단)
+[AT] "AT+CWQAP" (8)
+[AT] "OK" (2)
+[LADDER] 2단: 결합 해제 완료 → 깨끗한 상태에서 CWJAP 재시도
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 사다리=2/0 rx=487 lines=36 up=51s
+[DIAG] offline step=2 사다리=2/0 rx=487 lines=36 up=54s
+[AT] "OK" (2)
+[NET] CWJAP OK — 결합됐다. IP 를 실제로 받았는지 CIFSR 로 확인한다
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.0.214" (13)
+[NET] ★ IP 확보: 192.168.0.214
+[AT] "OK" (2)
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 적용됨 → CIPSTART
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.0.29",9991" (37)
+[AT] "OK" (2)
+[AT] "Linked" (6)
+[NET] online (CONNECT) + 캐시 비움
+[TX] S,0,60B,000,55,P1,76
+[SLOT] n=46 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,0,60B,000,55,P1,76" (21)
+[AT] "SEND OK" (7)
+[TX] D,*,7,12,5A
+D,A1,IP,01
+D,A2,IP,02
+D,A3,IP,03
+D,A4,IP,04
+D,A5,IP,05
+D,B1,IP,02
+D,B2,IP,01
+D,B3,IP,00
+D,B4,IP,07
+D,B5,IP,06
+D,E1,OBV,47
+D,X1,OBV,5A
+[REG] 등록 전송 145B
+[SLOT] n=47 tx=145 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=146" (14)
+[DROP-OVF] 줄이 96바이트를 넘어 버렸다
+[AT] "SEND OK" (7)
+[TX] S,2,60B,000,57,P1,76
+[SLOT] n=48 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,2,60B,000,57,P1,76" (21)
+[AT] "SEND OK" (7)
+[TX] S,3,60A,000,58,P1,7B
+[SLOT] n=49 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,3,60A,000,58,P1,7B" (21)
+[AT] "SEND OK" (7)
+[TX] S,4,608,000,60,P1,0E
+[SLOT] n=50 tx=20 ack=0 due=0 r=1
+[CNT] up=60 drop=0 esprst=1 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=50 oow=0 smiss=1 ssovf=0 cksumng=0 okstream=4 penddrop=0 pendfill=5 bigfill=1 bigdrop=0 bigokst=1 oklost=0 bigoklost=0 skip=0 online=1
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,4,608,000,60,P1,0E" (21)
+[AT] "SEND OK" (7)
+[TX] S,5,608,000,61,P1,0E
+[SLOT] n=51 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,5,608,000,61,P1,0E" (21)
+[AT] "SEND OK" (7)
+[TX] S,6,608,000,62,P1,0E
+[SLOT] n=52 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,6,608,000,62,P1,0E" (21)
+[AT] "SEND OK" (7)
+[TX] S,7,608,000,63,P1,0E
+[SLOT] n=53 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,7,608,000,63,P1,0E" (21)
+[AT] "SEND OK" (7)
+[TX] S,8,608,000,64,P1,06
+[SLOT] n=54 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,8,608,000,64,P1,06" (21)
+[AT] "SEND OK" (7)
+[TX] S,9,608,000,66,P1,05
+[SLOT] n=55 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[AT] " S,9,608,000,66,P1,05" (21)
+[AT] "SEND OK" (7)
+[TX] S,10,609,000,67,P1,3D
+[SLOT] n=56 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,10,609,000,67,P1,3D" (22)
+[AT] "SEND OK" (7)
+[TX] S,11,609,000,68,P1,33
+[SLOT] n=57 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,11,609,000,68,P1,33" (22)
+[AT] "SEND OK" (7)
+[TX] S,12,609,000,69,P1,31
+[SLOT] n=58 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,12,609,000,69,P1,31" (22)
+[AT] "SEND OK" (7)
+[TX] S,13,609,000,70,P1,38
+[SLOT] n=59 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,13,609,000,70,P1,38" (22)
+[AT] "SEND OK" (7)
+[TX] S,14,60B,000,72,P1,46
+[SLOT] n=60 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,14,60B,000,72,P1,46" (22)
+[AT] "SEND OK" (7)
+[TX] S,15,60B,000,73,P1,46
+[SLOT] n=61 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,15,60B,000,73,P1,46" (22)
+[AT] "SEND OK" (7)
+[TX] S,16,60B,000,74,P1,42
+[SLOT] n=62 tx=21 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=22" (13)
+[AT] " S,16,60B,000,74,P1,42" (22)
+[AT] "SEND OK" (7)
+[AT] "ERROR" (5)
+[NET] 송신 오류 응답(로그만, 카운터는 sendLine 이 센다): ERROR
+[AT] "Unlink" (6)
+[DIAG] offline step=3 사다리=2/0 rx=1553 lines=97 up=75s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[NET] ★ ESP 가 IP 를 잃었다 — 모듈 리셋으로 본다. 누적 사건 2
+[AT] "OK" (2)
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[AT] "OK" (2)
+[DIAG] offline step=3 사다리=2/0 rx=1605 lines=103 up=78s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 31s · 연속 0회 · 결합유지 26s · 현재 2단(0회 누적)
+[LADDER] 2단 조치: 5초 쉬고 AT+CWQAP 로 결합을 명시적으로 끊은 뒤 다시 붙는다
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[AT] "OK" (2)
+[DIAG] offline step=10 사다리=2/1 rx=1631 lines=106 up=81s
+[DIAG] offline step=10 사다리=2/1 rx=1631 lines=106 up=84s
+[NET] 10 CWQAP (결합 해제 — 사다리 2단)
+[AT] "AT+CWQAP" (8)
+[AT] "OK" (2)
+[LADDER] 2단: 결합 해제 완료 → 깨끗한 상태에서 CWJAP 재시도
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 사다리=2/1 rx=1683 lines=109 up=87s
+[DIAG] offline step=2 사다리=2/1 rx=1683 lines=109 up=90s
+[DIAG] offline step=2 사다리=2/1 rx=1683 lines=109 up=93s
+[DIAG] offline step=2 사다리=2/1 rx=1683 lines=109 up=96s
+[DIAG] offline step=2 사다리=2/1 rx=1683 lines=109 up=99s
+[AT] "FAIL" (4)
+[NET] ★ CWJAP 실패 1회 (구형 펌웨어는 사유를 주지 않는다)
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 15s · 연속 1회 · 결합유지 없음 · 현재 2단(1회 누적)
+[LADDER] ↑↑ 단 상승 → 3단
+[LADDER] 3단 조치: 15초 쉬고 AT+RST (모듈 소프트 리셋)
+[DIAG] offline step=0 사다리=3/0 rx=1691 lines=110 up=102s
+[DIAG] offline step=0 사다리=3/0 rx=1691 lines=110 up=105s
+[DIAG] offline step=0 사다리=3/0 rx=1691 lines=110 up=108s
+[DIAG] offline step=0 사다리=3/0 rx=1691 lines=110 up=111s
+[DIAG] offline step=0 사다리=3/0 rx=1691 lines=110 up=114s
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "OK" (2)
+[DIAG] offline step=1 사다리=3/0 rx=1706 lines=112 up=117s
+[AT] "bB\xD6\x86@\xF9Pc\xE2\xFCR\x89:\x978B\xCE\xFF\xCA\xC9\xA5\x9D\x1C\xFF\xC2I\x8D" (27)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "no change" (9)
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[CNT] up=120 drop=0 esprst=2 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=100 oow=0 smiss=1 ssovf=0 cksumng=0 okstream=17 penddrop=0 pendfill=17 bigfill=1 bigdrop=0 bigokst=1 oklost=0 bigoklost=0 skip=0 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=3/0 rx=1838 lines=117 up=120s
+[DIAG] offline step=2 사다리=3/0 rx=1838 lines=117 up=123s
+[DIAG] offline step=2 사다리=3/0 rx=1838 lines=117 up=126s
+[AT] "OK" (2)
+[NET] CWJAP OK — 결합됐다. IP 를 실제로 받았는지 CIFSR 로 확인한다
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.0.214" (13)
+[NET] ★ IP 확보: 192.168.0.214
+[AT] "OK" (2)
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 적용됨 → CIPSTART
+[DIAG] offline step=5 사다리=3/0 rx=1896 lines=123 up=129s
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.0.29",9991" (37)
+[AT] "OK" (2)
+[AT] "Linked" (6)
+[NET] online (CONNECT) + 캐시 비움
+[TX] S,17,608,000,132,P1,0A
+[SLOT] n=110 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,17,608,000,132,P1,0A" (23)
+[AT] "SEND OK" (7)
+[TX] D,*,7,12,5A
+D,A1,IP,01
+D,A2,IP,02
+D,A3,IP,03
+D,A4,IP,04
+D,A5,IP,05
+D,B1,IP,02
+D,B2,IP,01
+D,B3,IP,00
+D,B4,IP,07
+D,B5,IP,06
+D,E1,OBV,47
+D,X1,OBV,5A
+[REG] 등록 전송 145B
+[SLOT] n=111 tx=145 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=146" (14)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=112 tx=22 ack=0 due=0 r=0
+[DROP-OVF] 줄이 96바이트를 넘어 버렸다
+[AT] "SEND OK" (7)
+[TX] S,19,609,000,135,P1,02
+[SLOT] n=113 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,19,609,000,135,P1,02" (23)
+[AT] "SEND OK" (7)
+[TX] S,20,609,000,136,P1,0B
+[SLOT] n=114 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,20,609,000,136,P1,0B" (23)
+[AT] "SEND OK" (7)
+[TX] S,21,609,000,138,P1,04
+[SLOT] n=115 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,21,609,000,138,P1,04" (23)
+[AT] "SEND OK" (7)
+[TX] S,22,609,000,139,P1,06
+[SLOT] n=116 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,22,609,000,139,P1,06" (23)
+[AT] "SEND OK" (7)
+[TX] S,23,609,000,140,P1,09
+[SLOT] n=117 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,23,609,000,140,P1,09" (23)
+[AT] "SEND OK" (7)
+[TX] S,24,609,000,141,P1,0F
+[SLOT] n=118 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,24,609,000,141,P1,0F" (23)
+[AT] "SEND OK" (7)
+[TX] S,25,608,000,142,P1,0C
+[SLOT] n=119 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,25,608,000,142,P1,0C" (23)
+[AT] "SEND OK" (7)
+[TX] S,26,60A,000,144,P1,70
+[SLOT] n=120 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,26,60A,000,144,P1,70" (23)
+[AT] "SEND OK" (7)
+[TX] S,27,60A,000,145,P1,70
+[SLOT] n=121 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,27,60A,000,145,P1,70" (23)
+[AT] "SEND OK" (7)
+[TX] S,28,60A,000,146,P1,7C
+[SLOT] n=122 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,28,60A,000,146,P1,7C" (23)
+[AT] "SEND OK" (7)
+[TX] S,29,60A,000,147,P1,7C
+[SLOT] n=123 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,29,60A,000,147,P1,7C" (23)
+[AT] "SEND OK" (7)
+[TX] S,30,60A,000,148,P1,7B
+[SLOT] n=124 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,30,60A,000,148,P1,7B" (23)
+[AT] "SEND OK" (7)
+[AT] "ERROR" (5)
+[NET] 송신 오류 응답(로그만, 카운터는 sendLine 이 센다): ERROR
+[AT] "Unlink" (6)
+[DIAG] offline step=3 사다리=3/0 rx=2779 lines=169 up=149s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[NET] ★ ESP 가 IP 를 잃었다 — 모듈 리셋으로 본다. 누적 사건 3
+[AT] "OK" (2)
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[AT] "OK" (2)
+[DIAG] offline step=3 사다리=3/0 rx=2831 lines=175 up=152s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 34s · 연속 0회 · 결합유지 25s · 현재 3단(0회 누적)
+[LADDER] 3단 조치: 15초 쉬고 AT+RST (모듈 소프트 리셋)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[AT] "OK" (2)
+[DIAG] offline step=0 사다리=3/1 rx=2857 lines=178 up=155s
+[DIAG] offline step=0 사다리=3/1 rx=2857 lines=178 up=158s
+[DIAG] offline step=0 사다리=3/1 rx=2857 lines=178 up=161s
+[DIAG] offline step=0 사다리=3/1 rx=2857 lines=178 up=164s
+[DIAG] offline step=0 사다리=3/1 rx=2857 lines=178 up=167s
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "OK" (2)
+[AT] "bB\xD6\x84@\xF9Rc\xE2\xFCR\x89\x84#\xD9\x10B\xFF\xC8\xC9\xA5\x9D\x1C\xFF\xC2I\x8D" (27)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[DIAG] offline step=1 사다리=3/1 rx=2944 lines=182 up=170s
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "no change" (9)
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 사다리=3/1 rx=3004 lines=185 up=173s
+[DIAG] offline step=2 사다리=3/1 rx=3004 lines=185 up=176s
+[AT] "OK" (2)
+[NET] CWJAP OK — 결합됐다. IP 를 실제로 받았는지 CIFSR 로 확인한다
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.0.214" (13)
+[NET] ★ IP 확보: 192.168.0.214
+[AT] "OK" (2)
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 적용됨 → CIPSTART
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.0.29",9991" (37)
+[DIAG] offline step=5 사다리=3/1 rx=3102 lines=192 up=179s
+[CNT] up=180 drop=0 esprst=3 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=150 oow=0 smiss=2 ssovf=0 cksumng=0 okstream=31 penddrop=0 pendfill=31 bigfill=2 bigdrop=0 bigokst=2 oklost=0 bigoklost=0 skip=1 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] "OK" (2)
+[AT] "Linked" (6)
+[NET] online (CONNECT) + 캐시 비움
+[TX] S,31,608,000,181,P1,06
+[SLOT] n=151 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,31,608,000,181,P1,06" (23)
+[AT] "SEND OK" (7)
+[TX] D,*,7,12,5A
+D,A1,IP,01
+D,A2,IP,02
+D,A3,IP,03
+D,A4,IP,04
+D,A5,IP,05
+D,B1,IP,02
+D,B2,IP,01
+D,B3,IP,00
+D,B4,IP,07
+D,B5,IP,06
+D,E1,OBV,47
+D,X1,OBV,5A
+[REG] 등록 전송 145B
+[SLOT] n=152 tx=145 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=146" (14)
+[DROP-OVF] 줄이 96바이트를 넘어 버렸다
+[AT] "SEND OK" (7)
+[TX] S,33,608,000,183,P1,06
+[SLOT] n=153 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=154 tx=22 ack=0 due=0 r=0
+[AT] " S,33,608,000,183,P1,06" (23)
+[AT] "SEND OK" (7)
+[TX] S,34,609,000,186,P1,05
+[SLOT] n=155 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,34,609,000,186,P1,05" (23)
+[AT] "SEND OK" (7)
+[TX] S,35,609,000,187,P1,05
+[SLOT] n=156 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,35,609,000,187,P1,05" (23)
+[AT] "SEND OK" (7)
+[TX] S,36,609,000,188,P1,09
+[SLOT] n=157 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,36,609,000,188,P1,09" (23)
+[AT] "SEND OK" (7)
+[TX] S,37,609,000,189,P1,09
+[SLOT] n=158 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,37,609,000,189,P1,09" (23)
+[AT] "SEND OK" (7)
+[TX] S,38,609,000,190,P1,0E
+[SLOT] n=159 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,38,609,000,190,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,39,60B,000,192,P1,76
+[SLOT] n=160 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,39,60B,000,192,P1,76" (23)
+[AT] "SEND OK" (7)
+[TX] S,40,60A,000,193,P1,7A
+[SLOT] n=161 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,40,60A,000,193,P1,7A" (23)
+[AT] "SEND OK" (7)
+[TX] S,41,60A,000,194,P1,7C
+[SLOT] n=162 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,41,60A,000,194,P1,7C" (23)
+[AT] "SEND OK" (7)
+[TX] S,42,60A,000,195,P1,7E
+[SLOT] n=163 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,42,60A,000,195,P1,7E" (23)
+[AT] "SEND OK" (7)
+[TX] S,43,60A,000,196,P1,7C
+[SLOT] n=164 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,43,60A,000,196,P1,7C" (23)
+[AT] "SEND OK" (7)
+[TX] S,44,60A,000,198,P1,75
+[SLOT] n=165 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,44,60A,000,198,P1,75" (23)
+[AT] "SEND OK" (7)
+[TX] S,45,60A,000,199,P1,75
+[SLOT] n=166 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,45,60A,000,199,P1,75" (23)
+[AT] "ERROR" (5)
+[NET] 송신 오류 응답(로그만, 카운터는 sendLine 이 센다): ERROR
+[AT] "Unlink" (6)
+[DIAG] offline step=3 사다리=3/1 rx=3984 lines=239 up=199s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[NET] ★ ESP 가 IP 를 잃었다 — 모듈 리셋으로 본다. 누적 사건 4
+[AT] "OK" (2)
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[AT] "OK" (2)
+[DIAG] offline step=3 사다리=3/1 rx=4036 lines=245 up=202s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 31s · 연속 0회 · 결합유지 26s · 현재 3단(1회 누적)
+[LADDER] ↑↑ 단 상승 → 4단
+[LADDER] ⚠4단 미실행: 하드웨어 리셋선이 배선되지 않았다(ESP_RST_WIRED=0)
+[LADDER]   → Uno A2 를 ESP 의 RST 에 물리고 ESP_RST_WIRED 를 1 로 바꿔 다시 구워라
+[LADDER]   지금은 30초 쉬고 AT+RST 만 되풀이한다
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[AT] "OK" (2)
+[DIAG] offline step=0 사다리=4/0 rx=4062 lines=248 up=205s
+[DIAG] offline step=0 사다리=4/0 rx=4062 lines=248 up=208s
+[DIAG] offline step=0 사다리=4/0 rx=4062 lines=248 up=211s
+[DIAG] offline step=0 사다리=4/0 rx=4062 lines=248 up=214s
+[DIAG] offline step=0 사다리=4/0 rx=4062 lines=248 up=217s
+[DIAG] offline step=0 사다리=4/0 rx=4062 lines=248 up=220s
+[DIAG] offline step=0 사다리=4/0 rx=4062 lines=248 up=223s
+[DIAG] offline step=0 사다리=4/0 rx=4062 lines=248 up=226s
+[DIAG] offline step=0 사다리=4/0 rx=4062 lines=248 up=229s
+[DIAG] offline step=0 사다리=4/0 rx=4062 lines=248 up=232s
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "OK" (2)
+[DIAG] offline step=1 사다리=4/0 rx=4095 lines=250 up=235s
+[AT] "bB\xD6\x86@\xF9Pa\xE2\xFCR\x89:\x97`@\xCC\xFF\xCA=\xA91\x1C\xFF\xC2=\x8D" (27)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "no change" (9)
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 사다리=4/0 rx=4209 lines=255 up=238s
+[CNT] up=240 drop=0 esprst=4 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=200 oow=0 smiss=3 ssovf=0 cksumng=0 okstream=45 penddrop=0 pendfill=46 bigfill=3 bigdrop=0 bigokst=3 oklost=0 bigoklost=0 skip=2 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=4/0 rx=4209 lines=255 up=241s
+[AT] "OK" (2)
+[NET] CWJAP OK — 결합됐다. IP 를 실제로 받았는지 CIFSR 로 확인한다
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.0.214" (13)
+[NET] ★ IP 확보: 192.168.0.214
+[AT] "OK" (2)
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 적용됨 → CIPSTART
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.0.29",9991" (37)
+[AT] "OK" (2)
+[AT] "Linked" (6)
+[NET] online (CONNECT) + 캐시 비움
+[TX] S,46,60A,000,244,P1,75
+[SLOT] n=204 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[REG] 등록 실패 145B
+[SLOT] n=205 tx=145 ack=0 due=0 r=0
+[AT] " S,46,60A,000,244,P1,75" (23)
+[AT] "SEND OK" (7)
+[TX] D,*,7,12,5A
+D,A1,IP,01
+D,A2,IP,02
+D,A3,IP,03
+D,A4,IP,04
+D,A5,IP,05
+D,B1,IP,02
+D,B2,IP,01
+D,B3,IP,00
+D,B4,IP,07
+D,B5,IP,06
+D,E1,OBV,47
+D,X1,OBV,5A
+[REG] 등록 전송 145B
+[SLOT] n=206 tx=145 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=146" (14)
+[DROP-OVF] 줄이 96바이트를 넘어 버렸다
+[AT] "SEND OK" (7)
+[TX] S,48,60A,000,248,P1,77
+[SLOT] n=207 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,48,60A,000,248,P1,77" (23)
+[AT] "SEND OK" (7)
+[TX] S,49,60A,000,249,P1,77
+[SLOT] n=208 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,49,60A,000,249,P1,77" (23)
+[AT] "SEND OK" (7)
+[TX] S,50,60A,000,250,P1,77
+[SLOT] n=209 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,50,60A,000,250,P1,77" (23)
+[AT] "SEND OK" (7)
+[AT] "ERROR" (5)
+[NET] 송신 오류 응답(로그만, 카운터는 sendLine 이 센다): ERROR
+[AT] "Unlink" (6)
+[DIAG] offline step=3 사다리=4/0 rx=4700 lines=280 up=250s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[NET] ★ ESP 가 IP 를 잃었다 — 모듈 리셋으로 본다. 누적 사건 5
+[AT] "OK" (2)
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[AT] "OK" (2)
+[DIAG] offline step=3 사다리=4/0 rx=4752 lines=286 up=253s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 17s · 연속 0회 · 결합유지 12s · 현재 4단(0회 누적)
+[LADDER] ⚠4단 미실행: 하드웨어 리셋선이 배선되지 않았다(ESP_RST_WIRED=0)
+[LADDER]   → Uno A2 를 ESP 의 RST 에 물리고 ESP_RST_WIRED 를 1 로 바꿔 다시 구워라
+[LADDER]   지금은 30초 쉬고 AT+RST 만 되풀이한다
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[AT] "OK" (2)
+[DIAG] offline step=0 사다리=4/1 rx=4778 lines=289 up=256s
+[DIAG] offline step=0 사다리=4/1 rx=4778 lines=289 up=259s
+[DIAG] offline step=0 사다리=4/1 rx=4778 lines=289 up=262s
+[DIAG] offline step=0 사다리=4/1 rx=4778 lines=289 up=265s
+[DIAG] offline step=0 사다리=4/1 rx=4778 lines=289 up=268s
+[DIAG] offline step=0 사다리=4/1 rx=4778 lines=289 up=271s
+[DIAG] offline step=0 사다리=4/1 rx=4778 lines=289 up=274s
+[DIAG] offline step=0 사다리=4/1 rx=4778 lines=289 up=277s
+[DIAG] offline step=0 사다리=4/1 rx=4778 lines=289 up=280s
+[DIAG] offline step=0 사다리=4/1 rx=4778 lines=289 up=283s
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "OK" (2)
+[AT] "`B\xD4\x84@\xF9Ra\xE0\xFCR\x89:\x97bB\xCE\xFF\xCA\xC9\xA5\x9D\x1C\xFF\xC2I\x8D" (27)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[DIAG] offline step=1 사다리=4/1 rx=4865 lines=293 up=286s
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "no change" (9)
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 사다리=4/1 rx=4925 lines=296 up=289s
+[DIAG] offline step=2 사다리=4/1 rx=4925 lines=296 up=292s
+[DIAG] offline step=2 사다리=4/1 rx=4925 lines=296 up=295s
+[DIAG] offline step=2 사다리=4/1 rx=4925 lines=296 up=298s
+[CNT] up=300 drop=0 esprst=5 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=250 oow=0 smiss=4 ssovf=0 cksumng=0 okstream=50 penddrop=0 pendfill=51 bigfill=4 bigdrop=0 bigokst=4 oklost=0 bigoklost=0 skip=3 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=4/1 rx=4925 lines=296 up=301s
+[AT] "OK" (2)
+[NET] CWJAP OK — 결합됐다. IP 를 실제로 받았는지 CIFSR 로 확인한다
+[DIAG] offline step=3 사다리=4/1 rx=4931 lines=297 up=304s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.0.214" (13)
+[NET] ★ IP 확보: 192.168.0.214
+[AT] "OK" (2)
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 적용됨 → CIPSTART
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.0.29",9991" (37)
+[AT] "OK" (2)
+[AT] "Linked" (6)
+[NET] online (CONNECT) + 캐시 비움
+[TX] S,51,609,000,306,P1,0C
+[SLOT] n=255 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,51,609,000,306,P1,0C" (23)
+[AT] "SEND OK" (7)
+[TX] D,*,7,12,5A
+D,A1,IP,01
+D,A2,IP,02
+D,A3,IP,03
+D,A4,IP,04
+D,A5,IP,05
+D,B1,IP,02
+D,B2,IP,01
+D,B3,IP,00
+D,B4,IP,07
+D,B5,IP,06
+D,E1,OBV,47
+D,X1,OBV,5A
+[REG] 등록 전송 145B
+[SLOT] n=256 tx=145 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=146" (14)
+[DROP-OVF] 줄이 96바이트를 넘어 버렸다
+[AT] "SEND OK" (7)
+[TX] S,53,609,000,308,P1,00
+[SLOT] n=257 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,53,609,000,308,P1,00" (23)
+[AT] "SEND OK" (7)
+[TX] S,54,609,000,309,P1,06
+[SLOT] n=258 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,54,609,000,309,P1,06" (23)
+[AT] "SEND OK" (7)
+[TX] S,55,608,000,310,P1,0E
+[SLOT] n=259 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,55,608,000,310,P1,0E" (23)
+[AT] "SEND OK" (7)
+[TX] S,56,60A,000,312,P1,76
+[SLOT] n=260 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,56,60A,000,312,P1,76" (23)
+[AT] "SEND OK" (7)
+[TX] S,57,60A,000,313,P1,76
+[SLOT] n=261 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,57,60A,000,313,P1,76" (23)
+[AT] "SEND OK" (7)
+[TX] S,58,60A,000,314,P1,7E
+[SLOT] n=262 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,58,60A,000,314,P1,7E" (23)
+[AT] "SEND OK" (7)
+[TX] S,59,60A,000,315,P1,7E
+[SLOT] n=263 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,59,60A,000,315,P1,7E" (23)
+[AT] "SEND OK" (7)
+[TX] S,60,60A,000,316,P1,77
+[SLOT] n=264 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,60,60A,000,316,P1,77" (23)
+[AT] "SEND OK" (7)
+[TX] S,61,60A,000,318,P1,78
+[SLOT] n=265 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=266 tx=22 ack=0 due=0 r=0
+[AT] " S,61,60A,000,318,P1,78" (23)
+[AT] "SEND OK" (7)
+[TX] S,62,60B,000,320,P1,73
+[SLOT] n=267 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,62,60B,000,320,P1,73" (23)
+[AT] "SEND OK" (7)
+[TX] S,63,60B,000,321,P1,73
+[SLOT] n=268 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,63,60B,000,321,P1,73" (23)
+[AT] "SEND OK" (7)
+[TX] S,64,60B,000,322,P1,77
+[SLOT] n=269 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,64,60B,000,322,P1,77" (23)
+[AT] "SEND OK" (7)
+[TX] S,65,609,000,324,P1,0B
+[SLOT] n=270 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,65,609,000,324,P1,0B" (23)
+[AT] "SEND OK" (7)
+[TX] S,66,609,000,325,P1,09
+[SLOT] n=271 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,66,609,000,325,P1,09" (23)
+[AT] "SEND OK" (7)
+[TX] S,67,609,000,326,P1,0B
+[SLOT] n=272 tx=22 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=23" (13)
+[AT] " S,67,609,000,326,P1,0B" (23)
+[AT] "ERROR" (5)
+[NET] 송신 오류 응답(로그만, 카운터는 sendLine 이 센다): ERROR
+[AT] "Unlink" (6)
+[DIAG] offline step=3 사다리=4/1 rx=6005 lines=356 up=327s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[NET] ★ ESP 가 IP 를 잃었다 — 모듈 리셋으로 본다. 누적 사건 6
+[AT] "OK" (2)
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[AT] "OK" (2)
+[DIAG] offline step=3 사다리=4/1 rx=6057 lines=362 up=330s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 42s · 연속 0회 · 결합유지 27s · 현재 4단(1회 누적)
+[LADDER] ↑↑ 단 상승 → 5단
+[LADDER] ⚠5단 미실행: 전원 재투입은 **부품 미보유로 미구현**이다
+[LADDER]   필요 부품: 로우사이드 MOSFET 스위치(예: 2N7000/AO3400 + 10k)
+[LADDER]   대신 4단 조치를 60초 백오프로 되풀이한다(종착역)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[AT] "OK" (2)
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=333s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=336s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=339s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=342s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=345s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=348s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=351s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=354s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=357s
+[CNT] up=360 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=300 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=360s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=363s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=366s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=369s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=372s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=375s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=378s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=381s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=384s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=387s
+[DIAG] offline step=0 사다리=5/0 rx=6083 lines=365 up=390s
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "OK" (2)
+[DIAG] offline step=1 사다리=5/0 rx=6098 lines=367 up=393s
+[AT] "b@\xD4\x86@\xF9Rc\xE2\xFCR\x8B:\x97bB\xCE\xFF\xCA\xC9\xA5\x9D\x1C\xFF\xC2I\x8D" (27)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "no change" (9)
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 사다리=5/0 rx=6230 lines=372 up=396s
+[DIAG] offline step=2 사다리=5/0 rx=6230 lines=372 up=399s
+[DIAG] offline step=2 사다리=5/0 rx=6230 lines=372 up=402s
+[DIAG] offline step=2 사다리=5/0 rx=6230 lines=372 up=405s
+[DIAG] offline step=2 사다리=5/0 rx=6230 lines=372 up=408s
+[DIAG] offline step=2 사다리=5/0 rx=6230 lines=372 up=411s
+[AT] "FAIL" (4)
+[NET] ★ CWJAP 실패 1회 (구형 펌웨어는 사유를 주지 않는다)
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 15s · 연속 1회 · 결합유지 없음 · 현재 5단(0회 누적)
+[LADDER] ⚠5단 미실행: 전원 재투입은 **부품 미보유로 미구현**이다
+[LADDER]   필요 부품: 로우사이드 MOSFET 스위치(예: 2N7000/AO3400 + 10k)
+[LADDER]   대신 4단 조치를 60초 백오프로 되풀이한다(종착역)
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=414s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=417s
+[CNT] up=420 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=350 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=420s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=423s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=426s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=429s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=432s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=435s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=438s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=441s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=444s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=447s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=450s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=453s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=456s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=459s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=462s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=465s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=468s
+[DIAG] offline step=0 사다리=5/1 rx=6238 lines=373 up=471s
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "OK" (2)
+[AT] "bB\xD6\x86@\xF9Rc\xE2\xFE\x10\x89:\x97`@\xCE\xFF\xCA\xC9\xA5\x9D\x1C\xFF\xC2I\x8D" (27)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "no change" (9)
+[DIAG] offline step=2 사다리=5/1 rx=6350 lines=379 up=474s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 사다리=5/1 rx=6385 lines=380 up=477s
+[CNT] up=480 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=400 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=5/1 rx=6385 lines=380 up=480s
+[DIAG] offline step=2 사다리=5/1 rx=6385 lines=380 up=483s
+[DIAG] offline step=2 사다리=5/1 rx=6385 lines=380 up=486s
+[DIAG] offline step=2 사다리=5/1 rx=6385 lines=380 up=489s
+[AT] "FAIL" (4)
+[NET] ★ CWJAP 실패 2회 (구형 펌웨어는 사유를 주지 않는다)
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 15s · 연속 2회 · 결합유지 없음 · 현재 5단(1회 누적)
+[NET] 7 GMR (펌웨어 판 — 진단)
+[AT] "AT+GMR" (6)
+[AT] "0018000902" (10)
+[AT] "OK" (2)
+[NET] 8 CWCOUNTRY (채널 12/13 우회 시도 — 진단)
+[AT] "AT+CWCOUNTRY_DEF=0,"KR",1,13" (28)
+[AT] "ERROR" (5)
+[NET] CWCOUNTRY 미지원(ERROR) — 이 펌웨어로는 채널 12/13 을 코드로 못 연다.
+[NET]   → 공유기 채널을 1/6/11 로 바꾸는 것이 확정 해법이다
+[DIAG] offline step=9 사다리=5/2 rx=6460 lines=386 up=492s
+[NET] 9 CWLAP (주변 AP 목록 — 진단)
+[AT] "AT+CWLAP" (8)
+[AT] "+CWLAP:(3,"3F_es_room2_2G",-41,"70:5d:cc:06:31:b6",2)" (53)
+[AT] "+CWLAP:(3,"2F_201",-58,"70:5d:cc:0f:0f:da",7)" (45)
+[AT] "+CWLAP:(3,"4F_es_room",-29,"70:5d:cc:06:3a:3a",8)" (49)
+[AT] "+CWLAP:(3,"AX3000M",-70,"58:86:94:09:f4:0c",10)" (47)
+[AT] "OK" (2)
+[NET] ── AP 스캔 판정 ──────────────────────────
+[NET] 설정한 SSID 가 목록에 **없다** → 비번 문제가 아니다.
+[NET]   2.4GHz 인가 / 전파가 닿는가 / SSID 철자가 맞는가를 봐라.
+[DIAG] offline step=2 사다리=5/2 rx=6679 lines=392 up=495s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 사다리=5/2 rx=6714 lines=393 up=498s
+[DIAG] offline step=2 사다리=5/2 rx=6714 lines=393 up=501s
+[DIAG] offline step=2 사다리=5/2 rx=6714 lines=393 up=504s
+[DIAG] offline step=2 사다리=5/2 rx=6714 lines=393 up=507s
+[DIAG] offline step=2 사다리=5/2 rx=6714 lines=393 up=510s
+[AT] "FAIL" (4)
+[NET] ★ CWJAP 실패 3회 (구형 펌웨어는 사유를 주지 않는다)
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 15s · 연속 3회 · 결합유지 없음 · 현재 5단(2회 누적)
+[LADDER] ⚠5단 미실행: 전원 재투입은 **부품 미보유로 미구현**이다
+[LADDER]   필요 부품: 로우사이드 MOSFET 스위치(예: 2N7000/AO3400 + 10k)
+[LADDER]   대신 4단 조치를 60초 백오프로 되풀이한다(종착역)
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=513s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=516s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=519s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=522s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=525s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=528s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=531s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=534s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=537s
+[CNT] up=540 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=450 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=540s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=543s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=546s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=549s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=552s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=555s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=558s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=561s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=564s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=567s
+[DIAG] offline step=0 사다리=5/3 rx=6722 lines=394 up=570s
+[NET] 0 RST
+[AT] "bB\xD6\x86@\xF9Ra\xE0\xFER\x8B:"\xDCPB\xFF\xCA\xC9\xA5\x9D\x1C\xFF\xC2I\x8D" (27)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[DIAG] offline step=1 사다리=5/3 rx=6794 lines=396 up=573s
+[NET] 1 CWMODE=1
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 사다리=5/3 rx=6829 lines=397 up=576s
+[DIAG] offline step=2 사다리=5/3 rx=6829 lines=397 up=579s
+[DIAG] offline step=2 사다리=5/3 rx=6829 lines=397 up=582s
+[DIAG] offline step=2 사다리=5/3 rx=6829 lines=397 up=585s
+[DIAG] offline step=2 사다리=5/3 rx=6829 lines=397 up=588s
+[AT] "FAIL" (4)
+[NET] ★ CWJAP 실패 4회 (구형 펌웨어는 사유를 주지 않는다)
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 15s · 연속 4회 · 결합유지 없음 · 현재 5단(3회 누적)
+[LADDER] ⚠5단 미실행: 전원 재투입은 **부품 미보유로 미구현**이다
+[LADDER]   필요 부품: 로우사이드 MOSFET 스위치(예: 2N7000/AO3400 + 10k)
+[LADDER]   대신 4단 조치를 60초 백오프로 되풀이한다(종착역)
+[DIAG] offline step=0 사다리=5/4 rx=6837 lines=398 up=591s
+[DIAG] offline step=0 사다리=5/4 rx=6837 lines=398 up=594s
+[DIAG] offline step=0 사다리=5/4 rx=6837 lines=398 up=597s
+[CNT] up=600 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=500 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=0 사다리=5/4 rx=6837 lines=398 up=600s
+[DIAG] offline step=0 사다리=5/4 rx=6870 lines=398 up=603s
+[DIAG] offline step=0 사다리=5/4 rx=6870 lines=398 up=606s
+[DIAG] offline step=0 사다리=5/4 rx=6870 lines=398 up=609s
+[DIAG] offline step=0 사다리=5/4 rx=6870 lines=398 up=612s
+[DIAG] offline step=0 사다리=5/4 rx=6870 lines=398 up=615s
+[DIAG] offline step=0 사다리=5/4 rx=6870 lines=398 up=618s
+[DIAG] offline step=0 사다리=5/4 rx=6870 lines=398 up=621s
+[DIAG] offline step=0 사다리=5/4 rx=6870 lines=398 up=624s
+[DIAG] offline step=0 사다리=5/4 rx=6870 lines=398 up=627s
+[DIAG] offline step=0 사다리=5/4 rx=6870 lines=398 up=630s
+[DIAG] offline step=0 사다리=5/4 rx=6870 lines=398 up=633s
+[DIAG] offline step=0 사다리=5/4 rx=6870 lines=398 up=636s
+[DIAG] offline step=0 사다리=5/4 rx=6870 lines=398 up=639s
+[DIAG] offline step=0 사다리=5/4 rx=6870 lines=398 up=642s
+[DIAG] offline step=0 사다리=5/4 rx=6870 lines=398 up=645s
+[DIAG] offline step=0 사다리=5/4 rx=6870 lines=398 up=648s
+[NET] 0 RST
+[DIAG] offline step=1 사다리=5/4 rx=6870 lines=398 up=651s
+[NET] 1 CWMODE=1
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[DIAG] offline step=2 사다리=5/4 rx=6870 lines=398 up=654s
+[DIAG] offline step=2 사다리=5/4 rx=6870 lines=398 up=657s
+[CNT] up=660 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=550 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=5/4 rx=6870 lines=398 up=660s
+[DIAG] offline step=2 사다리=5/4 rx=6870 lines=398 up=663s
+[DIAG] offline step=2 사다리=5/4 rx=6870 lines=398 up=666s
+[DIAG] offline step=2 사다리=5/4 rx=6870 lines=398 up=669s
+[DIAG] offline step=2 사다리=5/4 rx=6870 lines=398 up=672s
+[DIAG] offline step=2 사다리=5/4 rx=6870 lines=398 up=675s
+[DIAG] offline step=2 사다리=5/4 rx=6870 lines=398 up=678s
+[DIAG] offline step=2 사다리=5/4 rx=6870 lines=398 up=681s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 5회 · 결합유지 없음 · 현재 5단(4회 누적)
+[LADDER] ⚠5단 미실행: 전원 재투입은 **부품 미보유로 미구현**이다
+[LADDER]   필요 부품: 로우사이드 MOSFET 스위치(예: 2N7000/AO3400 + 10k)
+[LADDER]   대신 4단 조치를 60초 백오프로 되풀이한다(종착역)
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=684s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=687s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=690s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=693s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=696s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=699s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=702s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=705s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=708s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=711s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=714s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=717s
+[CNT] up=720 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=600 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=720s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=723s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=726s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=729s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=732s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=735s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=738s
+[DIAG] offline step=0 사다리=5/5 rx=6870 lines=398 up=741s
+[NET] 0 RST
+[DIAG] offline step=1 사다리=5/5 rx=6870 lines=398 up=744s
+[NET] 1 CWMODE=1
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[DIAG] offline step=2 사다리=5/5 rx=6870 lines=398 up=747s
+[DIAG] offline step=2 사다리=5/5 rx=6870 lines=398 up=750s
+[DIAG] offline step=2 사다리=5/5 rx=6870 lines=398 up=753s
+[DIAG] offline step=2 사다리=5/5 rx=6870 lines=398 up=756s
+[DIAG] offline step=2 사다리=5/5 rx=6870 lines=398 up=759s
+[DIAG] offline step=2 사다리=5/5 rx=6870 lines=398 up=762s
+[DIAG] offline step=2 사다리=5/5 rx=6870 lines=398 up=765s
+[DIAG] offline step=2 사다리=5/5 rx=6870 lines=398 up=768s
+[DIAG] offline step=2 사다리=5/5 rx=6870 lines=398 up=771s
+[DIAG] offline step=2 사다리=5/5 rx=6870 lines=398 up=774s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 6회 · 결합유지 없음 · 현재 5단(5회 누적)
+[LADDER] ⚠5단 미실행: 전원 재투입은 **부품 미보유로 미구현**이다
+[LADDER]   필요 부품: 로우사이드 MOSFET 스위치(예: 2N7000/AO3400 + 10k)
+[LADDER]   대신 4단 조치를 60초 백오프로 되풀이한다(종착역)
+[DIAG] offline step=0 사다리=5/6 rx=6870 lines=398 up=777s
+[CNT] up=780 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=650 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=0 사다리=5/6 rx=6870 lines=398 up=780s
+[DIAG] offline step=0 사다리=5/6 rx=6870 lines=398 up=783s
+[DIAG] offline step=0 사다리=5/6 rx=6870 lines=398 up=786s
+[DIAG] offline step=0 사다리=5/6 rx=6870 lines=398 up=789s
+[DIAG] offline step=0 사다리=5/6 rx=6871 lines=398 up=792s
+[DIAG] offline step=0 사다리=5/6 rx=6871 lines=398 up=795s
+[DIAG] offline step=0 사다리=5/6 rx=6871 lines=398 up=798s
+[DIAG] offline step=0 사다리=5/6 rx=6871 lines=398 up=801s
+[DIAG] offline step=0 사다리=5/6 rx=6871 lines=398 up=804s
+[DIAG] offline step=0 사다리=5/6 rx=6871 lines=398 up=807s
+[DIAG] offline step=0 사다리=5/6 rx=6871 lines=398 up=810s
+[DIAG] offline step=0 사다리=5/6 rx=6871 lines=398 up=813s
+[DIAG] offline step=0 사다리=5/6 rx=6871 lines=398 up=816s
+[DIAG] offline step=0 사다리=5/6 rx=6871 lines=398 up=819s
+[DIAG] offline step=0 사다리=5/6 rx=6871 lines=398 up=822s
+[DIAG] offline step=0 사다리=5/6 rx=6871 lines=398 up=825s
+[DIAG] offline step=0 사다리=5/6 rx=6871 lines=398 up=828s
+[DIAG] offline step=0 사다리=5/6 rx=6871 lines=398 up=831s
+[DIAG] offline step=0 사다리=5/6 rx=6871 lines=398 up=834s
+[NET] 0 RST
+[DIAG] offline step=1 사다리=5/6 rx=6871 lines=398 up=837s
+[NET] 1 CWMODE=1
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[CNT] up=840 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=700 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=5/6 rx=6871 lines=398 up=840s
+[DIAG] offline step=2 사다리=5/6 rx=6871 lines=398 up=843s
+[DIAG] offline step=2 사다리=5/6 rx=6871 lines=398 up=846s
+[DIAG] offline step=2 사다리=5/6 rx=6871 lines=398 up=849s
+[DIAG] offline step=2 사다리=5/6 rx=6871 lines=398 up=852s
+[DIAG] offline step=2 사다리=5/6 rx=6871 lines=398 up=855s
+[DIAG] offline step=2 사다리=5/6 rx=6871 lines=398 up=858s
+[DIAG] offline step=2 사다리=5/6 rx=6871 lines=398 up=861s
+[DIAG] offline step=2 사다리=5/6 rx=6871 lines=398 up=864s
+[DIAG] offline step=2 사다리=5/6 rx=6871 lines=398 up=867s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 7회 · 결합유지 없음 · 현재 5단(6회 누적)
+[LADDER] ⚠5단 미실행: 전원 재투입은 **부품 미보유로 미구현**이다
+[LADDER]   필요 부품: 로우사이드 MOSFET 스위치(예: 2N7000/AO3400 + 10k)
+[LADDER]   대신 4단 조치를 60초 백오프로 되풀이한다(종착역)
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=870s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=873s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=876s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=879s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=882s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=885s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=888s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=891s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=894s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=897s
+[CNT] up=900 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=750 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=900s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=903s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=906s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=909s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=912s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=915s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=918s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=921s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=924s
+[DIAG] offline step=0 사다리=5/7 rx=6871 lines=398 up=927s
+[NET] 0 RST
+[DIAG] offline step=1 사다리=5/7 rx=6871 lines=398 up=930s
+[NET] 1 CWMODE=1
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[DIAG] offline step=2 사다리=5/7 rx=6871 lines=398 up=933s
+[DIAG] offline step=2 사다리=5/7 rx=6871 lines=398 up=936s
+[DIAG] offline step=2 사다리=5/7 rx=6871 lines=398 up=939s
+[DIAG] offline step=2 사다리=5/7 rx=6871 lines=398 up=942s
+[DIAG] offline step=2 사다리=5/7 rx=6871 lines=398 up=945s
+[DIAG] offline step=2 사다리=5/7 rx=6871 lines=398 up=948s
+[DIAG] offline step=2 사다리=5/7 rx=6871 lines=398 up=951s
+[DIAG] offline step=2 사다리=5/7 rx=6871 lines=398 up=954s
+[DIAG] offline step=2 사다리=5/7 rx=6871 lines=398 up=957s
+[CNT] up=960 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=800 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=5/7 rx=6871 lines=398 up=960s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 8회 · 결합유지 없음 · 현재 5단(7회 누적)
+[LADDER] ⚠5단 미실행: 전원 재투입은 **부품 미보유로 미구현**이다
+[LADDER]   필요 부품: 로우사이드 MOSFET 스위치(예: 2N7000/AO3400 + 10k)
+[LADDER]   대신 4단 조치를 60초 백오프로 되풀이한다(종착역)
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=963s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=966s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=969s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=972s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=975s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=978s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=981s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=984s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=987s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=990s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=993s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=996s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=999s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=1002s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=1005s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=1008s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=1011s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=1014s
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=1017s
+[CNT] up=1020 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=850 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=0 사다리=5/8 rx=6871 lines=398 up=1020s
+[NET] 0 RST
+[DIAG] offline step=1 사다리=5/8 rx=6871 lines=398 up=1023s
+[NET] 1 CWMODE=1
+[DIAG] offline step=2 사다리=5/8 rx=6871 lines=398 up=1026s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[DIAG] offline step=2 사다리=5/8 rx=6871 lines=398 up=1029s
+[DIAG] offline step=2 사다리=5/8 rx=6871 lines=398 up=1032s
+[DIAG] offline step=2 사다리=5/8 rx=6871 lines=398 up=1035s
+[DIAG] offline step=2 사다리=5/8 rx=6871 lines=398 up=1038s
+[DIAG] offline step=2 사다리=5/8 rx=6871 lines=398 up=1041s
+[DIAG] offline step=2 사다리=5/8 rx=6871 lines=398 up=1044s
+[DIAG] offline step=2 사다리=5/8 rx=6871 lines=398 up=1047s
+[DIAG] offline step=2 사다리=5/8 rx=6970 lines=398 up=1050s
+[DROP-OVF] 줄이 96바이트를 넘어 버렸다
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[DIAG] offline step=2 사다리=5/8 rx=7020 lines=399 up=1053s
+[DIAG] offline step=2 사다리=5/8 rx=7020 lines=399 up=1056s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 9회 · 결합유지 없음 · 현재 5단(8회 누적)
+[LADDER] ⚠5단 미실행: 전원 재투입은 **부품 미보유로 미구현**이다
+[LADDER]   필요 부품: 로우사이드 MOSFET 스위치(예: 2N7000/AO3400 + 10k)
+[LADDER]   대신 4단 조치를 60초 백오프로 되풀이한다(종착역)
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1059s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1062s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1065s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1068s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1071s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1074s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1077s
+[CNT] up=1080 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=900 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1080s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1083s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1086s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1089s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1092s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1095s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1098s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1101s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1104s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1107s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1110s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1113s
+[DIAG] offline step=0 사다리=5/9 rx=7020 lines=399 up=1116s
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "OK" (2)
+[AT] "`B\xD6\x86@\xF9Ra\xE2\xFCR\x89:\x97b@\xCC\xFF\xC8\xC9\xA5\x9D\xCE\xFF\xC0I\x8D" (27)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "no change" (9)
+[DIAG] offline step=2 사다리=5/9 rx=7132 lines=405 up=1119s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 사다리=5/9 rx=7167 lines=406 up=1122s
+[DIAG] offline step=2 사다리=5/9 rx=7167 lines=406 up=1125s
+[DIAG] offline step=2 사다리=5/9 rx=7167 lines=406 up=1128s
+[DIAG] offline step=2 사다리=5/9 rx=7167 lines=406 up=1131s
+[DIAG] offline step=2 사다리=5/9 rx=7167 lines=406 up=1134s
+[AT] "FAIL" (4)
+[NET] ★ CWJAP 실패 10회 (구형 펌웨어는 사유를 주지 않는다)
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 15s · 연속 10회 · 결합유지 없음 · 현재 5단(9회 누적)
+[LADDER] ⚠5단 미실행: 전원 재투입은 **부품 미보유로 미구현**이다
+[LADDER]   필요 부품: 로우사이드 MOSFET 스위치(예: 2N7000/AO3400 + 10k)
+[LADDER]   대신 4단 조치를 60초 백오프로 되풀이한다(종착역)
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1137s
+[CNT] up=1140 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=950 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1140s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1143s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1146s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1149s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1152s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1155s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1158s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1161s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1164s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1167s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1170s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1173s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1176s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1179s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1182s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1185s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1188s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1191s
+[DIAG] offline step=0 사다리=5/10 rx=7175 lines=407 up=1194s
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "OK" (2)
+[AT] "`B\xD6\x86@\xF9Ra\xE2\xFCP\x89:\x97b@\xCE\xFF\xC8\xC9\xA5\x9D\x1C\xFF\xC2I\x8D" (27)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[DIAG] offline step=1 사다리=5/10 rx=7299 lines=411 up=1197s
+[AT] "\x82\x82\xF2\x9F\xA1\x12\x12\x87\x196\x8A\xA3\xFF\x87\xF0\x8D\xA1\xC5\xC1C\x18V\x9A\xD2\x07\xF0\x92\x87\x1A\xDA\x92\xC1\x07\xF0\x12\x87\xFC" (37)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[NET] 1 CWMODE=1
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[CNT] up=1200 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=1000 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=2 사다리=5/10 rx=7355 lines=413 up=1200s
+[DIAG] offline step=2 사다리=5/10 rx=7355 lines=413 up=1203s
+[DROP-OVF] 줄이 96바이트를 넘어 버렸다
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[DIAG] offline step=2 사다리=5/10 rx=7511 lines=414 up=1206s
+[DIAG] offline step=2 사다리=5/10 rx=7512 lines=414 up=1209s
+[AT] "" (0)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[DIAG] offline step=2 사다리=5/10 rx=7594 lines=416 up=1212s
+[DIAG] offline step=2 사다리=5/10 rx=7594 lines=416 up=1215s
+[DIAG] offline step=2 사다리=5/10 rx=7594 lines=416 up=1218s
+[DIAG] offline step=2 사다리=5/10 rx=7594 lines=416 up=1221s
+[DIAG] offline step=2 사다리=5/10 rx=7594 lines=416 up=1224s
+[DIAG] offline step=2 사다리=5/10 rx=7594 lines=416 up=1227s
+[LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 11회 · 결합유지 없음 · 현재 5단(10회 누적)
+[LADDER] ⚠5단 미실행: 전원 재투입은 **부품 미보유로 미구현**이다
+[LADDER]   필요 부품: 로우사이드 MOSFET 스위치(예: 2N7000/AO3400 + 10k)
+[LADDER]   대신 4단 조치를 60초 백오프로 되풀이한다(종착역)
+[DIAG] offline step=0 사다리=5/11 rx=7594 lines=416 up=1230s
+[DIAG] offline step=0 사다리=5/11 rx=7594 lines=416 up=1233s
+[DIAG] offline step=0 사다리=5/11 rx=7594 lines=416 up=1236s
+[DIAG] offline step=0 사다리=5/11 rx=7594 lines=416 up=1239s
+[DIAG] offline step=0 사다리=5/11 rx=7594 lines=416 up=1242s
+[AT] "" (0)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[DIAG] offline step=0 사다리=5/11 rx=7677 lines=418 up=1245s
+[DIAG] offline step=0 사다리=5/11 rx=7677 lines=418 up=1248s
+[DIAG] offline step=0 사다리=5/11 rx=7677 lines=418 up=1251s
+[DIAG] offline step=0 사다리=5/11 rx=7677 lines=418 up=1254s
+[DIAG] offline step=0 사다리=5/11 rx=7677 lines=418 up=1257s
+[CNT] up=1260 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=1050 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=66 penddrop=0 pendfill=68 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=4 online=0
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[DIAG] offline step=0 사다리=5/11 rx=7677 lines=418 up=1260s
+[DIAG] offline step=0 사다리=5/11 rx=7677 lines=418 up=1263s
+[DIAG] offline step=0 사다리=5/11 rx=7677 lines=418 up=1266s
+[DIAG] offline step=0 사다리=5/11 rx=7677 lines=418 up=1269s
+[DIAG] offline step=0 사다리=5/11 rx=7677 lines=418 up=1272s
+[DIAG] offline step=0 사다리=5/11 rx=7677 lines=418 up=1275s
+[DIAG] offline step=0 사다리=5/11 rx=7677 lines=418 up=1278s
+[DIAG] offline step=0 사다리=5/11 rx=7677 lines=418 up=1281s
+[DIAG] offline step=0 사다리=5/11 rx=7677 lines=418 up=1284s
+[DIAG] offline step=0 사다리=5/11 rx=7677 lines=418 up=1287s
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "OK" (2)
+[AT] "`B\xD4\x86@\xF9Rc\x10\xFCR\x89:\x97bB\xCE\xFF\xCA\xC9\xA5\x9D\x1C\xFF\xC2I\x8D" (27)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[DIAG] offline step=1 사다리=5/11 rx=7764 lines=422 up=1290s
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "no change" (9)
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 사다리=5/11 rx=7824 lines=425 up=1293s
+[DIAG] offline step=2 사다리=5/11 rx=7824 lines=425 up=1296s
+[AT] "OK" (2)
+[NET] CWJAP OK — 결합됐다. IP 를 실제로 받았는지 CIFSR 로 확인한다
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.0.214" (13)
+[NET] ★ IP 확보: 192.168.0.214
+[AT] "OK" (2)
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 적용됨 → CIPSTART
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.0.29",9991" (37)
+[AT] "OK" (2)
+[AT] "Linked" (6)
+[NET] online (CONNECT) + 캐시 비움
+[TX] S,68,60B,000,1297,P1,45
+[SLOT] n=1081 tx=23 ack=0 due=231 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,68,60B,000,1297,P1,45" (24)
+[AT] "SEND OK" (7)
+[TX] D,*,7,12,5A
+D,A1,IP,01
+D,A2,IP,02
+D,A3,IP,03
+D,A4,IP,04
+D,A5,IP,05
+D,B1,IP,02
+D,B2,IP,01
+D,B3,IP,00
+D,B4,IP,07
+D,B5,IP,06
+D,E1,OBV,47
+D,X1,OBV,5A
+[REG] 등록 전송 145B
+[SLOT] n=1082 tx=145 ack=0 due=0 r=1
+[DROP-OVF] 줄이 96바이트를 넘어 버렸다
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=146" (14)
+[TX] S,70,60B,000,1299,P1,42
+[SLOT] n=1083 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,70,60B,000,1299,P1,42" (24)
+[AT] "SEND OK" (7)
+[TX] S,71,60B,000,1300,P1,42
+[SLOT] n=1084 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,71,60B,000,1300,P1,42" (24)
+[AT] "SEND OK" (7)
+[TX] S,72,60A,000,1302,P1,40
+[SLOT] n=1085 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,72,60A,000,1302,P1,40" (24)
+[AT] "SEND OK" (7)
+[TX] S,73,60A,000,1303,P1,40
+[SLOT] n=1086 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,73,60A,000,1303,P1,40" (24)
+[AT] "SEND OK" (7)
+[TX] S,74,60A,000,1304,P1,40
+[SLOT] n=1087 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,74,60A,000,1304,P1,40" (24)
+[AT] "SEND OK" (7)
+[TX] S,75,60A,000,1305,P1,40
+[SLOT] n=1088 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,75,60A,000,1305,P1,40" (24)
+[AT] "SEND OK" (7)
+[TX] S,76,60A,000,1306,P1,40
+[SLOT] n=1089 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,76,60A,000,1306,P1,40" (24)
+[AT] "SEND OK" (7)
+[TX] S,77,608,000,1308,P1,36
+[SLOT] n=1090 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,77,608,000,1308,P1,36" (24)
+[AT] "SEND OK" (7)
+[TX] S,78,608,000,1309,P1,38
+[SLOT] n=1091 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,78,608,000,1309,P1,38" (24)
+[AT] "SEND OK" (7)
+[TX] S,79,609,000,1310,P1,30
+[SLOT] n=1092 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,79,609,000,1310,P1,30" (24)
+[AT] "SEND OK" (7)
+[TX] S,80,609,000,1311,P1,37
+[SLOT] n=1093 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,80,609,000,1311,P1,37" (24)
+[AT] "SEND OK" (7)
+[TX] S,81,609,000,1312,P1,35
+[SLOT] n=1094 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,81,609,000,1312,P1,35" (24)
+[AT] "SEND OK" (7)
+[TX] S,82,609,000,1314,P1,30
+[SLOT] n=1095 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,82,609,000,1314,P1,30" (24)
+[AT] "SEND OK" (7)
+[TX] S,83,609,000,1315,P1,30
+[SLOT] n=1096 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,83,609,000,1315,P1,30" (24)
+[AT] "SEND OK" (7)
+[TX] S,84,609,000,1316,P1,34
+[SLOT] n=1097 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,84,609,000,1316,P1,34" (24)
+[AT] "SEND OK" (7)
+[TX] S,85,609,000,1317,P1,34
+[SLOT] n=1098 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,85,609,000,1317,P1,34" (24)
+[AT] "SEND OK" (7)
+[TX] S,86,608,000,1318,P1,39
+[SLOT] n=1099 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,86,608,000,1318,P1,39" (24)
+[AT] "SEND OK" (7)
+[TX] S,87,60A,000,1320,P1,4A
+[SLOT] n=1100 tx=23 ack=0 due=0 r=1
+[CNT] up=1320 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=1100 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=85 penddrop=0 pendfill=88 bigfill=6 bigdrop=0 bigokst=6 oklost=0 bigoklost=0 skip=4 online=1
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,87,60A,000,1320,P1,4A" (24)
+[AT] "SEND OK" (7)
+[TX] S,88,60A,000,1321,P1,44
+[SLOT] n=1101 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,88,60A,000,1321,P1,44" (24)
+[AT] "SEND OK" (7)
+[TX] S,89,60A,000,1322,P1,46
+[SLOT] n=1102 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,89,60A,000,1322,P1,46" (24)
+[AT] "SEND OK" (7)
+[TX] S,90,60A,000,1323,P1,4F
+[SLOT] n=1103 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,90,60A,000,1323,P1,4F" (24)
+[AT] "SEND OK" (7)
+[TX] S,91,60A,000,1324,P1,49
+[SLOT] n=1104 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,91,60A,000,1324,P1,49" (24)
+[AT] "SEND OK" (7)
+[TX] S,92,60A,000,1326,P1,48
+[SLOT] n=1105 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,92,60A,000,1326,P1,48" (24)
+[AT] "SEND OK" (7)
+[TX] S,93,60B,000,1327,P1,4B
+[SLOT] n=1106 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,93,60B,000,1327,P1,4B" (24)
+[AT] "SEND OK" (7)
+[LADDER] ↓ 30초 연속 온라인 — 사다리를 0단으로 내린다 (직전 5단)
+[TX] S,94,60B,000,1328,P1,43
+[SLOT] n=1107 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,94,60B,000,1328,P1,43" (24)
+[AT] "SEND OK" (7)
+[TX] S,95,60B,000,1329,P1,43
+[SLOT] n=1108 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,95,60B,000,1329,P1,43" (24)
+[AT] "SEND OK" (7)
+[TX] S,96,60B,000,1330,P1,48
+[SLOT] n=1109 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,96,60B,000,1330,P1,48" (24)
+[AT] "SEND OK" (7)
+[TX] S,97,609,000,1332,P1,30
+[SLOT] n=1110 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,97,609,000,1332,P1,30" (24)
+[AT] "SEND OK" (7)
+[TX] S,98,609,000,1333,P1,3E
+[SLOT] n=1111 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,98,609,000,1333,P1,3E" (24)
+[AT] "SEND OK" (7)
+[TX] S,99,609,000,1334,P1,38
+[SLOT] n=1112 tx=23 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=24" (13)
+[AT] " S,99,609,000,1334,P1,38" (24)
+[AT] "SEND OK" (7)
+[TX] S,100,608,000,1335,P1,09
+[SLOT] n=1113 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,100,608,000,1335,P1,09" (25)
+[AT] "SEND OK" (7)
+[TX] S,101,608,000,1336,P1,0B
+[SLOT] n=1114 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,101,608,000,1336,P1,0B" (25)
+[AT] "SEND OK" (7)
+[TX] S,102,608,000,1338,P1,06
+[SLOT] n=1115 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,102,608,000,1338,P1,06" (25)
+[AT] "SEND OK" (7)
+[TX] S,103,608,000,1339,P1,06
+[SLOT] n=1116 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,103,608,000,1339,P1,06" (25)
+[AT] "SEND OK" (7)
+[TX] S,104,608,000,1340,P1,0F
+[SLOT] n=1117 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,104,608,000,1340,P1,0F" (25)
+[AT] "SEND OK" (7)
+[TX] S,105,608,000,1341,P1,0F
+[SLOT] n=1118 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,105,608,000,1341,P1,0F" (25)
+[AT] "SEND OK" (7)
+[TX] S,106,608,000,1342,P1,0F
+[SLOT] n=1119 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,106,608,000,1342,P1,0F" (25)
+[AT] "SEND OK" (7)
+[TX] S,107,60B,000,1344,P1,72
+[SLOT] n=1120 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,107,60B,000,1344,P1,72" (25)
+[AT] "SEND OK" (7)
+[TX] S,108,60B,000,1345,P1,7C
+[SLOT] n=1121 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,108,60B,000,1345,P1,7C" (25)
+[AT] "SEND OK" (7)
+[TX] S,109,60B,000,1346,P1,7E
+[SLOT] n=1122 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,109,60B,000,1346,P1,7E" (25)
+[AT] "SEND OK" (7)
+[TX] S,110,60B,000,1347,P1,77
+[SLOT] n=1123 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,110,60B,000,1347,P1,77" (25)
+[AT] "SEND OK" (7)
+[TX] S,111,60B,000,1348,P1,79
+[SLOT] n=1124 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,111,60B,000,1348,P1,79" (25)
+[AT] "SEND OK" (7)
+[TX] S,112,60B,000,1350,P1,73
+[SLOT] n=1125 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,112,60B,000,1350,P1,73" (25)
+[AT] "SEND OK" (7)
+[TX] S,113,60B,000,1351,P1,73
+[SLOT] n=1126 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,113,60B,000,1351,P1,73" (25)
+[AT] "SEND OK" (7)
+[TX] S,114,60A,000,1352,P1,74
+[SLOT] n=1127 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,114,60A,000,1352,P1,74" (25)
+[AT] "SEND OK" (7)
+[TX] S,115,60A,000,1353,P1,74
+[SLOT] n=1128 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,115,60A,000,1353,P1,74" (25)
+[AT] "SEND OK" (7)
+[TX] S,116,60A,000,1354,P1,70
+[SLOT] n=1129 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,116,60A,000,1354,P1,70" (25)
+[AT] "SEND OK" (7)
+[TX] S,117,608,000,1356,P1,0A
+[SLOT] n=1130 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,117,608,000,1356,P1,0A" (25)
+[AT] "SEND OK" (7)
+[TX] S,118,608,000,1357,P1,04
+[SLOT] n=1131 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,118,608,000,1357,P1,04" (25)
+[AT] "SEND OK" (7)
+[TX] S,119,608,000,1358,P1,0A
+[SLOT] n=1132 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,119,608,000,1358,P1,0A" (25)
+[AT] "SEND OK" (7)
+[TX] S,120,608,000,1359,P1,01
+[SLOT] n=1133 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,120,608,000,1359,P1,01" (25)
+[AT] "SEND OK" (7)
+[TX] S,121,609,000,1360,P1,0B
+[SLOT] n=1134 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,121,609,000,1360,P1,0B" (25)
+[AT] "SEND OK" (7)
+[TX] S,122,609,000,1362,P1,0A
+[SLOT] n=1135 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,122,609,000,1362,P1,0A" (25)
+[AT] "SEND OK" (7)
+[TX] S,123,609,000,1363,P1,0A
+[SLOT] n=1136 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,123,609,000,1363,P1,0A" (25)
+[AT] "SEND OK" (7)
+[TX] S,124,609,000,1364,P1,0A
+[SLOT] n=1137 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,124,609,000,1364,P1,0A" (25)
+[AT] "SEND OK" (7)
+[TX] S,125,609,000,1365,P1,0A
+[SLOT] n=1138 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,125,609,000,1365,P1,0A" (25)
+[AT] "SEND OK" (7)
+[TX] S,126,609,000,1366,P1,0A
+[SLOT] n=1139 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,126,609,000,1366,P1,0A" (25)
+[AT] "SEND OK" (7)
+[TX] S,127,60B,000,1368,P1,7E
+[SLOT] n=1140 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,127,60B,000,1368,P1,7E" (25)
+[AT] "SEND OK" (7)
+[TX] S,128,60A,000,1369,P1,73
+[SLOT] n=1141 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,128,60A,000,1369,P1,73" (25)
+[AT] "SEND OK" (7)
+[TX] S,129,60A,000,1370,P1,7A
+[SLOT] n=1142 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,129,60A,000,1370,P1,7A" (25)
+[AT] "SEND OK" (7)
+[TX] S,130,60A,000,1371,P1,73
+[SLOT] n=1143 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,130,60A,000,1371,P1,73" (25)
+[AT] "SEND OK" (7)
+[TX] S,131,60A,000,1372,P1,71
+[SLOT] n=1144 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,131,60A,000,1372,P1,71" (25)
+[AT] "SEND OK" (7)
+[TX] S,132,60A,000,1374,P1,74
+[SLOT] n=1145 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,132,60A,000,1374,P1,74" (25)
+[AT] "SEND OK" (7)
+[TX] S,133,60A,000,1375,P1,74
+[SLOT] n=1146 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,133,60A,000,1375,P1,74" (25)
+[AT] "SEND OK" (7)
+[TX] S,134,60A,000,1376,P1,70
+[SLOT] n=1147 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,134,60A,000,1376,P1,70" (25)
+[AT] "SEND OK" (7)
+[TX] S,135,60B,000,1377,P1,73
+[SLOT] n=1148 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,135,60B,000,1377,P1,73" (25)
+[AT] "SEND OK" (7)
+[TX] S,136,60B,000,1378,P1,7F
+[SLOT] n=1149 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,136,60B,000,1378,P1,7F" (25)
+[AT] "SEND OK" (7)
+[TX] S,137,609,000,1380,P1,02
+[SLOT] n=1150 tx=24 ack=0 due=0 r=1
+[CNT] up=1380 drop=0 esprst=6 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=1150 oow=0 smiss=5 ssovf=0 cksumng=0 okstream=135 penddrop=0 pendfill=138 bigfill=6 bigdrop=0 bigokst=6 oklost=0 bigoklost=0 skip=4 online=1
+[RAM] 최저 여유 617 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+[AT] " S,137,609,000,1380,P1,02" (25)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=25" (13)
+[TX] S,138,609,000,1381,P1,0C
+[SLOT] n=1151 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,138,609,000,1381,P1,0C" (25)
+[AT] "SEND OK" (7)
+[TX] S,139,609,000,1382,P1,0E
+[SLOT] n=1152 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=1153 tx=24 ack=0 due=0 r=0
+[TX-WAIT] ★ T1 초과 — 그래도 계속 기다린다(두들기지 않는다)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[SLOT] n=1154 tx=24 ack=0 due=0 r=0
+[AT] " S,139,609,000,1382,P1,0E" (25)
+[AT] "SEND OK" (7)
+[TX] S,140,608,000,1386,P1,05
+[SLOT] n=1155 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,140,608,000,1386,P1,05" (25)
+[AT] "SEND OK" (7)
+[TX] S,141,608,000,1387,P1,05
+[SLOT] n=1156 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,141,608,000,1387,P1,05" (25)
+[AT] "SEND OK" (7)
+[TX] S,142,608,000,1388,P1,09
+[SLOT] n=1157 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,142,608,000,1388,P1,09" (25)
+[AT] "SEND OK" (7)
+[TX] S,143,608,000,1389,P1,09
+[SLOT] n=1158 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,143,608,000,1389,P1,09" (25)
+[AT] "SEND OK" (7)
+[TX] S,144,608,000,1390,P1,06
+[SLOT] n=1159 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,144,608,000,1390,P1,06" (25)
+[AT] "SEND OK" (7)
+[TX] S,145,60A,000,1392,P1,7C
+[SLOT] n=1160 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,145,60A,000,1392,P1,7C" (25)
+[AT] "SEND OK" (7)
+[TX] S,146,60A,000,1393,P1,7E
+[SLOT] n=1161 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,146,60A,000,1393,P1,7E" (25)
+[AT] "SEND OK" (7)
+[TX] S,147,60B,000,1394,P1,7B
+[SLOT] n=1162 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,147,60B,000,1394,P1,7B" (25)
+[AT] "SEND OK" (7)
+[TX] S,148,60B,000,1395,P1,75
+[SLOT] n=1163 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,148,60B,000,1395,P1,75" (25)
+[AT] "SEND OK" (7)
+[TX] S,149,60B,000,1396,P1,77
+[SLOT] n=1164 tx=24 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=25" (13)
+[AT] " S,149,60B,000,1396,P1,77" (25)
+[AT] "SEND OK" (7)

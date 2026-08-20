@@ -1,0 +1,11 @@
+
+[PARKING NODE] pro�다리=0/0 rx=0 lines=0 up=3s
+ ESP_RST_WIRED=1 · 6단(워치독) 끔
+[NET] 0 RST
+[NET] 1 CWMODE=1
+[DIAG] offline step=2 사다리=0/0 rx=0 lines=0 up=3s
+ ESP_RST_WIRED=1 · 6단(워치독) 끔
+[NET] 0 RST
+[NET] 1 CWMODE=1
+[DIAG] offline step=2 사다리=0/0 rx=0 lines=0 up=3s
+����Z���2i5b�1	Lm��t<Z���$I�6&��"�߼���߼����˵�����	���6&�߸���_�����gQ=�Y�����ᑒ��S4�6";�]���T>i���xRζ�'V�a|m2��P�����������"���:�

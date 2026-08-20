@@ -1,0 +1,18 @@
+=== 창 AD 마감 freeze (08-20 00:07:31) ===
+실질 t0 22:40:56(탭개방) · ㉠발사 22:42:31 · 되돌리기 22:45:34(루트값)
+--- 창 전체 ---
+  🔴 깨진 나가는 AT **13 / 4219** = 0.31%   (①비출력 13 + ②출력가능 0)
+CIPSEND 4219 · SEND OK 4254 · +IPD 1 · [G] 4
+busy p 0 · CIFSR0 13 · LADDER실패 4 · T2 0 · SLOT-OOW 1
+--- 🔴 22:45:34 이후 무자극 구간만 ---
+줄수    18813 · +IPD 0 · CIPSEND 3631 · SEND OK 3661
+  🔴 깨진 나가는 AT **11 / 3631** = 0.30%   (①비출력 11 + ②출력가능 0)
+busy p 0 · T2 0 · LADDER실패 4
+--- 세션 경계(되돌리기 재기동) ---
+23:46:15  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+23:46:42  [NET] ★ IP 확보: 192.168.35.79
+23:46:43  [NET] CIPMUX=0 적용됨 → CIPSTART
+23:46:43  [NET] 5 CIPSTART
+23:46:43  [AT] "AT+CIPSTART="TCP","192.168.35.21",9991" (38)
+--- 최종 CNT ---
+00:07:15  [CNT] up=5160 drop=0 esprst=8 hwrst=0/0 resync=0 sendfail=0 okto=2 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=4300 oow=1 smiss=7 ssovf=0 cksumng=0 okstream=4223 penddrop=0 pendfill=4225 bigfill=11 bigdrop=0 bigokst=11 oklost=0 bigoklost=0 skip=17 online=1

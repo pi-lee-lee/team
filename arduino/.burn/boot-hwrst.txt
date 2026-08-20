@@ -1,0 +1,67 @@
+���>��������|�Q
+[PARKING NODE] proto v1 / 10 slots / 12 modules / dev=P1
+[BOOT] 리셋 원인: 불명 (부트로더가 MCUSR 을 지우고 넘어왔다)
+[BOOT] 사다리 4단(ESP 하드리셋선) 배선됨(A2) · 6단(워치독) 끔
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "OK" (2)
+[AT] "b@\xD6\x86@\xF9Rc\xE2\xFCR\x8B:\x97bD\xCE\xFF\xCA\xC9\xA5\x9D\x1C\xFF\xC2I\x8D" (27)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "no change" (9)
+[DIAG] offline step=2 사다리=0/0 rx=112 lines=6 up=3s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 사다리=0/0 rx=147 lines=7 up=6s
+[DIAG] offline step=2 사다리=0/0 rx=147 lines=7 up=9s
+[AT] "OK" (2)
+[NET] CWJAP OK — 결합됐다. IP 를 실제로 받았는지 CIFSR 로 확인한다
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.0.214" (13)
+[NET] ★ IP 확보: 192.168.0.214
+[AT] "OK" (2)
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 적용됨 → CIPSTART
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.0.29",9991" (37)
+[DIAG] offline step=5 사다리=0/0 rx=245 lines=14 up=12s
+[AT] "OK" (2)
+[AT] "Linked" (6)
+[NET] online (CONNECT) + 캐시 비움
+[TX] S,0,608,000,14,P1,09
+[SLOT] n=12 tx=20 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=21" (13)
+[TX-WAIT] 앞 전송의 SEND OK 를 아직 못 봤다 — 이번 주기는 건너뛴다
+[REG] 등록 실패 145B
+[SLOT] n=13 tx=145 ack=0 due=0 r=0
+[AT] " S,0,608,000,14,P1,09" (21)
+[AT] "SEND OK" (7)
+[AT] "+IPD,21:R,403,A5,utc8esf8,03" (28)
+[SLOT-OOW] +71ms
+[AT] "OK" (2)
+[AT] "ERROR" (5)
+[NET] 송신 오류 응답(로그만, 카운터는 sendLine 이 센다): ERROR
+[AT] "Unlink" (6)
+[DIAG] offline step=3 사다리=0/0 rx=361 lines=23 up=15s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[NET] ★ ESP 가 IP 를 잃었다 — 모듈 리셋으로 본다. 누적 사건 1
+[AT] "OK" (2)
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "0.0.0.0" (7)
+[AT] "OK" (2)
+[DIAG] offline step=3 사다리=0/0 rx=413 lines=29 up=18s
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시
+[LADDER] 실패(CWJAP FAIL) CWJAP소요 17s · 연속 0회 · 결합유지 10s · 현재 0단(0회 누적)
+[LADDER] ↑↑ 단 상승 → 1단
+[LADDER] 1단 조치: 시리얼 드레인 32바이트 버림 + 줄 조립 초기화
+[DIAG] offline step=2 사다리=1/0 rx=413 lines=29 up=21s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)

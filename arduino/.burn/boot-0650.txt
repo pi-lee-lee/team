@@ -1,0 +1,31 @@
+�V�iV�6&��_��X�
+[NET] 대상 192.168.35.21:8888
+
+[SENS] A1=훅 B1=훅  ⚠ 샘플 훅 = 시뮬/LED되읽기 (배선 없음)
+
+[PARKING NODE] proto v1 / 1 spots / 2 sensors / 6 modules / dev=P1
+[BOOT] 리셋 원인: 불명 (부트로더가 MCUSR 을 지우고 넘어왔다)
+[BOOT] 사다리 4단(ESP 하드리셋선) 미배선 — A2 를 ESP RST 에 물리고 ESP_RST_WIRED=1 · 6단(워치독) 끔
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=2 사다리=0/0 rx=45 lines=4 up=3s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="SK_WiFiGIGA50DC_2.4G","2011050796"" (44)
+[AT] "busy p..." (9)
+[NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=6s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=9s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=12s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=15s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=18s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=21s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=24s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=27s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=30s
+[DIAG] offline step=2 사다리=0/0 rx=103 lines=6 up=33s

@@ -1,0 +1,33 @@
+
+[PARKING NODE] proto v1 / 10 slots / 12 modules / dev=P1
+[BOOT] 리셋 원인: 불명 (부트로더가 MCUSR 을 지우고 넘어왔다)
+[BOOT] 사다리 4단(ESP 하드리셋선) 미배선 — A2 를 ESP RST 에 물리고 ESP_RST_WIRED=1 · 6단(워치독) 끔
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "OK" (2)
+[AT] "b@\xD4\x86@\xF9Rc\x10\xFCR\x89:\x97bB\xCC\xFF\xCA\xC9\xA5\x9D\x1C\xFF\xC0I\x8D" (27)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "no change" (9)
+[DIAG] offline step=2 사다리=0/0 rx=112 lines=6 up=3s
+[NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 사다리=0/0 rx=147 lines=7 up=6s
+[DIAG] offline step=2 사다리=0/0 rx=147 lines=7 up=9s
+[AT] "OK" (2)
+[NET] CWJAP OK — 결합됐다. IP 를 실제로 받았는지 CIFSR 로 확인한다
+[NET] 3 CIFSR (IP 를 실제로 받았는가)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.0.214" (13)
+[NET] ★ IP 확보: 192.168.0.214
+[AT] "OK" (2)
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 적용됨 → CIPSTART
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.0.29",9991" (37)
+[DIAG] offline step=5 사다리=0/0 rx=245 lines=14 up=12s
+[DIAG] offline step=5 사다리=0/0 rx=245 lines=14 up=15s
+[DIAG] offline step=5 사다리=0/0 rx=245 lines=14 up=18s

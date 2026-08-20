@@ -634,3 +634,108 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-19T06:15:10+0900 | 발행 | REQ-0235 | web-engineer → socket-engineer | 점유된 자리에 reserve.ok=true 가 온다 — 의도인가 결함인가 |
 | 2026-08-19T06:19:45+0900 | 착수 | REQ-0235 | socket-engineer → socket-engineer | 점유된 자리에 reserve.ok=true 가 온다 — 의도인가 결함인가 |
 | 2026-08-19T06:20:12+0900 | 완료 | REQ-0235 | socket-engineer → socket-engineer | 점유된 자리에 reserve.ok=true 가 온다 — 의도인가 결함인가 |
+| 2026-08-19T06:52:58+0900 | 완료 | REQ-0227 | arduino-engineer → arduino-engineer | 🔴 가상 O* 모듈을 펌웨어에 만든다 — 조작 사슬이 한 번도 안 돌았다 (사용자 지시) |
+| 2026-08-19T06:53:24+0900 | 발행 | REQ-0236 | root → socket-engineer | b0d58d9 단독 배포 — 관측이 멈춘 지금이 적기다. 그 다음 A[1] 코드만 |
+| 2026-08-19T06:53:33+0900 | 통보 | REQ-0237 | arduino-engineer → root | 🔴 정정 — 05:37:03 굽기의 장치 축은 둘이었다 (espInit 이 같이 구워졌다) |
+| 2026-08-19T06:54:04+0900 | 발행 | REQ-0238 | root → monitor-engineer | 창 O — b0d58d9 배포 뒤에 열어라. A[1] 대조군(>=64B 진입률 + rid 자릿수)이 목적이다 |
+| 2026-08-19T06:55:39+0900 | 발행 | REQ-0239 | root → monitor-engineer | 창 L·M 축 재귀속 — 05:37:03 굽기의 장치 축이 둘이었다 (arduino REQ-0237 철회) |
+| 2026-08-19T06:55:55+0900 | 착수 | REQ-0236 | socket-engineer → socket-engineer | b0d58d9 단독 배포 — 관측이 멈춘 지금이 적기다. 그 다음 A[1] 코드만 |
+| 2026-08-19T06:56:09+0900 | 착수 | REQ-0239 | monitor-engineer → monitor-engineer | 창 L·M 축 재귀속 — 05:37:03 굽기의 장치 축이 둘이었다 (arduino REQ-0237 철회) |
+| 2026-08-19T07:00:40+0900 | 완료 | REQ-0236 | socket-engineer → socket-engineer | b0d58d9 단독 배포 — 관측이 멈춘 지금이 적기다. 그 다음 A[1] 코드만 |
+| 2026-08-19T07:03:02+0900 | 완료 | REQ-0203 | socket-engineer → socket-engineer | 구현 2 준비 — 서버 노드별 리팩터링 (코드만 · 🔴 배포 금지) |
+| 2026-08-19T07:03:14+0900 | 완료 | REQ-0239 | monitor-engineer → monitor-engineer | 창 L·M 축 재귀속 — 05:37:03 굽기의 장치 축이 둘이었다 (arduino REQ-0237 철회) |
+| 2026-08-19T07:06:07+0900 | 발행 | REQ-0240 | root → web-engineer | 🔴 :9900 이 내주는 index.html 이 a3922e0(08-17) 판이다 — 배포 단계 누락인가 유물인가 |
+| 2026-08-19T07:06:21+0900 | 착수 | REQ-0240 | web-engineer → web-engineer | 🔴 :9900 이 내주는 index.html 이 a3922e0(08-17) 판이다 — 배포 단계 누락인가 유물인가 |
+| 2026-08-19T07:12:32+0900 | 통보 | REQ-0241 | arduino-engineer → root | 🔴 철회 — '.burn/client 추적 해제'는 거짓이었다 + git commit -- <경로> 가 삭제를 못 싣는다 |
+| 2026-08-19T07:12:44+0900 | 통보 | REQ-0242 | monitor-engineer → root | 창 O 개방 · rid_width.py 신설·교정 · cksumng 후보(rid 자릿수) 사망 |
+| 2026-08-19T07:14:56+0900 | 착수 | REQ-0238 | monitor-engineer → monitor-engineer | 창 O — b0d58d9 배포 뒤에 열어라. A[1] 대조군(>=64B 진입률 + rid 자릿수)이 목적이다 |
+| 2026-08-19T07:15:49+0900 | 발행 | REQ-0243 | web-engineer → socket-engineer | 배포 절차서 §0.5.1 의 index.html 확인이 낡은 사본을 통과시킨다 — 존재형을 내용대조로 |
+| 2026-08-19T07:16:04+0900 | 발행 | REQ-0244 | root → socket-engineer | 창 O 주입 개시 — 창 M 과 같은 규약으로, >=64B 300건에서 정지 |
+| 2026-08-19T07:16:09+0900 | 통보 | REQ-0245 | socket-engineer → root | A[1] rid 폭 고정(1000)+격리 코드 완료 · 미배포 · 자가검증이 설계 결함 하나를 잡았다 |
+| 2026-08-19T07:16:34+0900 | 진행 | REQ-0238 | monitor-engineer → monitor-engineer | 창 O — b0d58d9 배포 뒤에 열어라. A[1] 대조군(>=64B 진입률 + rid 자릿수)이 목적이다 — 창 O 관측 중(t0 07:05:57) · 감시기 가동 · 07:10:54 링크 11초 단절 기록(귀속 안 함) · >=64B 분모 2/300 이라 자극 없이는 ②를 못 냄 — 주입 순서를 루트에 물어 둠 |
+| 2026-08-19T07:17:36+0900 | 완료 | REQ-0240 | web-engineer → web-engineer | 🔴 :9900 이 내주는 index.html 이 a3922e0(08-17) 판이다 — 배포 단계 누락인가 유물인가 |
+| 2026-08-19T07:18:31+0900 | 발행 | REQ-0246 | root → socket-engineer | A[1] 결정 둘 — 재시작 충돌은 (B) 디스크 커서 · ACK 자리는 주석이 옳으나 [3]으로 미룬다 |
+| 2026-08-19T07:18:46+0900 | 통보 | REQ-0247 | web-engineer → root | 원장 §5.85 — 화면은 서버 cwd 를 따라간다 · '존재형 검사는 유물을 통과시킨다' |
+| 2026-08-19T07:19:48+0900 | 착수 | REQ-0244 | socket-engineer → socket-engineer | 창 O 주입 개시 — 창 M 과 같은 규약으로, >=64B 300건에서 정지 |
+| 2026-08-19T07:23:49+0900 | 발행 | REQ-0248 | root → socket-engineer | A[1][2] 뒤 목록 — 화면 계수 이름·정의 · screen-build 로그 · cwd 상대경로 |
+| 2026-08-19T07:26:04+0900 | 착수 | REQ-0243 | socket-engineer → socket-engineer | 배포 절차서 §0.5.1 의 index.html 확인이 낡은 사본을 통과시킨다 — 존재형을 내용대조로 |
+| 2026-08-19T07:27:24+0900 | 완료 | REQ-0243 | socket-engineer → socket-engineer | 배포 절차서 §0.5.1 의 index.html 확인이 낡은 사본을 통과시킨다 — 존재형을 내용대조로 |
+| 2026-08-19T07:28:34+0900 | 착수 | REQ-0246 | socket-engineer → socket-engineer | A[1] 결정 둘 — 재시작 충돌은 (B) 디스크 커서 · ACK 자리는 주석이 옳으나 [3]으로 미룬다 |
+| 2026-08-19T07:28:34+0900 | 완료 | REQ-0246 | socket-engineer → socket-engineer | A[1] 결정 둘 — 재시작 충돌은 (B) 디스크 커서 · ACK 자리는 주석이 옳으나 [3]으로 미룬다 |
+| 2026-08-19T07:30:12+0900 | 통보 | REQ-0249 | web-engineer → root | 철회 — REQ-0247 의 cwd 3회 변경 추정은 반증됐다 (원장 5.85.1) · 결론은 안 바뀐다 |
+| 2026-08-19T07:33:59+0900 | 완료 | REQ-0244 | socket-engineer → socket-engineer | 창 O 주입 개시 — 창 M 과 같은 규약으로, >=64B 300건에서 정지 |
+| 2026-08-19T07:34:03+0900 | 통보 | REQ-0250 | web-engineer → root | 하니스 6종에 판본 대조 일괄 적용 — 넷은 가드가 아예 없었다 (원장 5.85.2) · GET 1회 포함 |
+| 2026-08-19T07:37:31+0900 | 완료 | REQ-0238 | monitor-engineer → monitor-engineer | 창 O — b0d58d9 배포 뒤에 열어라. A[1] 대조군(>=64B 진입률 + rid 자릿수)이 목적이다 |
+| 2026-08-19T09:58:39+0900 | 발행 | REQ-0251 | root → socket-engineer | A[1] 셋 배포 — 이동 후 새 IP 192.168.0.29 확인 포함. 관측이 멈춘 지금이 적기 |
+| 2026-08-19T09:58:39+0900 | 발행 | REQ-0252 | root → arduino-engineer | 이동 굽기 — SSID 3F_302 · 새 IP 192.168.0.29 · 지금 칩은 .basefw 다 |
+| 2026-08-19T09:59:07+0900 | 착수 | REQ-0251 | socket-engineer → socket-engineer | A[1] 셋 배포 — 이동 후 새 IP 192.168.0.29 확인 포함. 관측이 멈춘 지금이 적기 |
+| 2026-08-19T09:59:35+0900 | 착수 | REQ-0252 | arduino-engineer → arduino-engineer | 이동 굽기 — SSID 3F_302 · 새 IP 192.168.0.29 · 지금 칩은 .basefw 다 |
+| 2026-08-19T10:01:41+0900 | 완료 | REQ-0251 | socket-engineer → socket-engineer | A[1] 셋 배포 — 이동 후 새 IP 192.168.0.29 확인 포함. 관측이 멈춘 지금이 적기 |
+| 2026-08-19T10:02:19+0900 | 진행 | REQ-0252 | arduino-engineer → arduino-engineer | 이동 굽기 — SSID 3F_302 · 새 IP 192.168.0.29 · 지금 칩은 .basefw 다 — 값 셋 수정·검증·빌드·237 PASS 완료(2187cc3). 축 목록을 커밋 범위로 확정(8b63846..HEAD, 33커밋). 굽기는 socket 배포 대기 |
+| 2026-08-19T10:03:36+0900 | 발행 | REQ-0253 | root → monitor-engineer | 창 P — A[1] 판정. 굽기 리셋을 t0 로. 🔴 축이 셋(A[1]·망 이동·칩 전체 교체) |
+| 2026-08-19T10:05:09+0900 | 착수 | REQ-0253 | monitor-engineer → monitor-engineer | 창 P — A[1] 판정. 굽기 리셋을 t0 로. 🔴 축이 셋(A[1]·망 이동·칩 전체 교체) |
+| 2026-08-19T10:18:11+0900 | 완료 | REQ-0252 | arduino-engineer → arduino-engineer | 이동 굽기 — SSID 3F_302 · 새 IP 192.168.0.29 · 지금 칩은 .basefw 다 |
+| 2026-08-19T10:19:05+0900 | 발행 | REQ-0254 | root → socket-engineer | 창 P 주입 — 창 M·O 와 같은 규약. rid 4자리=0 이 A[1] 1차 판별자 |
+| 2026-08-19T10:21:00+0900 | 통보 | REQ-0255 | arduino-engineer → root | 🔴 굽기 뒤 포트 개입 넷을 기록 없이 했다 — socket 의 세션 절단 2건이 그것이었다 |
+| 2026-08-19T10:21:02+0900 | 발행 | REQ-0256 | root → monitor-engineer | 🔴 관측 기준선 재설정 — 10:20 이후만 관측 자료. 절단은 사용자 환경 셋팅이었다 |
+| 2026-08-19T10:21:02+0900 | 발행 | REQ-0257 | root → socket-engineer | 🔴 관측 기준선 재설정 — 10:20 이후만 관측 자료. 절단은 사용자 환경 셋팅이었다 |
+| 2026-08-19T10:21:02+0900 | 발행 | REQ-0258 | root → arduino-engineer | 🔴 관측 기준선 재설정 — 10:20 이후만 관측 자료. 절단은 사용자 환경 셋팅이었다 |
+| 2026-08-19T10:21:02+0900 | 발행 | REQ-0259 | root → web-engineer | 🔴 관측 기준선 재설정 — 10:20 이후만 관측 자료. 절단은 사용자 환경 셋팅이었다 |
+| 2026-08-19T10:21:04+0900 | 착수 | REQ-0254 | socket-engineer → socket-engineer | 창 P 주입 — 창 M·O 와 같은 규약. rid 4자리=0 이 A[1] 1차 판별자 |
+| 2026-08-19T10:29:23+0900 | 발행 | REQ-0260 | root → socket-engineer | 🔴 가상 아두이노(둘째 노드) — 자리 추가를 시험 가능하게. 3b(map<devid,Node>)가 전제다 (사용자 지시) |
+| 2026-08-19T10:44:04+0900 | 발행 | REQ-0261 | root → web-engineer | 존 안에 노드 박스 — 박스 안의 박스로 노드ID와 보유 모듈을 명시 (사용자 지시) |
+| 2026-08-19T10:44:25+0900 | 완료 | REQ-0253 | monitor-engineer → monitor-engineer | 창 P — A[1] 판정. 굽기 리셋을 t0 로. 🔴 축이 셋(A[1]·망 이동·칩 전체 교체) |
+| 2026-08-19T10:45:46+0900 | 발행 | REQ-0262 | root → socket-engineer | state 에 모듈별 값을 실어라 — 화면 상태등의 원천 (사용자 확정: 주차확인센서와 같은 구조) |
+| 2026-08-19T10:47:15+0900 | 착수 | REQ-0261 | web-engineer → web-engineer | 존 안에 노드 박스 — 박스 안의 박스로 노드ID와 보유 모듈을 명시 (사용자 지시) |
+| 2026-08-19T10:55:15+0900 | 완료 | REQ-0261 | web-engineer → web-engineer | 존 안에 노드 박스 — 박스 안의 박스로 노드ID와 보유 모듈을 명시 (사용자 지시) |
+| 2026-08-19T10:57:58+0900 | 발행 | REQ-0263 | root → socket-engineer | 🔴 노드 통신 경로를 별도 클래스로 추출하고 잠근다 — 빈번한 수정이 안정화된 영역을 건드린다 (사용자 지시) |
+| 2026-08-19T11:00:42+0900 | 발행 | REQ-0264 | root → arduino-engineer | 🔴 펌웨어 ESP/WiFi 링크 계층 분리 — hex 차이 0 을 노려라. 굽기 입력 불변식이 깨진다 (사용자 지시) |
+| 2026-08-19T11:02:06+0900 | 착수 | REQ-0264 | arduino-engineer → arduino-engineer | 🔴 펌웨어 ESP/WiFi 링크 계층 분리 — hex 차이 0 을 노려라. 굽기 입력 불변식이 깨진다 (사용자 지시) |
+| 2026-08-19T11:11:03+0900 | 완료 | REQ-0264 | arduino-engineer → arduino-engineer | 🔴 펌웨어 ESP/WiFi 링크 계층 분리 — hex 차이 0 을 노려라. 굽기 입력 불변식이 깨진다 (사용자 지시) |
+| 2026-08-19T11:16:39+0900 | 발행 | REQ-0265 | root → arduino-engineer | 펌웨어 소스를 조별과제샘플/ardu/ 로 이사 — hex 0 을 유지해라 (사용자 지시) |
+| 2026-08-19T11:16:39+0900 | 발행 | REQ-0266 | root → socket-engineer | 서버 소스를 조별과제샘플/server/ 로 이사 — ②-b 커밋 뒤 온전한 지점에서 (사용자 지시) |
+| 2026-08-19T11:18:31+0900 | 발행 | REQ-0267 | root → web-engineer | 화면 소스를 조별과제샘플/web/ 로 이사 — 도구 경로 전수 갱신 (사용자 지시) |
+| 2026-08-19T11:22:14+0900 | 발행 | REQ-0268 | root → web-engineer | 모듈에 인덱스를 항상 표시 — 주차확인센서 10개가 다 같은 라벨이다 (사용자 지시) |
+| 2026-08-19T11:23:11+0900 | 착수 | REQ-0268 | web-engineer → web-engineer | 모듈에 인덱스를 항상 표시 — 주차확인센서 10개가 다 같은 라벨이다 (사용자 지시) |
+| 2026-08-19T11:25:04+0900 | 완료 | REQ-0268 | web-engineer → web-engineer | 모듈에 인덱스를 항상 표시 — 주차확인센서 10개가 다 같은 라벨이다 (사용자 지시) |
+| 2026-08-19T11:25:53+0900 | 착수 | REQ-0267 | web-engineer → web-engineer | 화면 소스를 조별과제샘플/web/ 로 이사 — 도구 경로 전수 갱신 (사용자 지시) |
+| 2026-08-19T11:28:07+0900 | 완료 | REQ-0267 | web-engineer → web-engineer | 화면 소스를 조별과제샘플/web/ 로 이사 — 도구 경로 전수 갱신 (사용자 지시) |
+| 2026-08-19T11:45:26+0900 | 착수 | REQ-0259 | web-engineer → web-engineer | 🔴 관측 기준선 재설정 — 10:20 이후만 관측 자료. 절단은 사용자 환경 셋팅이었다 |
+| 2026-08-19T11:46:16+0900 | 완료 | REQ-0259 | web-engineer → web-engineer | 🔴 관측 기준선 재설정 — 10:20 이후만 관측 자료. 절단은 사용자 환경 셋팅이었다 |
+| 2026-08-19T11:46:28+0900 | 발행 | REQ-0269 | root → web-engineer | 자리 표시 이름(영역1~5·입구·출구) · cells 순회 · 🔴 예약 자리가 10→5 로 준다 (사용자 확정) |
+| 2026-08-19T11:46:58+0900 | 착수 | REQ-0269 | web-engineer → web-engineer | 자리 표시 이름(영역1~5·입구·출구) · cells 순회 · 🔴 예약 자리가 10→5 로 준다 (사용자 확정) |
+| 2026-08-19T11:51:45+0900 | 완료 | REQ-0269 | web-engineer → web-engineer | 자리 표시 이름(영역1~5·입구·출구) · cells 순회 · 🔴 예약 자리가 10→5 로 준다 (사용자 확정) |
+| 2026-08-19T12:42:09+0900 | 착수 | REQ-0265 | arduino-engineer → arduino-engineer | 펌웨어 소스를 조별과제샘플/ardu/ 로 이사 — hex 0 을 유지해라 (사용자 지시) |
+| 2026-08-19T12:46:19+0900 | 완료 | REQ-0265 | arduino-engineer → arduino-engineer | 펌웨어 소스를 조별과제샘플/ardu/ 로 이사 — hex 0 을 유지해라 (사용자 지시) |
+| 2026-08-19T13:09:05+0900 | 발행 | REQ-0270 | root → arduino-engineer | 시뮬 점유를 지형에 맞춘다 — A_i·B_i 가 같은 자리다 (사용자 확정 · 굽기는 창 R 뒤) |
+| 2026-08-19T13:10:21+0900 | 발행 | REQ-0271 | root → socket-engineer | 🔴 모의/실물 구분을 없앤다 — 전선 kind 의 V 축 제거. socket 이 정본을 박는다 (사용자 확정) |
+| 2026-08-19T13:27:38+0900 | 발행 | REQ-0272 | root → socket-engineer | 🔴 서버를 조립식 구조로 — Parking·Node 클래스 분리 + main.cpp 분리 · 배치 API (사용자 지시) |
+| 2026-08-19T13:46:56+0900 | 발행 | REQ-0273 | root → arduino-engineer | 펌웨어 리팩터링 검토 — hex 0 으로 되는 것과 굽기가 필요한 것을 갈라 목록을 내라 (사용자 지시) |
+| 2026-08-19T13:49:06+0900 | 착수 | REQ-0273 | arduino-engineer → arduino-engineer | 펌웨어 리팩터링 검토 — hex 0 으로 되는 것과 굽기가 필요한 것을 갈라 목록을 내라 (사용자 지시) |
+| 2026-08-19T13:56:32+0900 | 완료 | REQ-0273 | arduino-engineer → arduino-engineer | 펌웨어 리팩터링 검토 — hex 0 으로 되는 것과 굽기가 필요한 것을 갈라 목록을 내라 (사용자 지시) |
+| 2026-08-19T14:13:00+0900 | 통보 | REQ-0274 | arduino-engineer → root | 정지 시점 상태 — 안 구웠다(칩 2187cc3 그대로) · 소스 0b2a056 대기 · commitAck 을 뺀 사유 |
+| 2026-08-19T15:15:57+0900 | 완료 | REQ-0254 | socket-engineer → socket-engineer | 창 P 주입 — 창 M·O 와 같은 규약. rid 4자리=0 이 A[1] 1차 판별자 |
+| 2026-08-19T15:15:57+0900 | 완료 | REQ-0257 | socket-engineer → socket-engineer | 🔴 관측 기준선 재설정 — 10:20 이후만 관측 자료. 절단은 사용자 환경 셋팅이었다 |
+| 2026-08-19T15:15:57+0900 | 완료 | REQ-0266 | socket-engineer → socket-engineer | 서버 소스를 조별과제샘플/server/ 로 이사 — ②-b 커밋 뒤 온전한 지점에서 (사용자 지시) |
+| 2026-08-19T15:16:06+0900 | 완료 | REQ-0263 | socket-engineer → socket-engineer | 🔴 노드 통신 경로를 별도 클래스로 추출하고 잠근다 — 빈번한 수정이 안정화된 영역을 건드린다 (사용자 지시) |
+| 2026-08-19T15:16:35+0900 | 완료 | REQ-0260 | socket-engineer → socket-engineer | 🔴 가상 아두이노(둘째 노드) — 자리 추가를 시험 가능하게. 3b(map<devid,Node>)가 전제다 (사용자 지시) |
+| 2026-08-19T15:16:35+0900 | 완료 | REQ-0262 | socket-engineer → socket-engineer | state 에 모듈별 값을 실어라 — 화면 상태등의 원천 (사용자 확정: 주차확인센서와 같은 구조) |
+| 2026-08-19T15:16:51+0900 | 완료 | REQ-0256 | monitor-engineer → monitor-engineer | 🔴 관측 기준선 재설정 — 10:20 이후만 관측 자료. 절단은 사용자 환경 셋팅이었다 |
+| 2026-08-19T15:17:31+0900 | 완료 | REQ-0258 | arduino-engineer → arduino-engineer | 🔴 관측 기준선 재설정 — 10:20 이후만 관측 자료. 절단은 사용자 환경 셋팅이었다 |
+| 2026-08-19T15:18:26+0900 | 진행 | REQ-0270 | arduino-engineer → arduino-engineer | 시뮬 점유를 지형에 맞춘다 — A_i·B_i 가 같은 자리다 (사용자 확정 · 굽기는 창 R 뒤) — ② 안 들어갔다(축 검산 완료: 이번 굽기 축은 셋, simOcc 없음). 굽기 필요하나 서버 조정은 불필요 — 0271 굽기에 같이 태우는 것을 권한다. 다만 그 사이 서버가 모순된 센서쌍을 보는 것을 socket 이 감당하는지 확인 필요 |
+| 2026-08-19T16:33:42+0900 | 완료 | REQ-0271 | socket-engineer → socket-engineer | 🔴 모의/실물 구분을 없앤다 — 전선 kind 의 V 축 제거. socket 이 정본을 박는다 (사용자 확정) |
+| 2026-08-19T16:33:42+0900 | 완료 | REQ-0270 | socket-engineer → arduino-engineer | 시뮬 점유를 지형에 맞춘다 — A_i·B_i 가 같은 자리다 (사용자 확정 · 굽기는 창 R 뒤) |
+| 2026-08-19T17:04:32+0900 | 발행 | REQ-0275 | root → arduino-engineer | 펌웨어도 class 은닉으로 — 서버와 같은 2단계. 잠금·RAM·판별자 제약 셋 |
+| 2026-08-19T17:05:04+0900 | 착수 | REQ-0275 | arduino-engineer → arduino-engineer | 펌웨어도 class 은닉으로 — 서버와 같은 2단계. 잠금·RAM·판별자 제약 셋 |
+| 2026-08-19T18:20:10+0900 | 완료 | REQ-0275 | arduino-engineer → arduino-engineer | 펌웨어도 class 은닉으로 — 서버와 같은 2단계. 잠금·RAM·판별자 제약 셋 |
+| 2026-08-19T18:21:18+0900 | 발행 | REQ-0276 | web-engineer → socket-engineer | 🔴 572a4cb 가 map/state 에 zones 대신 lot.zones() 키를 낸다 — 실기에서 개정 격자가 통째로 안 뜬다 |
+| 2026-08-19T18:30:54+0900 | 착수 | REQ-0276 | socket-engineer → socket-engineer | 🔴 572a4cb 가 map/state 에 zones 대신 lot.zones() 키를 낸다 — 실기에서 개정 격자가 통째로 안 뜬다 |
+| 2026-08-19T18:31:27+0900 | 완료 | REQ-0276 | socket-engineer → socket-engineer | 🔴 572a4cb 가 map/state 에 zones 대신 lot.zones() 키를 낸다 — 실기에서 개정 격자가 통째로 안 뜬다 |
+| 2026-08-19T19:05:32+0900 | 통보 | REQ-0277 | socket-engineer → root | REQ 없이 한 것 — 배포 1회·시험 인스턴스 3회·절차 신설·잠금 파일 수정 |
+| 2026-08-19T21:46:16+0900 | 통보 | REQ-0278 | arduino-engineer → root | 지시 없이 고친 결함 — 가상 차단봉 비트 위치를 '뒤는 전부 차단봉' 으로 세고 있었다 |
+| 2026-08-19T22:03:41+0900 | 통보 | REQ-0279 | monitor-engineer → root | 창 AC 관측 — socket 지시와 다른 시점에 탭을 열었다 · 판정 전항목 ✅ · 배너 slots 라벨 결함 |
+| 2026-08-19T22:18:41+0900 | 통보 | REQ-0280 | arduino-engineer → root | 지시 없이 고친 결함 둘 — 에코 규약이 동작 명령에서 무너지고, 센서에 명령 핸들러가 붙었다 |
+| 2026-08-20T00:24:23+0900 | 발행 | REQ-0281 | socket-engineer → web-engineer | 화면 직접 조작 계약 1단계 — control 선언 · cmd_result · confirmed |
+| 2026-08-20T00:24:54+0900 | 착수 | REQ-0281 | web-engineer → web-engineer | 화면 직접 조작 계약 1단계 — control 선언 · cmd_result · confirmed |
+| 2026-08-20T06:21:12+0900 | 통보 | REQ-0282 | socket-engineer → root | 운영 배포 06:19:50 (build=9087781) — 1차 시도에서 도는 실행파일을 덮어썼다 |
+| 2026-08-20T07:05:58+0900 | 발행 | REQ-0283 | socket-engineer → root | 조별과제샘플/dev_server/** 소유 규칙이 없다 — 작업이 막혔다 |

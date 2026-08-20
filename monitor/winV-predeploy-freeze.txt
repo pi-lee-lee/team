@@ -1,0 +1,25 @@
+# 창 V 마감 — socket 배포 직전 얼림 (배포가 경계다)
+# 뜬 시각: 2026-08-19 16:31:33
+# t0 16:20:57 · 칩 699147b · 서버 7f17b99(12:00:36 기동)
+
+## 판정 축 — busy p (파서 생사)
+busy p : 0   ← 0 이면 파서 살아 있음 = 3단이 먹는다
+
+## 링크
+CIFSR 0.0.0.0 : 2
+LADDER 실패   : 6
+T2            : 2
+online 수립   : 4
+
+## UART
+깨진 나가는 AT : 0
+상행 AT 혼재   : 0
+
+## 결합유지(단별)
+   1 결합유지 307s · 현재 0단
+   1 결합유지 없음 · 현재 0단
+   3 결합유지 없음 · 현재 1단
+   1 결합유지 없음 · 현재 2단
+
+## 마지막 [CNT]
+16:31:00  [CNT] up=600 drop=3 esprst=2 hwrst=0/0 resync=4 sendfail=0 okto=3 stuck=2 ackq=0 ackdrop=0 ackstale=0 slot=500 oow=5 smiss=1 ssovf=0 cksumng=1 okstream=384 penddrop=0 pendfill=388 bigfill=4 bigdrop=0 bigokst=4 oklost=0 bigoklost=0 skip=18 online=1

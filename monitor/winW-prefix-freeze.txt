@@ -1,0 +1,23 @@
+# 창 W 마감 얼림 — 사용자 ESP01 배선 접점 작업 직전
+# 뜬 시각: 2026-08-19 16:42:23
+# t0 16:33:46 · 칩 699147b · 서버 198e15b(pid 13000)
+
+## 🔴 1번 축 — 깨진 나가는 AT (분모 포함)
+  깨진 나가는 AT : 0
+  전체 CIPSEND   : 214
+  상행 AT 혼재   : 0
+  이스케이프 줄  : 0
+
+## 손상 원문
+[AT] "b\xFC\xD4\x86@\xF9Ra\xE2\xFCR\x89:\x97bB\xCC\xFF\xCA\xC9\xA5\x9D\x1C\xFF\xC2I\x8D"
+[AT] "\xEB\x0B\x1A\xA1\x85\xB9\x9D\x955"
+[AT] "192.168.0.214\x02"
+[AT] " S,17,73A,000,30\x0CP1,42"
+
+## 링크
+  busy p : 0   ← 0 이면 파서 살아 있음
+  Unlink : 4 · CWJAP OK : 2 · LADDER실패 : 7
+  CIFSR 0.0.0.0 : 0 · T2 : 3
+
+## 마지막 [CNT]
+16:41:49  [CNT] up=480 drop=4 esprst=2 hwrst=0/0 resync=5 sendfail=0 okto=3 stuck=3 ackq=0 ackdrop=0 ackstale=0 slot=400 oow=0 smiss=2 ssovf=0 cksumng=1 okstream=192 penddrop=0 pendfill=197 bigfill=5 bigdrop=0 bigokst=5 oklost=0 bigoklost=0 skip=19 online=1
