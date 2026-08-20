@@ -39,6 +39,26 @@
 
 class ParkingLot;
 
+// 🔴🔴 **`<windows.h>` 가 `IN` 과 `OUT` 을 *빈 매크로* 로 정의한다** (SAL 주석용).
+//   그래서 `enum Kind { IN, OUT };` 이 `enum Kind { , };` 로 펼쳐져 **컴파일이 깨진다.**
+//
+//   ⚠ **이건 Windows 에서만 나고, 우리는 그 기계가 없다.** 그래서 macOS 에서 재현해 잡았다:
+//       c++ -fsyntax-only -DIN= -DOUT= -x c++ parking.h
+//       → `parking.h:44: error: expected identifier`
+//     🔑 **매크로 충돌은 그 매크로를 흉내 내면 어디서든 재현된다.** 플랫폼이 없어도 잴 수 있다.
+//
+// 🔑 **헤더가 스스로 막는다.** `server.cpp` 쪽에서 `#undef` 하면
+//   **`lot.cpp` 를 다른 순서로 포함하는 곳에서 다시 깨진다** — 기여자의 파일이 그렇다.
+//   > **이름을 가진 헤더가 그 이름을 지킨다.**
+// ⚠ 이름을 바꾸는 대신 매크로를 걷는 이유: `Gate::IN` 은 **기여자가 쓰는 공개 이름**이고
+//   `lot.cpp` 에 이미 적혀 있다. **우리 이름이 남의 매크로에 밀릴 이유가 없다.**
+#ifdef IN
+#undef IN
+#endif
+#ifdef OUT
+#undef OUT
+#endif
+
 class Gate {
 public:
     enum Kind { IN, OUT };          // 입구 · 출구
