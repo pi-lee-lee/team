@@ -805,3 +805,10 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-20T18:04:57+0900 | 착수 | REQ-0309 | arduino-engineer → arduino-engineer | 🔴 주석을 걷고 그 자리에 검증받는 예제를 둔다 — 코드보다 주석이 많다 (사용자 지시) |
 | 2026-08-20T18:16:22+0900 | 발행 | REQ-0311 | root → arduino-engineer | 🔴 pin() 이 여러 핀을 받는다 — 2핀 센서에서 모양이 갈린다 (사용자 지적) |
 | 2026-08-20T18:17:35+0900 | 완료 | REQ-0310 | socket-engineer → socket-engineer | 주석을 걷고 그 자리에 검증받는 예제를 둔다 — server 트리 (사용자 지시) |
+| 2026-08-20T18:18:17+0900 | 반려 | REQ-0311 | root → arduino-engineer | 🔴 pin() 이 여러 핀을 받는다 — 2핀 센서에서 모양이 갈린다 (사용자 지적) |
+| 2026-08-20T18:22:00+0900 | 발행 | REQ-0312 | root → arduino-engineer | 🔴 pin() 을 없앤다 — 프레임워크가 핀을 알 이유가 없다 (사용자 지적) |
+| 2026-08-20T18:22:54+0900 | 착수 | REQ-0312 | arduino-engineer → arduino-engineer | 🔴 pin() 을 없앤다 — 프레임워크가 핀을 알 이유가 없다 (사용자 지적) |
+| 2026-08-20T18:52:30+0900 | 완료 | REQ-0312 | arduino-engineer → arduino-engineer | 🔴 pin() 을 없앤다 — 프레임워크가 핀을 알 이유가 없다 (사용자 지적) |
+| 2026-08-20T18:52:30+0900 | 완료 | REQ-0309 | arduino-engineer → arduino-engineer | 🔴 주석을 걷고 그 자리에 검증받는 예제를 둔다 — 코드보다 주석이 많다 (사용자 지시) |
+| 2026-08-20T18:56:28+0900 | 발행 | REQ-0313 | arduino-engineer → root | 🔴 occ=0 판별 — 센서 앞에 손을 대야 닫힌다 (내 계측기 밖) |
+| 2026-08-20T19:07:11+0900 | 완료 | REQ-0313 | arduino-engineer → root | 🔴 occ=0 판별 — 센서 앞에 손을 대야 닫힌다 (내 계측기 밖) |

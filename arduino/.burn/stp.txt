@@ -1,0 +1,5 @@
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:160:9: error: use of undeclared identifier 'pin'
+  160 |   (void)pin;
+      |         ^~~
+1 error generated.
+🔴 정의 안 된 매크로가 #if 에 있다 — 그 블록은 조용히 빠진다

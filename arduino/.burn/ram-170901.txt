@@ -1,0 +1,328 @@
+(MP0*¸ˇˇˇˇ˛ˇˇ"4¢Ú›Ãàˇˇ˛˛ˇˇˇîDïîåÃ¡ˇˇˇˇˇˇˇÇêQî⁄ç¡\¸ˇ˛ˇˇˇ0»Ÿˇ"4¢€Eq0˘ˇˇ˛ˇˇˇˇˇê7≠ETÂ'Ë.˛ˇˇˇ˛˛ˇˇˇêDp˝P0Pˇˇˇˇˇˇˇˇò–&ÚMP0*¸ˇˇˇˇ˛ˇˇ"4¢Ú›Ãàˇˇ˛˛ˇˇˇîDïîåÃ¡ˇˇˇˇˇˇˇÇêQî⁄ç¡\¸ˇ˛ˇˇˇ0»Ÿ
+[NET] ÎåÄÏÉÅ 192.168.0.29:8888
+
+[SENS] A1=ÌïÄ2 B1=ÌïÄ9 
+
+[PARKING NODE] proto v1 / 2 sensors / 4 modules / dev=P1
+[BOOT] Î¶¨ÏÖã ÏõêÏù∏: Ïïå Ïàò ÏóÜÏùå ‚Äî Ïù¥ Î∂ÄÌä∏Î°úÎçîÍ∞Ä MCUSR ÏùÑ ÏßÄÏö∞Í≥† ÎÑòÏñ¥Ïò®Îã§
+[BOOT] ÏÇ¨Îã§Î¶¨ 4Îã®(ESP ÌïòÎìúÎ¶¨ÏÖãÏÑ†) Î∞∞Ï†ú(ÏÑ§Í≥Ñ) ‚Äî hang ÏùÑ ÏóÜÏï† Î∂àÌïÑÏöî ¬∑ 6Îã®(ÏõåÏπòÎèÖ) ÎÅî
+[NET] 0 RST
+[AT] "AT+RST" (6)
+[AT] "OK" (2)
+[AT] "`B\xD6\x86@\xF9Rc\xE2\xFEP\x89:\x97bB\xCE\xFF\xCA\xC9\xA5\x9D\x1C\xFF\xC0I\x8D" (27)
+[AT] "[System Ready, Vendor:www.ai-thinker.com]" (41)
+[NET] 1 CWMODE=1
+[AT] "AT+CWMODE=1" (11)
+[AT] "no change" (9)
+[DIAG] offline step=2 ÏÇ¨Îã§Î¶¨=0/0 rx=112 lines=6 up=3s
+[NET] 2 CWJAP (ÏùëÎãµÍπåÏßÄ ÏµúÎåÄ 30Ï¥à Í∏∞Îã§Î¶∞Îã§)
+[AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+[DIAG] offline step=2 ÏÇ¨Îã§Î¶¨=0/0 rx=147 lines=7 up=6s
+[AT] "OK" (2)
+[NET] CWJAP OK ‚Äî Í≤∞Ìï©ÎêêÎã§. IP Î•º Ïã§Ï†úÎ°ú Î∞õÏïòÎäîÏßÄ CIFSR Î°ú ÌôïÏù∏ÌïúÎã§
+[NET] 3 CIFSR (IP Î•º Ïã§Ï†úÎ°ú Î∞õÏïòÎäîÍ∞Ä)
+[AT] "AT+CIFSR" (8)
+[AT] "192.168.0.214" (13)
+[NET] ‚òÖ IP ÌôïÎ≥¥: 192.168.0.214
+[AT] "OK" (2)
+[NET] 4 CIPMUX=0
+[AT] "AT+CIPMUX=0" (11)
+[AT] "OK" (2)
+[NET] CIPMUX=0 Ï†ÅÏö©Îê® ‚Üí CIPSTART
+[NET] 5 CIPSTART
+[AT] "AT+CIPSTART="TCP","192.168.0.29",8888" (37)
+[AT] "OK" (2)
+[AT] "Linked" (6)
+[NET] online (CONNECT) + Ï∫êÏãú ÎπÑÏõÄ
+[TX] S,0,0,0,8,P1,3A
+[SLOT] n=7 tx=15 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=16" (13)
+[AT] " S,0,0,0,8,P1,3A" (16)
+[AT] "SEND OK" (7)
+[TX] D,*,7,4,6D
+D,A1,IP,01
+D,B1,IP,02
+D,LD,OG,68
+D,L2,OL,15
+[REG] Îì±Î°ù Ï†ÑÏÜ° 54B
+[SLOT] n=8 tx=54 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=55" (13)
+[AT] " D,*,7,4,6DD,A1,IP,01D,B1,IP,02D,LD,OG,68D,L2,OL,15" (51)
+[AT] "SEND OK" (7)
+[TX] S,2,0,0,10,P1,01
+[SLOT] n=9 tx=16 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=17" (13)
+[AT] " S,2,0,0,10,P1,01" (17)
+[AT] "SEND OK" (7)
+[TX] S,3,0,0,12,P1,02
+[SLOT] n=10 tx=16 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=17" (13)
+[AT] " S,3,0,0,12,P1,02" (17)
+[AT] "SEND OK" (7)
+[TX] S,4,0,0,13,P1,04
+[SLOT] n=11 tx=16 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=17" (13)
+[AT] " S,4,0,0,13,P1,04" (17)
+[AT] "SEND OK" (7)
+[TX] S,5,0,0,14,P1,02
+[SLOT] n=12 tx=16 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=17" (13)
+[AT] " S,5,0,0,14,P1,02" (17)
+[AT] "SEND OK" (7)
+[TX] S,6,0,0,15,P1,00
+[SLOT] n=13 tx=16 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=17" (13)
+[AT] " S,6,0,0,15,P1,00" (17)
+[AT] "SEND OK" (7)
+[TX] S,7,0,0,16,P1,02
+[SLOT] n=14 tx=16 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=17" (13)
+[AT] " S,7,0,0,16,P1,02" (17)
+[AT] "SEND OK" (7)
+[TX] S,8,0,0,18,P1,03
+[SLOT] n=15 tx=16 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=17" (13)
+[AT] " S,8,0,0,18,P1,03" (17)
+[AT] "SEND OK" (7)
+[TX] S,9,0,0,19,P1,03
+[SLOT] n=16 tx=16 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=17" (13)
+[AT] " S,9,0,0,19,P1,03" (17)
+[AT] "SEND OK" (7)
+[TX] S,10,0,0,20,P1,31
+[SLOT] n=17 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,10,0,0,20,P1,31" (18)
+[AT] "SEND OK" (7)
+[TX] S,11,0,0,21,P1,31
+[SLOT] n=18 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,11,0,0,21,P1,31" (18)
+[AT] "SEND OK" (7)
+[TX] S,12,0,0,22,P1,31
+[SLOT] n=19 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,12,0,0,22,P1,31" (18)
+[AT] "SEND OK" (7)
+[TX] S,13,0,0,24,P1,36
+[SLOT] n=20 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,13,0,0,24,P1,36" (18)
+[AT] "SEND OK" (7)
+[TX] S,14,0,0,25,P1,30
+[SLOT] n=21 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,14,0,0,25,P1,30" (18)
+[AT] "SEND OK" (7)
+[TX] S,15,0,0,26,P1,32
+[SLOT] n=22 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,15,0,0,26,P1,32" (18)
+[AT] "SEND OK" (7)
+[TX] S,16,0,0,27,P1,30
+[SLOT] n=23 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,16,0,0,27,P1,30" (18)
+[AT] "SEND OK" (7)
+[TX] S,17,0,0,28,P1,3E
+[SLOT] n=24 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,17,0,0,28,P1,3E" (18)
+[AT] "SEND OK" (7)
+[TX] S,18,0,0,30,P1,38
+[SLOT] n=25 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,18,0,0,30,P1,38" (18)
+[AT] "SEND OK" (7)
+[TX] S,19,0,0,31,P1,38
+[SLOT] n=26 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,19,0,0,31,P1,38" (18)
+[AT] "SEND OK" (7)
+[TX] S,20,0,0,32,P1,31
+[SLOT] n=27 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,20,0,0,32,P1,31" (18)
+[AT] "SEND OK" (7)
+[TX] S,21,0,0,33,P1,31
+[SLOT] n=28 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,21,0,0,33,P1,31" (18)
+[AT] "SEND OK" (7)
+[TX] S,22,0,0,34,P1,35
+[SLOT] n=29 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,22,0,0,34,P1,35" (18)
+[AT] "SEND OK" (7)
+[TX] S,23,0,0,36,P1,36
+[SLOT] n=30 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,23,0,0,36,P1,36" (18)
+[AT] "SEND OK" (7)
+[TX] S,24,0,0,37,P1,30
+[SLOT] n=31 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,24,0,0,37,P1,30" (18)
+[AT] "SEND OK" (7)
+[TX] S,25,0,0,38,P1,3E
+[SLOT] n=32 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,25,0,0,38,P1,3E" (18)
+[AT] "SEND OK" (7)
+[TX] S,26,0,0,39,P1,3C
+[SLOT] n=33 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,26,0,0,39,P1,3C" (18)
+[AT] "SEND OK" (7)
+[TX] S,27,0,0,40,P1,33
+[SLOT] n=34 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,27,0,0,40,P1,33" (18)
+[AT] "SEND OK" (7)
+[TX] S,28,0,0,42,P1,3E
+[SLOT] n=35 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,28,0,0,42,P1,3E" (18)
+[AT] "SEND OK" (7)
+[TX] S,29,0,0,43,P1,3E
+[SLOT] n=36 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,29,0,0,43,P1,3E" (18)
+[AT] "SEND OK" (7)
+[TX] S,30,0,0,44,P1,31
+[SLOT] n=37 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,30,0,0,44,P1,31" (18)
+[AT] "SEND OK" (7)
+[TX] S,31,0,0,45,P1,31
+[SLOT] n=38 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,31,0,0,45,P1,31" (18)
+[AT] "SEND OK" (7)
+[TX] S,32,0,0,46,P1,31
+[SLOT] n=39 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,32,0,0,46,P1,31" (18)
+[AT] "SEND OK" (7)
+[TX] S,33,0,0,48,P1,3E
+[SLOT] n=40 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,33,0,0,48,P1,3E" (18)
+[AT] "SEND OK" (7)
+[TX] S,34,0,0,49,P1,38
+[SLOT] n=41 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,34,0,0,49,P1,38" (18)
+[AT] "SEND OK" (7)
+[TX] S,35,0,0,50,P1,31
+[SLOT] n=42 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,35,0,0,50,P1,31" (18)
+[AT] "SEND OK" (7)
+[TX] S,36,0,0,51,P1,33
+[SLOT] n=43 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,36,0,0,51,P1,33" (18)
+[AT] "SEND OK" (7)
+[TX] S,37,0,0,52,P1,31
+[SLOT] n=44 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,37,0,0,52,P1,31" (18)
+[AT] "SEND OK" (7)
+[TX] S,38,0,0,54,P1,38
+[SLOT] n=45 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,38,0,0,54,P1,38" (18)
+[AT] "SEND OK" (7)
+[TX] S,39,0,0,55,P1,38
+[SLOT] n=46 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,39,0,0,55,P1,38" (18)
+[AT] "SEND OK" (7)
+[TX] S,40,0,0,56,P1,35
+[SLOT] n=47 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,40,0,0,56,P1,35" (18)
+[AT] "SEND OK" (7)
+[TX] S,41,0,0,57,P1,35
+[SLOT] n=48 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,41,0,0,57,P1,35" (18)
+[AT] "SEND OK" (7)
+[TX] S,42,0,0,58,P1,39
+[SLOT] n=49 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,42,0,0,58,P1,39" (18)
+[AT] "SEND OK" (7)
+[TX] S,43,0,0,60,P1,33
+[SLOT] n=50 tx=17 ack=0 due=0 r=1
+[CNT] up=60 drop=0 esprst=0 hwrst=0/0 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=50 oow=0 smiss=1 ssovf=0 cksumng=0 okstream=43 penddrop=0 pendfill=44 bigfill=0 bigdrop=0 bigokst=0 oklost=0 bigoklost=0 skip=0 online=1
+[RAM] ÏµúÏ†Ä Ïó¨Ïú† 602 B ¬∑ ÌîÑÎ°¨ÌîÑÌä∏ Ïû¨ÎèôÍ∏∞ 0Ìöå (ÏÑúÎ≤ÑÏùò 'Î≤ÑÎ¶∞Ï§Ñ' Í≥º ÎßûÏïÑÏïº ÌïúÎã§)
+[AT] " S,43,0,0,60,P1,33" (18)
+[AT] "SEND OK" (7)
+[AT] "AT+CIPSEND=18" (13)
+[TX] S,44,0,0,61,P1,35
+[SLOT] n=51 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,44,0,0,61,P1,35" (18)
+[AT] "SEND OK" (7)
+[TX] S,45,0,0,62,P1,37
+[SLOT] n=52 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,45,0,0,62,P1,37" (18)
+[AT] "SEND OK" (7)
+[TX] S,46,0,0,63,P1,35
+[SLOT] n=53 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,46,0,0,63,P1,35" (18)
+[AT] "SEND OK" (7)
+[TX] S,47,0,0,64,P1,33
+[SLOT] n=54 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,47,0,0,64,P1,33" (18)
+[AT] "SEND OK" (7)
+[TX] S,48,0,0,66,P1,3E
+[SLOT] n=55 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,48,0,0,66,P1,3E" (18)
+[AT] "SEND OK" (7)
+[TX] S,49,0,0,67,P1,3E
+[SLOT] n=56 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,49,0,0,67,P1,3E" (18)
+[AT] "SEND OK" (7)
+[TX] S,50,0,0,68,P1,39
+[SLOT] n=57 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,50,0,0,68,P1,39" (18)
+[AT] "SEND OK" (7)
+[TX] S,51,0,0,69,P1,39
+[SLOT] n=58 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,51,0,0,69,P1,39" (18)
+[AT] "SEND OK" (7)
+[TX] S,52,0,0,70,P1,32
+[SLOT] n=59 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,52,0,0,70,P1,32" (18)
+[AT] "SEND OK" (7)
+[TX] S,53,0,0,72,P1,31
+[SLOT] n=60 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,53,0,0,72,P1,31" (18)
+[AT] "SEND OK" (7)
+[TX] S,54,0,0,73,P1,37
+[SLOT] n=61 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,54,0,0,73,P1,37" (18)
+[AT] "SEND OK" (7)
+[TX] S,55,0,0,74,P1,31
+[SLOT] n=62 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,55,0,0,74,P1,31" (18)
+[AT] "SEND OK" (7)
+[TX] S,56,0,0,75,P1,33
+[SLOT] n=63 tx=17 ack=0 due=0 r=1
+[AT] "AT+CIPSEND=18" (13)
+[AT] " S,56,0,0,75,P1,33" (18)
+[AT] "SEND OK" (7)

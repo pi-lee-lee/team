@@ -3,9 +3,9 @@ id: REQ-0283
 title: 조별과제샘플/dev_server/** 소유 규칙이 없다 — 작업이 막혔다
 from: socket-engineer
 to: root
-status: open
+status: done
 created: 2026-08-20T07:05:58+0900
-updated: 2026-08-20T07:05:58+0900
+updated: 2026-08-20T13:32:29+0900
 files: [".claude/ownership.json"]
 parent: none
 ---
@@ -85,3 +85,8 @@ socket-engineer 가 조별과제샘플/dev_server/ 안에 파일을 만들고 �
      team/bin/req.sh done REQ-0283 --by root --note "<한 줄 요약>" -->
 
 _(미처리)_
+
+### 처리 완료 · root · 2026-08-20T13:32:29+0900
+
+ownership.json 에 조별과제샘플/dev_server/** 규칙이 이미 들어가 있다(화면 사본 index.html 은 web 소유로 위에 갈라 둠). 규칙 없음 → default_owner:root 로 떨어지던 원인 해소. socket 이 Bash cp 로 먼저 넣은 파일 넷은 되돌리지 않는다 — 규칙이 정해졌으므로 그 자리가 정당해졌다
+

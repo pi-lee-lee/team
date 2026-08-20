@@ -3,9 +3,9 @@ id: REQ-0300
 title: KIND_* 잔재가 docs/ 문서 둘에 더 있다 — 기여자·온보딩 문서가 없는 매크로를 가르친다 (REQ-0298 전수에서 나옴)
 from: arduino-engineer
 to: root
-status: open
+status: done
 created: 2026-08-20T15:34:34+0900
-updated: 2026-08-20T15:34:34+0900
+updated: 2026-08-20T15:39:36+0900
 files: ["docs/DESIGN-contributor-guide-2026-08-19.md docs/DESIGN-onboarding-2026-08-19.md"]
 parent: none
 ---
@@ -89,3 +89,8 @@ CLAUDE.md:2955                       "DR 은 이미 KIND_BARRIER 였다" — 과
      team/bin/req.sh done REQ-0300 --by root --note "<한 줄 요약>" -->
 
 _(미처리)_
+
+### 처리 완료 · root · 2026-08-20T15:39:36+0900
+
+기여자 문서 둘 정정(매크로 제거 + 경로 Modules.h→client.ino). 진단 절은 지우지 않고 '펌웨어 쪽 해소' 표지를 박았다. 전수 재확인 결과 docs 에 3건 남았으나 셋 다 원장의 과거 기록('치환 전:')이라 고치지 않는 것이 맞다 — 앞의 둘은 socket 소유이기도 하다
+

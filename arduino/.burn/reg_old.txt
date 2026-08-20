@@ -1,0 +1,19 @@
+[TX] D,*,7,6,6F
+D,A1,IP,01
+D,B1,IP,02
+D,LD,OG,68
+D,L2,OG,1E
+D,LC,OG,6F
+D,DR,OG,76
+[REG] 등록 전송 76B
+  PASS  ★ 등록 배치가 나갔다
+--
+[TX] D,*,7,6,6F
+D,A1,IP,01
+D,B1,IP,02
+D,LD,OG,68
+D,L2,OG,1E
+D,LC,OG,6F
+D,DR,OG,76
+[REG] 등록 전송 76B
+  PASS  ★ 재등록 배치가 나갔다

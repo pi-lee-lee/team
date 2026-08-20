@@ -1,0 +1,5 @@
+/Users/idong-u/learn/arduino/test/stage1_test.cpp:2173:10: error: use of undeclared identifier 'worstUs'
+ 2173 |       ok(worstUs / 1000UL + 185UL < 600UL,
+      |          ^~~~~~~
+1 error generated.
+🔴 정의 안 된 매크로가 #if 에 있다 — 그 블록은 조용히 빠진다

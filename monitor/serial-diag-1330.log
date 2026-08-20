@@ -1,0 +1,91 @@
+13:26:41  «tap» 캡처 시작 — port=/dev/cu.usbmodem21201 baud=115200 pid=97499 date=2026-08-20 13:26:41
+13:26:41  «tap» ⚠ 이 시각에 DTR 로 보드가 리셋된다 — 분석에서 '우리가 만든 리셋'으로 표시할 것
+13:26:41  «tap» 포트 열림 (dsrdtr=False)
+13:26:42  다
+13:26:42  "192.168.0.29",8888" (37)
+13:26:42  [AT] "busy p..." (9)
+13:26:42  [NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+13:26:43  
+13:26:43  [NET] 대상 192.168.0.29:8888
+13:26:43  
+13:26:43  [SENS] A1=핀2 B1=핀9 
+13:26:43  
+13:26:43  [PARKING NODE] proto v1 / 1 spots / 2 sensors / 4 modules / dev=P1
+13:26:43  [BOOT] 리셋 원인: 알 수 없음 — 이 부트로더가 MCUSR 을 지우고 넘어온다
+13:26:43  [BOOT] 사다리 4단(ESP 하드리셋선) 미배선 — A2 를 ESP RST 에 물리고 ESP_RST_WIRED=1 · 6단(워치독) 끔
+13:26:44  [NET] 0 RST
+13:26:44  [AT] "AT+RST" (6)
+13:26:44  [AT] "busy p..." (9)
+13:26:44  [NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+13:26:46  [NET] 1 CWMODE=1
+13:26:46  [AT] "AT+CWMODE=1" (11)
+13:26:46  [AT] "busy p..." (9)
+13:26:46  [NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+13:26:46  [DIAG] offline step=2 사다리=0/0 rx=45 lines=4 up=3s
+13:26:47  [NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+13:26:47  [AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+13:26:47  [AT] "busy p..." (9)
+13:26:47  [NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+13:26:49  [DIAG] offline step=2 사다리=0/0 rx=91 lines=6 up=6s
+13:26:52  [DIAG] offline step=2 사다리=0/0 rx=91 lines=6 up=9s
+13:26:55  [DIAG] offline step=2 사다리=0/0 rx=91 lines=6 up=12s
+13:26:58  [DIAG] offline step=2 사다리=0/0 rx=91 lines=6 up=15s
+13:27:01  [DIAG] offline step=2 사다리=0/0 rx=91 lines=6 up=18s
+13:27:04  [DIAG] offline step=2 사다리=0/0 rx=91 lines=6 up=21s
+13:27:07  [DIAG] offline step=2 사다리=0/0 rx=91 lines=6 up=24s
+13:27:10  [DIAG] offline step=2 사다리=0/0 rx=91 lines=6 up=27s
+13:27:14  [DIAG] offline step=2 사다리=0/0 rx=91 lines=6 up=30s
+13:27:17  [DIAG] offline step=2 사다리=0/0 rx=91 lines=6 up=33s
+13:27:18  [LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 1회 · 결합유지 없음 · 현재 0단(0회 누적)
+13:27:18  [LADDER] ↑↑ 단 상승 → 1단
+13:27:18  [LADDER] 1단 조치: 시리얼 드레인 0바이트 버림 + 줄 조립 초기화
+13:27:18  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+13:27:18  [AT] "AT+CIFSR" (8)
+13:27:18  [AT] "busy p..." (9)
+13:27:18  [NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+13:27:20  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+13:27:20  [AT] "AT+CIFSR" (8)
+13:27:20  [AT] "busy p..." (9)
+13:27:20  [NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+13:27:20  [DIAG] offline step=3 사다리=1/0 rx=135 lines=10 up=36s
+13:27:21  [NET] 3 CIFSR (IP 를 실제로 받았는가)
+13:27:21  [NET] CIFSR 3회 소진 — 그러나 busy 거부였다. IP 소실로 세지 않는다
+13:27:21  [NET] CIFSR 3회에도 IP 가 없다 → CWJAP 부터 다시
+13:27:21  [LADDER] 실패(CWJAP FAIL) CWJAP소요 33s · 연속 1회 · 결합유지 없음 · 현재 1단(0회 누적)
+13:27:21  [LADDER] 1단 조치: 시리얼 드레인 22바이트 버림 + 줄 조립 초기화
+13:27:23  [NET] 2 CWJAP (응답까지 최대 30초 기다린다)
+13:27:23  [AT] "AT+CWJAP="3F_302","0424719222!!"" (32)
+13:27:23  [AT] "busy p..." (9)
+13:27:23  [NET] busy — ESP 가 앞 명령을 처리 중이다. 전진하지 않는다
+13:27:23  [DIAG] offline step=2 사다리=1/1 rx=181 lines=12 up=39s
+13:27:26  [DIAG] offline step=2 사다리=1/1 rx=181 lines=12 up=42s
+13:27:29  [DIAG] offline step=2 사다리=1/1 rx=181 lines=12 up=45s
+13:27:32  [DIAG] offline step=2 사다리=1/1 rx=181 lines=12 up=48s
+13:27:35  [DIAG] offline step=2 사다리=1/1 rx=181 lines=12 up=51s
+13:27:38  [DIAG] offline step=2 사다리=1/1 rx=181 lines=12 up=54s
+13:27:41  [DIAG] offline step=2 사다리=1/1 rx=181 lines=12 up=57s
+13:27:42  «tap» 살아있음 — 최근 60초 rx=3248B (이 줄이 끊기면 탭이 죽은 것이다)
+13:27:44  [CNT] up=60 drop=0 esprst=0 hwrst=0/0 resync=0 sendfail=0 okto=0 stuck=0 ackq=0 ackdrop=0 ackstale=0 slot=50 oow=0 smiss=0 ssovf=0 cksumng=0 okstream=0 penddrop=0 pendfill=0 bigfill=0 bigdrop=0 bigokst=0 oklost=0 bigoklost=0 skip=0 online=0
+13:27:44  [DIAG] offline step=2 사다리=1/1 rx=181 lines=12 up=60s
+13:27:44  [RAM] 최저 여유 65535 B · 프롬프트 재동기 0회 (서버의 '버린줄' 과 맞아야 한다)
+13:27:47  [DIAG] offline step=2 사다리=1/1 rx=181 lines=12 up=63s
+13:27:50  [DIAG] offline step=2 사다리=1/1 rx=181 lines=12 up=66s
+13:27:52  [LADDER] 실패(CWJAP 무응답) CWJAP소요 29s · 연속 2회 · 결합유지 없음 · 현재 1단(1회 누적)
+13:27:52  [LADDER] ↑↑ 단 상승 → 2단
+13:27:53  [NET] 7 GMR (펌웨어 판 — 진단)
+13:27:53  [DIAG] offline step=8 사다리=2/0 rx=181 lines=12 up=69s
+13:27:54  [NET] 8 CWCOUNTRY (채널 12/13 우회 시도 — 진단)
+13:27:56  [NET] 9 CWLAP (주변 AP 목록 — 진단)
+13:27:56  [DIAG] offline step=2 사다리=2/0 rx=181 lines=12 up=72s
+13:27:59  
+13:27:59  [NET] 대상 192.168.0.29:8888
+13:27:59  
+13:27:59  [SENS] A1=핀2 B1=핀9 
+13:27:59  
+13:27:59  [PARKING NODE] proto v1 / 1 spots / 2 sensors / 4 modules / dev=P1
+13:27:59  [BOOT] 리셋 원인: 알 수 없음 — 이 부트로더가 MCUSR 을 지우고 넘어온다
+13:27:59  [BOOT] 사다리 4단(ESP 하드리셋선) 미배선 — A2 를 ESP RST 에 물리고 ESP_RST_WIRED=1 · 6단(워치독) 끔
+13:28:00  [NET] 0 RST
+13:28:02  [NET] 1 CWMODE=1
+13:28:02  [DIAG] offline step=2 사다리=0/0 rx=0 lines=0 up=3s
+13:28:02  «tap» 캡처 종료 — SIGTERM 수신. 이 줄이 이 로그의 마지막 경계다.
