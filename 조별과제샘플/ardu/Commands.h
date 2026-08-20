@@ -85,7 +85,7 @@ static void processTest(char* f[], char* s0, char* s1, uint8_t* result) {
   // 여기부터 S / X — 자리 ID 가 필요하다
   const char* slotTok = f[3];
   const char* tval    = f[4];
-  uint8_t idx = (strlen(slotTok) == 2) ? slotIndexOf(slotTok[0], slotTok[1]) : 0xFF;
+  uint8_t idx = (strlen(slotTok) == 2) ? sensorIndexOf(slotTok[0], slotTok[1]) : 0xFF;
   if (idx == 0xFF) { *result = 3; return; }               // slot 은 ?? 로 남는다
 
   // 값 검사를 무장 검사보다 **먼저** 한다. 깨진 프레임은 장치 상태와 무관하게 깨진 프레임이다.
@@ -169,7 +169,7 @@ static void processCommand(char* cand) {
 
   // ── 여기부터 R / C ──
   const char* slotTok = f[2];
-  uint8_t idx = (strlen(slotTok) == 2) ? slotIndexOf(slotTok[0], slotTok[1]) : 0xFF;
+  uint8_t idx = (strlen(slotTok) == 2) ? sensorIndexOf(slotTok[0], slotTok[1]) : 0xFF;
 
   if (idx == 0xFF) {
     // §2.4 result=3 — 잘못된 자리 ID / 해석 불가.

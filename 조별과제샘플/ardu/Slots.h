@@ -6,6 +6,15 @@
 // 🔴🔴 **위치를 옮기지 마라.** `Config.h` 의 **정해진 자리에서** `#include` 된다.
 //   헤더 순서가 바뀌면 선언·초기화 순서가 같이 바뀌어 **산출물이 달라진다.**
 
+// ⚠ **`slot` 이라는 낱말이 이 저장소에서 셋을 가리킨다. 이름을 갈라 뒀다:**
+//     `sensorPin` · `readSensor` · `sensorIndexOf` · `applySensorPinMode`
+//         → **센서 칸.** 이 파일이 다루는 것이고 인덱스는 전선의 `idx` 다
+//     `slotName0/1` · `slotOverride*`
+//         → **전선의 자리 토큰**(두 글자). 명세 용어라 그대로 둔다 — `R`/`C`/`T` 가 쓴다
+//     `slotNo` · `slotStart` · `SLOT_MS`  (TxState.h)
+//         → **1.2초 반송파 슬롯.** 시간이다. 위 둘과 아무 관계가 없다
+//   🔑 셋 다 `slot` 이었을 때는 코드를 읽어도 구분이 안 됐다.
+
 // ─────────────────────────────────────────────────────────────────────────
 // 센서 칸 — 🔴 **전부 모듈 표에서 파생된다. 여기에 진실을 새로 만들지 마라**
 //
@@ -45,7 +54,7 @@ static_assert(SENSOR_N <= 16, "occMask 가 uint16_t 다 — 센서는 16칸까�
 // ⚠ 난수 시드를 A1 에서 뽑는다(`setup()`) — 어디에도 안 물린 핀이어야 노이즈가 나온다.
 //   그래서 **핀 A1 은 비워 둔다.** (핀 `A1` 과 모듈 이름 `A1` 은 아무 상관이 없다.)
 // ─────────────────────────────────────────────────────────────────────────
-static inline uint8_t slotPin(uint8_t i) {
+static inline uint8_t sensorPin(uint8_t i) {
   if (i >= SENSOR_N) return PIN_NONE;              // 센서가 아닌 칸에는 핀이 없다
   return pgm_read_byte(&MODULE_TABLE[i].pin);
 }
@@ -57,7 +66,7 @@ static inline char slotName1(uint8_t i) { return (char)pgm_read_byte(&MODULE_TAB
 // 자리 토큰 두 글자 → 센서 인덱스. 없으면 0xFF.
 // 🔴 **센서만 찾는다** — 루프가 `SENSOR_N` 까지만 돈다. 액추에이터 이름(`LD` 등)으로는
 //   예약(R)·취소(C)를 걸 수 없고, 그것이 옳다.
-static uint8_t slotIndexOf(char c0, char c1) {
+static uint8_t sensorIndexOf(char c0, char c1) {
   for (uint8_t i = 0; i < SENSOR_N; i++)
     if (slotName0(i) == c0 && slotName1(i) == c1) return i;
   return 0xFF;
@@ -80,7 +89,7 @@ static uint8_t slotIndexOf(char c0, char c1) {
 //
 // ⚠ **핸들러를 등록하면 `pinMode` 도 네가 잡아라.** 기본 경로는 `INPUT_PULLUP` 을 거는데
 //   초음파처럼 trig(OUTPUT)/echo(INPUT)가 갈린 센서에는 그것이 틀리기 때문이다.
-//   등록된 칸은 `applySlotPinMode()` 가 **손대지 않는다.**
+//   등록된 칸은 `applySensorPinMode()` 가 **손대지 않는다.**
 //
 // ⚠ **이 함수는 매 `loop()` 마다 불린다.** 오래 걸리는 측정을 그대로 넣으면 슬롯이 밀린다 —
 //   `pulseIn` 은 최악 타임아웃만큼 **블로킹**한다. **간격을 두고 값을 캐시해라.**
@@ -91,7 +100,7 @@ typedef bool (*SensorFn)(uint8_t pin);
 static SensorFn sensorFnOf(uint8_t idx);
 
 // 🔴 `ParkingNode` — **상태를 한 캡슐로**
-//   위의 것들은 **일부러 밖에 뒀다**: `SENSOR_N`·`slotPin`·`slotName*`·`slotIndexOf` 는
+//   위의 것들은 **일부러 밖에 뒀다**: `SENSOR_N`·`sensorPin`·`slotName*`·`sensorIndexOf` 는
 //   **상태를 안 만지는 순수·표 함수**다. 클래스에 넣으면 `this` 를 얻는 대신 아무것도 안 준다.
 //   ★ **클래스는 상태를 가진 것만 가져간다.**
 //
@@ -104,13 +113,13 @@ class ParkingNode {
   // 🔴 **초기화는 여기다. 생성자가 아니다.**
   //   전역 객체의 생성자는 `main()` 전에 돌아 `Serial`·`millis()` 가 없다.
   void begin() {
-    for (uint8_t i = 0; i < SENSOR_N; i++) applySlotPinMode(i);
+    for (uint8_t i = 0; i < SENSOR_N; i++) applySensorPinMode(i);
   }
 
   // 센서를 한 번 훑어 점유 비트를 갱신한다
   void readSensors() {
     uint16_t m = 0;
-    for (uint8_t i = 0; i < SENSOR_N; i++) if (readSlotSensor(i)) m |= (uint16_t)1 << i;
+    for (uint8_t i = 0; i < SENSOR_N; i++) if (readSensor(i)) m |= (uint16_t)1 << i;
     occMask = m;
   }
 
@@ -120,8 +129,8 @@ class ParkingNode {
   uint8_t readRealSensor(uint8_t i) {
     // 🔓 기여자 핸들러가 등록돼 있으면 **그것이 답이다.** 없으면 아래 기본 경로로 간다.
     SensorFn f = sensorFnOf(i);
-    if (f) return f(slotPin(i)) ? 1 : 0;
-    uint8_t raw = digitalRead(slotPin(i));
+    if (f) return f(sensorPin(i)) ? 1 : 0;
+    uint8_t raw = digitalRead(sensorPin(i));
   #if SENSOR_ACTIVE_LOW
     return (raw == LOW) ? 1 : 0;
   #else
@@ -130,10 +139,10 @@ class ParkingNode {
   }
 
   // 핀이 있는 칸의 입력 모드를 잡는다.
-  void applySlotPinMode(uint8_t i) {
+  void applySensorPinMode(uint8_t i) {
     // 🔴 기여자 핸들러가 있는 칸은 **건드리지 않는다.** 그 센서에 맞는 핀 모드는 그쪽이 안다.
     if (sensorFnOf(i)) return;
-    if (slotPin(i) != PIN_NONE) pinMode(slotPin(i), INPUT_PULLUP);
+    if (sensorPin(i) != PIN_NONE) pinMode(sensorPin(i), INPUT_PULLUP);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -189,7 +198,7 @@ class ParkingNode {
 
   // ★ 센서값의 단일 진입점 ★
   //   우선순위: 수동 오버라이드 > 실제 센서
-  uint8_t readSlotSensor(uint8_t i) {
+  uint8_t readSensor(uint8_t i) {
     // 무장 중일 때만 주입이 적용된다 — `testArmed` 를 여기서 한 번 더 본다.
     // 실사용에서는 중복이다(`T,S` 가 무장을 검사하고 `T,D` 가 전 칸을 지운다). 그래도 두는 이유:
     // 해제 상태에서 주입값이 occupied 에 실리면 **tmask 가 안 붙은 채로** 전선에 나가고,
@@ -198,7 +207,7 @@ class ParkingNode {
     if (testArmed && (ovrActive & ((uint16_t)1 << i))) return (uint8_t)((ovrValue >> i) & 1);
 
     // 실제 센서는 **무장 중에도 계속 읽는다.** 그건 진실이고 가릴 이유가 없다.
-    if (slotPin(i) != PIN_NONE) return readRealSensor(i);
+    if (sensorPin(i) != PIN_NONE) return readRealSensor(i);
 
     // 🔴 핀이 없는 센서 칸은 **늘 0(비었다)** 이다.
     //   장치는 가짜 점유 상태를 만들지 않는다 — 차 없이 시험할 수단은 위의 오버라이드(`T`)다.

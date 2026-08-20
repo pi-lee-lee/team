@@ -305,9 +305,9 @@ void setup() {
   for (uint8_t i = 0; i < SENSOR_N; i++) {
     char nm[4]; moduleNameOf(i, nm);
     Serial.print(nm); Serial.print('=');
-    if (slotPin(i) == PIN_NONE)                Serial.print(F("안읽음"));
+    if (sensorPin(i) == PIN_NONE)                Serial.print(F("안읽음"));
     else if (sensors.at(i))                    Serial.print(F("훅"));
-    else { Serial.print(F("핀")); Serial.print(slotPin(i)); }
+    else { Serial.print(F("핀")); Serial.print(sensorPin(i)); }
     Serial.print(' ');
   }
   Serial.println();

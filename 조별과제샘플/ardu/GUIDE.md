@@ -205,7 +205,7 @@ sensors.on("모듈이름", 핸들러); // setup() 에서
 
 ### 핀 모드
 
-등록한 칸은 `applySlotPinMode()` 가 **손대지 않는다** — 기본 경로는 `INPUT_PULLUP` 을
+등록한 칸은 `applySensorPinMode()` 가 **손대지 않는다** — 기본 경로는 `INPUT_PULLUP` 을
 거는데 초음파처럼 trig(OUTPUT)/echo(INPUT)가 갈린 센서에는 그것이 틀리기 때문이다.
 **네가 `setup()` 에서 직접 잡아라.**
 

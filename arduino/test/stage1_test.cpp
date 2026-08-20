@@ -1404,9 +1404,9 @@ int main() {
     //   `SLOT_PIN[]` 은 크기가 `SENSOR_N` 이라 그 밖은 배열 밖 읽기다.
     bool allPin = true;
     for (uint8_t i = 0; i < SENSOR_N; i++)
-      if (pgm_read_byte(&MODULE_TABLE[i].pin) != slotPin(i)) { allPin = false;
+      if (pgm_read_byte(&MODULE_TABLE[i].pin) != sensorPin(i)) { allPin = false;
         printf("      🔴 i=%u: 표 핀 %u 대 SLOT_PIN %u\n", i,
-               pgm_read_byte(&MODULE_TABLE[i].pin), slotPin(i)); }
+               pgm_read_byte(&MODULE_TABLE[i].pin), sensorPin(i)); }
     ok(allPin,              "★★ 표의 핀이 SLOT_PIN 과 전부 같다 (이행 중 두 표가 공존한다)");
 
     // ③ 🔴 **전선에 나가는 바이트가 그대로인가** — 이 축의 최종 판정이다
@@ -1754,32 +1754,32 @@ int main() {
     // 핀이 표에서 온다
     bool pinsMatch = true;
     for (uint8_t i = 0; i < SENSOR_N; i++)
-      if (slotPin(i) != pgm_read_byte(&MODULE_TABLE[i].pin)) pinsMatch = false;
-    ok(pinsMatch,           "★★ slotPin() 이 표의 `pin` 칸을 그대로 돌려준다");
-    ok(slotPin(SENSOR_N) == PIN_NONE,
+      if (sensorPin(i) != pgm_read_byte(&MODULE_TABLE[i].pin)) pinsMatch = false;
+    ok(pinsMatch,           "★★ sensorPin() 이 표의 `pin` 칸을 그대로 돌려준다");
+    ok(sensorPin(SENSOR_N) == PIN_NONE,
                             "★★ 센서 범위 밖은 PIN_NONE — 범위 가드가 산다");
 
     // 자리 토큰(전선 ACK 이 되비추는 두 글자)이 표의 이름에서 온다
     ok(slotName0(0) == (char)pgm_read_byte(&MODULE_TABLE[0].name[0]) &&
        slotName1(0) == (char)pgm_read_byte(&MODULE_TABLE[0].name[1]),
                             "★★ 자리 토큰 두 글자가 표의 `name` 이다");
-    ok(slotIndexOf(slotName0(0), slotName1(0)) == 0,
+    ok(sensorIndexOf(slotName0(0), slotName1(0)) == 0,
                             "★★ 이름으로 그 센서를 찾는다");
-    ok(slotIndexOf('Z', 'Z') == 0xFF, "★ 표에 없는 이름은 0xFF");
+    ok(sensorIndexOf('Z', 'Z') == 0xFF, "★ 표에 없는 이름은 0xFF");
 
     // 🔴 **음성 대조** — 액추에이터 이름으로는 자리를 찾을 수 없어야 한다.
     //   찾히면 `LD` 에 예약(R)이 걸리고, 그 비트는 자리 점유 비트와 겹친다.
     {
       char a0 = (char)pgm_read_byte(&MODULE_TABLE[SENSOR_N].name[0]);
       char a1 = (char)pgm_read_byte(&MODULE_TABLE[SENSOR_N].name[1]);
-      ok(slotIndexOf(a0, a1) == 0xFF,
+      ok(sensorIndexOf(a0, a1) == 0xFF,
                             "★★★ 액추에이터 이름으로는 자리를 못 찾는다 (예약이 안 걸린다)");
     }
 
     // 🔴 이 장치는 **시뮬 점유 상태를 갖지 않는다.** 핀이 없으면 늘 0 이다 —
     //   가짜 점유를 만들지 않는다. 차 없이 시험할 수단은 오버라이드(`T` 프레임)다.
     node.testArmed = false; node.ovrActive = 0;
-    ok(node.readSlotSensor(SENSOR_N) == 0,
+    ok(node.readSensor(SENSOR_N) == 0,
                             "★★ 핀 없는 칸은 0 이다 (장치가 점유를 지어내지 않는다)");
   }
 
@@ -1795,9 +1795,9 @@ int main() {
     node.begin();
     {
       uint8_t pinned = 0;
-      for (uint8_t i = 0; i < SENSOR_N; i++) if (slotPin(i) != PIN_NONE) pinned++;
+      for (uint8_t i = 0; i < SENSOR_N; i++) if (sensorPin(i) != PIN_NONE) pinned++;
       ok(pinned >= 1,       "★★ 기본 구성에서 핀을 적은 칸이 **하나 이상** 있다 — 0 이면 훅이 죽는다");
-      ok(g_pinMode[slotPin(0)] == INPUT_PULLUP,
+      ok(g_pinMode[sensorPin(0)] == INPUT_PULLUP,
                             "★★ 핀을 적은 칸의 핀 모드를 `begin()` 이 잡는다");
     }
     ok(!sensors.at(0),      "★ 등록 전에는 훅이 없다 (기본 digitalRead 경로)");
@@ -1833,16 +1833,16 @@ int main() {
                             "★★ 200ms 가 지나면 새로 잰다 — **영구 고착이 아니다**");
 
     // 🔴 등록된 칸은 기본 핀 모드를 **안 건드린다** (초음파는 trig/echo 가 갈린다)
-    g_pinMode[slotPin(0)] = 0xEE;          // 표지를 박아 둔다
-    node.applySlotPinMode(0);
-    ok(g_pinMode[slotPin(0)] == 0xEE,
+    g_pinMode[sensorPin(0)] = 0xEE;          // 표지를 박아 둔다
+    node.applySensorPinMode(0);
+    ok(g_pinMode[sensorPin(0)] == 0xEE,
                             "★★ 훅이 있는 칸에는 INPUT_PULLUP 을 안 건다 (기여자 몫이다)");
 
     // 뒤 시험에 영향이 없도록 되돌린다 — 0 을 넣으면 기본 경로로 돌아간다
     sensors.on("A1", 0);
     ok(!sensors.at(0),      "★ 0 을 등록하면 기본 경로로 돌아간다");
-    node.applySlotPinMode(0);
-    ok(g_pinMode[slotPin(0)] == INPUT_PULLUP,
+    node.applySensorPinMode(0);
+    ok(g_pinMode[sensorPin(0)] == INPUT_PULLUP,
                             "★★ 훅을 떼면 기본 INPUT_PULLUP 이 다시 걸린다");
     node.begin();      // 소스를 표에서 다시 파생시킨다
   }
@@ -2055,7 +2055,7 @@ int main() {
                             "★★ 되읽기 훅이 B1 에 붙는다 (`setup()` 과 같은 등록)");
     ok(sensors.at(1) == readLedBack, "★ 그 칸에 걸렸다");
     // A1(핀 2)은 훅이 없다 → 기본 경로. 미배선이면 INPUT_PULLUP 이라 HIGH → ACTIVE_LOW 로 0
-    g_pinLevel[slotPin(0)] = HIGH;
+    g_pinLevel[sensorPin(0)] = HIGH;
 
     char gg[28];
     // ① LED 끄기 → 자리는 비어 있어야 한다
@@ -2091,7 +2091,7 @@ int main() {
 
     // ⑤ 훅을 떼면 기본 경로로 — 되돌릴 수 있다는 것까지 본다
     sensors.on("B1", 0);
-    g_pinLevel[slotPin(1)] = HIGH;                 // 미배선 = 풀업 = HIGH (앞 시험이 바꿨을 수 있다)
+    g_pinLevel[sensorPin(1)] = HIGH;                 // 미배선 = 풀업 = HIGH (앞 시험이 바꿨을 수 있다)
     node.readSensors();
     ok((node.occMask & (1u << 1)) == 0,
                             "★★ 훅을 떼면 B1 이 핀 9(미배선 → 0)로 돌아간다");
@@ -2156,7 +2156,7 @@ int main() {
       for (uint8_t k = 0; k < MODULE_N; k++) if (sensors.at(k)) noSampleHook = false;
       ok(noSampleHook,      "★★ setup() 은 센서 훅을 **안 붙인다** — 붙일 실물이 없다");
     }
-    ok(slotPin(0) != PIN_NONE,
+    ok(sensorPin(0) != PIN_NONE,
                             "★★ 그래도 핀은 적혀 있다 — 센서를 달면 **바로 읽힌다**");
 
     // ④ 🔴 훅을 붙이면 **두 센서가 갈릴 수 있는가** — 서버의 OR/AND 판정이 갈리려면 필요하다

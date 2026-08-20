@@ -249,20 +249,20 @@ int main() {
   printf("\n[4] 소스 REAL — 핀을 LOW 로 당기면 점유로 읽힌다 (SENSOR_ACTIVE_LOW)\n");
   node.slotOverrideClearAll();
   node.slotSourceSet(0, 1);                              // A1 을 실물 소스로
-  ok(g_pinMode[slotPin(0)] == INPUT_PULLUP, "A1 의 핀이 INPUT_PULLUP 으로 잡힌다");
-  g_pinLevel[slotPin(0)] = LOW;                     // 차량 있음
+  ok(g_pinMode[sensorPin(0)] == INPUT_PULLUP, "A1 의 핀이 INPUT_PULLUP 으로 잡힌다");
+  g_pinLevel[sensorPin(0)] = LOW;                     // 차량 있음
   spin(400);
   std::string occ4 = occField(lastStatus());
-  printf("        A1 핀=%u LOW → occupied=%s\n", (unsigned)slotPin(0), occ4.c_str());
+  printf("        A1 핀=%u LOW → occupied=%s\n", (unsigned)sensorPin(0), occ4.c_str());
   ok(occ4.size() == 10 && occ4[0] == '1', "실물 소스가 LOW 를 점유(1)로 읽는다");
 
-  g_pinLevel[slotPin(0)] = HIGH;                    // 차량 없음
+  g_pinLevel[sensorPin(0)] = HIGH;                    // 차량 없음
   spin(400);
   std::string occ5 = occField(lastStatus());
   ok(occ5.size() == 10 && occ5[0] == '0', "HIGH 는 비어 있음(0)으로 읽는다");
 
   printf("\n[5] 우선순위 — 오버라이드가 실물 소스를 이긴다\n");
-  g_pinLevel[slotPin(0)] = HIGH;                    // 실물은 '비어 있음'
+  g_pinLevel[sensorPin(0)] = HIGH;                    // 실물은 '비어 있음'
   node.slotOverrideSet(0, 1);                            // 그런데 강제로 점유
   spin(400);
   std::string occ6 = occField(lastStatus());
