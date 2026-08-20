@@ -80,21 +80,10 @@ class ParkingNode {
   bool beginDone;
 
   // 센서를 한 번 훑어 점유 비트를 갱신한다
-  // 🔬 **활성 센서 수** — `0` 이면 **전부**(평소 동작). 부하 측정판이 이 값을 낮춰
-  //   "센서 k 개일 때의 부하" 를 만든다. 🔑 등록은 그대로 두고 **읽는 수만** 바꾼다 —
-  //   그것이 실기의 부하와 같다(`D` 프레임에는 전부 실린다).
-  //   ⚠ 평소 빌드에서는 0 이라 아무 영향이 없다.
-  uint8_t activeSensors;
-
   void readSensors() {
     uint16_t m = 0;
-    uint8_t seen = 0;
-    for (uint8_t i = 0; i < MODULE_N; i++) {
-      if (!isSensor(i)) continue;
-      if (activeSensors && seen >= activeSensors) break;   // 🔬 부하 측정: 여기까지만 읽는다
-      seen++;
-      if (readSensor(i)) m |= (uint16_t)1 << i;
-    }
+    for (uint8_t i = 0; i < MODULE_N; i++)
+      if (isSensor(i) && readSensor(i)) m |= (uint16_t)1 << i;
     occMask = m;
   }
 

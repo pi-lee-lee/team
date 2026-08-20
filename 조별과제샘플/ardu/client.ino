@@ -177,7 +177,6 @@ static bool cmdL2(uint32_t arg) {
 #include "FrameCodec2.h"       // ACK 발행·슬롯 배치
 #include "Commands.h"          // R / C / G / T 프레임 처리
 #include "Session.h"           // 주기 처리(statusTick·cntTick)
-#include "KSweep.h"            // 🔬 센서 부하 측정판 — `KSWEEP` 없으면 **통째로 빈다**
 #include "Runtime.h"        // begin()/tick() 정의 — **목록 맨 끝이어야 한다**
 // ─────────────────────────────────────────────────────────────────────────
 // ██████████████████████████████████████████████████████████████████████████
@@ -244,15 +243,6 @@ void setup() {
   node.actuator("LD").on(cmdLed);
   node.actuator("L2").on(cmdL2);
   SAMPLE_EXTRA_MODULES                        // 회귀 시험만 쓴다. 평소엔 비어 있다
-#ifdef KSWEEP
-  // 🔬 부하 측정 센서 11개 — A1·B1 과 합쳐 **13개**. 평소 빌드에는 없다.
-  node.sensor("S3").on(ks03).near(US_NEAR_CM);  node.sensor("S4").on(ks04).near(US_NEAR_CM);
-  node.sensor("S5").on(ks05).near(US_NEAR_CM);  node.sensor("S6").on(ks06).near(US_NEAR_CM);
-  node.sensor("S7").on(ks07).near(US_NEAR_CM);  node.sensor("S8").on(ks08).near(US_NEAR_CM);
-  node.sensor("S9").on(ks09).near(US_NEAR_CM);  node.sensor("SA").on(ks10).near(US_NEAR_CM);
-  node.sensor("SB").on(ks11).near(US_NEAR_CM);  node.sensor("SC").on(ks12).near(US_NEAR_CM);
-  node.sensor("SD").on(ks13).near(US_NEAR_CM);
-#endif
 }
 
 void loop() {
