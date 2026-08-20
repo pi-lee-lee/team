@@ -166,7 +166,7 @@ static void moduleKindOf(uint8_t i, char* out4) {
 // ═════════════════════════════════════════════════════════════════════════
 // 🔴 **인자는 32비트다** (2026-08-19). 이진 on/off 도, LCD 의 7자리 숫자도 같은 통로로 온다.
 //   ⚠ **값의 뜻은 프로토콜이 모른다.** 서버는 숫자를 나르기만 하고 **뜻은 기여자가 정한다.**
-typedef bool (*CommandFn)(uint32_t arg);   // 반환 true → ACK `result=0`(성공) · false → `3`(수행 불가)
+// `CommandFn` typedef 는 모듈 표 앞(`client.ino`)에 있다 — 표가 그 타입을 쓰기 때문이다.
 
 class CommandRouter {
  public:
@@ -188,10 +188,18 @@ class CommandRouter {
   }
   // 전선에서 온 `idx` 로 부른다. 등록이 없으면 false → 호출부가 `result=3` 으로 답한다.
   // 🔴 **성공했을 때만 에코를 갱신한다.** 거절된 명령은 상태를 안 바꾼다.
+  // 표에 적힌 핸들러 — 🔴 **이것이 기본이고 `on()` 은 그 위의 런타임 덮어쓰기다.**
+  //   진실이 둘이 아니다: 표가 원천이고 `on()` 은 시험·예외용 오버라이드다.
+  static CommandFn tableCmd(uint8_t idx) {
+    return (idx < MODULE_N) ? (CommandFn)pgm_read_ptr(&MODULE_TABLE[idx].cmd) : (CommandFn)0;
+  }
+
   bool dispatch(uint8_t idx, uint32_t arg) {
-    if (idx >= MODULE_N || fn_[idx] == 0) return false;
+    if (idx >= MODULE_N) return false;
+    CommandFn f = fn_[idx] ? fn_[idx] : tableCmd(idx);
+    if (f == 0) return false;
     curEcho_ = (arg != 0);                 // 기본값 — 핸들러가 `echoIs()` 로 덮을 수 있다
-    if (!fn_[idx](arg)) return false;      // 🔴 거절된 명령은 상태를 안 바꾼다
+    if (!f(arg)) return false;             // 🔴 거절된 명령은 상태를 안 바꾼다
     const uint16_t bit = (uint16_t)1 << idx;
     if (curEcho_) echo_ |= bit; else echo_ &= (uint16_t)~bit;
     return true;
@@ -206,7 +214,8 @@ class CommandRouter {
   //
   //   판별자: **명령표에 "끄는 값"이 0 말고 따로 있으면 이 함수를 불러라.**
   void echoIs(bool on) { curEcho_ = on; }
-  bool has(uint8_t idx) const { return idx < MODULE_N && fn_[idx] != 0; }
+  // 🔴 표에 적힌 것도 "있다" 다 — 등록 호출 없이 표만 쓰는 것이 기본 경로이므로.
+  bool has(uint8_t idx) const { return idx < MODULE_N && (fn_[idx] != 0 || tableCmd(idx) != 0); }
 
   // ═══ 🔴 **액추에이터 에코** — `S` 의 자리 비트열에 실려 나간다 ═══════════════
   //   서버는 **`ACK` 이 아니라 이 비트**로 "명령이 먹었나"를 안다.
@@ -250,7 +259,12 @@ class SensorRouter {
     }
     return false;
   }
-  SensorFn at(uint8_t idx) const { return (idx < MODULE_N) ? fn_[idx] : (SensorFn)0; }
+  // 🔴 표가 기본, `on()` 이 오버라이드 — 명령 쪽과 같은 규칙이다.
+  SensorFn at(uint8_t idx) const {
+    if (idx >= MODULE_N) return (SensorFn)0;
+    if (fn_[idx]) return fn_[idx];
+    return (SensorFn)pgm_read_ptr(&MODULE_TABLE[idx].sense);
+  }
  private:
   SensorFn fn_[MODULE_N];
 };

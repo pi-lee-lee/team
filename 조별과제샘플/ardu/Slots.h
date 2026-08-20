@@ -94,7 +94,7 @@ static uint8_t sensorIndexOf(char c0, char c1) {
 // ⚠ **이 함수는 매 `loop()` 마다 불린다.** 오래 걸리는 측정을 그대로 넣으면 슬롯이 밀린다 —
 //   `pulseIn` 은 최악 타임아웃만큼 **블로킹**한다. **간격을 두고 값을 캐시해라.**
 // ═════════════════════════════════════════════════════════════════════════
-typedef bool (*SensorFn)(uint8_t pin);
+// `SensorFn` typedef 는 모듈 표 앞(`client.ino`)에 있다 — 표가 그 타입을 쓰기 때문이다.
 // 🔴 선언만 여기 있고 **정의는 `Modules.h`** 다 — 등록표가 이름 검색을 쓰는데
 //   그 코드가 이 파일보다 뒤에 온다.
 static SensorFn sensorFnOf(uint8_t idx);

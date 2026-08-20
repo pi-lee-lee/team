@@ -152,7 +152,7 @@ static bool ultrasonicRead(uint8_t pin) {
 }
 static bool readLedBack(uint8_t pin) {
   (void)pin;
-  return digitalRead(PIN_SAMPLE_LED) == HIGH;
+  return digitalRead(LED_BUILTIN) == HIGH;
 }
 static bool readA1(uint8_t pin) { (void)pin; return (slotNo % 20) < 10; }
 
@@ -1558,10 +1558,10 @@ int main() {
       ackQ.clearCache(); ackQ.clearQueue();
       snprintf(gg, sizeof gg, "G,401,2,1,"); appendChecksum(gg, (uint8_t)strlen(gg));
       handleFrameLine(gg);
-      ok(g_pinLevel[PIN_SAMPLE_LED] == HIGH, "★★ ① LD 1 → 핀이 HIGH 다 (콜백이 실제로 돌았다)");
+      ok(g_pinLevel[LED_BUILTIN] == HIGH, "★★ ① LD 1 → 핀이 HIGH 다 (콜백이 실제로 돌았다)");
       snprintf(gg, sizeof gg, "G,402,2,0,"); appendChecksum(gg, (uint8_t)strlen(gg));
       handleFrameLine(gg);
-      ok(g_pinLevel[PIN_SAMPLE_LED] == LOW,  "★★ ① LD 0 → 핀이 LOW 다");
+      ok(g_pinLevel[LED_BUILTIN] == LOW,  "★★ ① LD 0 → 핀이 LOW 다");
 
       // ② 🔴 **7자리 숫자** — 이 시험이 `parseU32` 의 존재 이유다.
       //   옛 파서는 16비트라 65,535 를 넘으면 `result=3` 이 나갔다. 7자리는 못 들어왔다.
@@ -2062,7 +2062,7 @@ int main() {
     ackQ.clearCache(); ackQ.clearQueue();
     snprintf(gg, sizeof gg, "G,950,2,0,"); appendChecksum(gg, (uint8_t)strlen(gg));
     handleFrameLine(gg);
-    ok(g_pinLevel[PIN_SAMPLE_LED] == LOW, "★ LD 0 → 핀 13 이 LOW (눈으로 보는 표지)");
+    ok(g_pinLevel[LED_BUILTIN] == LOW, "★ LD 0 → 핀 13 이 LOW (눈으로 보는 표지)");
     node.readSensors();
     ok((node.occMask & 0x3) == 0,
                             "★★ 자리 A1 의 두 센서가 다 0 이다 (LED 꺼짐 · 핀2 미배선)");
@@ -2071,7 +2071,7 @@ int main() {
     ackQ.clearCache(); ackQ.clearQueue();
     snprintf(gg, sizeof gg, "G,951,2,1,"); appendChecksum(gg, (uint8_t)strlen(gg));
     handleFrameLine(gg);
-    ok(g_pinLevel[PIN_SAMPLE_LED] == HIGH, "★ LD 1 → 핀 13 이 HIGH");
+    ok(g_pinLevel[LED_BUILTIN] == HIGH, "★ LD 1 → 핀 13 이 HIGH");
     node.readSensors();
     ok((node.occMask & (1u << 1)) != 0,
                             "★★★ **B1 이 LED 를 되읽어 1 이 됐다** — 입력 훅이 실물 경로로 돌았다");
@@ -2107,17 +2107,33 @@ int main() {
   //   🔴 지금까지 시험은 `setup()` 을 안 부르고 **자기가 등록**했다. 그래서 `setup()` 에서
   //     `router.on` 을 하나 빠뜨려도 시험이 통과했다 — 실제로 `L2` 에서 그렇게 물렸다.
   //   → **여기서는 `setup()` 을 직접 부른다.** 그것만이 "샘플에 있다"를 검사한다.
-  printf("\n[43] setup() 이 콜백을 실제로 등록하는가\n");
+  printf("\n[43] 표가 핸들러를 갖는가 · 런타임 등록이 그것을 덮는가\n");
   {
     Serial.echoToStdout = false;
-    // 등록을 **전부 지우고** 시작한다 — 앞 시험이 해 둔 것에 기대면 이 시험은 무의미하다
+    // 🔴 **계약이 바뀌었다.** 옛 시험은 *"지우면 하나도 안 남는다"* 를 음성 대조로 썼다 —
+    //   `router.on()` 만이 진실이라는 전제였다. **지금은 모듈 표가 기본이고 `on()` 은 오버라이드다.**
+    //   그래서 런타임 등록을 지워도 **표에 적힌 핸들러가 남는다.** 그것이 옳은 거동이다.
     for (uint8_t i = 0; i < MODULE_N; i++) {
       char n4[4]; moduleNameOf(i, n4);
-      router.on(n4, 0); sensors.on(n4, 0);
+      router.on(n4, 0); sensors.on(n4, 0);          // 런타임 오버라이드만 지운다
     }
-    bool cleared = true;
-    for (uint8_t i = 0; i < MODULE_N; i++) if (router.has(i) || sensors.at(i)) cleared = false;
-    ok(cleared,             "★ 음성 대조: 지우면 하나도 안 남는다 (이 시험이 실제로 돈다)");
+
+    // ⓐ 표가 기본이다 — 등록 호출이 **0회**인 상태에서 `LD` 가 명령을 받는다
+    int8_t ldIdx = -1, senIdx = -1;
+    for (uint8_t k = 0; k < MODULE_N; k++) {
+      char n4[4]; moduleNameOf(k, n4);
+      char k4[4]; moduleKindOf(k, k4);
+      if (strcmp(n4, "LD") == 0) ldIdx = (int8_t)k;
+      if (k4[0] == 'I' && senIdx < 0) senIdx = (int8_t)k;
+    }
+    ok(ldIdx >= 0,          "★ 사전 조건: 표에 `LD` 가 있다");
+    ok(router.has((uint8_t)ldIdx),
+                            "★★★ 등록 호출 0회인데 `LD` 가 명령을 받는다 — **표가 기본이다**");
+
+    // ⓑ 🔴 **음성 대조** — 표에 핸들러를 안 적은 모듈은 여전히 없다.
+    //   이게 없으면 `has()` 가 늘 true 를 내는 것과 구별이 안 된다.
+    ok(senIdx >= 0 && !router.has((uint8_t)senIdx),
+                            "★★★ 표에 `cmd` 를 안 적은 센서는 명령을 못 받는다 (음성 대조)");
 
     setup();                                       // 🔴 실기가 부르는 그 함수
 
@@ -2163,7 +2179,7 @@ int main() {
     {
       sensors.on("A1", readA1);            // 시험 하네스의 훅(주기 24초)
       sensors.on("B1", readLedBack);       // LED 되읽기
-      g_pinLevel[PIN_SAMPLE_LED] = LOW;
+      g_pinLevel[LED_BUILTIN] = LOW;
       bool everSplit = false, sawHi = false, sawLo = false;
       for (uint32_t t = 0; t < 40; t++) {
         slotNo = t; node.readSensors();

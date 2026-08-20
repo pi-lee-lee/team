@@ -21,6 +21,9 @@
 
 #define PROGMEM
 #define pgm_read_byte(p) (*(const uint8_t*)(p))
+// 🔴 함수 포인터를 표에서 읽는다(모듈 표가 핸들러를 갖는다).
+//   호스트는 주소 공간이 하나라 그냥 역참조다 — AVR 은 `lpm` 을 쓴다.
+#define pgm_read_ptr(p)  (*(p))
 #define F(x) (x)
 
 #define HIGH 1

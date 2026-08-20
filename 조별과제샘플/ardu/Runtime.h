@@ -31,8 +31,18 @@ void ParkingNode::begin() {
   // ⚠ `MODULE_TABLE` 에서 아날로그 핀을 센서로 쓰면 그 핀을 여기 쓰지 마라.
   randomSeed((unsigned long)analogRead(A1) ^ micros());
 
-  // 핀을 적은 칸의 입력 모드를 잡는다. 훅이 등록된 칸은 건드리지 않는다.
+  // 센서: 핀을 적은 칸의 입력 모드를 잡는다. 훅이 등록된 칸은 건드리지 않는다.
   for (uint8_t i = 0; i < SENSOR_N; i++) applySensorPinMode(i);
+
+  // 🔓 **액추에이터: 표에 핀을 적었으면 `OUTPUT` 으로 잡는다.**
+  //   🔑 센서와 같은 규칙이다 — **핀을 적었으면 쓰겠다는 뜻이다.** 기여자가 또 잡을 이유가 없다.
+  //   ⚠ 다른 모드가 필요한 장치(서보·I2C·시리얼)는 두 길이 있다:
+  //     ① 표의 핀을 `PIN_NONE` 으로 두고 핸들러가 알아서 한다
+  //     ② `setup()` 에서 `pinMode` 를 다시 불러 덮는다 (이 뒤에 돈다)
+  for (uint8_t i = SENSOR_N; i < MODULE_N; i++) {
+    const uint8_t pin = pgm_read_byte(&MODULE_TABLE[i].pin);
+    if (pin != PIN_NONE) pinMode(pin, OUTPUT);
+  }
 
   // 재부팅하면 테스트 오버라이드는 사라진다 — 서버가 다시 내려보내지 않는다(예약과 정반대).
   // 전역이라 어차피 0 이지만, **"여기서 버린다"를 코드로 남겨 둔다.**

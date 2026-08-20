@@ -50,10 +50,12 @@ static_assert(sizeof(DEVICE_ID) > 1 && sizeof(DEVICE_ID) <= 9,
 //   ⚠ **예시를 그대로 두고 자기 것을 덧붙이지 마라** — 이름이 곧 자리 결속 키라
 //     같은 이름이 여럿이면 **등록은 성공하고 자리에는 아무것도 안 붙는다. 오류가 안 뜬다.**
 //
-//   한 줄 = 모듈 하나 :  {"이름", 종류, 핀}
+//   한 줄 = 모듈 하나 :  {"이름", 종류, 핀, 핸들러}   ← 🔑 **이 한 줄이 모듈의 전부다**
 //     이름 : **자리 id 와 같아야 한다**(2자 + NUL). `A1`·`B3`·`E1` …
 //     종류 : **첫 글자만 뜻이 있다** — `I`=관측 전용("IP" "IX") · `O`=명령 받음("OG" "OL" "OB")
-//     핀   : 실물이면 핀 번호, 가상이면 `PIN_NONE`
+//     핀   : 실물이면 핀 번호, 없으면 `PIN_NONE`  — 🔑 **적으면 `begin()` 이 모드까지 잡는다**
+//     핸들러 : `O*` 는 명령 함수, `I*` 는 센서 함수. **비우면 기본 동작**
+//              (명령 없음 → `result=3` · 센서 없음 → `digitalRead(핀)`)
 //
 // 🔴 **이 표는 모든 `#include` 보다 앞에 있어야 한다** — 헤더들이 이 표에서
 //   센서 수·핀·자리 토큰을 파생한다. 아래로 내리면 그 파생이 표를 못 본다.
@@ -68,11 +70,52 @@ static_assert(sizeof(DEVICE_ID) > 1 && sizeof(DEVICE_ID) <= 9,
 #define SAMPLE_EXTRA_MODULES
 #endif
 
+// 🔴 액추에이터 핀을 고를 때: **D7·D8 은 ESP 가 쓴다** — 겹치면 통신이 죽는다.
+// 🔓 아래 샘플은 **보드에 이미 달려 있는 LED**(`LED_BUILTIN` = 13)를 쓴다. 아무것도 안 사도 된다.
+//   🔑 `LED_BUILTIN` 을 그대로 쓴다 — 보드가 바뀌어도 따라가고, **이름이 한 겹 줄어든다.**
+
+// 표에 적는 두 종류의 함수. 🔴 **표보다 앞에 있어야 한다** — 표가 이 타입을 쓴다.
+typedef bool (*CommandFn)(uint32_t arg);   // `O*` 모듈: 반환 true → ACK `result=0` · false → `3`
+typedef bool (*SensorFn)(uint8_t pin);     // `I*` 모듈: 반환 true = 찼다 (비우면 `digitalRead`)
+
+// ██████████████████████████████████████████████████████████████████████████
+// █  🔓  **내 모듈이 하는 일 — 여기 쓰고 아래 표에 이름을 적는다**            █
+// ██████████████████████████████████████████████████████████████████████████
+//   명령 핸들러 :  `bool 이름(uint32_t arg)`   — arg 는 서버가 보낸 값(0~2^32-1)
+//   센서 핸들러 :  `bool 이름(uint8_t pin)`    — 반환 true = 찼다
+// 🔑 **표 한 줄과 함수 하나. 그것이 모듈 하나의 전부다** — 등록 호출이 따로 없다.
+// ██████████████████████████████████████████████████████████████████████████
+static bool cmdLed(uint32_t arg) {
+  digitalWrite(LED_BUILTIN, arg ? HIGH : LOW);
+  // 🔑 **거절 로그가 없는 이유**: 이 핸들러는 `false` 를 낼 자리가 없다.
+  //   모든 값에 뜻이 있다(0=끔 · 그 외=켬). 거절이 없으면 남길 것도 없다.
+  return true;
+}
+
+static bool cmdL2(uint32_t arg) {
+  if (arg > 9999999UL) {                 // 🔴 표시할 수 없는 값은 **거절한다**
+#if DEBUG
+    // 🔴 **거절도 남긴다.** 이 줄이 없으면 "안 불렸다"와 구분이 안 된다.
+    Serial.print(F("[L2] 거절 — 7자리 초과: ")); Serial.println(arg);
+#endif
+    return false;
+  }
+#if DEBUG
+  Serial.print(F("[L2] ")); Serial.println(arg);   // 실물 LCD 라이브러리는 여기에 붙인다
+#endif
+  return true;
+}
+
 struct ModuleDef {
   char    name[3];      // "A1" + NUL — 명칭이자 **지금은 자리 결속 키다**(위 경고)
   char    kind[4];      // 🔴 **첫 글자만 뜻이 있다**: `I`=관측 전용 · `O`=명령 받음
                         //   둘째 글자부터는 자유다(서버는 안 본다). 2~3글자 + NUL
   uint8_t pin;
+  // 🔓 **이 모듈이 하는 일.** 비워 두면(`0`) 기본 동작이다 —
+  //   `cmd` 가 없으면 명령에 `result=3`(수행 불가), `sense` 가 없으면 `digitalRead(pin)`.
+  //   🔑 표가 `PROGMEM` 이라 **함수 포인터도 플래시다. RAM 을 먹지 않는다.**
+  CommandFn cmd;
+  SensorFn  sense;
 };
 // 🔴 **가상 모듈 스위치 — 기본값 0(끔)**
 //   가상 차단봉 `E1`·`X1` 은 **시험용**이다. 실물 없이 명령 사슬을 밟아 보려면 1 로 켠다.
@@ -81,11 +124,6 @@ struct ModuleDef {
 #ifndef VIRTUAL_MODULES
 #define VIRTUAL_MODULES 0
 #endif
-// 샘플 액추에이터의 핀. 🔴 D7·D8 은 ESP 가 쓴다 — 겹치면 통신이 죽는다.
-// 🔓 **LED 는 보드에 이미 달려 있는 13번**(`LED_BUILTIN`). **아무것도 안 사도 된다.**
-//   🔑 보드가 바뀌어도 `LED_BUILTIN` 이 따라간다 — 숫자를 박지 않는 이유다.
-#define PIN_SAMPLE_LED   LED_BUILTIN
-
 // 🔴 `constexpr` 이다 — **이 표에서 센서 수를 컴파일 시점에 센다.**
 //   `static const` 로 되돌리면 그 파생이 상수식에서 못 읽어 빌드가 깨진다.
 static constexpr ModuleDef MODULE_TABLE[] PROGMEM = {
@@ -109,8 +147,8 @@ static constexpr ModuleDef MODULE_TABLE[] PROGMEM = {
   //   ⚠ 서버 조립 표(`main.cpp`)의 이름과 **글자 그대로** 같아야 붙는다.
   // 🔴 **중간에 끼워 넣지 마라. 끝에 붙여라** — 전선의 `idx` 가 이 표의 순서라
   //   중간 삽입은 뒤의 idx 를 전부 밀어 **지금 되는 결속을 조용히 깬다.**
-  {"LD", "OG", PIN_SAMPLE_LED},   // 🔓 보드 내장 LED. **아무것도 안 사도 된다**
-  {"L2", "OL", PIN_NONE},         // 🔓 숫자를 받는 표시기 — 화면의 **입력 칸**이 이것 때문에 뜬다
+  {"LD", "OG", LED_BUILTIN, cmdLed},   // 🔓 보드 내장 LED. **아무것도 안 사도 된다**
+  {"L2", "OL", PIN_NONE, cmdL2},   // 🔓 숫자를 받는 표시기 — 화면의 **입력 칸**이 이것 때문에 뜬다
   SAMPLE_EXTRA_MODULES                        // 회귀 시험만 쓴다. 평소엔 비어 있다
 #if VIRTUAL_MODULES
   // ⚠ **시험용 가상 차단봉.** 기본값은 꺼져 있다 — `VIRTUAL_MODULES` 를 1 로 켤 때만 실린다.
@@ -179,29 +217,10 @@ static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_T
 //   서버:  srv.send("P1", "L2", 1234567);   ← 화면의 **숫자 입력 칸**이 이것을 보낸다
 //   🔑 **아래 주석 블록의 예시를 그대로 켠 것이다.** 실물 LCD 를 달면 `Serial.print` 자리에
 //     네 라이브러리를 넣으면 된다 — 그 한 줄만 바뀐다.
-static bool cmdL2(uint32_t arg) {
-  if (arg > 9999999UL) {                 // 🔴 표시할 수 없는 값은 **거절한다**
-#if DEBUG
-    // 🔴 **거절도 남긴다.** 이 줄이 없으면 "안 불렸다"와 구분이 안 된다.
-    Serial.print(F("[L2] 거절 — 7자리 초과: ")); Serial.println(arg);
-#endif
-    return false;
-  }
-#if DEBUG
-  Serial.print(F("[L2] ")); Serial.println(arg);   // 실물 LCD 라이브러리는 여기에 붙인다
-#endif
-  return true;
-}
 
 // ── ① on/off ───────────────────────────────────────────────────────────────
 //   [LD 명령표]  0 = 끔 · 그 외 = 켬
 //   서버:  srv.send("P1", "LD", 1);
-static bool cmdLed(uint32_t arg) {
-  digitalWrite(PIN_SAMPLE_LED, arg ? HIGH : LOW);
-  // 🔑 **거절 로그가 없는 이유**: 이 핸들러는 `false` 를 낼 자리가 없다.
-  //   모든 값에 뜻이 있다(0=끔 · 그 외=켬). 거절이 없으면 남길 것도 없다.
-  return true;
-}
 
 // ══ 🔓 **다른 모듈을 붙이려면 — 아래 꼴로 쓴다** ═══════════════════════════
 //   📖 자세한 것은 `GUIDE.md` §3·§4
@@ -262,14 +281,11 @@ void setup() {
   Serial.begin(115200);
   node.begin();
 
-  // 🔓 **자기 핀** — 액추에이터의 핀 모드는 여기서 잡는다
-  pinMode(PIN_SAMPLE_LED, OUTPUT);
-
-  // 🔓 **명령 수신 등록** — 모듈 표의 `O*` 줄마다 하나
-  //   ⚠ 등록 안 한 모듈에 명령이 오면 `result=3`(수행 불가)로 답한다. 조용히 성공하지 않는다.
-  router.on("LD", cmdLed);      // 🔓 보드 내장 LED
-  router.on("L2", cmdL2);       // 🔓 숫자 표시기
+  // 🔑 **명령·센서 등록이 없다** — 표에 함수 이름을 적었으므로 그것이 등록이다.
+  //   ⚠ 표에 함수를 안 적은 `O*` 모듈에 명령이 오면 `result=3`(수행 불가)로 답한다.
 #if VIRTUAL_MODULES
+  // ⚠ 가상 차단봉은 예외다: 핸들러가 `virtualGate()`(Modules.h)를 쓰는데 그것이 표보다 뒤에 있다.
+  //   **런타임 등록이 표를 덮는 경로**가 그래서 남아 있다 — 시험도 이 경로를 쓴다.
   router.on("E1", gateE1);      // 시험용 가상 차단봉 — 실물이 오면 이 줄만 바꾼다
   router.on("X1", gateX1);
 #endif
