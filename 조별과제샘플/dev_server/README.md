@@ -1,7 +1,7 @@
 # 개발용 주차 서버 — 이 폴더 **하나만** 있으면 돈다
 
 ```
-macOS/Linux   c++ -std=c++11 -O2 -o srv server.cpp   →  ./srv
+macOS/Linux   c++ -std=c++11 -O2 -o srv server.cpp lot.cpp   →  ./srv
 Windows(VS)   dev_server.sln 을 열고 F5              →  콘솔 창이 뜬다
 화면          http://127.0.0.1:9900/
 ```
@@ -44,12 +44,15 @@ c++ -fsyntax-only -DIN= -DOUT= -x c++ parking.h
 
 ### 🔴 남은 함정 (우리가 못 재는 것) — 직접 만들 때 쓰라
 ```
-① **유니티 빌드다.** `server.cpp` 가 `#include "lot.cpp"` 한다
-   → VS 가 폴더의 `.cpp` 를 자동 추가하면 `lot.cpp` 가 **따로 컴파일되고**
-     `buildLot`·`onTick`·`onCmdResult` 가 **두 번 정의**된다 → `LNK2005`
-   ✅ **컴파일 항목은 `server.cpp` 하나로.** `lot.cpp` 는 프로젝트에서 **제외**한다
-   🔑 하필 `lot.cpp` 는 **혼자서도 문법이 통과하도록 일부러** 만들어져 있다
-     (편집기 빨간 줄 방지) → **VS 가 진짜 소스로 오해한다**
+① ✅ **고쳤다 (2026-08-20).** 전에는 `server.cpp` 가 `#include "lot.cpp"` 하는
+   **유니티 빌드**여서, VS 가 폴더의 `.cpp` 를 자동 추가하면 `lot.cpp` 가 두 번 컴파일되고
+   `buildLot`·`onTick`·`onCmdResult` 가 **중복 정의**됐다 → `LNK2005`
+   ✅ 훅 셋의 **선언을 `parking.h` 로** 올리고 `#include "lot.cpp"` 를 뺐다.
+     `lot.cpp` 는 이제 **진짜 번역 단위**다 →
+     🔑 **폴더의 `.cpp` 를 전부 컴파일하는 것이 이제 *정답* 이다**
+   ⚠ macOS 에서 그 오류를 **재현하고 고쳤다**:
+     `c++ -c lot.cpp && c++ -c server.cpp && c++ lot.o server.o`
+     → 고치기 전 `duplicate symbol` 3건 · 고친 뒤 **링크 성공**
 ② 🔴 **`/utf-8` 을 반드시 준다.** 이 소스는 BOM 없는 UTF-8 이고 안내 문구가 한글이다.
    빼면 CP949 로 읽어 **문자열이 깨지는데 컴파일은 통과한다** —
    **빌드 로그로 못 잡고 브라우저 화면에서 처음 보인다**

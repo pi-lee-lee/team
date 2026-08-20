@@ -338,7 +338,12 @@ bool ParkingServer::openPorts()    { return p_->srv.openPorts(); }
 bool ParkingServer::serveOneTick() { return p_->srv.serveOneTick(); }
 void ParkingServer::closeDown()    { p_->srv.closeDown(); }
 
-#include "lot.cpp"      // 🔴 **기여자가 여는 유일한 파일** — buildLot / onTick / onCmdResult
+// 🔴 **`#include "lot.cpp"` 가 여기 있었다. 2026-08-20 에 뺐다.**
+//   `lot.cpp` 는 이제 **진짜 번역 단위**다 — 훅 셋의 선언이 `parking.h` 에 있고
+//   링크가 그 둘을 잇는다.
+//   🔑 그래서 **폴더의 `.cpp` 를 전부 컴파일하는 것이 정답이 된다**(Visual Studio 의 기본값).
+//   ⚠ 빌드가 두 줄이 됐다: `c++ -c server.cpp && c++ -c lot.cpp && c++ *.o -o srv`
+//     (또는 `c++ -o srv server.cpp lot.cpp` 한 줄)
 #include "entry.h"      // 엔진 진입점 — `main()` 은 여기 있다(기여자는 안 연다)
 
 

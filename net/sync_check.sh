@@ -46,6 +46,21 @@ for T in "$ROOT/조별과제샘플/server" "$ROOT/조별과제샘플/dev_server"
   fi
   if c++ -std=c++11 -fsyntax-only -I "$USE" "$WORK/lot.cpp" 2>"$WORK/err"; then
     echo "✅ $name — lot.cpp 가 이 트리의 공개 API 로 컴파일된다"
+    # 🔴 **dev_server 는 한 걸음 더 간다 — 링크까지 본다** (2026-08-20)
+    #   `lot.cpp` 가 **진짜 번역 단위**가 됐으므로 *"공개 API 만으로 성립하나"* 를 넘어
+    #   **"실제로 링크되나"** 를 잴 수 있다. 🔑 **검사의 뜻이 강해졌다.**
+    #   ⚠ 운영 트리(`server/`)에는 안 한다 — 거기는 아직 `#include "lot.cpp"` 라
+    #     따로 링크하면 **중복 정의가 나는 것이 정상**이다. **두 트리의 뜻이 다르다.**
+    if [ "$name" = "dev_server" ] && [ "$NEG" = "0" ]; then
+      if c++ -std=c++11 -w -DBUILD_ID='"sync"' -o "$WORK/link_probe" \
+             "$T/server.cpp" "$T/lot.cpp" 2>"$WORK/lerr"; then
+        echo "   ✅ 두 번역 단위 링크 성공 (server.cpp + lot.cpp)"
+      else
+        echo "   🔴 **링크가 안 된다** — Visual Studio 가 겪을 바로 그 오류다:"
+        head -4 "$WORK/lerr" | sed 's/^/     /'
+        rc=1
+      fi
+    fi
   else
     echo "🔴 $name — lot.cpp 가 **안 된다**. 공개 API 가 갈렸다:"
     head -4 "$WORK/err" | sed 's/^/     /'

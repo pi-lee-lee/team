@@ -308,4 +308,24 @@ private:
     Impl* p_;
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔴🔴 **기여자가 구현하는 훅 셋** — 선언은 여기, 정의는 `lot.cpp` 에 있다
+//
+//   이 선언이 없으면 `server.cpp` 가 `#include "lot.cpp"` 로 소스를 통째로 끌어와야 했고,
+//   그러면 **번역 단위가 하나뿐**이라 `.cpp` 를 여럿 컴파일하는 도구(Visual Studio)에서
+//   `lot.cpp` 가 **두 번 컴파일되어 링크가 깨진다.**
+//
+//   ✅ macOS 에서 그 오류를 그대로 재현했다(Windows 없이):
+//       c++ -c lot.cpp && c++ -c server.cpp && c++ lot.o server.o
+//       → duplicate symbol 'onTick(ParkingServer&)' · 'buildLot' · 'onCmdResult'
+//   🔑 **셋뿐이었다.** 나머지 헤더는 `static`·`inline` 이라 링크가 안 깨진다 —
+//     그래서 *"h 에 모두 정의가 있어서"* 가 아니라 **이 셋이 원인**이었다.
+//
+// ⚠ **비워 둬도 된다.** `onTick`·`onCmdResult` 는 아무것도 안 해도 서버가 돈다.
+//   다만 **정의는 있어야 한다** — 선언만 있고 정의가 없으면 링크에서 "미해결 외부 기호"다.
+// ═══════════════════════════════════════════════════════════════════════════
+void buildLot(ParkingLot& lot);              // ① 주차장을 조립한다
+void onTick(ParkingServer& srv);             // ② 한 박자마다 — 명령을 여기서 낸다
+void onCmdResult(const CmdResult& r);        // ③ 명령 결과 — 성공 / 거절 / 무응답
+
 #endif  // PARKING_H
