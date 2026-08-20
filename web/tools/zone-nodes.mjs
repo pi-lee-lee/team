@@ -479,6 +479,59 @@ try {
        sel && sel.sel === 'FA' && sel.panelMods === 10, JSON.stringify(sel));
   }
 
+  /* ── 🔴 REQ-0289 회귀 방지 — **폭 단계마다 판 배치와 합격선을 같이 본다** ──────
+     사용자 요구는 *"PC 화면에서는 넓게"* 였고, 루트의 조건은 *"좁은 화면·2열 거동을 깨지 마라"* 였다.
+     🔑 그래서 **세 폭에서 같은 것을 잰다.** 한 폭만 재면 다른 폭이 조용히 깨진다.
+     ⚠ 판 배치는 좌표로 잰다 — CSS 문자열을 읽으면 "그렇게 적혀 있다"까지고 "그렇게 놓인다"가 아니다. */
+  if (!LIVE) {
+    const LAYOUTS = [
+      { w: 760,  cols: 1, name: '좁은 화면(1열)' },
+      { w: 1280, cols: 2, name: '보통(2열)' },
+      { w: 1800, cols: 3, name: '넓은 화면(3열)' },
+    ];
+    for (const L of LAYOUTS) {
+      await client.send('Emulation.setDeviceMetricsOverride',
+        { width: L.w, height: 900, deviceScaleFactor: 1, mobile: false });
+      await sleep(140);
+      const box = await evaluate(client, `(() => {
+        const r = (sel) => { const e = document.querySelector(sel); if (!e) return null;
+          const b = e.getBoundingClientRect(); return { l: Math.round(b.left), t: Math.round(b.top), r: Math.round(b.right), h: Math.round(b.height) }; };
+        const cells = [...document.querySelectorAll('#zone-grid .zone')].map(c => Math.round(c.getBoundingClientRect().height));
+        return { grid: r('.pane--grid'), detail: r('.pane--detail'), info: r('.pane--info'),
+                 main: r('main'), cells: cells, wrap: r('.wrap') };
+      })()`);
+      const g = box && box.grid, d = box && box.detail, i = box && box.info;
+      ok('분모: ' + L.name + ' 에서 판 셋이 다 있다', !!(g && d && i), JSON.stringify(box));
+      if (!(g && d && i)) continue;
+      if (L.cols === 1) {
+        ok('🔴 ' + L.name + ': 셋이 같은 열에 쌓인다 (왼쪽 좌표가 같다)',
+           g.l === d.l && d.l === i.l, JSON.stringify({ g: g.l, d: d.l, i: i.l }));
+        ok('🔴 ' + L.name + ': 읽는 순서가 격자 → 상세 → 그 밖',
+           g.t <= d.t && d.t <= i.t, JSON.stringify({ g: g.t, d: d.t, i: i.t }));
+      }
+      if (L.cols === 2) {
+        ok('🔴 ' + L.name + ': 격자와 상세가 나란히 선다',
+           g.r <= d.l, JSON.stringify({ gridRight: g.r, detailLeft: d.l }));
+        ok('🔴 ' + L.name + ': 그 밖은 상세 **아래**에 쌓인다 (둘째 열)',
+           i.l === d.l && i.t > d.t, JSON.stringify({ dl: d.l, il: i.l, dt: d.t, it: i.t }));
+      }
+      if (L.cols === 3) {
+        ok('🔴 ' + L.name + ': 셋이 **나란히** 선다 (가로를 쓴다)',
+           g.r <= d.l && d.r <= i.l, JSON.stringify({ g: g.r, dl: d.l, dr: d.r, il: i.l }));
+        ok('🔴 ' + L.name + ': 세 판의 위쪽이 같은 줄에 있다',
+           g.t === d.t && d.t === i.t, JSON.stringify({ g: g.t, d: d.t, i: i.t }));
+        ok('넓은 화면에서 .wrap 이 1060 보다 넓다 (' + (box.wrap ? (box.wrap.r - box.wrap.l) : '?') + 'px)',
+           !!box.wrap && (box.wrap.r - box.wrap.l) > 1060, JSON.stringify(box.wrap));
+      }
+      /* 🔴 REQ-0288 의 합격선을 **폭마다** 다시 본다 — 높이를 정하는 것은 뷰포트뿐이어야 한다. */
+      ok('🔴 ' + L.name + ': 칸 높이가 서로 같다 (REQ-0288 합격선 유지 · ' + L.w + 'px)',
+         box.cells.length >= 2 && box.cells.every((h) => h === box.cells[0]),
+         JSON.stringify(box.cells));
+    }
+    await client.send('Emulation.clearDeviceMetricsOverride');
+    await sleep(120);
+  }
+
   if (!LIVE) {
     skip('실기에서 이 지형이 그렇게 온다', '주입 모드다 — 이 초록은 "그 자료가 오면 그렇게 그린다"이지 '
        + '"실기에서 그렇게 나온다"가 아니다. `--live <포트>` 로 따로 재라');

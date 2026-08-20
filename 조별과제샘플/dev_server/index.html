@@ -17,7 +17,7 @@
   자기 자신을 포함해서 재면 값이 자기를 바꿔 영원히 안 맞는다 — 그래서 정규화 후에 잰다.
   판정: `web/tools/deploy-screen.mjs --check`
 -->
-<meta name="screen-build" content="src=d0e3ef8330ab git=005183b+dirty at=2026-08-20T13:57:31">
+<meta name="screen-build" content="src=7662ecf398dc git=847e5ef+dirty at=2026-08-20T14:05:50">
 <title>주차 관제 — 실시간 자리 현황</title>
 <!--
   주차 관제 데모 (단일 파일 · 외부 의존성 없음)
@@ -109,7 +109,13 @@
     line-height: 1.5;
   }
 
+  /* 🔴 폭 단계 (REQ-0289 · 사용자: *"기본화면이 세로 기준이다. PC 화면에서는 넓게 보고 싶다"*).
+     미디어쿼리가 **좁은 화면 분기 하나뿐**이라 넓은 모니터에서 가운데만 쓰고 세로로 길어졌다.
+     🔑 무한정 넓히지 않는다 — 글줄이 길어지면 읽기가 나빠진다. 그래서 **단계**를 둔다. */
   .wrap { max-width: 1060px; margin: 0 auto; }
+  @media (min-width: 1200px) { .wrap { max-width: 1400px; } }
+  @media (min-width: 1600px) { .wrap { max-width: 1760px; } }
+  @media (min-width: 2100px) { .wrap { max-width: 2000px; } }
 
   .topbar {
     display: flex; flex-wrap: wrap; gap: 12px;
@@ -148,8 +154,31 @@
   }
   .demo-tools button:hover { border-color: var(--accent); color: var(--accent); }
 
-  main { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(230px, 1fr); gap: 16px; align-items: start; }
-  @media (max-width: 780px) { main { grid-template-columns: minmax(0, 1fr); } }
+  /* ── 판 배치 — 🔴 **`grid-template-areas` 로 못 박는다** (REQ-0289) ──────────
+     자동 흐름에 맡기면 판이 셋인데 열이 둘일 때 **세 번째가 다음 줄 첫 칸으로 떨어진다**
+     (격자 아래에 '그 밖'이 끼어든다). 이름으로 배치하면 열 수가 바뀌어도 자리가 안 흔들린다.
+     🔑 HTML 순서는 **1열에서 읽는 순서**이고, 여기서는 그 순서를 바꾸지 않는다. */
+  main { display: grid; gap: 16px; align-items: start;
+         grid-template-columns: minmax(0, 1.55fr) minmax(230px, 1fr);
+         grid-template-areas: "grid detail" "grid info"; }
+  .pane--grid   { grid-area: grid; }
+  .pane--detail { grid-area: detail; }
+  .pane--info   { grid-area: info; }
+  @media (max-width: 780px) {
+    main { grid-template-columns: minmax(0, 1fr);
+           grid-template-areas: "grid" "detail" "info"; }
+  }
+  /* 넓은 화면 ① — 2열을 유지하고 **남는 가로를 격자에 준다.** 상세 패널도 같이 넓어진다
+     (`control` 위젯의 숫자 칸·버튼이 줄바꿈되지 않을 만큼은 줘야 한다). */
+  @media (min-width: 1200px) {
+    main { grid-template-columns: minmax(0, 1.9fr) minmax(300px, 1fr); }
+  }
+  /* 넓은 화면 ② — **3열.** 격자 · 선택한 자리 · 그 밖.
+     🔴 여기서 세로가 짧아지는 것이 이 REQ 의 목적이다: 둘째 열에 쌓여 있던 두 판이 나란히 선다. */
+  @media (min-width: 1600px) {
+    main { grid-template-columns: minmax(0, 2fr) minmax(330px, 1fr) minmax(300px, 0.9fr);
+           grid-template-areas: "grid detail info"; }
+  }
 
   section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
   section h2 { margin: 0 0 10px; font-size: 14px; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-dim); }
@@ -209,6 +238,11 @@
   .zgrid { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px;
            grid-template-columns: repeat(var(--zcols, 1), minmax(0, 1fr));
            grid-auto-rows: var(--zrowh, 92px); }
+  /* 🔴 넓어지면 칸이 **납작해진다** — 폭만 늘고 높이는 고정이라 도면처럼 안 보인다.
+     그래서 행 높이도 단계로 올린다. **높이를 정하는 것은 여전히 뷰포트뿐이다** —
+     모듈 수는 어디에도 안 들어간다(REQ-0288 합격선이 그대로 성립한다). */
+  @media (min-width: 1200px) { .zgrid { --zrowh: 104px; } }
+  @media (min-width: 1600px) { .zgrid { --zrowh: 116px; } }
   .zgrid > li { min-width: 0; }
   /* 🔴 빈 칸 — **자리가 아니다.** 초점을 받지 않고 보조기술에서 숨는다.
      `5×5` 에 자리 5 + 입출구면 빈 칸이 18개다 — 전부 탭 정지점이면 접근성 결함이다(설계서 §5.1). */
@@ -513,7 +547,7 @@
   <p id="slots-banner" class="banner banner--warn" role="status" aria-live="polite" hidden></p>
 
   <main>
-    <section aria-labelledby="grid-title">
+    <section class="pane pane--grid" aria-labelledby="grid-title">
       <h2 id="grid-title">자리 현황</h2>
       <div class="grid-head" id="grid-head" aria-hidden="true"><span>열 A</span><span>열 B</span></div>
       <ul id="grid" class="grid" role="list"></ul>
@@ -533,12 +567,16 @@
       </ul>
     </section>
 
-    <section class="side" aria-labelledby="zsel-title">
-      <!-- 🔴 선택한 자리의 상세 (REQ-0288 ③안). 격자 칸은 요약만 그리고 **여기가 목록과 조작을 받는다.**
-           🔑 새 열을 만들지 않았다 — `main` 의 둘째 열이 이미 있었다. -->
+    <!-- 🔴 판을 **셋으로 가른다** (REQ-0289). 열 배치는 CSS `grid-template-areas` 가 정한다 —
+         좁은 화면 1열 · 보통 2열(상세와 그 밖이 둘째 열에 쌓인다) · 아주 넓으면 3열.
+         🔑 HTML 순서는 **좁은 화면의 읽는 순서**다: 격자 → 선택한 자리 → 그 밖. -->
+    <section class="pane pane--detail side" aria-labelledby="zsel-title">
+      <!-- 🔴 선택한 자리의 상세 (REQ-0288 ③안). 격자 칸은 요약만 그리고 **여기가 목록과 조작을 받는다.** -->
       <h2 id="zsel-title">선택한 자리</h2>
       <div id="zone-detail" class="zpanel"></div>
+    </section>
 
+    <section class="pane pane--info side" aria-labelledby="side-title">
       <h2 id="side-title">장치 상태</h2>
       <dl>
         <dt>센서</dt>      <dd id="dev-online">-</dd>
@@ -2771,6 +2809,8 @@ function renderZoneGrid() {
   if (!on) { renderZoneDetail(null, new Map()); return; }
 
   const m = state.map;
+  /* 🔴 열 수는 **자리의 논리 배치**다(맵 정의). 화면 폭 때문에 바꾸지 않는다 —
+     바꾸면 A1 이 어느 칸에 있는지가 창 크기에 따라 달라진다. 넓은 화면은 `.wrap` 폭으로 받는다(REQ-0289). */
   el.zoneGrid.style.setProperty('--zcols', String(m.cols));
   const byCell = new Map();
   const overlap = new Map();   /* 칸키 → 가려진 자리 id 들 */
