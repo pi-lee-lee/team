@@ -798,3 +798,4 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-20T17:46:11+0900 | 완료 | REQ-0306 | socket-engineer → socket-engineer | 차단봉을 없앤다 — lot.cpp 의 DR 선언 제거 (사용자 지시) |
 | 2026-08-20T17:48:15+0900 | 통보 | REQ-0307 | web-engineer → root | 원장 §5.94 — cmd_result 는 서버 문구가 먼저, ack 은 내 표가 먼저(반대) · 그 문구는 안 지워진다 |
 | 2026-08-20T17:59:01+0900 | 완료 | REQ-0304 | arduino-engineer → arduino-engineer | 🔴 모듈 설정을 선언 한 줄로 — 컴포넌트 패턴 (사용자 지시 · REQ-0303 B단계를 대체한다) |
+| 2026-08-20T18:01:49+0900 | 통보 | REQ-0308 | arduino-engineer → root | 원장 §68~97 — 다른 도메인도 쓸 것만 골라 알린다 (판별자·값의 사전·시험의 다섯째 얼굴) |
