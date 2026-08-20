@@ -151,6 +151,7 @@ static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_T
 #include "FrameCodec2.h"       // ACK 발행·슬롯 배치
 #include "Commands.h"          // R / C / G / T 프레임 처리
 #include "Session.h"           // 주기 처리(statusTick·cntTick)
+#include "Runtime.h"        // begin()/tick() 정의 — **목록 맨 끝이어야 한다**
 // ─────────────────────────────────────────────────────────────────────────
 // ██████████████████████████████████████████████████████████████████████████
 // █  🔓  **명령 수신 핸들러 — 자기 액추에이터를 여기 붙인다**                █
@@ -247,155 +248,36 @@ static bool gateE1(uint32_t arg) { return virtualGate(0, arg); }
 static bool gateX1(uint32_t arg) { return virtualGate(1, arg); }
 #endif
 
+// ██████████████████████████████████████████████████████████████████████████
+// █  🔓  **여기가 네 자리다** — 자기 핀과 자기 모듈만 적는다                █
+// ██████████████████████████████████████████████████████████████████████████
+//
+//   `node.begin()` : 링크 시작 · 슬롯 원점 · 난수 시드 · 센서 핀 모드 · 리셋선 · 워치독
+//   `node.tick()`  : 한 박자 (수신 → 센서 훑기 → 송신 → 계수)
+//
+// 🔑 **그 안의 순서는 네가 바꿀 수 없다. 그래서 감춰 뒀다**(정의는 `Runtime.h`).
+//   드러내 봐야 "지킬 의무" 만 생기고 얻는 것이 없다. 이 함수에는 **바꿀 수 있는 것만** 남아 있다.
+// ██████████████████████████████████████████████████████████████████████████
 void setup() {
   Serial.begin(115200);
-  espInit();                        // UART 를 열고 접속 사다리를 시작만 한다 (여기서 기다리지 않는다)
-
-  // 슬롯 위상의 원점. 🔴 **반드시 여기서 잡는다** — 0 으로 두면 첫 `statusTick` 에서
-  //   `now - 0` 만큼의 슬롯을 한꺼번에 소진하느라 while 이 헛돈다.
-  slotStart = millis();
-
-  // 난수 시드는 **아무 데도 안 물린 아날로그 핀**에서 뽑는다 — 물려 있으면 노이즈가 안 나온다.
-  // ⚠ `MODULE_TABLE` 에서 아날로그 핀을 센서로 쓰면 그 핀을 여기 쓰지 마라.
-  randomSeed((unsigned long)analogRead(A1) ^ micros());
-
-  // 자리 초기화 — 실물로 지정된 칸의 입력 모드까지 **`node` 가 스스로 잡는다**.
-  //   ⚠ 생성자가 아니라 여기다: 전역 생성자는 `main()` 전에 돌아 `pinMode` 를 부를 수 없다.
   node.begin();
 
-  // 🔓 **센서 훅 등록** — 안 붙이면 `digitalRead(핀)` 이 기본이다.
-  //   sensors.on("A1", readA1);       ← 자기 센서를 붙일 때. 위 주석 블록 참조
+  // 🔓 **자기 핀** — 액추에이터의 핀 모드는 여기서 잡는다
+  pinMode(PIN_SAMPLE_LED, OUTPUT);
 
-  // 🔓 **명령 수신 등록 — 자기 액추에이터를 여기 붙인다**
-  //   예)  `router.on("G1", myGate);`   ← 표에 `{"G1", "OB", 7}` 을 더한 뒤
+  // 🔓 **명령 수신 등록** — 모듈 표의 `O*` 줄마다 하나
   //   ⚠ 등록 안 한 모듈에 명령이 오면 `result=3`(수행 불가)로 답한다. 조용히 성공하지 않는다.
-  pinMode(PIN_SAMPLE_LED,  OUTPUT);
-  router.on("LD", cmdLed);      // 🔓 명령 등록. 모듈마다 한 줄
+  router.on("LD", cmdLed);      // 🔓 보드 내장 LED
   router.on("L2", cmdL2);       // 🔓 숫자 표시기
 #if VIRTUAL_MODULES
   router.on("E1", gateE1);      // 시험용 가상 차단봉 — 실물이 오면 이 줄만 바꾼다
   router.on("X1", gateX1);
 #endif
 
-  // 재부팅하면 테스트 오버라이드는 사라진다 — 서버가 다시 내려보내지 않는다(예약과 정반대).
-  // 전역이라 어차피 0 이지만, **"여기서 버린다"를 코드로 남겨 둔다.**
-  node.testArmed = false;
-  node.slotOverrideClearAll();
-
-  // ESP 리셋선은 **놓은 상태(하이임피던스)로 시작**한다.
-  //   전원 인가 직후 AVR 핀은 원래 INPUT 이라 이미 떠 있지만, **"여기서 명시적으로 놓는다"**를
-  //   코드로 남긴다. 🔴 실수로 OUTPUT LOW 로 두면 ESP 가 영원히 리셋에 잡혀 아무 일도 안 난다.
-#if ESP_RST_WIRED
-  pinMode(PIN_ESP_RST, INPUT);
-#endif
-
-#if DEBUG
-  // 🔴 **둘은 다른 값이다. 하나만 찍으면 오독된다.**
-  //     `SENSOR_N`      = **센서 수**  — 표에서 `I` 로 시작하는 줄 수
-  //     `moduleCount()` = **모듈 수**  — 센서 + 액추에이터. `D,*,<drain>,<n>` 의 `n` 이 이것이다
-  //   ⚠ **자리 수는 안 찍는다.** 장치는 자리 배치를 모른다 — 서버 조립 표가 정한다.
-  // 🔴 **이 보드가 어느 서버를 보는가** — 포트 세트가 둘이라 자주 물어지는 것이다.
-  //   ⚠ 소스를 읽어 짐작하지 마라. **빌드 시점에 덮일 수 있다.** 이 줄이 칩의 진실이다.
-  Serial.print(F("\n[NET] 대상 " SERVER_IP ":" SERVER_PORT));
-  Serial.println();
-
-  // 🔴 **내 센서가 실제로 읽히는가** — 이 줄이 그 답이다.
-  //   ⚠ 시뮬이면 `sensors.on()` 훅도 안 불린다(실물 경로 안에 있다). 그 사실이 여기 보인다.
-  Serial.print(F("\n[SENS] "));
-  for (uint8_t i = 0; i < SENSOR_N; i++) {
-    char nm[4]; moduleNameOf(i, nm);
-    Serial.print(nm); Serial.print('=');
-    if (sensorPin(i) == PIN_NONE)                Serial.print(F("안읽음"));
-    else if (sensors.at(i))                    Serial.print(F("훅"));
-    else { Serial.print(F("핀")); Serial.print(sensorPin(i)); }
-    Serial.print(' ');
-  }
-  Serial.println();
-
-  Serial.print(F("\n[PARKING NODE] proto v1 / "));
-  Serial.print(SENSOR_N);          Serial.print(F(" sensors / "));
-  Serial.print(moduleCount());     Serial.println(F(" modules / dev=" DEVICE_ID));
-
-  // ── 부팅 원인 — **추측을 사실로 바꾸는 한 줄**. 왜 재부팅했는지는 여기서만 알 수 있다 ──
-  Serial.print(F("[BOOT] 리셋 원인: "));
-  if (mcusrMirror == 0) {
-    // 🔴 이 보드의 부트로더(optiboot 4.4)는 MCUSR 을 지우고 넘어온다.
-    //   `.init3` 에서 가장 먼저 읽어도 이미 0 이다 — **알 수 있는 방법이 없다.**
-    //   ⚠ "불명"이라고만 쓰면 가끔은 알 수 있을 것처럼 읽혀 다음 사람이 기다린다.
-    Serial.println(F("알 수 없음 — 이 부트로더가 MCUSR 을 지우고 넘어온다"));
-  } else {
-    if (mcusrMirror & _BV(PORF))  Serial.print(F("전원인가(POR) "));
-    if (mcusrMirror & _BV(EXTRF)) Serial.print(F("외부리셋(버튼/DTR) "));
-    if (mcusrMirror & _BV(BORF))  Serial.print(F("**브라운아웃(전원부족)** "));
-    if (mcusrMirror & _BV(WDRF))  Serial.print(F("워치독 "));
-    Serial.println();
-  }
-  Serial.print(F("[BOOT] 사다리 4단(ESP 하드리셋선) "));
-  Serial.print(ESP_RST_WIRED ? F("배선됨(A2)") : F("미배선 — A2 를 ESP RST 에 물리고 ESP_RST_WIRED=1"));
-  Serial.print(F(" · 6단(워치독) "));
-  Serial.println(ENABLE_WDT ? F("켬") : F("끔"));
-#endif
-
-#if ENABLE_WDT
-  // 8초. SoftwareSerial 비트뱅잉과 waitForPrompt(300ms)를 넉넉히 덮는다.
-  // (가장 긴 정지는 drainSerial 의 120ms 다 — 8초와는 두 자릿수 차이라 오발이 없다.)
-  wdt_enable(WDTO_8S);
-#endif
+  // 🔓 **센서 훅 등록** — 안 붙이면 `digitalRead(핀)` 이 기본이다
+  //   sensors.on("A1", readA1);       ← 자기 센서를 붙일 때. `Slots.h` 의 주석 블록 참조
 }
-
-#if DEBUG
-// 오프라인인 동안 3초마다 한 줄. 🔴 **이 한 줄이 원인을 셋으로 가른다:**
-//   rx=0                 → ESP→Uno 로 바이트가 아예 안 온다. 배선(D7)·레벨·모듈 전원을 봐라
-//   rx>0, lines=0        → 바이트는 오는데 줄이 안 끊긴다. 줄 종단이 LF 가 아닐 수 있다
-//   lines>0, online=0    → 줄은 오는데 접속 문구를 못 알아본다. [AT] 로그에서 실제 문구를 봐라
-// 셋 중 무엇인지 모르는 채로 고치면 또 빗나간다.
-static void diagTick(unsigned long now) {
-  if (netOnline) return;
-  if (now - dbgLastDiag < DIAG_PERIOD_MS) return;
-  dbgLastDiag = now;
-  Serial.print(F("[DIAG] offline step="));  Serial.print(netStep);
-  // 사다리의 현재 칸을 같이 찍는다. 없으면 3초마다 같은 줄이 흘러갈 뿐
-  //   **"지금 무엇을 하며 기다리는 중인가"**를 로그에서 알 수 없다.
-  Serial.print(F(" 사다리="));              Serial.print(rung);
-  Serial.print('/');                        Serial.print(rungFails);
-  if (espRstHeld) Serial.print(F(" [ESP리셋유지중]"));
-  Serial.print(F(" rx="));                  Serial.print(dbgRxBytes);
-  Serial.print(F(" lines="));               Serial.print(dbgLineCnt);
-  Serial.print(F(" up="));                  Serial.print(now / 1000UL);
-  Serial.println(F("s"));
-}
-#endif
-
-#if DEBUG
-// RAM 최저 여유를 1분에 한 줄. **온라인일 때도 찍는다** — [DIAG] 는 오프라인 전용이라
-// 정작 2시간 소크(=계속 온라인) 동안 아무것도 안 보이기 때문이다.
-static unsigned long lastRamReport = 0;
-static void ramTick(unsigned long now) {
-  if (now - lastRamReport < 60000UL) return;
-  lastRamReport = now;
-  Serial.print(F("[RAM] 최저 여유 "));
-  Serial.print(ramLow);
-  Serial.print(F(" B · 프롬프트 재동기 "));
-  Serial.print(promptResyncs);
-  Serial.println(F("회 (서버의 '버린줄' 과 맞아야 한다)"));
-}
-#endif
 
 void loop() {
-#if ENABLE_WDT
-  wdt_reset();                      // 여기 못 오면(=행) 8초 뒤 AVR 이 스스로 리셋된다
-#endif
-  unsigned long now = millis();
-  espReset(now);
-  espRead();
-  drainPending();
-  // 🔴 **보류 ACK 를 여기서 따로 내보내지 마라.** 슬롯 배치(`sendSlotBatch`)가 같이 싣는다 —
-  //   따로 내보내면 **슬롯당 1거래 규칙이 깨지고 수신 창을 침범한다.**
-  node.readSensors();               // 자리 상태를 훑는다
-  statusTick(now);
-  cntTick(now);                     // 🔴 DEBUG 밖이다 — 운영 빌드에서도 관측이 남아야 한다
-#if DEBUG
-  diagTick(now);
-  ramTick(now);
-#endif
+  node.tick();
 }

@@ -2178,6 +2178,36 @@ int main() {
     Serial.out.clear(); Serial.echoToStdout = true;
   }
 
+  // ── [44] 🔴 **`loop()` 이 `tick()` 으로 위임하는가** — 이 경로는 시험이 안 밟던 곳이다 ──
+  //   🔑 `setup()` 은 [43] 이 직접 부르는데 `loop()` 는 아무도 안 불렀다. 그래서 프레임워크를
+  //     `tick()` 안으로 옮겨도 **시험이 통과했다** — §"시험이 실기가 안 하는 준비를 대신한다".
+  //   → 여기서 `loop()` 를 직접 부른다. 그것만이 "위임이 실제로 돈다"를 검사한다.
+  printf("\n[44] loop() 이 node.tick() 으로 위임하는가\n");
+  {
+    Serial.out.clear();
+    node.bannerDone = false;                    // 사전 조건을 손으로 세운다
+    ok(!node.bannerDone,    "★ 사전 조건: 아직 배너를 안 찍었다");
+
+    loop();                                     // 🔴 실기가 부르는 그 함수
+
+    ok(node.bannerDone,     "★★★ 첫 `loop()` 이 배너를 찍었다 — 위임이 실제로 돈다");
+    const std::string first = Serial.out;
+    ok(first.find("[PARKING NODE]") != std::string::npos,
+                            "★★ 배너 본문이 나왔다 (`[PARKING NODE]`)");
+    ok(first.find("[NET] 대상") != std::string::npos,
+                            "★★ `[NET] 대상` 줄도 같이 나왔다");
+    // 🔴 배너가 **맨 앞**이어야 한다 — 뒤로 밀리면 부팅 로그 첫 줄이 AT 로그가 된다
+    ok(first.find("[NET] 대상") < 8,
+                            "★★★ 배너가 출력의 맨 앞이다 (AT 로그보다 먼저)");
+
+    // 두 번째 호출은 배너를 **다시 안 찍는다**
+    Serial.out.clear();
+    loop();
+    ok(Serial.out.find("[PARKING NODE]") == std::string::npos,
+                            "★★ 두 번째 `loop()` 은 배너를 다시 찍지 않는다");
+    Serial.out.clear();
+  }
+
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }

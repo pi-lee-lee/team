@@ -110,11 +110,19 @@ static SensorFn sensorFnOf(uint8_t idx);
 // ═════════════════════════════════════════════════════════════════════════
 class ParkingNode {
  public:
-  // 🔴 **초기화는 여기다. 생성자가 아니다.**
-  //   전역 객체의 생성자는 `main()` 전에 돌아 `Serial`·`millis()` 가 없다.
-  void begin() {
-    for (uint8_t i = 0; i < SENSOR_N; i++) applySensorPinMode(i);
-  }
+  // 🔴 **시작과 한 박자 — 정의는 `Runtime.h` 다**(이 파일보다 뒤에 온다).
+  //   여기서 본문을 쓸 수 없다: `begin()` 은 `espInit()` 을, `tick()` 은 `espRead()` 를 부르고
+  //   그 함수들이 **이 파일 뒤에** 정의되기 때문이다.
+  //   ⚠ **생성자가 아니라 `begin()` 인 이유**: 전역 객체의 생성자는 `main()` 전에 돌아
+  //     `Serial`·`millis()`·`pinMode` 가 아직 없다.
+  void begin();
+  void tick();
+
+  // 배너를 첫 `tick()` 에서 한 번만 찍기 위한 표시.
+  // 🔴 **왜 `begin()` 이 아니라 첫 `tick()` 인가**: 배너의 `[SENS]` 줄이 **기여자가 등록한 훅**을
+  //   보고 `훅`/`핀N` 을 가른다. `begin()` 에서 찍으면 등록 전이라 **거짓말을 한다.**
+  //   `tick()` **맨 앞**에 두므로 어떤 AT 로그보다 먼저 나간다 — 부팅 로그 첫 줄이 그대로다.
+  bool bannerDone;
 
   // 센서를 한 번 훑어 점유 비트를 갱신한다
   void readSensors() {
