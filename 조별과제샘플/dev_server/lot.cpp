@@ -112,11 +112,18 @@ void onCmdResult(const CmdResult& r) {
 // ④ 자리 점유가 바뀌면 불린다 — **센서가 말한 변화를 그대로 받는다**   자세히: §점유변화
 //   🔑 **상승·하강 둘 다 온다.** 한쪽만 쓰려면 `occupied` 로 갈라라.
 //   🔑 **첫 관측에서는 안 불린다** — 기동 직후의 값은 변화가 아니라 처음 본 것이다.
-void onOccupancy(ParkingServer& srv, const std::string& spot, bool occupied) {
+void onOccupancy(ParkingServer& srv, const std::string& spot,
+                 const std::string& module, bool occupied) {
     // 🔴 **초음파에 물체가 잡힐 때마다 내장 LED(pin 13)를 토글한다.**
     //   첫 번째 잡힘 → 켜짐 · 두 번째 잡힘 → 꺼짐 · 세 번째 → 켜짐 …
     //   ⚠ **잡힐 때(0→1)만 센다.** 물체가 사라질 때(1→0)는 아무것도 안 한다 —
     //     안 그러면 한 번 지나갈 때 두 번 토글되어 제자리로 돌아온다.
+    // 🔓 **어느 센서를 쓸지는 네가 고른다** — 이 자리에는 초음파가 둘(A1·B1)이다.
+    //   지금은 **둘 다 받는다**: 어느 쪽을 만져도 토글된다.
+    //   한쪽만 쓰려면 주석을 켜라 — 그러면 다른 센서는 아무 일도 안 한다.
+    // if (module != "A1") return;         // A1 센서만
+    // if (module != "B1") return;         // B1 센서만
+    (void)module;
     if (spot != "A1" || !occupied) return;
 
     static bool ledOn = false;          // 🔑 `static` — 다음 호출까지 살아 있어야 한다

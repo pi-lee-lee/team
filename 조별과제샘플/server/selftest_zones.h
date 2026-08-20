@@ -268,6 +268,53 @@
                 if (!ok41) bad++;
             }
 
+            // ㊷ 🔴 **모듈 단위로 온다** — 한 자리의 센서 둘이 **독립으로** 불린다 (REQ-0314 후속)
+            //   🔑 이것이 "자리 단위" 와 갈리는 지점이다. 자리로 합치면 OR 이라 **두 번째 센서를
+            //     만져도 아무 일이 안 난다.** 모듈 단위면 각각 온다 — 합칠지는 기여자가 정한다.
+            {
+                ParkingLot L;
+                L.spot("A1").parking().module("P1", "A1").module("P1", "B1");
+                ParkingServer ps(L);
+                Server t; t.lot_ = &L; t.build_default_zones(); t.init_srv_id();
+                t.park.devid = "P1"; t.park.reg_done = true;
+                t.park.mods.push_back(std::make_pair(std::string("A1"), std::string("IP")));
+                t.park.mods.push_back(std::make_pair(std::string("B1"), std::string("IP")));
+                t.bind_modules(t.park);
+                t.park.mod_bits_n = 2; t.park.mod_bits[0] = 0; t.park.mod_bits[1] = 0;
+                t.owner_ = &ps; t.occ_cb_ = st_occ_probe;
+                g_st_occ_n = 0; g_st_occ_mod.clear();
+
+                t.notify_occupancy_changes();               // 첫 관측 — 둘 다 안 불린다
+                bool r0 = (g_st_occ_n == 0);
+
+                t.park.mod_bits[0] = 1;                     // A1 만 상승
+                t.notify_occupancy_changes();
+                bool r1 = (g_st_occ_n == 1 && g_st_occ_mod == "A1" && g_st_occ_val == true);
+
+                // 🔴 **A1 이 이미 1 인 상태에서 B1 을 올린다.**
+                //   자리 단위(OR)였으면 여기서 **아무 일도 안 난다** — 자리는 이미 찼다.
+                //   모듈 단위라 **B1 로 한 번 더 온다.** 그 차이가 이 시험의 값이다.
+                t.park.mod_bits[1] = 1;
+                t.notify_occupancy_changes();
+                bool r2 = (g_st_occ_n == 2 && g_st_occ_mod == "B1" && g_st_occ_val == true);
+
+                // 하강도 모듈별이다 — A1 만 내린다(두 프레임). B1 은 그대로 1 이다.
+                t.park.mod_bits[0] = 0;
+                t.notify_occupancy_changes();
+                t.notify_occupancy_changes();
+                bool r3 = (g_st_occ_n == 3 && g_st_occ_mod == "A1" && g_st_occ_val == false);
+                t.occ_cb_ = 0; t.owner_ = 0;
+
+                bool ok42 = r0 && r1 && r2 && r3;
+                std::cout << (ok42 ? "  ✓ " : "  ✗ ")
+                          << "모듈 단위 — 첫관측 0(" << (r0 ? "예" : "아니오")
+                          << ") · A1 상승(" << (r1 ? "예" : "아니오")
+                          << ") · 🔴 **A1 이 1 인데 B1 도 따로 온다**(" << (r2 ? "예" : "아니오")
+                          << ") · A1 만 하강(" << (r3 ? "예" : "아니오")
+                          << ") · 누계 " << g_st_occ_n << "\n";
+                if (!ok42) bad++;
+            }
+
             // ㉕ 🔴 **`state` 봉투와 `actions`** (REQ-0203 4c)
             {
                 Server t; t.build_default_zones(); t.init_srv_id();

@@ -33,9 +33,17 @@ class ParkingServer;
 
 // 🔴 **자리 점유가 바뀌면 불린다.** `onCommandResult` 와 같은 계열이다 —
 //   기여자는 훅 하나를 더 배우는 것이 아니라 **같은 모양을 한 번 더 쓴다.**
+//   `spot`     : 자리 id · `module` : **그 값을 말한 센서 모듈 이름**
 //   `occupied` : 바뀐 **뒤**의 값. 상승(비었다→찼다)과 하강(찼다→비었다) **둘 다** 온다
+//
+// 🔴 **모듈 단위로 불린다.** 한 자리에 센서가 둘이면 **각각** 온다 —
+//   자리 하나로 합쳐서 한 번 부르지 않는다. 합칠지 말지는 **기여자가 정한다**:
+//     `if (module != "A1") return;`  ← 한 센서만 쓰겠다
+//   🔑 그래서 **콜백은 하나이고 파라미터만 하나 늘었다.** 배우는 것이 안 는다.
+// 🔑 **센서(`I*`)만 온다.** 명령 모듈의 에코는 안 온다 — 안 그러면 자기 명령이 자기를 부른다.
 // ⚠ 서버의 한 박자 안에서 불린다. 오래 걸리는 일을 하지 마라.
-typedef void (*OccupancyFn)(ParkingServer& srv, const std::string& spot, bool occupied);
+typedef void (*OccupancyFn)(ParkingServer& srv, const std::string& spot,
+                            const std::string& module, bool occupied);
 
 struct SpotBehavior {
     virtual ~SpotBehavior() {}

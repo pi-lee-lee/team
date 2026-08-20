@@ -392,6 +392,23 @@
     //   ⚠ 이것이 변화 콜백이 **자기 명령으로 재귀하지 않는 근거다** —
     //     콜백이 `LD`(OG)를 켜면 그 에코 비트가 오르지만 **여기 안 들어오므로 점유가 안 움직인다.**
     //     근거를 주석이 아니라 시험으로도 박아 뒀다(음성 대조).
+    // 이름을 같이 준다. **순서는 선언 순서**(`z.modules`) — 재현 가능해야 한다.
+    void zone_sensors(const Zone& z,
+                      std::vector<std::pair<std::string, SensorReading> >& out) const {
+        for (size_t m = 0; m < z.modules.size(); m++) {
+            const Node* mn = node_by_devid(z.modules[m].first);
+            int mi = -1;
+            if (mn)
+                for (size_t k = 0; k < mn->mods.size(); k++)
+                    if (mn->mods[k].first == z.modules[m].second) { mi = (int)k; break; }
+            if (mi < 0) continue;
+            if (!mn || mn->mods[mi].second.empty() || mn->mods[mi].second[0] != 'I') continue;
+            const bool known = (mi < mn->mod_bits_n);
+            const bool val   = known && mn->mod_bits[mi];
+            out.push_back(std::make_pair(z.modules[m].second, SensorReading(known, val)));
+        }
+    }
+
     void zone_readings(const Zone& z, std::vector<SensorReading>& out,
                        int& v_known, int& v_total, int& v_ones) const {
         v_known = v_total = v_ones = 0;
@@ -432,25 +449,37 @@
         for (size_t i = 0; i < lot.zones().size(); i++) {
             const Zone& z = lot.zones()[i];
             if (z.kind != "parking") continue;       // 일반영역은 점유를 말하지 않는다
-            const bool now = zone_occupied_now(z);
-            std::map<std::string, bool>::iterator it = occ_prev_.find(z.id);
-            if (it == occ_prev_.end()) { occ_prev_[z.id] = now; continue; }  // 첫 관측 — 변화 아님
-            if (it->second == now) { occ_fall_n_[z.id] = 0; continue; }      // 확정값과 같다
-            // 🔴 **하강(찼다→비었다)만 한 프레임 더 본다.**
-            //   초음파는 간헐 반사 실패로 한 프레임 `0` 을 낸다(실측 `8 → 0 → 8`).
-            //   그것을 변화로 읽으면 **아무도 안 건드렸는데 LED 가 토글된다** —
-            //   깜빡임 하나가 `0`(하강) + `1`(상승) 이 되어 **상승 쪽에서 헛토글이 난다.**
-            // 🔑 실패 모드가 **거짓 `0` 한쪽뿐**이라 지연도 한쪽에만 건다 —
-            //   **상승은 즉시 부른다.** 사용자가 손을 대는 순간의 반응은 안 느려진다.
-            // ⚠ 대가: 진짜 하강 알림이 **한 프레임(약 1.2초) 늦는다.** 그것은 값을 지불한 것이다.
-            if (!now) {
-                if (++occ_fall_n_[z.id] < 2) continue;   // 아직 확정 아님 — 다음 프레임을 본다
+            // 🔴 **모듈 단위다.** 자리 하나로 합치지 않는다 — 합칠지는 기여자가 정한다.
+            //   ⚠ 순서는 **선언 순서**(`zone_sensors` 가 그렇게 준다). 재현 가능해야 한다.
+            std::vector<std::pair<std::string, SensorReading> > ms;
+            zone_sensors(z, ms);
+            for (size_t m = 0; m < ms.size(); m++) {
+                // 🔑 **값을 아직 못 받은 모듈은 판정하지 않는다.** `known=false` 를 `false` 로
+                //   읽으면 "비었다"가 되고, 그건 모름을 거짓으로 무너뜨리는 것이다.
+                if (!ms[m].second.known) continue;
+                const std::string key = z.id + "\t" + ms[m].first;
+                const bool now = ms[m].second.value;
+                std::map<std::string, bool>::iterator it = occ_prev_.find(key);
+                if (it == occ_prev_.end()) { occ_prev_[key] = now; continue; }  // 첫 관측
+                if (it->second == now) { occ_fall_n_[key] = 0; continue; }      // 확정값과 같다
+                // 🔴 **하강(찼다→비었다)만 한 프레임 더 본다.**
+                //   초음파는 간헐 반사 실패로 한 프레임 `0` 을 낼 수 있다. 그것을 변화로 읽으면
+                //   **아무도 안 건드렸는데 LED 가 토글된다** — 깜빡임 하나가 `0`(하강) + `1`(상승)이
+                //   되어 **상승 쪽에서 헛토글**이 난다.
+                // 🔑 실패 모드가 **거짓 `0` 한쪽뿐**이라 지연도 한쪽에만 건다 —
+                //   **상승은 즉시.** 손을 대는 순간의 반응은 안 느려진다.
+                // ⚠ 대가: 떼고 **두 프레임(약 2.4초)** 안에 다시 대면 토글이 안 뜬다. 결함이 아니다.
+                // ⚠ **모듈별로 건다.** 자리 단위로 걸면 한 센서의 거짓 `0` 이 다른 센서를 막는다.
+                if (!now) {
+                    if (++occ_fall_n_[key] < 2) continue;
+                }
+                occ_fall_n_[key] = 0;
+                it->second = now;
+                occ_change_n_++;                      // 🔑 콜백을 등록 안 해도 센다
+                logf("=", std::string("자리 ") + z.id + " · 모듈 " + ms[m].first
+                          + " 점유 " + (now ? "→ 찼다" : "→ 비었다"));
+                if (occ_cb_ && owner_) occ_cb_(*owner_, z.id, ms[m].first, now);
             }
-            occ_fall_n_[z.id] = 0;
-            it->second = now;
-            occ_change_n_++;                          // 🔑 콜백을 등록 안 해도 센다
-            logf("=", std::string("자리 ") + z.id + " 점유 " + (now ? "→ 찼다" : "→ 비었다"));
-            if (occ_cb_ && owner_) occ_cb_(*owner_, z.id, now);
         }
     }
 

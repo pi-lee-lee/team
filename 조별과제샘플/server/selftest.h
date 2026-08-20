@@ -32,8 +32,10 @@ static std::string s_line(long seq, const char* occ, const char* res, long long 
 static int         g_st_occ_n = 0;
 static std::string g_st_occ_spot;
 static bool        g_st_occ_val = false;
-static void st_occ_probe(ParkingServer&, const std::string& spot, bool occupied) {
-    g_st_occ_n++; g_st_occ_spot = spot; g_st_occ_val = occupied;
+static std::string g_st_occ_mod;
+static void st_occ_probe(ParkingServer&, const std::string& spot,
+                         const std::string& module, bool occupied) {
+    g_st_occ_n++; g_st_occ_spot = spot; g_st_occ_mod = module; g_st_occ_val = occupied;
 }
 
 static int selftest() {

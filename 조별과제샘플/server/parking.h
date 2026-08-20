@@ -269,12 +269,17 @@ public:
     // 🔴 **자리 점유가 바뀌면 불린다** — 센서가 말한 변화를 그대로 받는다.
     //
     //   ```
-    //   void onOccupancy(ParkingServer& srv, const std::string& spot, bool occupied) {
+    //   void onOccupancy(ParkingServer& srv, const std::string& spot,
+    //                    const std::string& module, bool occupied) {
+    //       if (module != "A1") return;                // 🔓 원하는 센서만 골라 쓴다
     //       if (occupied) srv.send("P1", "LD", 1);     // 다른 장치에 지시해도 된다
     //   }
     //   srv.onOccupancyChanged(onOccupancy);
     //   ```
     //
+    // 🔴 **모듈 단위로 불린다.** 한 자리에 센서가 둘이면 **각각** 온다 —
+    //   서버가 자리 하나로 합쳐 주지 않는다. **합칠지 말지는 기여자의 선택**이다.
+    // 🔑 **센서(`I*`)만 온다.** 명령 모듈의 에코는 안 온다 — 자기 명령이 자기를 부르지 않는다.
     // 🔑 **상승·하강 둘 다 온다.** 한쪽만 쓰려면 `occupied` 로 갈라라.
     // 🔑 **첫 관측에서는 안 불린다** — 기동 직후의 값은 "변화"가 아니라 처음 본 것이다.
     // ⚠ `parking()` 인 자리에만 온다. 일반영역은 점유를 보고할 의무가 없다.

@@ -95,7 +95,12 @@ void example_send(ParkingServer& srv) {
 // ── ⑦ 점유가 바뀌면 — **센서 변화로 다른 장치를 움직인다** ─────────────────
 //   🔑 상승·하강 **둘 다** 온다. 한쪽만 쓰려면 `occupied` 로 갈라라.
 //   🔑 **첫 관측에서는 안 불린다** — 기동 직후 값은 변화가 아니라 처음 본 것이다.
-void example_occupancy(ParkingServer& srv, const std::string& spot, bool occupied) {
+void example_occupancy(ParkingServer& srv, const std::string& spot,
+                       const std::string& module, bool occupied) {
+    // 🔓 **모듈 단위로 온다.** 한 자리에 센서가 둘이면 각각 불린다 —
+    //   합칠지 말지는 **네 선택**이다. 한쪽만 쓰려면 아래를 켜라.
+    // if (module != "A1") return;
+    (void)module;
     if (spot != "A1" || !occupied) return;      // 잡힐 때만(0→1)
 
     static bool ledOn = false;                  // 🔑 다음 호출까지 살아야 한다
