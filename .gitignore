@@ -134,3 +134,7 @@ data_log.json
 
 # 화면 흐름 포착 — 계속 자란다. 맨이름 금지(§디렉터리가 되면 뜻이 뒤집힌다)
 .claude/limit/*.raw
+조별과제샘플/VS_server/.vs/
+
+조별과제샘플/VS_server/server/x64/Debug/
+조별과제샘플/VS_server/x64/Debug/
