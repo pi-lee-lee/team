@@ -47,6 +47,16 @@
       "note": "바로 위 규칙과 글자는 같지만 한글이 NFD(자모 분리)로 적혀 있다 — 오타가 아니다. macOS 는 같은 한글 경로를 NFC/NFD 두 형태로 넘기는데 훅은 유니코드 정규화를 하지 않아, NFC 규칙만 두면 NFD 로 들어온 경로가 조용히 확장자 규칙(cpp-engineer)으로 새어나간다(실측 확인). 두 형태를 모두 적어 막는다"
     },
     {
+      "glob": "**/VS_server/index.html",
+      "owner": "web-engineer",
+      "note": "Visual Studio 프로젝트 안의 화면 사본. 🔴 dev_server/index.html 과 같은 이유로 **web 이 주인이다** — 갱신 주체와 소유자를 갈라 놓으면 반드시 낡는다. 아래 VS_server/** 규칙보다 위에 있어야 한다"
+    },
+    {
+      "glob": "**/VS_server/**",
+      "owner": "socket-engineer",
+      "note": "사용자가 직접 만들어 푸시한 VS 프로젝트(2026-08-20 · 커밋 4ec8f1a). 서버 소스 트리라 socket 소유다. 🔴 규칙이 없으면 확장자 규칙으로 .h/.cpp 가 cpp-engineer 에게 떨어지는데, 그쪽은 이 서버의 정본을 모른다. 🔑 한글을 안 쓰는 글롭인 이유는 dev_server 규칙과 같다(NFC/NFD)"
+    },
+    {
       "glob": "**/dev_server/index.html",
       "owner": "web-engineer",
       "note": "개발용 서버 폴더의 화면 사본. 🔴 **socket 이 아니라 web 이 주인이다** — 갱신 주체와 소유자를 갈라 놓으면 반드시 낡는다(socket 의 지적). 아래 dev_server/** 규칙보다 위에 있어야 한다: 판정은 위에서부터 첫 일치다"
