@@ -119,12 +119,13 @@ static bool checksumSelfConsistent(const std::string& line) {
   return xorCk(line.substr(0, cut + 1)) == line.substr(cut + 1);
 }
 
-// 그 칸의 시뮬 값을 0 으로 고정한다 — simAdvance 가 다시 건드리지 못하게 마감을 멀리 민다.
-// 이걸 안 하면 "오버라이드로 1 이 됐다"와 "시뮬이 마침 1 이었다"를 구별할 수 없다.
+// 그 칸을 **비어 있는 상태로 고정**한다.
+// 🔑 장치 안의 모의 점유가 없어진 뒤로는 핀을 HIGH 로 두는 것이 곧 "비었다"다(SENSOR_ACTIVE_LOW).
+//   이걸 안 하면 "오버라이드로 1 이 됐다"와 "원래 1 이었다"를 구별할 수 없다.
 static void pinSimLow(uint8_t i) {
-  // §12B.1 이후 시뮬은 자율 전진을 하지 않으므로 값만 내려 두면 그대로 유지된다.
-  // (예전에는 simNextAt 마감도 멀리 밀어야 했다 — 그 배열 자체가 사라졌다.)
-  node.simOcc &= (uint16_t)~((uint16_t)1 << i);
+  const uint8_t pin = sensorPin(i);
+  if (pin != PIN_NONE) g_pinLevel[pin] = HIGH;   // 핀 있는 칸: 실물이 '비었다'를 낸다
+  // 핀 없는 칸은 구조적으로 늘 0 이다 — 할 것이 없다
 }
 
 static std::vector<std::string> splitLine(const std::string& s) {
@@ -248,7 +249,7 @@ int main() {
 
   printf("\n[4] 소스 REAL — 핀을 LOW 로 당기면 점유로 읽힌다 (SENSOR_ACTIVE_LOW)\n");
   node.slotOverrideClearAll();
-  node.slotSourceSet(0, 1);                              // A1 을 실물 소스로
+  // 🔑 A1 은 표에 핀이 적혀 있으므로 **이미 실물이다.** 따로 켜는 스위치가 없다
   ok(g_pinMode[sensorPin(0)] == INPUT_PULLUP, "A1 의 핀이 INPUT_PULLUP 으로 잡힌다");
   g_pinLevel[sensorPin(0)] = LOW;                     // 차량 있음
   spin(400);
@@ -273,7 +274,6 @@ int main() {
   spin(400);
   std::string occ7 = occField(lastStatus());
   ok(occ7.size() == 10 && occ7[0] == '0', "오버라이드 해제 → 실물 값(0)으로 복귀");
-  node.slotSourceSet(0, 0);
 
   printf("\n[6] 수신 경로 — +IPD → 예약 → ACK (명세 §6.2 / §8.1)\n");
   node.slotOverrideClearAll();
@@ -630,93 +630,39 @@ int main() {
     ok(spinUntilOnline(20000), "시험 후 다시 온라인으로 복귀했다");
   }
 
-  printf("\n[24] ★ 시뮬은 스스로 전진하지 않는다 — M 트리거만 민다 (§12B.1/.2, REQ-0047)\n");
+  printf("\n[24] ★ `M`(시뮬 한 걸음)은 항상 result=5 다 — 이 장치는 시뮬 상태가 없다\n");
   {
+    // 🔴 장치 안의 모의 점유 상태를 없앴다. 센서값은 핀에서 오거나(핀이 있으면) 늘 0 이다.
+    //   그래서 "바꿀 칸" 이 **구조적으로** 없다.
+    // ⚠ **타입은 남겼다** — 지우면 result 가 5(바꿀 칸 없음)에서 3(해석 불가)으로 바뀌어
+    //   전선 값이 달라진다. 서버는 계속 `M` 을 보낸다.
+    // 🔑 이 검사는 **내부가 아니라 전선**을 본다 — 옛 판은 노드 내부 비트를 직접 읽었다.
     node.testArmed = false;
     node.slotOverrideClearAll();
-    for (uint8_t i = 0; i < SENSOR_N; i++) node.slotSourceSet(i, 0);
     node.resMask = 0;
     ok(spinUntilOnline(20000), "온라인 상태다 (사전 조건)");
 
-    // (a) 자율 전진이 없다 — 이게 이번 변경의 핵심이다
-    uint16_t before = node.simOcc;
-    spinMs(120000);                                  // 가상시각 2분
-    printf("        트리거 없이 2분: node.simOcc %04X → %04X\n", before, node.simOcc);
-    ok(node.simOcc == before, "★ 트리거 없이는 시뮬이 한 비트도 바뀌지 않는다");
-
-    // (b) 명세 §2.5 의 M/ACK 예제 체크섬을 내 계산이 재현하는가
-    {
-      const char* spec[] = {"M,60,4B", "M,65535,7D", "A,60,A3,0,05", "A,60,??,5,72"};
-      int mism = 0;
-      for (const char* l : spec) if (!checksumSelfConsistent(l)) { printf("        MISMATCH %s\n", l); mism++; }
-      ok(mism == 0, "명세의 M/ACK 예제 4줄 체크섬 일치");
-    }
-
-    // (c) 트리거 한 번 = 한 칸만 바뀐다
-    uint16_t b1 = node.simOcc;
-    deliverIPD("M,60,4B");                           // 명세 §2.5 의 그 줄
+    deliverIPD("M,60," + xorCk("M,60,"));
     spin(300);
-    int flipped = 0;
-    for (uint8_t i = 0; i < SENSOR_N; i++) if (((node.simOcc >> i) & 1) != ((b1 >> i) & 1)) flipped++;
-    printf("        M,60 → node.simOcc %04X → %04X, ACK=%s\n", b1, node.simOcc, lastAck().c_str());
-    ok(flipped == 1, "★ 트리거 한 번에 정확히 한 칸만 바뀐다");
-    ok(lastAck()[0] == 'A' && lastAck().find(",0,") != std::string::npos, "ACK result=0");
-    // ACK 의 slot 이 실제로 바뀐 칸인가
-    uint8_t changedIdx = 0xFF;
-    for (uint8_t i = 0; i < SENSOR_N; i++) if (((node.simOcc >> i) & 1) != ((b1 >> i) & 1)) changedIdx = i;
-    std::vector<std::string> af = splitLine(lastAck());
-    ok(af.size() == 5 && af[2] == std::string(1, slotCol(changedIdx)) + std::string(1, slotRow(changedIdx)),
-       "ACK 의 slot 이 실제로 바뀐 칸이다");
+    printf("        M,60 → ACK=%s\n", lastAck().c_str());
+    ok(lastAck() == "A,60,??,5," + xorCk("A,60,??,5,"),
+       "★★ `M` 은 `A,<rid>,??,5,<ck>` 로 답한다 (바이트 일치)");
 
-    // (d) 멱등 — 같은 rid 재전송이 두 걸음이 되면 안 된다 (§12B.4)
-    uint16_t b2 = node.simOcc;
-    deliverIPD("M,60,4B");
+    // 멱등 — 같은 rid 재전송이 다른 답을 내지 않는다
+    deliverIPD("M,60," + xorCk("M,60,"));
     spin(300);
-    printf("        같은 rid 재전송 → node.simOcc %04X (변화 없어야 함), ACK=%s\n", node.simOcc, lastAck().c_str());
-    ok(node.simOcc == b2, "★ 같은 rid 재전송은 두 걸음이 되지 않는다");
+    ok(lastAck() == "A,60,??,5," + xorCk("A,60,??,5,"),
+       "★ 같은 rid 재전송도 같은 ACK (캐시가 답한다)");
 
-    // (e) 예약된 빈칸을 우선 채운다 → occupied=1,reserved=1 도달 (§12B.2)
-    node.slotOverrideClearAll();
-    node.resMask = 0;
-    node.simOcc = 0;                                      // 전 칸 비움
-    node.resMask |= (uint16_t)1 << 7;                     // B3 예약
-    deliverIPD("M,61," + xorCk("M,61,"));
+    // 🔴 음성 대조 — **모르는 타입은 result=3 이다.** 5 와 3 이 갈리는 것이 이 설계의 요점이고,
+    //   `M` 타입을 지웠다면 위 응답이 이 값으로 바뀌었을 것이다.
+    deliverIPD("Z,61," + xorCk("Z,61,"));
     spin(300);
-    printf("        예약 B3 상태에서 M → occupied=%s reserved=%s ACK=%s\n",
-           occField(lastStatus()).c_str(), lastStatus().empty() ? "" : splitLine(lastStatus())[3].c_str(),
-           lastAck().c_str());
-    ok(((node.simOcc >> 7) & 1) == 1, "★ 예약된 빈칸 B3 이 먼저 채워졌다");
-    ok(occField(lastStatus())[7] == '1' && splitLine(lastStatus())[3][7] == '1',
-       "★ occupied=1, reserved=1 조합이 실제로 전선에 나갔다 (§1.1 마지막 행)");
-    ok(lastAck().find(",B3,0,") != std::string::npos, "ACK 이 B3 을 가리킨다");
+    printf("        Z,61(모르는 타입) → ACK=%s\n", lastAck().c_str());
+    ok(lastAck().find(",5,") == std::string::npos,
+       "★★★ 모르는 타입은 result=5 가 아니다 — `M` 을 지우면 이 값이 됐을 것이다");
 
-    // (f) tmask 는 시뮬 변화를 포함하지 않는다 (§12B.3)
-    ok(tmaskField(lastStatus()).empty(), "해제 상태라 tmask 필드 자체가 없다 — 시뮬 변화는 tmask 와 무관");
-
-    // (g) 무장 중에도 트리거가 먹는다 ← REQ-0043 잔재 제거의 회귀 방지 핵심
-    deliverIPD("T,140,A,??,-," + xorCk("T,140,A,??,-,"));
-    spin(300);
-    ok(node.testArmed, "무장됐다 (사전 조건)");
-    uint16_t b3 = node.simOcc;
-    deliverIPD("M,62," + xorCk("M,62,"));
-    spin(300);
-    printf("        무장 중 M → node.simOcc %04X → %04X, ACK=%s\n", b3, node.simOcc, lastAck().c_str());
-    ok(node.simOcc != b3, "★ 무장 중에도 트리거가 먹는다 (테스트 모드와 별개 — §12B.3)");
-    ok(tmaskField(lastStatus()) == "0000000000",
-       "★ 시뮬로 바뀐 칸은 tmask 에 들어가지 않는다 (주입이 아니다)");
-
-    // (h) 실물 칸은 트리거의 영향을 받지 않는다
-    deliverIPD("T,141,D,??,-," + xorCk("T,141,D,??,-,"));
-    spin(200);
-    for (uint8_t i = 0; i < SENSOR_N; i++) node.slotSourceSet(i, 1);   // 전 칸 실물
-    node.resMask = 0;
-    uint16_t b4 = node.simOcc;
-    deliverIPD("M,63," + xorCk("M,63,"));
-    spin(300);
-    printf("        전 칸 실물 상태에서 M → ACK=%s\n", lastAck().c_str());
-    ok(node.simOcc == b4, "실물 칸은 트리거로 바뀌지 않는다");
-    ok(lastAck().find(",??,5,") != std::string::npos, "★ 바꿀 시뮬 칸이 없으면 result=5, slot=??");
-    for (uint8_t i = 0; i < SENSOR_N; i++) node.slotSourceSet(i, 0);   // 원복
+    ok(spinUntilOnline(20000), "복귀한다");
   }
 
   printf("\n[25] ★ 연속 전송 실패가 오프라인 전환을 일으킨다 (REQ-0049 ①)\n");
