@@ -2312,8 +2312,64 @@ int main() {
       printf("      실측 분포(49~60cm) 8회 → 뒤집힘 **%u회**\n", flips);
       ok(flips == 0,        "★★★ 실측 분포에서 **한 번도 안 뒤집힌다** (히스테리시스가 듣는다)");
     }
+
+    // ── 🔴 **"못 쟀다" 갈래** — 히스테리시스가 못 막는 두 번째 구멍 ─────────────
+    //   실측: B1 이 **72/310 = 23.2%** 를 못 쟀고 **연속 1~2슬롯이 16/18** 이었다(간헐).
+    //   그것을 곧바로 "비었다" 로 읽으면 물체가 있는데도 상승→토글이 난다.
+    //   🔑 **히스테리시스는 값이 있을 때만 작동한다.** 이 갈래는 값이 없어서 그 밖이다.
+    {
+      sensors.nearOn("A1", 60);
+      // 사전 조건: 찼던 상태로 만든다
+      node.occMask = 1; node.noRead[0] = 0;
+      ok(readAt(50) == 1,   "★ 사전 조건: 50cm → 찼다");
+
+      // ① 🔴 **못 쟀다 1회는 참는다**
+      g_pulseIn = 0; g_millis += 10000;
+      ok(node.readSensor(0) == 1,
+                            "★★★ 못 쟀다 1회 → **유지**한다 (간헐이 16/18 이다)");
+      // ② 2회도 참는다
+      g_millis += 10000;
+      ok(node.readSensor(0) == 1,
+                            "★★★ 못 쟀다 2회 → 여전히 유지 (N=3 미만)");
+      // ③ 🔴 3회에 해제한다
+      g_millis += 10000;
+      ok(node.readSensor(0) == 0,
+                            "★★★ 못 쟀다 **3회** → 해제 (N=3 · 실제 이탈 8~10슬롯을 통과시킨다)");
+
+      // ④ 🔴 **값이 오면 계수가 0 으로 돌아간다** — 안 돌아가면 언젠가 무조건 해제된다
+      node.occMask = 1;
+      ok(readAt(50) == 1,   "★ 값이 오면 다시 찼다");
+      g_pulseIn = 0; g_millis += 10000;
+      ok(node.readSensor(0) == 1,
+                            "★★★ 값 뒤 못 쟀다 1회 → 유지 (**계수가 0 으로 되돌았다**)");
+
+      // ⑤ 🔑 **음성 대조** — 비었던 상태에서 못 쟀다는 계속 비었다
+      node.occMask = 0; node.noRead[0] = 0;
+      g_pulseIn = 0; g_millis += 10000;
+      ok(node.readSensor(0) == 0,
+                            "★★★ 음성 대조: **비었던** 상태 · 못 쟀다 → 계속 비었다 (유지가 아니다)");
+
+      // ⑥ 🔑 실측 패턴 재현 — 값·못쟀다가 섞인 실제 순서
+      //   실기 분포: 값 76.8% · 못쟀다 23.2%(간헐 1~2슬롯). 그 모양으로 만든다
+      {
+        const long seq[] = {49, -1, 56, -1, -1, 55, 60, -1, 57, 49};
+        node.occMask = 0; node.noRead[0] = 0;
+        uint8_t flips = 0, prev = 0;
+        for (uint8_t k = 0; k < 10; k++) {
+          uint8_t cur;
+          if (seq[k] < 0) { g_pulseIn = 0; g_millis += 10000; cur = node.readSensor(0); }
+          else cur = readAt(seq[k]);
+          node.occMask = cur ? 1 : 0;
+          if (k && cur != prev) flips++;
+          prev = cur;
+        }
+        printf("      값+못쟀다 섞은 실측 패턴 10회 → 뒤집힘 **%u회**\n", flips);
+        ok(flips <= 1,      "★★★ 값과 못쟀다가 섞여도 **한 번만** 뒤집힌다 (첫 상승뿐)");
+      }
+    }
+
     g_clockAutoAdvance = saveAutoTop;
-    g_pulseIn = 0; node.occMask = 0;
+    g_pulseIn = 0; node.occMask = 0; node.noRead[0] = 0;
   }
 
   printf("\n=== 결과: %d PASS / %d FAIL ===\n\n", g_pass, g_fail);

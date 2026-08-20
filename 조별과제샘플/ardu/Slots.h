@@ -101,7 +101,15 @@ class ParkingNode {
       // 🔓 전선에 실을 값. **hex 3자리(0~4095)로 확정됐으므로 `uint16_t` 로 충분하다** —
       //   `long`(4B)으로 두면 모듈당 2B 를 헛되게 쓴다(8모듈 16B).
       lastVal[i] = (v < 0 || v > 4095L) ? VAL_NONE : (uint16_t)v;
-      if (v == SENSOR_NO_READING) return 0;  // 🔴 **못 쟀다 ≠ 0cm.** 점유로 안 읽는다
+      // 🔴 **못 쟀다 ≠ 0cm ≠ 비었다.** 셋이 다른 진술이다.
+      //   히스테리시스는 **값이 있을 때만** 작동한다 — 이 갈래는 값이 없어서 그 밖이다.
+      //   실측 23.2% 가 못 쟀고 그중 **간헐(1~2슬롯)이 16/18** 이었다 → 참는다.
+      if (v == SENSOR_NO_READING) {
+        if (noRead[i] < 255) noRead[i]++;
+        if (noRead[i] >= NO_READ_RELEASE_N) return 0;   // 연속 N회 → **해제**
+        return (uint8_t)((occMask >> i) & 1);           // 그 전엔 **직전 상태 유지**
+      }
+      noRead[i] = 0;
 #if DEBUG
       valSeen(i, v);                         // 👁 흔들림 폭 누적 — **진단이라 DEBUG 뒤에 둔다**
 #endif
@@ -125,6 +133,9 @@ class ParkingNode {
   // 🔴 `VAL_NONE` 은 **"못 쟀다"** 다. hex 3자리로는 표현할 수 없는 값을 골랐다.
   static const uint16_t VAL_NONE = 0xFFFF;
   uint16_t lastVal[MODULE_CAP];
+  // 🔴 연속 "못 쟀다" 횟수. `NO_READ_RELEASE_N` 회를 넘으면 해제한다.
+  //   ⚠ 값이 오면 **0 으로 되돌린다** — 안 되돌리면 누적돼 언젠가 무조건 해제된다.
+  uint8_t noRead[MODULE_CAP];
 
   // ── 👁 **흔들림 폭 진단** — `.near()` 문턱을 값으로 정하기 위한 계측 ────────
   // 🔴 왜 min/max 인가 : 매 측정을 찍으면 슬롯당 108B 가 늘어 TX 버퍼(64B)를 넘기고
