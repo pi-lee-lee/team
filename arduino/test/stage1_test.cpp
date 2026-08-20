@@ -76,9 +76,9 @@ uint8_t __heap_start = 0;
 //   사용자 지시로 샘플은 **LED 하나**만 남았는데, 그러면 명령 경로(거절 로그·에코·묶음 하행)를
 //   밟을 대상이 사라진다. 그 경로들은 **오늘 실제로 결함을 잡은** 시험이라 버릴 수 없다.
 //   🔑 그래서 표는 여기서 늘리고 **핸들러도 여기서 정의한다.** 샘플은 안 건드린다.
+//   ⚠ `L2` 는 **샘플이 다시 가져갔다**(화면 숫자 입력 칸 때문에). 여기서 또 넣으면 **이름 중복**이다.
 #define SAMPLE_EXTRA_MODULES  {"LC", "OL", PIN_NONE}, \
-                              {"DR", "OB",    6},        \
-                              {"L2", "OL", PIN_NONE},
+                              {"DR", "OB",    6},
 #define PIN_SAMPLE_DOOR 6
 // 🔓 **샘플 액추에이터도 켜서 빌드한다** — 안 켜면 `cmdLed`/`cmdLcd`/`cmdDoor` 가
 //   **한 번도 컴파일되지 않는다.** 샘플 코드는 아무도 안 돌려 보면 조용히 썩는다.
@@ -1531,7 +1531,7 @@ int main() {
       ok(router.on("LD", cmdLed),  "★★ LD 등록 (① on/off)");
       ok(router.on("LC", cmdLcd),  "★★ LC 등록 (② 7자리 숫자)");
       ok(router.on("DR", cmdDoor), "★★ DR 등록 (③ 동작 명령)");
-      ok(router.on("L2", cmdLcd2), "★★ L2 등록 (② 둘째 표시기 — 같은 종류가 둘이다)");
+      ok(router.on("L2", cmdL2), "★★ L2 등록 — 🔑 **샘플의 핸들러**를 그대로 쓴다(덮어쓰지 않는다)");
 
       // 🔴🔴 **이 시험이 `setup()` 과 갈라지지 않게 하는 단언이다.**
       //   시험은 `setup()` 을 안 부르고 **여기서 직접 등록**한다. 그래서 `setup()` 에
@@ -1566,14 +1566,14 @@ int main() {
       // ② 🔴 **7자리 숫자** — 이 시험이 `parseU32` 의 존재 이유다.
       //   옛 파서는 16비트라 65,535 를 넘으면 `result=3` 이 나갔다. 7자리는 못 들어왔다.
       ackQ.clearCache(); ackQ.clearQueue();
-      snprintf(gg, sizeof gg, "G,403,3,1234567,"); appendChecksum(gg, (uint8_t)strlen(gg));
+      snprintf(gg, sizeof gg, "G,403,4,1234567,"); appendChecksum(gg, (uint8_t)strlen(gg));
       handleFrameLine(gg);
       { int8_t h = ackQ.find(403);
         ok(h >= 0 && ackQ.at(h).result == 0,
                             "★★ ② 7자리(1234567)가 그대로 들어와 성공한다 — 16비트였으면 3 이다"); }
       // 상한 밖은 거절한다 — **핸들러가 스스로 판단한 거절**이지 파서 실패가 아니다
       ackQ.clearCache(); ackQ.clearQueue();
-      snprintf(gg, sizeof gg, "G,404,3,10000000,"); appendChecksum(gg, (uint8_t)strlen(gg));
+      snprintf(gg, sizeof gg, "G,404,4,10000000,"); appendChecksum(gg, (uint8_t)strlen(gg));
       handleFrameLine(gg);
       { int8_t h = ackQ.find(404);
         ok(h >= 0 && ackQ.at(h).result == 3,
@@ -1581,14 +1581,14 @@ int main() {
 
       // ③ 동작 명령 — **표에 있는 값은 성공, 없는 값은 거절**
       ackQ.clearCache(); ackQ.clearQueue();
-      snprintf(gg, sizeof gg, "G,405,4,1,"); appendChecksum(gg, (uint8_t)strlen(gg));
+      snprintf(gg, sizeof gg, "G,405,5,1,"); appendChecksum(gg, (uint8_t)strlen(gg));
       handleFrameLine(gg);
       ok(g_pinLevel[PIN_SAMPLE_DOOR] == HIGH, "★★ ③ DR 1(열기) → 핀이 HIGH 다");
       { int8_t h = ackQ.find(405);
         ok(h >= 0 && ackQ.at(h).result == 0, "★★ ③ 표에 있는 값은 result=0"); }
       ackQ.clearCache(); ackQ.clearQueue();
       // 🔴 **표에 없는 값**. 여기서 0 이 나오면 "조용히 성공"이라 사람이 원인을 못 찾는다
-      snprintf(gg, sizeof gg, "G,406,4,9,"); appendChecksum(gg, (uint8_t)strlen(gg));
+      snprintf(gg, sizeof gg, "G,406,5,9,"); appendChecksum(gg, (uint8_t)strlen(gg));
       handleFrameLine(gg);
       { int8_t h = ackQ.find(406);
         ok(h >= 0 && ackQ.at(h).result == 3,
@@ -1598,29 +1598,29 @@ int main() {
 
       // ── 🔴 **에코** — 서버가 "명령이 먹었나"를 아는 비트. 전선 비용 0B ──────────
       //   표 순서: A1(0) B1(1) LD(2) LC(3) DR(4) E1(5) X1(6)
-      ok((router.echoMask() & (1u << 4)) != 0,
+      ok((router.echoMask() & (1u << 5)) != 0,
                             "★★ DR 열기(1) 뒤 에코 비트가 선다");
       ok((router.echoMask() & (1u << 2)) == 0,
                             "★★ LD 는 마지막이 0(끔)이라 에코가 내려가 있다");
-      ok((router.echoMask() & (1u << 3)) != 0,
+      ok((router.echoMask() & (1u << 4)) != 0,
                             "★★ LC 는 마지막이 1234567 이라 에코가 서 있다 (0 이 아니다)");
       // 🔴 **거절된 명령은 에코를 안 바꾼다** — 위 `G,406,4,9` 가 거절됐고 DR 은 열린 채다
-      ok((router.echoMask() & (1u << 4)) != 0,
+      ok((router.echoMask() & (1u << 5)) != 0,
                             "★★ 거절된 명령이 에코를 **뒤집지 않는다**");
 
       // 🔴🔴 **이 시험이 `echoIs()` 의 존재 이유다.**
       //   DR 의 명령표는 `1=열기 2=닫기` 다. 기본 규약(`arg != 0`)만 쓰면 **닫기(2)도 0 이 아니라서
       //   에코가 켜진 채**로 남는다 — 문은 닫혔는데 서버는 열린 줄 안다. 조용히 틀린 자료다.
       ackQ.clearCache(); ackQ.clearQueue();
-      snprintf(gg, sizeof gg, "G,407,4,2,"); appendChecksum(gg, (uint8_t)strlen(gg));
+      snprintf(gg, sizeof gg, "G,407,5,2,"); appendChecksum(gg, (uint8_t)strlen(gg));
       handleFrameLine(gg);
       ok(g_pinLevel[PIN_SAMPLE_DOOR] == LOW, "★ DR 닫기(2)가 핀을 내린다");
-      ok((router.echoMask() & (1u << 4)) == 0,
+      ok((router.echoMask() & (1u << 5)) == 0,
                             "★★ **닫기(2)면 에코가 내려간다** — 0 이 아닌 값인데도 (echoIs 가 정한다)");
 
       // 나머지도 내려 두고 뒤 시험(가상 차단봉)이 자기 비트만 보게 한다
       ackQ.clearCache(); ackQ.clearQueue();
-      snprintf(gg, sizeof gg, "G,408,3,0,"); appendChecksum(gg, (uint8_t)strlen(gg));
+      snprintf(gg, sizeof gg, "G,408,4,0,"); appendChecksum(gg, (uint8_t)strlen(gg));
       handleFrameLine(gg);
       ok(router.echoMask() == 0,
                             "★★ 전부 내리면 에코 마스크가 0 이다 (센서 비트를 안 건드린다)");
@@ -1652,7 +1652,7 @@ int main() {
     slotNo = 0;
     ok(gates.isOpen(0, slotNo) == e0,  "★ 같은 slotNo 면 같은 값이다 (결정적 · 재현 가능)");
 
-    // ③ 🔴 `G` 명령 — idx 6 = E1. 표 순서: A1(0) B1(1) LD(2) LC(3) DR(4) L2(5) E1(6) X1(7)
+    // ③ 🔴 `G` 명령 — idx 6 = E1. 표 순서: A1(0) B1(1) LD(2) L2(3) LC(4) DR(5) E1(6) X1(7)
     char g[24]; snprintf(g, sizeof g, "G,301,6,0,"); appendChecksum(g, (uint8_t)strlen(g));
     handleFrameLine(g);
     ok(gates.manual,         "★★ 첫 명령이 자율 토글을 **영구 정지**시킨다");
@@ -1858,7 +1858,7 @@ int main() {
     char gg[32];
     // ① 콜백이 거절 — 8자리
     Serial.out.clear(); ackQ.clearCache(); ackQ.clearQueue();
-    snprintf(gg, sizeof gg, "G,910,3,12345678,"); appendChecksum(gg, (uint8_t)strlen(gg));
+    snprintf(gg, sizeof gg, "G,910,4,12345678,"); appendChecksum(gg, (uint8_t)strlen(gg));
     handleFrameLine(gg);
     ok(Serial.out.find("[LC] 거절") != std::string::npos,
                             "★★ ① 핸들러가 거절을 **로그로 남긴다** (조용히 false 하지 않는다)");
@@ -1880,21 +1880,21 @@ int main() {
 
     // ③ 인자 해독 실패 — 숫자가 아니다
     Serial.out.clear(); ackQ.clearCache(); ackQ.clearQueue();
-    snprintf(gg, sizeof gg, "G,912,3,abc,"); appendChecksum(gg, (uint8_t)strlen(gg));
+    snprintf(gg, sizeof gg, "G,912,4,abc,"); appendChecksum(gg, (uint8_t)strlen(gg));
     handleFrameLine(gg);
     ok(Serial.out.find("인자 해독 실패") != std::string::npos,
                             "★★ ③ 숫자가 아니면 '인자 해독 실패' — 프레임 쪽 문제라고 말해 준다");
 
     // ④ DR 의 명령표 밖 값
     Serial.out.clear(); ackQ.clearCache(); ackQ.clearQueue();
-    snprintf(gg, sizeof gg, "G,913,4,9,"); appendChecksum(gg, (uint8_t)strlen(gg));
+    snprintf(gg, sizeof gg, "G,913,5,9,"); appendChecksum(gg, (uint8_t)strlen(gg));
     handleFrameLine(gg);
     ok(Serial.out.find("[DR] 거절") != std::string::npos,
                             "★★ ④ 동작 명령도 거절을 남긴다 (명령표에 없는 값)");
 
     // ⑤ 🔴 **성공 갈래도 확인한다** — 거절만 보면 '늘 거절'인 코드도 통과한다
     Serial.out.clear(); ackQ.clearCache(); ackQ.clearQueue();
-    snprintf(gg, sizeof gg, "G,914,3,1234567,"); appendChecksum(gg, (uint8_t)strlen(gg));
+    snprintf(gg, sizeof gg, "G,914,4,1234567,"); appendChecksum(gg, (uint8_t)strlen(gg));
     handleFrameLine(gg);
     ok(Serial.out.find("[LC] 1234567") != std::string::npos,
                             "★★ ⑤ 성공하면 값이 찍힌다 (거절 문구가 아니다)");
@@ -1917,12 +1917,12 @@ int main() {
     ssOverflows = 0; pendDrops = 0;
     Serial.out.clear();
 
-    // 표 순서: A1(0) B1(1) LD(2) LC(3) DR(4) L2(5) E1(6) X1(7)
+    // 표 순서: A1(0) B1(1) LD(2) L2(3) LC(4) DR(5) E1(6) X1(7)
     char f1[24], f2[24], f3[24], f4[24];
     snprintf(f1, sizeof f1, "G,921,2,1,");        appendChecksum(f1, (uint8_t)strlen(f1));
-    snprintf(f2, sizeof f2, "G,922,3,1234567,");  appendChecksum(f2, (uint8_t)strlen(f2));
-    snprintf(f3, sizeof f3, "G,923,5,7654321,");  appendChecksum(f3, (uint8_t)strlen(f3));
-    snprintf(f4, sizeof f4, "G,924,4,1,");        appendChecksum(f4, (uint8_t)strlen(f4));
+    snprintf(f2, sizeof f2, "G,922,4,1234567,");  appendChecksum(f2, (uint8_t)strlen(f2));
+    snprintf(f3, sizeof f3, "G,923,3,7654321,");  appendChecksum(f3, (uint8_t)strlen(f3));
+    snprintf(f4, sizeof f4, "G,924,5,1,");        appendChecksum(f4, (uint8_t)strlen(f4));
 
     std::string payload = std::string(f1) + "\n" + f2 + "\n" + f3 + "\n" + f4 + "\n";
     printf("      묶음 페이로드 %u B (프레임 넷)\n", (unsigned)payload.size());
@@ -2138,7 +2138,8 @@ int main() {
     //   그것들은 시험 하네스 것이다. 여기가 갈리면 "샘플에 있다"의 뜻이 흐려진다.
     {
       bool extraUntouched = true;
-      for (const char* nm : {"LC", "DR", "L2"}) {
+      // ⚠ `L2` 는 **샘플이 다시 가져갔다**(화면 입력 칸). 시험용은 `LC`·`DR` 둘이다.
+      for (const char* nm : {"LC", "DR"}) {
         for (uint8_t k = 0; k < MODULE_N; k++) {
           char n4[4]; moduleNameOf(k, n4);
           if (strcmp(n4, nm) == 0 && router.has(k)) { extraUntouched = false;

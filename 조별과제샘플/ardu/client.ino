@@ -114,6 +114,7 @@ static const ModuleDef MODULE_TABLE[] PROGMEM = {
   // 🔴 **중간에 끼워 넣지 마라. 끝에 붙여라** — 전선의 `idx` 가 이 표의 순서라
   //   중간 삽입은 뒤의 idx 를 전부 밀어 **지금 되는 결속을 조용히 깬다.**
   {"LD", "OG", PIN_SAMPLE_LED},   // 🔓 보드 내장 LED. **아무것도 안 사도 된다**
+  {"L2", "OL", PIN_NONE},         // 🔓 숫자를 받는 표시기 — 화면의 **입력 칸**이 이것 때문에 뜬다
   SAMPLE_EXTRA_MODULES                        // 회귀 시험만 쓴다. 평소엔 비어 있다
 #if VIRTUAL_MODULES
   // ⚠ **시험용 가상 차단봉.** 기본값은 꺼져 있다 — `VIRTUAL_MODULES` 를 1 로 켤 때만 실린다.
@@ -157,6 +158,25 @@ static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_T
 // 🔓 **샘플 — 명령 왕복 세 꼴.** 서버 쪽 `srv.send(devid, 모듈이름, 값)` 과 짝이다.
 //   셋 다 **같은 통로**다. 다른 것은 **네가 정한 값의 뜻**뿐이다.
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ── ② 7자리 숫자를 받는 표시기 ─────────────────────────────────────────────
+//   [L2 명령표]  값 = 표시할 수 (0 ~ 9999999)
+//   서버:  srv.send("P1", "L2", 1234567);   ← 화면의 **숫자 입력 칸**이 이것을 보낸다
+//   🔑 **아래 주석 블록의 예시를 그대로 켠 것이다.** 실물 LCD 를 달면 `Serial.print` 자리에
+//     네 라이브러리를 넣으면 된다 — 그 한 줄만 바뀐다.
+static bool cmdL2(uint32_t arg) {
+  if (arg > 9999999UL) {                 // 🔴 표시할 수 없는 값은 **거절한다**
+#if DEBUG
+    // 🔴 **거절도 남긴다.** 이 줄이 없으면 "안 불렸다"와 구분이 안 된다.
+    Serial.print(F("[L2] 거절 — 7자리 초과: ")); Serial.println(arg);
+#endif
+    return false;
+  }
+#if DEBUG
+  Serial.print(F("[L2] ")); Serial.println(arg);   // 실물 LCD 라이브러리는 여기에 붙인다
+#endif
+  return true;
+}
 
 // ── ① on/off ───────────────────────────────────────────────────────────────
 //   [LD 명령표]  0 = 끔 · 그 외 = 켬
@@ -237,6 +257,7 @@ void setup() {
   //   ⚠ 등록 안 한 모듈에 명령이 오면 `result=3`(수행 불가)로 답한다. 조용히 성공하지 않는다.
   pinMode(PIN_SAMPLE_LED,  OUTPUT);
   router.on("LD", cmdLed);      // 🔓 명령 등록. 모듈마다 한 줄
+  router.on("L2", cmdL2);       // 🔓 숫자 표시기
 #if VIRTUAL_MODULES
   router.on("E1", gateE1);      // 시험용 가상 차단봉 — 실물이 오면 이 줄만 바꾼다
   router.on("X1", gateX1);
