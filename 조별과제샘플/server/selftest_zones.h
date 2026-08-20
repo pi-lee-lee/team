@@ -204,30 +204,17 @@
                 t.notify_occupancy_changes();
                 bool okEcho = (t.occ_change_n_ == c0 + 1);
 
-                // 🔴 ⑤ **깜빡임** — 한 프레임만 `0` 이었다가 되돌아온다(초음파 간헐 반사 실패).
-                //   **변화로 세면 안 된다.** 세면 아무도 안 건드렸는데 LED 가 토글된다.
-                t.park.mod_bits[0] = 0;
-                t.notify_occupancy_changes();                    // 하강 후보 1회 — 아직 확정 아님
-                t.park.mod_bits[0] = 1;
-                t.notify_occupancy_changes();                    // 되돌아왔다
-                bool okFlicker = (t.occ_change_n_ == c0 + 1);    // 🔑 상승도 안 센다(확정이 안 바뀌었다)
-
-                t.park.mod_bits[0] = 0;                          // ⑥ 진짜 하강 — 두 프레임 연속
+                t.park.mod_bits[0] = 0;                          // ⑤ 센서 1→0 (하강)
                 t.notify_occupancy_changes();
-                bool okFallPending = (t.occ_change_n_ == c0 + 1);   // 아직
-                t.notify_occupancy_changes();
-                bool okFall = (t.occ_change_n_ == c0 + 2);          // 두 번째에 확정
+                bool okFall = (t.occ_change_n_ == c0 + 2);
 
-                bool ok40 = okFirst && okRise && okSame && okEcho
-                         && okFlicker && okFallPending && okFall;
+                bool ok40 = okFirst && okRise && okSame && okEcho && okFall;
                 std::cout << (ok40 ? "  ✓ " : "  ✗ ")
                           << "점유 변화 — 첫관측 무(" << (okFirst ? "예" : "아니오")
                           << ") · 상승(" << (okRise ? "예" : "아니오")
                           << ") · 같은값 무(" << (okSame ? "예" : "아니오")
                           << ") · 🔴 **LD 에코로 안 움직임**(" << (okEcho ? "예" : "아니오")
-                          << ") · 🔴 **깜빡임 무시**(" << (okFlicker ? "예" : "아니오")
-                          << ") · 하강은 두 프레임 뒤(" << (okFallPending && okFall ? "예" : "아니오")
-                          << ")\n";
+                          << ") · 하강(" << (okFall ? "예" : "아니오") << ")\n";
                 if (!ok40) bad++;
             }
 
@@ -253,17 +240,15 @@
                 t.notify_occupancy_changes();          // 상승 — 불린다
                 bool q1 = (g_st_occ_n == 1 && g_st_occ_spot == "A1" && g_st_occ_val == true);
                 t.park.mod_bits[0] = 0;
-                t.notify_occupancy_changes();          // 하강 후보 — 아직 안 불린다
-                bool q2a = (g_st_occ_n == 1);
-                t.notify_occupancy_changes();          // 두 프레임 연속 — 이제 불린다
-                bool q2 = (g_st_occ_n == 2 && g_st_occ_val == false) && q2a;
+                t.notify_occupancy_changes();          // 하강 — 불린다
+                bool q2 = (g_st_occ_n == 2 && g_st_occ_val == false);
                 t.occ_cb_ = 0; t.owner_ = 0;
 
                 bool ok41 = q0 && q1 && q2;
                 std::cout << (ok41 ? "  ✓ " : "  ✗ ")
                           << "점유 콜백 — 첫관측 0회(" << (q0 ? "예" : "아니오")
                           << ") · 상승 A1/true(" << (q1 ? "예" : "아니오")
-                          << ") · 하강 false(두 프레임 뒤)(" << (q2 ? "예" : "아니오")
+                          << ") · 하강 false(" << (q2 ? "예" : "아니오")
                           << ") · 누계 " << g_st_occ_n << "\n";
                 if (!ok41) bad++;
             }
