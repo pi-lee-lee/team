@@ -1606,8 +1606,8 @@ int main() {
       //   네 핀을 전수로 묻는다 — 하나가 빠지면 그 모듈만 조용히 안 듣는다.
       ok(g_pinMode[US_TRIG] == OUTPUT && g_pinMode[US_ECHO] == INPUT,
                             "★★★ 초음파 Trig=OUTPUT · Echo=INPUT");
-      ok(g_pinMode[B1_PIN] == INPUT_PULLUP,
-                            "★★ 접점 센서 B1_PIN = INPUT_PULLUP");
+      ok(g_pinMode[B1_TRIG] == OUTPUT && g_pinMode[B1_ECHO] == INPUT,
+                            "★★★ 두 번째 초음파 B1 Trig=OUTPUT · Echo=INPUT");
       ok(g_pinMode[LD_PIN] == OUTPUT,
                             "★★ 액추에이터 LD_PIN = OUTPUT");
       // 🔑 음성 대조: 아무도 안 쓰는 핀은 건드리지 않았다 — `setup()` 이 넓게 쓸지 않는다
@@ -1910,7 +1910,7 @@ int main() {
 
     // ⑤ 훅을 떼면 기본 경로로 — 되돌릴 수 있다는 것까지 본다
     sensors.on("B1", 0);
-    g_pinLevel[B1_PIN] = HIGH;                    // 미배선 = 풀업 = HIGH (앞 시험이 바꿨을 수 있다)
+    g_pinLevel[B1_ECHO] = HIGH;                    // 미배선 = 풀업 = HIGH (앞 시험이 바꿨을 수 있다)
     node.readSensors();
     ok((node.occMask & (1u << 1)) == 0,
                             "★★ 훅을 떼면 B1 이 핀 9(미배선 → 0)로 돌아간다");
@@ -2088,6 +2088,7 @@ int main() {
     //   그것을 상속하면 이 시험의 분모가 0 이 된다 — 실제로 그렇게 헛통과했다.
     //   🔑 **뒤 시험은 앞 시험의 *정리* 를 상속한다.** 사전 조건을 남에게 기대지 마라.
     sensors.on("A1", readUltrasonic);
+    sensors.on("B1", readB1);               // 🔴 **실기 구성이다** — 둘 다 초음파(Trig 11 · Echo 10)
     g_millis += 10000;                      // 캐시(`lastAt`)를 확실히 만료시킨다
     g_pulseIn = 0;                          // 🔴 반향 없음 = 타임아웃을 다 쓰는 최악(=빈 자리)
     g_pulseInCalls = 0; g_pulseInBlockUs = 0;
@@ -2098,10 +2099,11 @@ int main() {
            MODULE_N, (int)isSensor(0), (void*)senseOf(0));
     // 🔴 센서가 몇이고 그중 몇이 초음파 함수를 쓰나 — 12회의 원인을 여기서 가른다
     { uint8_t ns=0, nus=0;
-      for (uint8_t k=0;k<MODULE_N;k++) if (isSensor(k)) { ns++; if (senseOf(k)==readUltrasonic) nus++; }
+      for (uint8_t k=0;k<MODULE_N;k++) if (isSensor(k)) { ns++;
+        if (senseOf(k)==readUltrasonic || senseOf(k)==readB1) nus++; }
       printf("      센서 %u개 중 초음파 함수 %u개\n", ns, nus); }
-    ok(isSensor(0) && senseOf(0) == readUltrasonic,
-                            "★★★ 분모: A1 이 센서이고 초음파 함수가 붙어 있다");
+    ok(isSensor(0) && senseOf(0) == readUltrasonic && isSensor(1) && senseOf(1) == readB1,
+                            "★★★ 분모: 센서 **둘 다** 초음파 함수가 붙어 있다 (실기 구성)");
 
     // 🔴 **자동 시계 전진을 끈다.** 이 shim 의 `millis()` 는 호출마다 1ms 를 흘리는데
     //   (스핀 루프가 끝나게 하려고) 그러면 게이트 간격이 **절반으로 보인다** —
@@ -2125,18 +2127,26 @@ int main() {
     // ① 게이트가 듣는다 — 1200번 불렸는데 실제 측정은 그보다 훨씬 적다
     ok(g_pulseInCalls < loops / 10,
                             "★★★ 게이트가 듣는다 — 호출 1200회 중 실제 측정은 10% 미만");
-    // ② 기대값을 리터럴로 박는다: 1200ms / 200ms = 6회 (+ 첫 회)
-    ok(g_pulseInCalls <= 7, "★★ 실제 측정이 슬롯당 7회 이하다 (200ms 게이트 = 6회 + 첫 회)");
-    // ③ 🔴 **블로킹 예산** — 이것이 루트의 물음에 답하는 수다
-    ok(blockMs <= 60,       "★★★ 최악(빈 자리)에서도 슬롯의 5% 이하만 막힌다");
+    // ② 기대값을 리터럴로 박는다: 초음파 센서마다 1200/200 = 6회 (+ 첫 회)
+    uint8_t nUs = 0;
+    for (uint8_t k = 0; k < MODULE_N; k++)
+      if (isSensor(k) && (senseOf(k) == readUltrasonic || senseOf(k) == readB1)) nUs++;
+    ok(g_pulseInCalls <= (unsigned long)(nUs * 7),
+                            "★★ 측정 횟수가 (초음파 수 × 7) 이하다 — 200ms 게이트");
+    // 🔴 ③ **축을 갈라서 묻는다.** 옛 판은 문턱 60ms 를 **누적** 축에 걸었는데
+    //   60ms 는 **버퍼(연속)** 축의 수(66ms)에서 온 것이다. 섞으면 초음파 둘에서 헛 FAIL 이 난다.
+    //   🔑 누적은 슬롯 대비 비율로, 연속은 66ms 로 묻는다(원장 §111).
+    ok(blockMs * 100UL / SLOT_TOTAL_MS <= 50,
+                            "★★★ **누적** 블로킹이 슬롯의 50% 이하다 (루프 지연 축)");
     // ④ 음성 대조 — 게이트를 무력화하면 이 검사가 실제로 빨강이 되는가
     {
       g_pulseInCalls = 0; g_pulseInBlockUs = 0;
       g_clockAutoAdvance = false;
       for (unsigned long t = 0; t < 100; t++) { g_millis += 500; node.readSensors(); }
       g_clockAutoAdvance = saveAuto;
-      ok(g_pulseInCalls == 100,
-                            "★★★ 음성 대조: 게이트 간격을 넘겨 부르면 100회 전부 측정한다");
+      // 🔑 분모가 **초음파 센서 수만큼** 곱해진다. 리터럴 100 을 두면 센서가 늘 때 헛 FAIL 이다
+      ok(g_pulseInCalls == (unsigned long)(100 * nUs),
+                            "★★★ 음성 대조: 게이트를 넘겨 부르면 (100 × 초음파 수) 회 전부 측정한다");
     }
 
     // ── 🔴 **상한: 센서가 여럿이면 한 루프에 몇 번 막히나** ────────────────────

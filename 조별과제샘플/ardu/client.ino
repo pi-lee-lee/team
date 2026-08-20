@@ -91,11 +91,32 @@ static bool readUltrasonic() {
   return lastVal;
 }
 
-// 🔓 **접점 센서 (리드 스위치·적외선처럼 켜짐/꺼짐만 내는 것)** — 9번 핀
-//   🔑 `INPUT_PULLUP` 이라 눌리면 GND 로 당겨진다 → `LOW` 가 "차가 있다"다.
-//     ⚠ 극성은 센서마다 다르다. **네 센서 것으로 바꿔라** — 그래서 이 판정이 여기 있다.
-#define B1_PIN 9
-static bool readB1() { return digitalRead(B1_PIN) == LOW; }
+// 🔓 **두 번째 초음파 — B1** (Trig 11 · Echo 10)
+//
+// 🔑 **위 함수를 복사해서 핀만 바꿨다.** 센서를 하나 더 달 때 그것이 가장 쉬운 길이다 —
+//   `setup()` 의 등록 줄(`node.sensor("B1").on(readB1)`)은 **한 글자도 안 바뀐다.**
+//   🔓 즉 **함수 내용만 갈면 그 자리의 센서 종류가 바뀐다.** 이름이 계약이고 함수가 구현이다.
+//
+// ⚠ 초음파를 **셋 이상** 달 거면 이 복사가 아파진다. 그때는 공통 함수로 뽑아라 —
+//   다만 둘까지는 복사가 더 읽기 쉽다(핀이 함수 안에 그대로 보인다).
+// 🔴 예산을 세라 : 초음파 하나가 6.96ms 다. **연속 66ms** 가 상한이고 그것의 50%(33ms)를 쓴다
+//   → 지금 둘 = 14ms. `GUIDE.md` §4 의 표가 그 수를 준다.
+#define B1_TRIG 11
+#define B1_ECHO 10
+static bool readB1() {
+  static uint32_t lastAt  = 0;
+  static bool     lastVal = false;
+  const uint32_t now = millis();
+  if (lastAt != 0 && (now - lastAt) < US_PERIOD_MS) return lastVal;   // 캐시
+  lastAt = now;
+
+  digitalWrite(B1_TRIG, LOW);   delayMicroseconds(2);
+  digitalWrite(B1_TRIG, HIGH);  delayMicroseconds(10);
+  digitalWrite(B1_TRIG, LOW);
+  const uint32_t us = pulseIn(B1_ECHO, HIGH, US_TIMEOUT_US);
+  lastVal = (us != 0) && ((us / 58UL) < US_NEAR_CM);
+  return lastVal;
+}
 
 #define LD_PIN LED_BUILTIN            // 🔓 보드에 붙은 13번 LED
 static bool cmdLed(uint32_t arg) {
@@ -171,7 +192,7 @@ static bool cmdL2(uint32_t arg) {
 // 🔓 **본보기는 주석이 아니라 위의 실제 코드다** — 네 꼴이 다 켜져 있다:
 //
 //     readUltrasonic  두 핀 센서(거리 → 문턱 판정)   `node.sensor("A1").on(readUltrasonic)`
-//     readB1          접점 센서(켜짐/꺼짐)            `node.sensor("B1").on(readB1)`
+//     readB1          두 핀 센서 — 같은 꼴 두 번째      `node.sensor("B1").on(readB1)`
 //     cmdLed          on/off 액추에이터               `node.actuator("LD").on(cmdLed)`
 //     cmdL2           숫자를 받는 표시기(거절 있음)    `node.actuator("L2").on(cmdL2)`
 //
@@ -204,7 +225,7 @@ void setup() {
 
   // 🔓 **내 핀 — 아두이노 기본 설정.** 장치는 어느 모듈이 어느 핀인지 모른다
   pinMode(US_TRIG, OUTPUT);   pinMode(US_ECHO, INPUT);
-  pinMode(B1_PIN,  INPUT_PULLUP);
+  pinMode(B1_TRIG, OUTPUT);   pinMode(B1_ECHO, INPUT);
   pinMode(LD_PIN,  OUTPUT);
 
   // 🔓 **내 모듈 — 이름 ↔ 함수, 한 줄에 하나.** 적은 순서가 전선 순서다(섞어 적어도 된다)
