@@ -159,7 +159,11 @@ static void cntTick(uint32_t now) {
       else {
         Serial.print(node.vMin[i]); Serial.print('~'); Serial.print(node.vMax[i]);
         Serial.print(F("cm 폭")); Serial.print((uint16_t)(node.vMax[i] - node.vMin[i]));
-        Serial.print(F(" n")); Serial.print(node.vN[i]);
+        // 🔴 **`호출` 이지 `표본` 이 아니다.** `valSeen` 은 캐시 반환값도 센다 —
+        //   200ms 게이트라 60초에 300회여야 하는데 실측이 65535(포화)였다. 218배다.
+        //   ⚠ **min/max 는 여전히 옳다**(같은 값을 여러 번 봐도 폭은 안 바뀐다).
+        //   🔑 틀린 것은 이름이었다. 고치기 전까지 **"호출"로 읽어라.**
+        Serial.print(F(" 호출")); Serial.print(node.vN[i]);
       }
     }
     if (any) {
