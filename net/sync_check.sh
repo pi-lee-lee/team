@@ -21,6 +21,9 @@ SRC="$ROOT/조별과제샘플/server/lot.cpp"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 cp "$SRC" "$WORK/lot.cpp"
+# 🔑 예제는 **배포 폴더에 하나만** 둔다(사본을 두면 갈린다). 검사는 **두 트리 모두에** 건다.
+EXSRC="$ROOT/조별과제샘플/dev_server/EXAMPLES.cpp"
+[ -f "$EXSRC" ] && cp "$EXSRC" "$WORK/examples.cpp"
 
 NEG=0
 if [ "${1:-}" = "--negative" ]; then NEG=1; fi
@@ -58,6 +61,22 @@ for T in "$ROOT/조별과제샘플/server" "$ROOT/조별과제샘플/dev_server"
   fi
   if c++ -std=c++11 -fsyntax-only -I "$USE" "$WORK/lot.cpp" 2>"$WORK/err"; then
     echo "✅ $name — lot.cpp 가 이 트리의 공개 API 로 컴파일된다"
+    # 🔴 **예제도 같은 문으로 통과해야 한다** (2026-08-20 · REQ-0310)
+    #   `EXAMPLES.cpp` 는 기여자가 베끼는 코드다. 주석 안의 예시는 아무 검사도 안 받아서
+    #   **API 가 바뀌면 조용히 낡는다** — 이 검사가 그것을 막는 유일한 장치다.
+    #   ⚠ 파일이 없으면 **초록이 아니라 경보다.** 대상이 사라지면 검사가 스스로 무장 해제된다.
+    if [ -f "$WORK/examples.cpp" ]; then
+      if c++ -std=c++11 -fsyntax-only -I "$USE" "$WORK/examples.cpp" 2>"$WORK/eerr"; then
+        echo "   ✅ EXAMPLES.cpp 도 이 트리의 공개 API 로 컴파일된다"
+      else
+        echo "   🔴 **EXAMPLES.cpp 가 안 된다** — 예제가 낡았다:"
+        head -4 "$WORK/eerr" | sed 's/^/     /'
+        rc=1
+      fi
+    else
+      echo "   🔴🔴 EXAMPLES.cpp 를 못 찾았다 — **이 검사는 지금 예제를 안 지킨다**"
+      rc=1
+    fi
     # 🔴 **dev_server 는 한 걸음 더 간다 — 링크까지 본다** (2026-08-20)
     #   `lot.cpp` 가 **진짜 번역 단위**가 됐으므로 *"공개 API 만으로 성립하나"* 를 넘어
     #   **"실제로 링크되나"** 를 잴 수 있다. 🔑 **검사의 뜻이 강해졌다.**
