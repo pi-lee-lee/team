@@ -26,8 +26,8 @@
 // ① 주차장을 조립한다 — 🔴 **이것만 채우면 돌아간다**       자세히: GUIDE-sample.md §조립
 void buildLot(ParkingLot& lot) {
     lot.spot("A1").sensor("P1", "A1").sensor("P1", "B1")     // 주차 자리 — 센서 둘(이중화)
-                   .actuator("P1", "LD");
-                //    .actuator("P1", "L2");  // 그 자리의 표시등·표시기
+                   .actuator("P1", "LD")                     // 표시등(보드 13번 LED)
+                   .actuator("P1", "L2");                    // 표시기(7자리 숫자)
 
     lot.gate("E1", Gate::IN);                 // 입구
     lot.spot("E1").actuator("P1", "DR");      // 🔑 차단봉은 **입구에** 있다. 주차 자리가 아니다
@@ -38,7 +38,12 @@ void buildLot(ParkingLot& lot) {
     lot.label("P1", "A1", "왼쪽 센서");     //    조작 못 하는 모듈도 이름을 갖는다
     lot.spot("A1").label("1번 자리");       //    자리 이름 — 안 쓰면 화면이 `A1` 을 쓴다
     lot.control("P1", "LD").toggle();                            // 0 / 1
-    // lot.control("P1", "L2").number(0, 9999999);                  // 숫자 칸
+    lot.label("P1", "L2", "표시기");
+    lot.control("P1", "L2").number(0, 9999999);                  // 🔴 **화면의 숫자 입력 칸**
+    // 🔴 범위는 **장치가 정한 것**이다 — 넘기면 장치가 `result=3` 으로 거절하고
+    //   시리얼에 `[L2] 거절 — 7자리 초과: <값>` 을 찍는다(arduino 확인).
+    // ⚠ 에코는 **비트 하나**라 `1234567` 을 보내도 *"0이 아니다"* 만 돌아온다 →
+    //   화면의 `confirmed` 는 **`partial`** 이 유일한 참이다. 값 확인은 안 된다
     lot.control("P1", "DR").choice()                             // 🔴 **이 선언이 곧 명령표다**
             .option(1, "열기").option(2, "닫기");
     // 🔑 값의 뜻은 **장치의 콜백**이 정한다. 여기 라벨과 그쪽 표가 같아야 한다
