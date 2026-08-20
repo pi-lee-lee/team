@@ -36,6 +36,16 @@ void buildLot(ParkingLot& lot) {
         .module("P1", "LD")              //   표시등
         .module("P1", "L2");             //   표시기
 
+    // 🔴 **모듈을 안 붙인 주차 자리** — 자리만 잡아 두는 것도 정상이다 (REQ-0292)
+    //   서버가 봉투에 `active:{ok:false, reason:"no_modules"}` 를 실어 주고
+    //   화면이 그것을 **비활성**으로 그린다.
+    //   🔑 점유는 여전히 `unknown` 이다 — 지우지 않았다. **왜 모르는지를 같이 말할 뿐이다.**
+    //     (센서가 고장난 게 아니라 애초에 아무것도 안 붙였다)
+    lot.spot("A2").at(0, 1).parking().label("2번 자리");
+    lot.spot("A3").at(0, 2).parking().label("3번 자리");
+    lot.spot("A4").at(0, 3).parking().label("4번 자리");
+    lot.spot("A5").at(0, 4).parking().label("5번 자리");
+
     lot.spot("E1")                       // 일반영역 — `parking()` 을 안 적었다
         .at(3, 4)
         .label("입구")

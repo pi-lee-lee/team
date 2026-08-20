@@ -38,7 +38,8 @@
                     "\"type\":\"map\"", "\"srv_id\":", "\"epoch\":",
                     "\"grid\":", "\"rows\":", "\"cols\":",
                     "\"zones\":[", "\"id\":", "\"kind\":", "\"cells\":", "\"modules\":[",
-                    "\"devid\":", "\"name\":", "\"idx\":"
+                    "\"devid\":", "\"name\":", "\"idx\":",
+                    "\"active\":"          // REQ-0292 — 모듈 0개인 주차 자리를 화면이 가른다
                 };
                 static const char* stateKeys[] = {
                     "\"type\":\"state\"", "\"srv_id\":", "\"epoch\":", "\"ts_ms\":",
@@ -76,6 +77,40 @@
                           << sizeof(stateKeys)/sizeof(stateKeys[0]) << "종 + 서명검사)"
                           << (ok35 ? "" : (" — 🔴" + missing)) << "\n";
                 if (!ok35) bad++;
+            }
+
+            // 🔴 `active` — **모듈이 하나도 안 붙은 주차 자리**를 봉투가 이유와 함께 말한다 (REQ-0292)
+            //
+            //   ⚠ 긍정형으로 쓴다. *"비활성 문구가 아니다"* 같은 부정형은 **대상이 없어도 참**이다.
+            //   🔑 **세 갈래를 다 밟는다** — 하나만 재면 *"전부 ok:false"* 로도 통과한다.
+            //     ① 모듈 있는 주차 자리 → ok:true   ② 모듈 0개 주차 자리 → ok:false/no_modules
+            //     ③ 모듈 0개 **일반영역** → ok:true (점유를 보고할 의무가 없다)
+            //   🔑 기대값은 **손으로 박은 리터럴**이다. 코드에서 만들어 대조하면 둘이 같이 틀린다.
+            {
+                ParkingLot L;
+                L.spot("A1").parking().module("P1", "A1");
+                L.spot("A2").parking();
+                L.spot("E1");
+                Server t; t.lot_ = &L; t.build_default_zones(); t.init_srv_id();
+                const std::string m = t.map_json();
+                const size_t NP = std::string::npos;
+                size_t pA1 = m.find("\"id\":\"A1\""), pA2 = m.find("\"id\":\"A2\""),
+                       pE1 = m.find("\"id\":\"E1\"");
+                // 🔴 자리별로 잘라서 본다. 통째로 `find` 하면 **어느 자리 것인지 못 가른다** —
+                //   한 자리만 맞아도 통과하는 검사가 된다.
+                bool okpos = (pA1 != NP && pA2 != NP && pE1 != NP && pA1 < pA2 && pA2 < pE1);
+                const char* ACT_OK = "\"active\":{\"ok\":true,\"reason\":null}";
+                const char* ACT_NO = "\"active\":{\"ok\":false,\"reason\":\"no_modules\"}";
+                bool a1 = okpos && m.substr(pA1, pA2 - pA1).find(ACT_OK) != NP;
+                bool a2 = okpos && m.substr(pA2, pE1 - pA2).find(ACT_NO) != NP;
+                bool a3 = okpos && m.substr(pE1).find(ACT_OK) != NP;
+                bool okA = okpos && a1 && a2 && a3;
+                std::cout << (okA ? "  ✓ " : "  ✗ ") << "map: active — 모듈있는주차 ok:true("
+                          << (a1 ? "예" : "아니오") << ") · 모듈0개주차 no_modules("
+                          << (a2 ? "예" : "아니오") << ") · 모듈0개 일반영역 ok:true("
+                          << (a3 ? "예" : "아니오") << ")"
+                          << (okpos ? "" : " — 🔴 자리 셋을 못 찾았다") << "\n";
+                if (!okA) bad++;
             }
 
 
