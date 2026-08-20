@@ -151,25 +151,11 @@ static bool cmdDoor(uint32_t arg) {
   return true;
 }
 
-// 센서 훅 둘 — 샘플 주석 블록의 모양 그대로다
-#define PIN_US_TRIG 3
-#define PIN_US_ECHO 4
-static const uint16_t US_OCCUPIED_CM = 60;
-static bool ultrasonicRead(uint8_t pin) {
-  (void)pin;
-  static unsigned long lastAt  = 0;
-  static bool          lastVal = false;
-  const unsigned long now = millis();
-  if (now - lastAt < 200UL) return lastVal;
-  lastAt = now;
-  digitalWrite(PIN_US_TRIG, LOW);  delayMicroseconds(2);
-  digitalWrite(PIN_US_TRIG, HIGH); delayMicroseconds(10);
-  digitalWrite(PIN_US_TRIG, LOW);
-  const unsigned long us = pulseIn(PIN_US_ECHO, HIGH, 6000UL);
-  if (us == 0) { lastVal = false; return false; }
-  lastVal = (us / 58UL) < US_OCCUPIED_CM;
-  return lastVal;
-}
+// 🔴 **초음파 훅을 여기서 복제하지 않는다.** `client.ino` 에 **실제로 켜져 있고**
+//   이 시험이 **그것을 직접 부른다** — 샘플이 검증받는 유일한 길이다.
+//   ⚠ 옛 판은 이 블록이 *"샘플 주석 블록의 모양 그대로"* 복제였다. 그러면 샘플이 낡어도
+//     시험은 통과한다(§"시험이 실기가 안 하는 준비를 대신해 준다").
+//   🔑 그래서 샘플의 `readUltrasonic`·`US_OCCUPIED_CM`·`US_TRIG`·`US_ECHO` 를 그대로 쓴다.
 static bool readLedBack(uint8_t pin) {
   (void)pin;
   return digitalRead(LED_BUILTIN) == HIGH;
@@ -1439,11 +1425,12 @@ int main() {
     // 🔴 **기대값을 손으로 박는다.** 옛 판은 `표의 pin` 과 `modPin(i)` 를 비교했는데
     //   `modPin` 이 그 표를 읽는 유일한 경로이므로 **자기끼리 대조**였다 — 늘 통과한다.
     //   지금 묻는 것은 *"`setup()` 의 `.pin(...)` 이 실제로 그 값을 넣었나"* 다.
-    const uint8_t WANT[] = { 2, 9, (uint8_t)LED_BUILTIN, PIN_NONE };
+    // 🔴 A1 은 **초음파(두 핀)라 `.pin()` 을 안 준다** → PIN_NONE 이고 훅이 답한다
+    const uint8_t WANT[] = { PIN_NONE, 9, (uint8_t)LED_BUILTIN, PIN_NONE };
     for (uint8_t i = 0; i < 4; i++)
       if (modPin(i) != WANT[i]) { allPin = false;
         printf("      🔴 i=%u: 핀 %u · 기대 %u\n", i, modPin(i), WANT[i]); }
-    ok(allPin,              "★★ 표의 핀이 SLOT_PIN 과 전부 같다 (이행 중 두 표가 공존한다)");
+    ok(allPin,              "★★ 각 칸의 핀이 `setup()` 이 준 값과 같다");
 
     // ③ 🔴 **전선에 나가는 바이트가 그대로인가** — 이 축의 최종 판정이다
     wifi.refusePrompt = false;
@@ -1563,8 +1550,10 @@ int main() {
     // 핀이 표에서 온다
     bool pinsMatch = true;
     // 🔴 `modPin(i)` 와 표를 비교하면 **자기끼리 대조**다(늘 통과한다). 리터럴로 묻는다.
-    if (!(modPin(0) == 2 && modPin(1) == 9)) pinsMatch = false;
-    ok(pinsMatch,           "★★ `.pin(2)` · `.pin(9)` 가 실제로 그 핀을 넣었다");
+    // 🔑 **두 방식이 나란히 있는 것**이 이 샘플의 값이다 — 기여자가 자기 센서가 어느 쪽인지 고른다
+    if (!(modPin(1) == 9)) pinsMatch = false;                    // 접점 센서 : `.pin(9)`
+    if (!(modPin(0) == PIN_NONE && senseOf(0) != 0)) pinsMatch = false;  // 두 핀 센서 : 훅만
+    ok(pinsMatch,           "★★★ `.pin(9)` 센서와 `.on()` 만 있는 센서가 **한 파일에 나란히** 있다");
     // 🔑 옛 판은 "센서 범위 밖"(= `SENSOR_N` 이후)을 물었다. 지금은 센서가 표 어디에 있어도
     //   되므로 그 경계가 없다 — 남은 경계는 **모듈 범위 밖**이다.
     ok(modPin(MODULE_N) == PIN_NONE,
@@ -1616,17 +1605,22 @@ int main() {
       uint8_t pinned = 0;
       for (uint8_t i = 0; i < MODULE_N; i++) if (modPin(i) != PIN_NONE) pinned++;
       ok(pinned >= 1,       "★★ 기본 구성에서 핀을 적은 칸이 **하나 이상** 있다 — 0 이면 훅이 죽는다");
-      ok(g_pinMode[modPin(0)] == INPUT_PULLUP,
-                            "★★ 핀을 적은 칸의 핀 모드를 `begin()` 이 잡는다");
+      ok(g_pinMode[modPin(1)] == INPUT_PULLUP,
+                            "★★ 핀을 적은 칸(B1)의 핀 모드를 `.pin()` 이 잡는다");
+      // 🔴 초음파는 두 핀이라 **`setup()` 이 직접** 잡는다 — `.pin()` 이 못 하는 일이다
+      ok(g_pinMode[US_TRIG] == OUTPUT && g_pinMode[US_ECHO] == INPUT,
+                            "★★★ 초음파의 Trig=OUTPUT · Echo=INPUT 을 `setup()` 이 잡는다");
     }
-    ok(!sensors.at(0),      "★ 등록 전에는 훅이 없다 (기본 digitalRead 경로)");
-    ok(sensors.on("A1", ultrasonicRead),
+    // 🔴 전제가 바뀌었다 — `setup()` 이 A1 에 **초음파 훅을 붙인다**(실물이 달렸다).
+    //   훅 없는 기본 경로는 `B1` 이 보여 준다.
+    ok(!sensors.at(1),      "★ 접점 센서(B1)는 훅이 없다 — 기본 `digitalRead` 경로다");
+    ok(sensors.on("A1", readUltrasonic),
                             "★★ 이름으로 등록된다 (router.on 과 같은 모양)");
-    ok(!sensors.on("ZZ", ultrasonicRead),
+    ok(!sensors.on("ZZ", readUltrasonic),
                             "★★ 표에 없는 이름은 **false** — 조용히 무시하지 않는다");
-    ok(sensors.at(0) == ultrasonicRead, "★ 등록된 것이 그 칸에 걸린다");
+    ok(sensors.at(0) == readUltrasonic, "★ 등록된 것이 그 칸에 걸린다");
 
-    // 🔴 **문턱 판정을 핸들러가 한다** — US_OCCUPIED_CM = 60cm
+    // 🔴 **문턱 판정을 핸들러가 한다** — US_NEAR_CM = 60cm
     g_millis += 1000;  g_pulseIn = 2900;   // 왕복 2900µs / 58 ≈ **50cm** → 60 미만 = 찼다
     ok(node.readRealSensor(0) == 1,
                             "★★ 50cm → 찼다 (핸들러가 cm 로 바꿔 문턱과 견준다)");
@@ -2007,12 +2001,14 @@ int main() {
     // ③ 🔴 **센서 훅은 샘플이 안 붙인다** — 보드에 센서가 없기 때문이다. **그게 정직하다.**
     //   ⚠ 옛 판은 시뮬/LED되읽기 훅을 붙여 "센서가 도는 것처럼" 보이게 했다. 그것을 지웠다.
     {
-      bool noSampleHook = true;
-      for (uint8_t k = 0; k < MODULE_N; k++) if (sensors.at(k)) noSampleHook = false;
-      ok(noSampleHook,      "★★ setup() 은 센서 훅을 **안 붙인다** — 붙일 실물이 없다");
+      // 🔴 **정반대로 뒤집혔다**: 실물 초음파(Trig 2 · Echo 4)가 달려서 `setup()` 이 훅을 붙인다.
+      //   ⚠ 옛 판은 *"붙일 실물이 없다"* 가 근거였다. 그 조건이 사라졌다.
+      int8_t hooked = -1;
+      for (uint8_t k = 0; k < MODULE_N; k++) if (sensors.at(k)) hooked = (int8_t)k;
+      ok(hooked == 0,        "★★★ `setup()` 이 A1 에 초음파 훅을 붙인다 (실물이 달렸다)");
+      ok(sensors.at(0) == readUltrasonic,
+                            "★★ 그 훅이 **샘플의 그 함수**다 — 시험이 복제하지 않는다");
     }
-    ok(modPin(0) != PIN_NONE,
-                            "★★ 그래도 핀은 적혀 있다 — 센서를 달면 **바로 읽힌다**");
 
     // ④ 🔴 훅을 붙이면 **두 센서가 갈릴 수 있는가** — 서버의 OR/AND 판정이 갈리려면 필요하다
     {
