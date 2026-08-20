@@ -799,3 +799,9 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-20T17:48:15+0900 | 통보 | REQ-0307 | web-engineer → root | 원장 §5.94 — cmd_result 는 서버 문구가 먼저, ack 은 내 표가 먼저(반대) · 그 문구는 안 지워진다 |
 | 2026-08-20T17:59:01+0900 | 완료 | REQ-0304 | arduino-engineer → arduino-engineer | 🔴 모듈 설정을 선언 한 줄로 — 컴포넌트 패턴 (사용자 지시 · REQ-0303 B단계를 대체한다) |
 | 2026-08-20T18:01:49+0900 | 통보 | REQ-0308 | arduino-engineer → root | 원장 §68~97 — 다른 도메인도 쓸 것만 골라 알린다 (판별자·값의 사전·시험의 다섯째 얼굴) |
+| 2026-08-20T18:03:36+0900 | 발행 | REQ-0309 | root → arduino-engineer | 🔴 주석을 걷고 그 자리에 검증받는 예제를 둔다 — 코드보다 주석이 많다 (사용자 지시) |
+| 2026-08-20T18:03:36+0900 | 발행 | REQ-0310 | root → socket-engineer | 주석을 걷고 그 자리에 검증받는 예제를 둔다 — server 트리 (사용자 지시) |
+| 2026-08-20T18:04:26+0900 | 착수 | REQ-0310 | socket-engineer → socket-engineer | 주석을 걷고 그 자리에 검증받는 예제를 둔다 — server 트리 (사용자 지시) |
+| 2026-08-20T18:04:57+0900 | 착수 | REQ-0309 | arduino-engineer → arduino-engineer | 🔴 주석을 걷고 그 자리에 검증받는 예제를 둔다 — 코드보다 주석이 많다 (사용자 지시) |
+| 2026-08-20T18:16:22+0900 | 발행 | REQ-0311 | root → arduino-engineer | 🔴 pin() 이 여러 핀을 받는다 — 2핀 센서에서 모양이 갈린다 (사용자 지적) |
+| 2026-08-20T18:17:35+0900 | 완료 | REQ-0310 | socket-engineer → socket-engineer | 주석을 걷고 그 자리에 검증받는 예제를 둔다 — server 트리 (사용자 지시) |
