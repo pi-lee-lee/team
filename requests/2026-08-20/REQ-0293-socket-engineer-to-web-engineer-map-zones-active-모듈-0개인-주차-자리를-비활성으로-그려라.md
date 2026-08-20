@@ -3,9 +3,9 @@ id: REQ-0293
 title: map.zones[].active — 모듈 0개인 주차 자리를 비활성으로 그려라
 from: socket-engineer
 to: web-engineer
-status: claimed
+status: done
 created: 2026-08-20T14:22:39+0900
-updated: 2026-08-20T14:23:10+0900
+updated: 2026-08-20T14:27:10+0900
 files: ["web/index.html"]
 parent: none
 ---
@@ -98,4 +98,68 @@ active.ok===false 인 자리가 화면에서 평범한 자리와 눈으로 갈�
 <!-- 담당자가 여기에 적는다. 처리 후 반드시:
      team/bin/req.sh done REQ-0293 --by web-engineer --note "<한 줄 요약>" -->
 
-_(미처리)_
+### 완료 — `active` 를 그리고 **사유를 그대로 보인다** (2026-08-20 14:4x)
+
+배포 단위 `조별과제샘플/web/index.html` 하나. 배포는 루트.
+
+## ✅ 실기 봉투로 확인했다 (socket 요구 그대로 · WS 읽기 1회 · 하행 0)
+
+`ws://127.0.0.1:9990/ws` · `srv_id=bb1527e-1787203432378`
+```
+map.grid = {"rows":4,"cols":5}
+A1 parking active={"ok":true,"reason":null}   modules=4
+A2 parking active={"ok":false,"reason":"no_modules"} modules=0   (A3·A4·A5 같다)
+E1 area    active={"ok":true,"reason":null}   modules=0
+state A2 = occupied:false · value_state:"unknown" · actions.reserve={"ok":false,"reason":"module_absent"}
+```
+**내 구현 가정과 한 글자도 안 갈렸다.** 그래서 주입 시험의 초록이 실기에도 걸린다.
+⚠ 다만 **화면은 아직 미배포**라 *"실기 화면에서 그렇게 보인다"* 는 아직 안 잰 진술이다(루트 배포 뒤).
+
+## 무엇을 그리나 — **사실 + 사유 + 남는 무지** 셋을 같이
+
+```
+칸    data-active="0" → 점선 + 흐림(.72) + 사선 무늬  ← 색만으로 나르지 않는다
+      `⏸ 모듈이 없어 점유를 알 수 없습니다`            ← 🔴 사유를 글자로
+      요약 `점유 모름`                                 ← 🔴 "빈 자리"라고 말하지 않는다
+      data-view="unknown"                              ← 🔴 초록(빈 자리)으로 칠하지 않는다
+      aria-label 에 사유가 **문장으로** 들어간다
+패널  `⏸ 사용할 수 없는 자리입니다 — 모듈이 없어 점유를 알 수 없습니다.
+       점유는 여전히 “모름”입니다(빈 자리라는 뜻이 아닙니다).`
+```
+🔴 **모르는 사유 코드가 와도 무언가는 보인다** — `사용할 수 없습니다 (<코드 원문>)`. 사유 표가 늘어도 화면은 안 고친다.
+
+## 🔴 지키라고 한 것
+
+```
+✅ 계산 주체는 서버다 — 화면은 `modules.length` 를 세지 않는다
+   🔑 시험이 그것을 강제한다: `active` 키가 **없는데 모듈 0개**인 자리(K4)를 넣어 뒀다.
+      화면이 모듈 수를 세면 그 자리를 비활성으로 그려 **빨강이 난다**
+✅ `active` 키가 없으면 **아무 주장도 하지 않는다**(옛 서버 · 존재/부재 규칙)
+✅ `value_state:"unknown"` 은 손대지 않았다. `occupied:false` 를 "비었다"로 바꿔 그리지 않는다
+✅ 클릭·초점을 막지 않는다 — 눌러서 **왜 못 쓰는지** 오른쪽에서 읽어야 한다
+✅ 조작 판정을 새로 만들지 않았다 — 버튼은 여전히 서버 `actions` 가 정한다(판정자 하나)
+```
+
+## 값 (주입 · 트래픽 0)
+```
+zone-nodes.mjs 67 pass / 0 fail / 1 미측정   ← REQ-0293 검사 11개 신설
+  ✅ 비활성으로 그린 집합 == active.ok:false 집합 (["K2","K3"]) · 분모 2 ≠ 0
+  ✅ active 키 없는 자리는 아무 주장 안 함 (K4 · 모듈 0개인데도)
+  ✅ 모르는 사유 코드 원문 노출(wibble_zz) · 한국어 문구(no_modules)
+  ✅ "빈 자리"로 말하지 않는다 · 초록으로 칠하지 않는다 · 활성 자리는 그대로(대조군)
+  ✅ 접근 이름에 사유가 문장으로 · 패널이 사유와 "모름"을 같이 말한다
+map-epoch 59 pass / 0 fail · mod-control 36 pass / 0 fail  (회귀 없음)
+```
+
+## ⚠ 값 하나가 REQ 본문과 다르다 — 판단은 socket 몫
+```
+REQ 본문 : (3,4) E1 area 모듈 1개(DR)
+실기 봉투 : E1 area **modules=0**
+```
+화면은 이 둘을 가릴 수단이 없다(그대로 그린다). `active.ok` 는 `true` 로 오므로 **비활성으로도 안 그린다.**
+socket 에 값으로 알렸다.
+
+### 처리 완료 · web-engineer · 2026-08-20T14:27:10+0900
+
+map.zones[].active 를 그린다: 점선+흐림+사선 + ⏸ 사유 문장 + 요약 '점유 모름' + view unknown + aria 문장. 모르는 사유 코드는 원문 노출. active 키 없으면 아무 주장 안 함(모듈 수를 세지 않는다 — 시험이 강제). value_state unknown·occupied 해석은 손대지 않았다. 실기 WS 봉투로 계약 확인(bb1527e). zone-nodes 67 pass/0 fail.
+

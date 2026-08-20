@@ -17,7 +17,7 @@
   자기 자신을 포함해서 재면 값이 자기를 바꿔 영원히 안 맞는다 — 그래서 정규화 후에 잰다.
   판정: `web/tools/deploy-screen.mjs --check`
 -->
-<meta name="screen-build" content="src=fe0ea8894bc3 git=88922ae+dirty at=2026-08-20T14:18:47">
+<meta name="screen-build" content="src=f7307344d820 git=dee7cee+dirty at=2026-08-20T14:27:10">
 <title>주차 관제 — 실시간 자리 현황</title>
 <!--
   주차 관제 데모 (단일 파일 · 외부 의존성 없음)
@@ -260,6 +260,14 @@
           background: var(--occ-bg); color: var(--occ-ink); }
   /* 선택 표시 — 🔴 색만으로 나르지 않는다. 테두리 링 + 칸 안의 `▸` 글자 + `aria-current`. */
   .zone[aria-current="true"] { outline: 3px solid var(--accent); outline-offset: -3px; }
+  /* 🔴 비활성 자리 (REQ-0293) — **평범한 자리와 눈으로 갈려야 한다.**
+     색만으로 나르지 않는다: 점선 + 흐림 + 사선 무늬 + 칸 안의 `⏸` 문구가 같이 간다.
+     ⚠ 초점·클릭은 막지 않는다 — 눌러서 **왜 못 쓰는지** 오른쪽에서 읽을 수 있어야 한다(§3.2 의 그 이유). */
+  .zone[data-active="0"] {
+    border-style: dashed; opacity: .72;
+    background-image: repeating-linear-gradient(45deg, rgba(127,127,127,.13) 0 5px, rgba(127,127,127,0) 5px 10px);
+  }
+  .zone__inactive { font-size: 10.5px; font-weight: 700; color: var(--warn-ink); }
   .zone:hover { filter: brightness(1.03); }
   .zone[data-usable="0"] { border-style: dotted; color: var(--ink-dim); }   /* 미상 자리 */
   /* 🔑 옛 격자(`.tile`)와 **같은 변수**를 쓴다 — 범례가 두 벌이 되면 색의 뜻이 갈린다. */
@@ -2659,6 +2667,19 @@ const ACTION_LABEL = {
  * 🔑 **서버가 번역하지 않는다.** 한글은 **표시 이름**이고 그 사상은 **여기 한 곳에만** 있다 —
  * 두 홉이 아니라 한 홉이다. (번역이 서버에도 있으면 사상이 두 벌이 되고 한쪽만 고치는 날이 온다.)
  */
+/**
+ * 🔴 **자리 비활성 사유** — 계약: `map.zones[].active = {ok, reason}` (REQ-0293 · SPEC-assembly-v2 §5).
+ *
+ * 🔑 **계산 주체는 서버다.** 화면은 `modules.length` 를 세지 않는다 —
+ * 세면 같은 규칙이 두 곳에 생기고, 두 구현이 갈리는 날 어느 쪽이 맞는지 알 수 없다.
+ * ⚠ 이것은 `value_state:"unknown"` 을 **없애는 것이 아니다.** 그 무지에 **이유를 붙이는 것**이다 —
+ *   모듈이 없는 자리의 점유는 여전히 *모르는 것이 맞다.* "비었다"로 바꿔 그리지 않는다.
+ * ⚠ 지금 닫힌 집합은 `no_modules` 하나다. **모르는 코드는 조용히 정상으로 떨어뜨리지 않고 원문을 보인다.**
+ */
+const ZONE_INACTIVE_TEXT = {
+  no_modules: '모듈이 없어 점유를 알 수 없습니다',
+};
+
 const MOD_KIND_LABEL = {
   IP: '주차확인센서', IX: '입출차센서',
   OG: '안내등', OL: '유도등', OB: '차단봉'
@@ -3114,6 +3135,9 @@ function zoneHeadEl(z, zs, opts) {
  */
 function zoneView(z, zs) {
   if (!zs) return 'unknown';
+  /* 🔴 **비활성 자리를 초록(빈 자리)으로 칠하지 않는다** (REQ-0293 · socket 조건).
+     모듈이 없으면 점유는 `occupied:false` 로 와도 **모르는 것이 맞다.** 초록은 "비었다"는 주장이다. */
+  if (z.active && z.active.ok === false) return 'unknown';
   if (z.kind !== 'parking') return '';
   if (zs.occupied && zs.reserved) return 'done';
   if (zs.occupied) return 'occupied';
@@ -3144,11 +3168,25 @@ function renderZone(li, z, zs) {
   box.dataset.usable = zs ? '1' : '0';
   const view = zoneView(z, zs);
   if (view) box.dataset.view = view;
+  /* 🔴 **비활성 자리** (REQ-0293). `active` 키가 **없으면 아무 주장도 하지 않는다**(존재/부재 규칙) —
+     옛 서버에는 이 키가 없고, 없는 것을 "활성"이나 "비활성"으로 단정하면 그게 지어내는 것이다. */
+  const inactive = !!(z.active && z.active.ok === false);
+  if (inactive) box.dataset.active = '0';
   const nMods = Array.isArray(z.modules) ? z.modules.length : 0;
   const selected = state.selZone === z.id;
   if (selected) box.setAttribute('aria-current', 'true');
 
   box.appendChild(zoneHeadEl(z, zs, { badge: nMods }));
+
+  /* 🔴 비활성을 **글자로도** 말한다. 흐림·점선만으로는 색각 이상·스크린리더에 안 들린다.
+     🔑 사유는 서버가 준 것을 쓴다. 모르는 코드면 원문을 그대로 보인다(다음 사람이 코드에서 안 찾게). */
+  if (inactive) {
+    const why = document.createElement('span');
+    why.className = 'zone__inactive';
+    const code = z.active.reason;
+    why.textContent = '⏸ ' + (ZONE_INACTIVE_TEXT[code] || ('사용할 수 없습니다 (' + String(code) + ')'));
+    box.appendChild(why);
+  }
 
   if (selected) {
     /* 선택을 색·테두리로만 말하지 않는다 — 글자로도 말한다(색각 이상·스크린리더). */
@@ -3174,6 +3212,8 @@ function renderZone(li, z, zs) {
   /* 접근 이름은 **문장**으로 적는다(§7.2: 좁은 곳은 기호, 넓은 곳은 문장). */
   box.setAttribute('aria-label',
     (zoneHasLabel(z) ? zoneLabel(z) + ' (' + z.id + ')' : z.id)
+    + (inactive ? ' — 사용할 수 없는 자리: '
+        + (ZONE_INACTIVE_TEXT[z.active.reason] || String(z.active.reason)) : '')
     + ' — ' + (zoneSummary(z, zs) || '상태 표시 없음')
     + ' · 모듈 ' + nMods + '개'
     + (selected ? ' · 지금 선택된 자리입니다' : ' · 눌러서 상세와 조작을 봅니다'));
@@ -3210,6 +3250,18 @@ function renderZoneDetail(m, st) {
   const head = zoneHeadEl(z, zs, null);
   head.classList.add('zpanel__head');
   wrap.appendChild(head);
+
+  /* 🔴 비활성이면 **여기서 먼저 말한다** (REQ-0293). 칸은 좁아서 한 줄이고, 사람이 이유를 읽는 자리는 여기다.
+     ⚠ 그리고 이 문구가 없으면 아래 "가능한 조작이 없습니다" 만 남아 **원인이 자리가 아니라 서버로 읽힌다.** */
+  if (z.active && z.active.ok === false) {
+    const why = document.createElement('p');
+    why.className = 'zpanel__empty';
+    const code = z.active.reason;
+    why.textContent = '⏸ 사용할 수 없는 자리입니다 — '
+      + (ZONE_INACTIVE_TEXT[code] || ('사유 코드 ' + String(code)))
+      + '. 점유는 여전히 “모름”입니다(빈 자리라는 뜻이 아닙니다).';
+    wrap.appendChild(why);
+  }
 
   /* 🔴 **박스 안의 박스** — 영역 박스 > **노드 박스** > 모듈 리스트 (사용자 지시 · REQ-0261).
      묶는 키는 **`devid`** 다. 한 영역에 여러 노드의 모듈이 들어올 수 있다
@@ -3354,6 +3406,10 @@ function renderZoneDetail(m, st) {
 /** 1행 요약. 🔴 `kind` 로 먼저 가른다 — **입구에 "예약됨"이 없다**(설계서 §4.1). */
 function zoneSummary(z, zs) {
   if (!zs) return '상태 미상';
+  /* 🔴 같은 이유로 **요약도 "빈 자리"라고 말하지 않는다** (REQ-0293).
+     socket 조건 그대로다: *"`occupied:false` 를 '비었다'로 바꿔 그리지 마라 — 여전히 '모른다'이다."*
+     🔑 사유는 바로 아래 `⏸` 줄이 말한다. 여기서는 **주장을 안 하는 것**이 할 일이다. */
+  if (z.active && z.active.ok === false) return '점유 모름';
   if (z.kind === 'parking') {
     if (zs.occupied && zs.reserved) return '예약한 자리에 입차';
     if (zs.occupied) return '사용 중';

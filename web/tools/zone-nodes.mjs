@@ -479,6 +479,76 @@ try {
        sel && sel.sel === 'FA' && sel.panelMods === 10, JSON.stringify(sel));
   }
 
+  /* ── 🔴 REQ-0293 — `map.zones[].active` 를 화면이 어떻게 그리나 ────────────
+     계약: `active = {ok, reason}` · **계산 주체는 서버**(화면이 modules.length 를 세지 않는다).
+     🔑 그래서 이 시험은 **`modules` 와 `active` 를 일부러 어긋나게** 넣는다 —
+        화면이 모듈 수를 세고 있으면 여기서 갈린다. */
+  if (!LIVE) {
+    const ACT = {
+      type: 'map', srv_id: 'T-1', epoch: 11, grid: { rows: 1, cols: 4 },
+      zones: [
+        { id: 'K1', kind: 'parking', cells: [[0, 0]], active: { ok: true, reason: null },
+          modules: [{ devid: 'P1', name: 'A1', kind: 'IP', idx: 0 }] },
+        { id: 'K2', kind: 'parking', cells: [[0, 1]], active: { ok: false, reason: 'no_modules' }, modules: [] },
+        /* 🔴 모르는 사유 코드 — 조용히 정상으로 떨어뜨리지 않고 원문을 보여야 한다 */
+        { id: 'K3', kind: 'parking', cells: [[0, 2]], active: { ok: false, reason: 'wibble_zz' }, modules: [] },
+        /* 🔴 `active` 키가 **없는** 자리(옛 서버) — 아무 주장도 하지 않아야 한다.
+           ⚠ 그리고 **모듈이 0개인데 active 가 없다** → 화면이 modules 를 센다면 여기서 비활성으로 그린다(오답). */
+        { id: 'K4', kind: 'parking', cells: [[0, 3]], modules: [] },
+      ],
+    };
+    await evaluate(client, inject(ACT));
+    await evaluate(client, inject({ type: 'state', srv_id: 'T-1', epoch: 11, ts_ms: 5, zones: [
+      { id: 'K1', occupied: false, reserved: false, value_state: 'known', actions: { reserve: { ok: true, reason: null } }, modules: [] },
+      { id: 'K2', occupied: false, reserved: false, value_state: 'unknown', actions: {}, modules: [] },
+      { id: 'K3', occupied: false, reserved: false, value_state: 'unknown', actions: {}, modules: [] },
+      { id: 'K4', occupied: false, reserved: false, value_state: 'unknown', actions: {}, modules: [] } ] }));
+    await sleep(160);
+    const av = await evaluate(client, `(() => {
+      const out = {};
+      for (const c of document.querySelectorAll('#zone-grid .zone')) {
+        out[c.dataset.zone] = { act: c.dataset.active === undefined ? null : c.dataset.active,
+          sum: (c.querySelector('.zone__sum') || {}).textContent || null,
+          why: (c.querySelector('.zone__inactive') || {}).textContent || null,
+          view: c.dataset.view || null, aria: c.getAttribute('aria-label') };
+      }
+      return out;
+    })()`);
+    const keys = Object.keys(av || {});
+    const marked = keys.filter((k) => av[k].act === '0');
+    ok('분모: 자리 넷이 다 그려졌다 (' + keys.length + ')', keys.length === 4, JSON.stringify(keys));
+    ok('🔴 비활성으로 그린 자리 집합 == active.ok:false 인 자리 집합  ' + S(marked),
+       setEq(marked, ['K2', 'K3']), JSON.stringify(av));
+    ok('🔴 그 집합이 비어 있지 않다 (' + marked.length + ')', marked.length === 2);
+    ok('🔴 active 키가 없는 자리는 아무 주장도 하지 않는다 (K4 · 모듈 0개인데도)',
+       av.K4 && av.K4.act === null && av.K4.why === null, JSON.stringify(av.K4));
+    ok('사유를 한국어로 말한다 (no_modules)',
+       !!(av.K2 && /모듈이 없어/.test(av.K2.why || '')), JSON.stringify(av.K2));
+    ok('🔴 모르는 사유 코드는 원문을 보인다 (wibble_zz)',
+       !!(av.K3 && /wibble_zz/.test(av.K3.why || '')), JSON.stringify(av.K3));
+    /* 🔴 socket 조건: `occupied:false` 를 "비었다"로 바꿔 그리지 마라 — 여전히 "모른다"다. */
+    ok('🔴 비활성 자리를 "빈 자리"로 말하지 않는다 (점유 모름)',
+       !!(av.K2 && av.K2.sum === '점유 모름' && av.K3 && av.K3.sum === '점유 모름'),
+       JSON.stringify([av.K2 && av.K2.sum, av.K3 && av.K3.sum]));
+    ok('🔴 비활성 자리를 초록(빈 자리)으로 칠하지 않는다',
+       !!(av.K2 && av.K2.view === 'unknown'), JSON.stringify(av.K2));
+    ok('활성 주차 자리는 그대로 "빈 자리" 다 (대조군)',
+       !!(av.K1 && av.K1.sum === '빈 자리' && av.K1.act === null), JSON.stringify(av.K1));
+    ok('접근 이름에 사유가 문장으로 들어간다 (기호만으로 나르지 않는다)',
+       !!(av.K2 && /모듈이 없어/.test(av.K2.aria || '')), JSON.stringify(av.K2 && av.K2.aria));
+    /* 패널에서도 이유를 읽을 수 있는가 — 사람이 이유를 읽는 자리는 여기다. */
+    const pan = await evaluate(client, `(() => {
+      const cell = [...document.querySelectorAll('#zone-grid .zone')].find(z => z.dataset.zone === 'K2');
+      if (!cell) return null;
+      cell.click();
+      const ps = [...document.querySelectorAll('#zone-detail .zpanel__empty')].map(p => p.textContent);
+      return ps;
+    })()`);
+    ok('🔴 패널이 비활성 사유와 "점유는 모름" 을 같이 말한다',
+       Array.isArray(pan) && pan.some((t) => /사용할 수 없는 자리/.test(t) && /모름/.test(t)),
+       JSON.stringify(pan));
+  }
+
   /* ── 🔴 REQ-0289 회귀 방지 — **폭 단계마다 판 배치와 합격선을 같이 본다** ──────
      사용자 요구는 *"PC 화면에서는 넓게"* 였고, 루트의 조건은 *"좁은 화면·2열 거동을 깨지 마라"* 였다.
      🔑 그래서 **세 폭에서 같은 것을 잰다.** 한 폭만 재면 다른 폭이 조용히 깨진다.
