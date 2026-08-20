@@ -388,11 +388,11 @@
         for (std::map<sock_t, Conn>::iterator it = conns.begin(); it != conns.end(); ++it)
             if (it->second.kind == Conn::WS) ws_send(it->first, payload);
     }
-    // 🔴 **이름이 `dead` 였다. 2026-08-20 에 바꿨다** (`-Wshadow` 가 짚었다)
+    // 🔴 **이름이 `dead` 였다.** `-Wshadow` 가 짚었다 — 바깥 `dead` 를 가리고 있었다.
     //   같은 이름이 **셋**이었다: 이 멤버(연결) · `downlink.h` 의 지역(rid) · `serve.h` 의 지역(장치id)
     //   🔴 셋 다 **정수 계열 컨테이너**라 잘못 써도 **컴파일이 통과한다.**
     //   ⚠ 그때도 코드는 맞았다 — 지역이 이겨서 의도대로 돌았다. **위험은 *다음 편집* 이었다.**
-    //   🔑 오늘 이 부류의 네 번째다(`n` · `kind` · `slot` · `dead`).
+    //   🔑 이 부류의 네 번째다(`n` · `kind` · `slot` · `dead`).
     //     **두 뜻을 겸한 이름은 값이 갈리기 전까지 안 보인다.**
     std::vector<sock_t> dead_conns;      // 전송 실패로 끊어야 할 연결. 루프 끝에서 거둔다
     void reap_dead() {
