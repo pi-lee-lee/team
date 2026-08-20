@@ -42,23 +42,6 @@
 static_assert(sizeof(DEVICE_ID) > 1 && sizeof(DEVICE_ID) <= 9,
               "DEVICE_ID 는 1~8자여야 한다 (명세 §2.3). 빈 값도 9자 이상도 안 된다");
 
-// ─────────────────────────────────────────────────────────────────────────
-// 🔴🔴 **순서와 위치를 바꾸지 마라** — 전처리 결과가 바뀌면 산출물이 달라진다.
-//   ⚠ 모듈 표가 `FrameCodec.h` 와 `Modules.h` 사이에 있는 것도 그 때문이다.
-//   🔑 새 헤더는 **목록 끝**에.   🔒 = 링크 계층 · 👁 = 관측
-// ─────────────────────────────────────────────────────────────────────────
-#include "Boot.h"              // 부팅 원인 기록(MCUSR 미러)
-#include "Config.h"            // 🔓 배선·망 설정·타이밍·반송파 슬롯 — **SSID/IP 를 여기서 바꾼다**
-#include "RxBuf.h"             // 🔒 수신 버퍼 셋(rxLine·workLine·pendLine)
-#include "Diag.h"              // 👁 현장 진단·RAM 계측
-#include "TxState.h"           // 송신 상태·슬롯 상태
-#include "Checksum.h"          // 체크섬(§2.2) — 순수 함수
-#include "RxLine.h"            // 🔒 수신 줄 조립(§6.2 1단계)
-#include "LinkGate.h"          // 🔒 살아있음 불변식·SEND OK 게이트
-#include "Counters.h"          // 👁 운영 계수기 [CNT] — 계수기를 더하는 것은 정상 작업이다
-#include "LinkRecovery.h"      // 🔒 IP 소실·소켓 복구·오프라인 전이
-#include "FrameCodec.h"        // S·D·A 프레임 · hex 인코딩 · 슬롯 배치
-
 // ██████████████████████████████████████████████████████████████████████████
 // █  🔓  **모듈 표 — 이 장치의 자기 구성. 자기 것으로 바꿔라**              █
 // ██████████████████████████████████████████████████████████████████████████
@@ -72,9 +55,19 @@ static_assert(sizeof(DEVICE_ID) > 1 && sizeof(DEVICE_ID) <= 9,
 //     종류 : **첫 글자만 뜻이 있다** — `I`=관측 전용("IP" "IX") · `O`=명령 받음("OG" "OL" "OB")
 //     핀   : 실물이면 핀 번호, 가상이면 `PIN_NONE`
 //
-// ⚠ **이 표는 `FrameCodec.h` 와 `Modules.h` 사이에 있어야 한다** —
-//   뒤에서 이 표를 읽는 코드가 온다.
+// 🔴 **이 표는 모든 `#include` 보다 앞에 있어야 한다** — 헤더들이 이 표에서
+//   센서 수·핀·자리 토큰을 파생한다. 아래로 내리면 그 파생이 표를 못 본다.
 // ██████████████████████████████████████████████████████████████████████████
+#define PIN_NONE 0xFF     // 핀 없음(가상 모듈·표시기처럼 핀이 필요 없는 것)
+
+// 회귀 시험만 쓰는 확장점. 기본은 **비어 있다** — 샘플에는 아무 영향이 없다.
+//   시험 하네스가 이것을 정의해 자기 모듈을 더 넣는다. 그래야 `client.ino` 에
+//   시험용 `#if` 를 두지 않고도 명령 경로를 계속 밟을 수 있다.
+//   ⚠ **샘플 코드에서는 이 이름을 쓰지 마라.** 자기 모듈은 표에 직접 적는다.
+#ifndef SAMPLE_EXTRA_MODULES
+#define SAMPLE_EXTRA_MODULES
+#endif
+
 struct ModuleDef {
   char    name[3];      // "A1" + NUL — 명칭이자 **지금은 자리 결속 키다**(위 경고)
   char    kind[4];      // 🔴 **첫 글자만 뜻이 있다**: `I`=관측 전용 · `O`=명령 받음
@@ -93,7 +86,9 @@ struct ModuleDef {
 //   🔑 보드가 바뀌어도 `LED_BUILTIN` 이 따라간다 — 숫자를 박지 않는 이유다.
 #define PIN_SAMPLE_LED   LED_BUILTIN
 
-static const ModuleDef MODULE_TABLE[] PROGMEM = {
+// 🔴 `constexpr` 이다 — **이 표에서 센서 수를 컴파일 시점에 센다.**
+//   `static const` 로 되돌리면 그 파생이 상수식에서 못 읽어 빌드가 깨진다.
+static constexpr ModuleDef MODULE_TABLE[] PROGMEM = {
   // 🔓 **자리 하나 · 센서 둘** — 서버 샘플과 짝이다:
   //      lot.spot("A1").sensor("P1","A1").sensor("P1","B1");
   //   🔴 **서버가 A1 하나만 보는데 장치가 더 보내면 나머지는 "미결속"으로 뜬다.**
@@ -101,7 +96,8 @@ static const ModuleDef MODULE_TABLE[] PROGMEM = {
   {"A1", "IP", 2},    // 자리 A1 의 첫째 센서 — 2번 핀
   {"B1", "IP", 9},    // 자리 A1 의 둘째 센서 — 9번 핀
 
-  // 🔓 **늘리려면 주석을 풀고 `SENSOR_N`·`SLOT_PIN[]` 도 같이 늘려라**(셋이 어긋나면 컴파일이 막는다)
+  // 🔓 **늘리려면 주석을 풀어라. 여기 한 줄이 전부다** — 센서 수·핀은 이 표에서 파생된다
+  //   ⚠ 서버 조립 표에도 한 줄을 더해야 한다. 안 하면 `미결속모듈` 로 뜬다
   // {"A2", "IP",  3}, {"B2", "IP", 10},
   // {"A3", "IP",  4}, {"B3", "IP", 11},
   // {"A4", "IP",  5}, {"B4", "IP", 12},
@@ -124,6 +120,24 @@ static const ModuleDef MODULE_TABLE[] PROGMEM = {
 #endif
 };
 static const uint8_t MODULE_N = (uint8_t)(sizeof(MODULE_TABLE) / sizeof(MODULE_TABLE[0]));
+
+// ─────────────────────────────────────────────────────────────────────────
+// 🔴🔴 **순서와 위치를 바꾸지 마라** — 전처리 결과가 바뀌면 산출물이 달라진다.
+//   ⚠ 모듈 표가 이 목록보다 **위**에 있는 것은 그 때문이다 — 헤더들이 표에서 파생한다.
+//   🔑 새 헤더는 **목록 끝**에.   🔒 = 링크 계층 · 👁 = 관측
+// ─────────────────────────────────────────────────────────────────────────
+#include "Boot.h"              // 부팅 원인 기록(MCUSR 미러)
+#include "Config.h"            // 🔓 배선·망 설정·타이밍·반송파 슬롯 — **SSID/IP 를 여기서 바꾼다**
+#include "RxBuf.h"             // 🔒 수신 버퍼 셋(rxLine·workLine·pendLine)
+#include "Diag.h"              // 👁 현장 진단·RAM 계측
+#include "TxState.h"           // 송신 상태·슬롯 상태
+#include "Checksum.h"          // 체크섬(§2.2) — 순수 함수
+#include "RxLine.h"            // 🔒 수신 줄 조립(§6.2 1단계)
+#include "LinkGate.h"          // 🔒 살아있음 불변식·SEND OK 게이트
+#include "Counters.h"          // 👁 운영 계수기 [CNT] — 계수기를 더하는 것은 정상 작업이다
+#include "LinkRecovery.h"      // 🔒 IP 소실·소켓 복구·오프라인 전이
+#include "FrameCodec.h"        // S·D·A 프레임 · hex 인코딩 · 슬롯 배치
+
 // ██████████████████████████████████████████████████████████████████████████
 // █  ⚠  아래부터는 **고쳐도 된다. 다만 비용이 있다**                        █
 // ██████████████████████████████████████████████████████████████████████████
@@ -268,12 +282,6 @@ void setup() {
   node.testArmed = false;
   node.slotOverrideClearAll();
 
-  // 🔓 모의 점유의 시작 상태. 이 값은 **트리거를 받기 전까지 그대로 유지된다**(자율 전진 없음).
-  node.simOcc = 0;   // 샘플은 **빈 자리로 시작**한다.
-                     //   채우려면 `(1U<<0) | (1U<<1)` 처럼 **한 자리의 센서를 짝으로** 넣어라.
-                     //   🔴 한쪽만 넣으면 **한 자리에서 두 센서가 모순된 값**을 내고,
-                     //     서버는 그 자리에서 갈린 두 값을 보게 된다.
-
   // ESP 리셋선은 **놓은 상태(하이임피던스)로 시작**한다.
   //   전원 인가 직후 AVR 핀은 원래 INPUT 이라 이미 떠 있지만, **"여기서 명시적으로 놓는다"**를
   //   코드로 남긴다. 🔴 실수로 OUTPUT LOW 로 두면 ESP 가 영원히 리셋에 잡혀 아무 일도 안 난다.
@@ -282,11 +290,10 @@ void setup() {
 #endif
 
 #if DEBUG
-  // 🔴 **셋이 서로 다른 값이다. 하나만 찍으면 반드시 오독된다.**
-  //     `SPOT_N`        = **자리 수**  — 서버 조립 표의 `spot` 수와 비교할 값
-  //     `SENSOR_N`      = **센서 수**  — 자리마다 둘이므로 자리 수의 2배다
+  // 🔴 **둘은 다른 값이다. 하나만 찍으면 오독된다.**
+  //     `SENSOR_N`      = **센서 수**  — 표에서 `I` 로 시작하는 줄 수
   //     `moduleCount()` = **모듈 수**  — 센서 + 액추에이터. `D,*,<drain>,<n>` 의 `n` 이 이것이다
-  //   ⚠ 옛 판은 센서 수 하나만 `slots` 라고 찍었다 — **센서 수를 자리 수로 읽게 만들었다.**
+  //   ⚠ **자리 수는 안 찍는다.** 장치는 자리 배치를 모른다 — 서버 조립 표가 정한다.
   // 🔴 **이 보드가 어느 서버를 보는가** — 포트 세트가 둘이라 자주 물어지는 것이다.
   //   ⚠ 소스를 읽어 짐작하지 마라. **빌드 시점에 덮일 수 있다.** 이 줄이 칩의 진실이다.
   Serial.print(F("\n[NET] 대상 " SERVER_IP ":" SERVER_PORT));
@@ -298,7 +305,7 @@ void setup() {
   for (uint8_t i = 0; i < SENSOR_N; i++) {
     char nm[4]; moduleNameOf(i, nm);
     Serial.print(nm); Serial.print('=');
-    if (!(node.srcReal & ((uint16_t)1 << i)))  Serial.print(F("안읽음"));
+    if (slotPin(i) == PIN_NONE)                Serial.print(F("안읽음"));
     else if (sensors.at(i))                    Serial.print(F("훅"));
     else { Serial.print(F("핀")); Serial.print(slotPin(i)); }
     Serial.print(' ');
@@ -306,8 +313,7 @@ void setup() {
   Serial.println();
 
   Serial.print(F("\n[PARKING NODE] proto v1 / "));
-  Serial.print(SPOT_N);         Serial.print(F(" spots / "));
-  Serial.print(SENSOR_N);            Serial.print(F(" sensors / "));
+  Serial.print(SENSOR_N);          Serial.print(F(" sensors / "));
   Serial.print(moduleCount());     Serial.println(F(" modules / dev=" DEVICE_ID));
 
   // ── 부팅 원인 — **추측을 사실로 바꾸는 한 줄**. 왜 재부팅했는지는 여기서만 알 수 있다 ──

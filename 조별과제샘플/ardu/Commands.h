@@ -95,8 +95,8 @@ static void processTest(char* f[], char* s0, char* s1, uint8_t* result) {
   }
 
   // 프레임이 성립했으므로 이제 ACK 에 그 자리를 담는다
-  *s0 = slotCol(idx);
-  *s1 = slotRow(idx);
+  *s0 = slotName0(idx);
+  *s1 = slotName1(idx);
 
   // §12A.2 무장하지 않은 채 S/X 가 오면 조용히 무시하지 않고 result=4 로 거절한다
   if (!node.testArmed) { *result = 4; return; }
@@ -154,23 +154,15 @@ static void processCommand(char* cand) {
   }
 
   if (type == 'M') {
-    // §12B.4 시뮬 한 걸음. **무장 여부로 막지 않는다** — 테스트 모드와 별개다(§12B.3).
-    // 멱등이 특히 중요하다: 재전송이 새 걸음으로 처리되면 한 번 눌렀는데 두 칸이 바뀐다.
-    // (위쪽 `ackQ.find()` 가 이미 걸러 준다 — M 도 R/C/T 와 같은 기계장치를 탄다.)
-    uint8_t idx = node.simStep();
-    if (idx == 0xFF) {
-      s0 = '?'; s1 = '?'; result = 5;    // 바꿀 시뮬 칸이 없다
+    // 🔴 **이 장치는 시뮬 점유 상태를 갖지 않는다.** 센서값은 핀에서 오거나(핀이 있으면)
+    //   늘 0 이다(없으면). 그래서 "시뮬 한 걸음"으로 바꿀 것이 **언제나 없다.**
+    //   차 없이 상태를 만들려면 `T` 프레임(오버라이드)을 쓴다 — 그쪽이 그 일을 한다.
+    // ⚠ **타입은 남긴다.** 지우면 `result` 가 5(바꿀 칸 없음)에서 3(해석 불가)으로 바뀌어
+    //   **전선 값이 달라진다.** 서버는 계속 `M` 을 보낼 수 있고, 답은 그대로 5 다.
+    s0 = '?'; s1 = '?'; result = 5;
 #if DEBUG
-      Serial.println(F("[SIM] 바꿀 시뮬 칸이 없다 → result=5"));
+    Serial.println(F("[SIM] 이 장치는 시뮬 상태가 없다 → result=5"));
 #endif
-    } else {
-      s0 = slotCol(idx); s1 = slotRow(idx); result = 0;
-#if DEBUG
-      Serial.print(F("[SIM] 한 걸음: ")); Serial.print(s0); Serial.print(s1);
-      Serial.print(F(" → occupied="));
-      Serial.println((node.simOcc >> idx) & 1);
-#endif
-    }
     commitAck(rid, s0, s1, result);
     return;
   }
@@ -192,8 +184,8 @@ static void processCommand(char* cand) {
     Serial.print(F("[BAD SLOT] rid=")); Serial.println(rid);
 #endif
   } else {
-    s0 = slotCol(idx);
-    s1 = slotRow(idx);
+    s0 = slotName0(idx);
+    s1 = slotName1(idx);
     uint16_t bit = (uint16_t)1 << idx;
 
     if (type == 'R') {

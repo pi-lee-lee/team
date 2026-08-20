@@ -46,7 +46,7 @@
 //   ```
 // **무엇이 바뀌나** — `millis()` 호출 시점이 **29줄만큼 앞당겨진다:**
 //   ```
-//   원래 : wifi.begin(9600)  … 29줄(randomSeed·node.applySlotPinMode×10·node.simOcc·pinMode) …  netStepAt = millis()
+//   원래 : wifi.begin(9600)  … 29줄(randomSeed · 핀 모드 초기화 · pinMode) …  netStepAt = millis()
 //   지금 : 셋을 한자리에서
 //   ```
 // ⚠ **무해하다**(`netStepWait = 500` 이라 여유가 크다). **그러나 변화가 없는 것은 아니다.**

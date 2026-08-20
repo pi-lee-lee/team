@@ -1739,39 +1739,48 @@ int main() {
   //     그 표지인데 **그건 서버 쪽 계측기**다. 장치 쪽에도 감시를 둔다 —
   //     §"조건을 적었으면 그것을 보는 감시를 **같은 자리에** 만들어라".
   {
-    printf("\n[37] 시뮬 점유의 지형 정렬 (A_i · B_i 짝)\n");
-    const uint8_t H = SENSOR_N / 2;
-    auto paired = [&](uint16_t m) {
-      for (uint8_t i = 0; i < H; i++)
-        if (((m >> i) & 1) != ((m >> (i + H)) & 1)) return false;
-      return true;
-    };
+    printf("\n[37] 모듈 표 파생 — 센서 수 · 핀 · 자리 토큰\n");
 
-    // 샘플 구성은 자리 하나(A1·B1)뿐이라 짝도 하나다.
-    node.simOcc = 0;                                   // setup() 과 같은 초기값
-    // 🔴 **`0` 은 짝 검사를 자동으로 통과한다.** 이 단언만 두면 헛통과다 —
-    //   조건이 이미 만족돼 있어서 통과하는 것이지 검사가 돈 것이 아니다.
-    //   그래서 **찬 상태**와 **어긋난 상태**를 같이 본다. 셋이 한 벌이다.
-    ok(paired(node.simOcc),      "★ 부팅 초기값이 짝 단위다 (샘플은 빈 자리 = 0)");
-    node.simOcc = (uint16_t)((1U << 0) | (1U << 1));    // A1·B1 둘 다 = 자리 하나가 참
-    ok(paired(node.simOcc),      "★★ 짝이 찬 상태도 짝 단위다 (A1 == B1)");
-    node.simOcc = (uint16_t)(1U << 0);                  // 🔴 한쪽만
-    ok(!paired(node.simOcc),     "★★ 한쪽만 켜지면 짝 검사가 **실패한다** — 검사가 실제로 돈다");
-    node.simOcc = 0;
+    // 센서 수는 컴파일 시점에 표에서 센다. 여기서 **손으로 다시 세어** 대조한다.
+    uint8_t handCount = 0;
+    while (handCount < MODULE_N &&
+           (char)pgm_read_byte(&MODULE_TABLE[handCount].kind[0]) == 'I') handCount++;
+    ok(SENSOR_N == handCount,
+                            "★★★ SENSOR_N 이 표의 `I*` 연속 줄 수와 같다 (컴파일 시점 파생)");
+    // 🔴 분모 확인 — 센서만 있거나 액추에이터만 있으면 아래 음성 대조가 성립하지 않는다
+    ok(SENSOR_N >= 1 && SENSOR_N < MODULE_N,
+                            "★ 표에 센서와 액추에이터가 둘 다 있다 (아래 검사의 사전 조건)");
 
-    // 🔴 **무작위 토글을 여러 번 돌려도 짝이 유지되는가** — 한 번만 보면 우연히 통과한다
-    node.resMask = 0; node.testArmed = false; node.ovrActive = 0;
-    randomSeed(12345);                                // 결정적으로 돌린다
-    bool held = true;
-    for (int k = 0; k < 200; k++) { node.simStep(); if (!paired(node.simOcc)) { held = false; break; } }
-    ok(held,                "★★ 무작위 토글 200회를 돌려도 짝이 유지된다");
+    // 핀이 표에서 온다
+    bool pinsMatch = true;
+    for (uint8_t i = 0; i < SENSOR_N; i++)
+      if (slotPin(i) != pgm_read_byte(&MODULE_TABLE[i].pin)) pinsMatch = false;
+    ok(pinsMatch,           "★★ slotPin() 이 표의 `pin` 칸을 그대로 돌려준다");
+    ok(slotPin(SENSOR_N) == PIN_NONE,
+                            "★★ 센서 범위 밖은 PIN_NONE — 범위 가드가 산다");
 
-    // 예약→점유 경로도 짝을 채우는가 (1순위 분기)
-    node.simOcc = 0; node.resMask = (uint16_t)(1U << 0);        // 자리 1 을 예약
-    node.simStep();
-    ok(((node.simOcc >> 0) & 1) && ((node.simOcc >> H) & 1),
-                            "★★ 예약→점유도 짝을 함께 채운다 (A1 과 B1 이 같이 선다)");
-    node.simOcc = 0; node.resMask = 0;
+    // 자리 토큰(전선 ACK 이 되비추는 두 글자)이 표의 이름에서 온다
+    ok(slotName0(0) == (char)pgm_read_byte(&MODULE_TABLE[0].name[0]) &&
+       slotName1(0) == (char)pgm_read_byte(&MODULE_TABLE[0].name[1]),
+                            "★★ 자리 토큰 두 글자가 표의 `name` 이다");
+    ok(slotIndexOf(slotName0(0), slotName1(0)) == 0,
+                            "★★ 이름으로 그 센서를 찾는다");
+    ok(slotIndexOf('Z', 'Z') == 0xFF, "★ 표에 없는 이름은 0xFF");
+
+    // 🔴 **음성 대조** — 액추에이터 이름으로는 자리를 찾을 수 없어야 한다.
+    //   찾히면 `LD` 에 예약(R)이 걸리고, 그 비트는 자리 점유 비트와 겹친다.
+    {
+      char a0 = (char)pgm_read_byte(&MODULE_TABLE[SENSOR_N].name[0]);
+      char a1 = (char)pgm_read_byte(&MODULE_TABLE[SENSOR_N].name[1]);
+      ok(slotIndexOf(a0, a1) == 0xFF,
+                            "★★★ 액추에이터 이름으로는 자리를 못 찾는다 (예약이 안 걸린다)");
+    }
+
+    // 🔴 이 장치는 **시뮬 점유 상태를 갖지 않는다.** 핀이 없으면 늘 0 이다 —
+    //   가짜 점유를 만들지 않는다. 차 없이 시험할 수단은 오버라이드(`T` 프레임)다.
+    node.testArmed = false; node.ovrActive = 0;
+    ok(node.readSlotSensor(SENSOR_N) == 0,
+                            "★★ 핀 없는 칸은 0 이다 (장치가 점유를 지어내지 않는다)");
   }
 
   // ── [38] 🔓 센서 읽기 훅 — **샘플 초음파 예시를 실제로 부른다** ──────────────
@@ -1785,21 +1794,12 @@ int main() {
     //   🔑 이 단언이 없으면 그 회귀가 **아무 신호 없이** 돌아온다.
     node.begin();
     {
-      bool everyPinnedIsReal = true;
-      for (uint8_t i = 0; i < SENSOR_N; i++)
-        if (slotPin(i) != PIN_NONE && !(node.srcReal & ((uint16_t)1 << i))) {
-          everyPinnedIsReal = false;
-          printf("      🔴 슬롯 %u 는 핀 %u 를 적었는데 시뮬이다\n", i, slotPin(i));
-        }
-      ok(everyPinnedIsReal,
-                            "★★★ **핀을 적은 칸은 실물로 읽는다** (표가 유일한 진실이다)");
-      ok(node.srcReal != 0, "★★ 기본 구성에서 실물 칸이 **하나 이상** 있다 — 0 이면 훅이 죽는다");
-      // 그리고 실물 칸은 핀 모드가 잡혀 있어야 한다(훅이 없을 때)
+      uint8_t pinned = 0;
+      for (uint8_t i = 0; i < SENSOR_N; i++) if (slotPin(i) != PIN_NONE) pinned++;
+      ok(pinned >= 1,       "★★ 기본 구성에서 핀을 적은 칸이 **하나 이상** 있다 — 0 이면 훅이 죽는다");
       ok(g_pinMode[slotPin(0)] == INPUT_PULLUP,
-                            "★★ 실물 칸의 핀 모드를 `begin()` 이 잡는다");
+                            "★★ 핀을 적은 칸의 핀 모드를 `begin()` 이 잡는다");
     }
-
-    node.srcReal = 0xFFFF;                 // 아래 훅 시험은 전 칸을 실물로 둔다
     ok(!sensors.at(0),      "★ 등록 전에는 훅이 없다 (기본 digitalRead 경로)");
     ok(sensors.on("A1", ultrasonicRead),
                             "★★ 이름으로 등록된다 (router.on 과 같은 모양)");
@@ -2156,7 +2156,8 @@ int main() {
       for (uint8_t k = 0; k < MODULE_N; k++) if (sensors.at(k)) noSampleHook = false;
       ok(noSampleHook,      "★★ setup() 은 센서 훅을 **안 붙인다** — 붙일 실물이 없다");
     }
-    ok(node.srcReal != 0,   "★★ 그래도 실물 소스는 켜져 있다 — 센서를 달면 **바로 읽힌다**");
+    ok(slotPin(0) != PIN_NONE,
+                            "★★ 그래도 핀은 적혀 있다 — 센서를 달면 **바로 읽힌다**");
 
     // ④ 🔴 훅을 붙이면 **두 센서가 갈릴 수 있는가** — 서버의 OR/AND 판정이 갈리려면 필요하다
     {
