@@ -17,7 +17,7 @@
   자기 자신을 포함해서 재면 값이 자기를 바꿔 영원히 안 맞는다 — 그래서 정규화 후에 잰다.
   판정: `web/tools/deploy-screen.mjs --check`
 -->
-<meta name="screen-build" content="src=f91dcf3db14d git=44d6014+dirty at=2026-08-20T14:52:14">
+<meta name="screen-build" content="src=f9f21fdc36cf git=3470465+dirty at=2026-08-20T15:55:31">
 <title>주차 관제 — 실시간 자리 현황</title>
 <!--
   주차 관제 데모 (단일 파일 · 외부 의존성 없음)
@@ -630,6 +630,14 @@
         <dt>마지막 갱신</dt><dd id="dev-age">-</dd>
       </dl>
 
+      <!-- 🔴 **시뮬 한 걸음은 데모에서만 보인다** (REQ-0301 · socket 발견).
+           실기에서는 `{"type":"sim_step"}` → 서버 → 전선 `M,<rid>,` → 장치가 **항상 result=5** 다:
+           장치의 `srcReal=0b11`(핀 둘)이라 **시뮬 갈래가 도달 불가**이고 arduino 의 REQ-0299 뒤에도 같다.
+           즉 실기에서는 **누르면 반드시 거절되는 버튼**이었다 —
+           우리 원칙(*"`actions` 가 있는 이유는 실패할 것을 안 내놓는 것"*)의 정확한 반례다.
+           🔑 **그런데 데모에서는 실제로 동작한다**(아래 `handleSimStep` → `result:0` · 점유가 뒤집힌다).
+              그래서 지우지 않고 **모드로 갈랐다.** 지우면 되는 기능을 죽이는 것이다. -->
+      <div id="sim-block" hidden>
       <h2 id="sim-title">시뮬레이션</h2>
       <div class="sim-panel">
         <button id="sim-step" type="button" class="sim-btn">▶ 한 걸음 진행</button>
@@ -639,7 +647,9 @@
           누를 때마다 <strong>자리 하나만</strong> 바뀝니다. 예약된 빈 칸이 있으면 그 칸부터 채웁니다(§12B.2).
           <br><strong>테스트 모드와 무관합니다</strong> — 무장하지 않아도 되고, 이 버튼으로 바뀐 값에는
           주입 표시가 붙지 않습니다.
+          <br>🔴 <strong>데모에서만 보입니다</strong> — 실기 장치에는 시뮬 갈래가 없어 항상 거절됩니다(REQ-0301).
         </p>
+      </div>
       </div>
 
       <h2 id="test-title">테스트 모드</h2>
@@ -1357,6 +1367,7 @@ const el = {
   dialogTitle: document.getElementById('confirm-title'),
   dialogBody:  document.getElementById('confirm-body'),
   simStep:     document.getElementById('sim-step'),
+  simBlock:    document.getElementById('sim-block'),
   simOutcome:  document.getElementById('sim-outcome'),
   simHint:     document.getElementById('sim-hint'),
   testBanner:  document.getElementById('test-banner'),
@@ -1713,6 +1724,12 @@ function render() {
  * 무장 경고 없이 데이터를 통제하는 것이 이 버튼의 존재 이유다(§12B.3).
  */
 function renderSim() {
+  /* 🔴 **데모에서만 보인다** (REQ-0301). 실기에서는 장치가 **항상 `result=5`** 로 거절한다 —
+     시뮬 갈래가 `srcReal=0b11` 때문에 도달 불가다(socket 실측 · `docs/net/LEDGER.md` §107).
+     🔑 판별자는 `state.link === 'demo'` 하나다: 데모 전송기가 `handleSimStep` 으로 **실제로 처리**하고
+        그 밖(ws · 폴백 · 미접속)에서는 **아무도 처리하지 못한다.**
+     ⚠ `hidden` 은 `display:none` 이라 초점도 안 잡힌다 — 키보드로도 도달할 수 없다. */
+  if (el.simBlock) el.simBlock.hidden = state.link !== 'demo';
   const deviceDown = !!(state.snapshot && state.snapshot.device.online === false);
   const pending = simPendingCount();
   let reason = '';
@@ -2324,6 +2341,13 @@ function simPendingCount() {
 }
 
 el.simStep.addEventListener('click', function () {
+  /* 🔴 **실기에서는 보내지 않는다** (REQ-0301). 버튼은 데모에서만 보이지만, 보이는 동안 링크가
+     바뀔 수 있다(데모 → ws). 그 경합에서 요청이 나가면 **반드시 거절되는 요청**이 전선에 실린다.
+     🔑 화면에서 감추는 것과 **보내지 않는 것**은 다른 문이고, 둘 다 있어야 한다. */
+  if (state.link !== 'demo') {
+    showMessage('시뮬레이션 한 걸음은 데모에서만 동작합니다 — 실기 장치에는 시뮬 갈래가 없어 항상 거절됩니다', 'info');
+    return;
+  }
   if (el.simStep.getAttribute('aria-disabled') === 'true') {
     showMessage(el.simStep.dataset.reason || '지금은 시뮬레이션을 진행할 수 없습니다', 'info');
     return;

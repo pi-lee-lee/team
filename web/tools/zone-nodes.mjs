@@ -701,6 +701,44 @@ try {
     await sleep(120);
   }
 
+  /* ── 🔴 REQ-0301 — 시뮬 버튼은 **데모에서만** 있다 ──────────────────────
+     실기에서는 장치가 항상 `result=5` 로 거절한다(socket 실측). 그런데 **데모에서는 동작한다** —
+     그래서 지우지 않고 모드로 갈랐다. 🔑 검사는 **양쪽을 다 본다**: 데모에서 살아 있고, ws 에서 없다.
+     ⚠ 한쪽만 보면 "숨겼다"만 확인되고 **되는 기능을 죽였는지는 아무도 안 본다.** */
+  if (!LIVE) {
+    const sim = await evaluate(client, `(() => {
+      const blk = document.getElementById('sim-block');
+      const btn = document.getElementById('sim-step');
+      if (!blk || !btn) return { err: 'sim-block 또는 sim-step 이 없다' };
+      const rec = [];
+      const orig = transport.send.bind(transport);
+      transport.send = (p) => { rec.push(p && p.type); };
+      const out = { demoHidden: blk.hidden, demoLink: state.link };
+      btn.click();                                  /* 데모에서 눌러 본다 */
+      out.demoSent = rec.slice();
+      /* 이제 실기 링크로 바꿔 본다 — 판별자가 link 하나이므로 이것이 그 경로다 */
+      rec.length = 0;
+      const before = state.link;
+      state.link = 'ws'; render();
+      out.wsHidden = blk.hidden;
+      out.wsReachable = btn.offsetParent !== null;  /* hidden 이면 초점·클릭 대상이 아니다 */
+      btn.click();
+      out.wsSent = rec.slice();
+      state.link = before; render();
+      transport.send = orig;
+      return out;
+    })()`);
+    console.log('  · 시뮬 → ' + JSON.stringify(sim));
+    ok('분모: 데모에서 시뮬 블록이 **보인다** (안 보이면 아래 대조가 공허하다)',
+       !!sim && sim.demoHidden === false, JSON.stringify(sim));
+    ok('✅ 데모에서는 시뮬이 여전히 나간다 (되는 기능을 죽이지 않았다)',
+       !!sim && Array.isArray(sim.demoSent) && sim.demoSent.includes('sim_step'), JSON.stringify(sim));
+    ok('🔴 실기 링크(ws)에서는 시뮬 블록이 숨는다',
+       !!sim && sim.wsHidden === true && sim.wsReachable === false, JSON.stringify(sim));
+    ok('🔴 실기 링크에서 눌러도 전선에 sim_step 이 안 나간다 (문이 둘이다)',
+       !!sim && Array.isArray(sim.wsSent) && !sim.wsSent.includes('sim_step'), JSON.stringify(sim));
+  }
+
   if (!LIVE) {
     skip('실기에서 이 지형이 그렇게 온다', '주입 모드다 — 이 초록은 "그 자료가 오면 그렇게 그린다"이지 '
        + '"실기에서 그렇게 나온다"가 아니다. `--live <포트>` 로 따로 재라');
