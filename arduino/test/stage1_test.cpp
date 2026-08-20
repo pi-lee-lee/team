@@ -88,7 +88,7 @@ static bool cmdDoor(uint32_t arg);
 // 🔴 **시험 지형이 실기 상한(8)보다 크다** — 8모듈 + 아래 시험들이 임시로 더 등록한다.
 //   호스트에는 RAM 제약이 없으므로 여기서 올린다. `Module.h` 의 `#ifndef` 가 받는다.
 //   ⚠ 실기 빌드의 8 은 `ramLow` 602B 실측으로 정한 값이다. **그것을 바꾸는 것이 아니다.**
-#define MODULE_CAP 12
+#define MODULE_CAP 13
 #define SAMPLE_EXTRA_MODULES  node.actuator("LC").on(cmdLcd); \
                               node.actuator("DR").pin(6).on(cmdDoor);
 #define PIN_SAMPLE_DOOR 6
@@ -254,6 +254,13 @@ static const char* FRAME = "S,1,0000000000,0000000000,1,P1,";
 
 int main() {
   printf("\n=== REQ-0116 1단계 — 프롬프트 4상태 & 살아있음 불변식 ===\n");
+
+  // 🔴 **실기가 부르는 그 함수를 여기서도 부른다.**
+  //   등록이 런타임이 된 뒤로 `setup()` 없이는 **모듈이 0개**다 — 지형이 비면 프레임도 빈다.
+  //   🔑 이것이 ㉠ 이다: 등록을 시험이 **복제하지 않는다**(그러면 실기가 안 하는 준비를
+  //     시험이 대신하는 것이고, 오늘 우리가 계속 잡아낸 함정이다).
+  //   ⚠ 하네스는 `Serial.begin`·`espInit` 을 **따로 안 부른다** — 확인했다. 겹침이 없다.
+  setup();
 
   // ── [1] 정상: '>' 를 받으면 성공하고 카운터가 0 으로 리셋된다 ──────────────
   printf("\n[1] 정상 프롬프트\n");
@@ -1862,20 +1869,27 @@ int main() {
     //   초음파처럼 trig/echo 가 갈린 장치는 핸들러가 직접 잡는다.
     //   🔑 옛 판은 `applySensorPinMode()` 가 훅 여부를 보고 건너뛰었다. 지금은 **부르지 않는 것**이 그 뜻이다.
     {
-      const uint8_t before = g_pinMode[7];
-      node.sensor("ZQ").on(ultrasonicRead);      // `.pin()` 없이 등록
-      ok(g_pinMode[7] == before,
-                            "★★ `.pin()` 을 안 부르면 어떤 핀 모드도 안 건드린다 (기여자 몫이다)");
-      ok(modPin(MODULE_N - 1) == PIN_NONE,
-                            "★ 그 칸의 핀은 PIN_NONE 이다");
+      // 🔑 **표를 늘리지 않는다** — 새로 등록하면 뒤 시험의 지형 전제가 오염된다(실제로 그래서
+      //   `EXPECT[]` 의 널 포인터를 읽고 죽었다). 이미 있는 `L2` 가 그 경우다: `.pin()` 을 안 썼다.
+      int8_t l2 = -1;
+      for (uint8_t k = 0; k < MODULE_N; k++) {
+        char n4[4]; moduleNameOf(k, n4);
+        if (strcmp(n4, "L2") == 0) l2 = (int8_t)k;
+      }
+      ok(l2 >= 0,           "★ 사전 조건: `.pin()` 을 안 부른 모듈(`L2`)이 있다");
+      ok(modPin((uint8_t)l2) == PIN_NONE,
+                            "★★ `.pin()` 을 안 부르면 핀이 PIN_NONE 이다 — 어떤 핀도 안 건드린다");
     }
 
     // 뒤 시험에 영향이 없도록 되돌린다 — 0 을 넣으면 기본 경로로 돌아간다
     sensors.on("A1", 0);
     ok(!sensors.at(0),      "★ 0 을 등록하면 기본 경로로 돌아간다");
     // 🔑 핀 모드를 다시 걸려면 `.pin()` 을 다시 부른다 — 그것이 이제 유일한 경로다.
+    //   ⚠ **이미 있는 칸에 다시 부른다**(표를 늘리지 않는다). `A1` 이 핀 2 를 쓴다.
     g_pinMode[2] = 0xEE;
-    node.sensor("ZR").pin(2);
+    node.sensor("A1");                       // 같은 이름을 다시 등록하지 않는다 — 아래에서 idx 로 건다
+    MODULE_N--;                              // 방금 늘어난 칸을 되돌린다
+    ModRef(0).pin(2);                        // 🔑 인덱스 0(=A1)에 직접 건다
     ok(g_pinMode[2] == INPUT_PULLUP,
                             "★★ 센서의 `.pin()` 은 INPUT_PULLUP 을 건다");
   }
@@ -2146,10 +2160,10 @@ int main() {
     // 🔴 **계약이 바뀌었다.** 옛 시험은 *"지우면 하나도 안 남는다"* 를 음성 대조로 썼다 —
     //   `router.on()` 만이 진실이라는 전제였다. **지금은 모듈 표가 기본이고 `on()` 은 오버라이드다.**
     //   그래서 런타임 등록을 지워도 **표에 적힌 핸들러가 남는다.** 그것이 옳은 거동이다.
-    for (uint8_t i = 0; i < MODULE_N; i++) {
-      char n4[4]; moduleNameOf(i, n4);
-      router.on(n4, 0); sensors.on(n4, 0);          // 런타임 오버라이드만 지운다
-    }
+    // 🔴 **표를 통째로 비운다.** 등록이 런타임이라 `setup()` 을 다시 부르면 **중복 등록**이 된다.
+    //   🔑 그래서 이 검사가 옛 판보다 **강해졌다** — 옛 판은 핸들러만 지웠고 표는 컴파일 상수라
+    //     "정말 `setup()` 이 만든 것인가" 를 물을 수 없었다. 지금은 표까지 비우고 다시 만든다.
+    MODULE_N = 0; modOverflowed = 0;
 
     // ⓐ 표가 기본이다 — 등록 호출이 **0회**인 상태에서 `LD` 가 명령을 받는다
     int8_t ldIdx = -1, senIdx = -1;
