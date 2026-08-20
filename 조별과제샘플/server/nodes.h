@@ -435,7 +435,18 @@
             const bool now = zone_occupied_now(z);
             std::map<std::string, bool>::iterator it = occ_prev_.find(z.id);
             if (it == occ_prev_.end()) { occ_prev_[z.id] = now; continue; }  // 첫 관측 — 변화 아님
-            if (it->second == now) continue;
+            if (it->second == now) { occ_fall_n_[z.id] = 0; continue; }      // 확정값과 같다
+            // 🔴 **하강(찼다→비었다)만 한 프레임 더 본다.**
+            //   초음파는 간헐 반사 실패로 한 프레임 `0` 을 낸다(실측 `8 → 0 → 8`).
+            //   그것을 변화로 읽으면 **아무도 안 건드렸는데 LED 가 토글된다** —
+            //   깜빡임 하나가 `0`(하강) + `1`(상승) 이 되어 **상승 쪽에서 헛토글이 난다.**
+            // 🔑 실패 모드가 **거짓 `0` 한쪽뿐**이라 지연도 한쪽에만 건다 —
+            //   **상승은 즉시 부른다.** 사용자가 손을 대는 순간의 반응은 안 느려진다.
+            // ⚠ 대가: 진짜 하강 알림이 **한 프레임(약 1.2초) 늦는다.** 그것은 값을 지불한 것이다.
+            if (!now) {
+                if (++occ_fall_n_[z.id] < 2) continue;   // 아직 확정 아님 — 다음 프레임을 본다
+            }
+            occ_fall_n_[z.id] = 0;
             it->second = now;
             occ_change_n_++;                          // 🔑 콜백을 등록 안 해도 센다
             logf("=", std::string("자리 ") + z.id + " 점유 " + (now ? "→ 찼다" : "→ 비었다"));
