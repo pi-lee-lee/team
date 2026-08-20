@@ -138,3 +138,10 @@ data_log.json
 
 조별과제샘플/VS_server/server/x64/Debug/
 조별과제샘플/VS_server/x64/Debug/
+
+# 시리얼 캡처 압축본 — 🔴 **원본이 이미 git 이력에 있다.**
+#   압축본을 또 커밋하면 `.git` 이 그만큼 더 커진다(원본은 이력에서 안 사라진다).
+#   🔑 필요하면 이력에서 꺼낸다: `git show <커밋>:monitor/serial-winX.log`
+#   압축본은 **작업 트리를 가볍게 하는 로컬 사본**이므로 추적하지 않는다.
+monitor/*.log.gz
+monitor/*.raw.gz
