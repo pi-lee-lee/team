@@ -17,7 +17,7 @@
   자기 자신을 포함해서 재면 값이 자기를 바꿔 영원히 안 맞는다 — 그래서 정규화 후에 잰다.
   판정: `web/tools/deploy-screen.mjs --check`
 -->
-<meta name="screen-build" content="src=7662ecf398dc git=847e5ef+dirty at=2026-08-20T14:05:50">
+<meta name="screen-build" content="src=fe0ea8894bc3 git=88922ae+dirty at=2026-08-20T14:18:47">
 <title>주차 관제 — 실시간 자리 현황</title>
 <!--
   주차 관제 데모 (단일 파일 · 외부 의존성 없음)
@@ -521,7 +521,13 @@
   <header class="topbar">
     <div class="topbar__title">
       <h1>주차 관제</h1>
-      <p class="sub">2열 5행 · 10칸 · 빈자리를 눌러 예약합니다</p>
+      <!-- 🔴 **정적 문구로 지형을 설명하지 않는다** (REQ-0290 · 사용자: *"안내대로 동작하지 않는다"*).
+           있던 문구: `2열 5행 · 10칸 · 빈자리를 눌러 예약합니다` — 둘 다 틀렸다:
+             ① 지형이 v2 로 바뀌어 자리 수·행열이 다르다 (옛 데모 지형을 설명하고 있었다)
+             ② 🔴 **칸을 눌러도 예약이 안 된다.** REQ-0288 부터 칸 클릭은 *선택* 이고 조작은 우측 패널이다
+                → 안내가 없는 동작을 하라고 시키고 있었다. 사용자는 그대로 했고 아무 일도 안 났다
+           🔑 지형은 `map` 봉투가 준다. 문구를 그것으로 만들면 낡지 않는다. -->
+      <p class="sub" id="grid-sub">연결 준비 중…</p>
     </div>
     <div class="topbar__status">
       <p id="conn-status" class="conn" role="status" aria-live="polite">
@@ -855,6 +861,18 @@ const RID_MAX      = 32;   // §4.1 브라우저 rid 는 최대 32자 불투명 
    ──────────────────────────────────────────────────────────────── */
 
 /** docs/net/parking-protocol.md §5.3 의 스냅샷 예제 그대로 (v1.2 / 개정 3 형태) */
+/**
+ * 🔴 **데모 자료는 실기에 없는 세계를 만들어 준다** — 그 사실을 여기 적어 둔다 (REQ-0290 · 루트 지시).
+ *
+ * 이 배열은 **옛 봉투(`snapshot.slots` 10칸 · `A1..A5,B1..B5`)** 의 세계다. 실기는 v2 부터
+ * `map`/`state`(자리 `kind`: `parking`/`area`)로 오고 **자리 수도 지형이 정한다.**
+ * 그래서 `?demo=1` 이나 파일 폴백에서 되는 것이 **실기에서 된다는 뜻이 아니다.**
+ *
+ * ⚠ 실제로 그것 때문에 결함을 하나 늦게 찾았다: 예약 확인 뒤 재검증이 `snapshot.slots` 를 보고 있었고
+ * **데모에서는 그 목록이 있어서 통과**했다. 새 봉투만 오는 실기에서는 전선에 아무것도 안 나갔다(REQ-0290).
+ * 🔑 §"시험이 실기가 안 하는 준비를 대신해 준다" 의 실물이다 — **지우지 않는다**(폴백이 이걸 쓴다).
+ *    대신 **데모에서 초록인 것을 실기 근거로 쓰지 마라.**
+ */
 const DEMO_SNAPSHOT = {
   type: 'snapshot',
   ts: 1755100000000,
@@ -1288,6 +1306,7 @@ const el = {
   slotsBanner: document.getElementById('slots-banner'),
   zoneGrid: document.getElementById('zone-grid'),
   zoneDetail: document.getElementById('zone-detail'),
+  gridSub: document.getElementById('grid-sub'),
   gridHead: document.getElementById('grid-head'),
   demoBanner:  document.getElementById('demo-banner'),
   demoTools:   document.getElementById('demo-tools'),
@@ -2159,10 +2178,18 @@ async function requestReserve(slotId) {
   if (!ok) return;
 
   // 대화상자를 여는 동안 상태가 바뀌었을 수 있다.
-  const slot = currentSlot(slotId);
-  if (!slot || tileView(slot).action !== 'reserve') {
-    showMessage(afterConfirmBlockedText(slotId, '예약'), 'err');
-    return;
+  /* 🔴 여는 판정자와 **같은 것**으로 재검증한다(REQ-0290). 개정 격자는 서버 `actions` 가 판정자다. */
+  if (mapUsable()) {
+    if (!zoneActionOk(slotId, 'reserve')) {
+      showMessage(afterConfirmBlockedText(slotId, '예약'), 'err');
+      return;
+    }
+  } else {
+    const slot = currentSlot(slotId);
+    if (!slot || tileView(slot).action !== 'reserve') {
+      showMessage(afterConfirmBlockedText(slotId, '예약'), 'err');
+      return;
+    }
   }
   const rid = newRid();
   markPending(rid, slotId, 'reserve');
@@ -2174,8 +2201,15 @@ async function requestCancel(slotId) {
     slotId + ' 자리의 내 예약을 취소합니다.' + staleNote());
   if (!ok) return;
 
-  const slot = currentSlot(slotId);
-  if (!slot || tileView(slot).action !== 'cancel') {
+  /* 🔴 취소도 같은 규칙이다 — 여는 쪽과 보내는 쪽의 판정자가 갈리면 그만큼 "열려 보이는데 안 되는" 창이 생긴다. */
+  if (mapUsable()) {
+    if (!zoneActionOk(slotId, 'cancel')) {
+      showMessage(afterConfirmBlockedText(slotId, '취소'), 'err');
+      return;
+    }
+  }
+  const slot = mapUsable() ? null : currentSlot(slotId);
+  if (!mapUsable() && (!slot || tileView(slot).action !== 'cancel')) {
     // 예약과 같은 이유로 여기도 갈린다 — 내 예약의 취소도 deviceDown 이면 action 이 없어진다
     // (tileView 의 `mine && canAct() && !deviceDown`). 문구가 하나면 여기서도 거짓말을 한다.
     showMessage(afterConfirmBlockedText(slotId, '취소'), 'err');
@@ -2355,6 +2389,24 @@ function applyBatchResult(msg) {
 function currentSlot(slotId) {
   if (!state.snapshot) return null;
   return state.snapshot.slots.find(function (s) { return s.id === slotId; }) || null;
+}
+
+/**
+ * 🔴 **개정 격자에서 조작의 판정자는 서버의 `zone.actions[act].ok` 다** (REQ-0290 · 사용자 실물 보고).
+ *
+ * 있던 결함: 격자는 `actions` 로 버튼을 열어 주는데 `requestReserve()` 는 확인 뒤에
+ * **옛 격자의 `snapshot.slots`** 로 다시 검증했다(`currentSlot` + `tileView`).
+ * 새 봉투만 오는 지형에서는 그 목록에 **그 자리가 없거나 `snapshot` 자체가 없다** →
+ * `showMessage("그 사이 자리 상태가 바뀌어…")` 하나 띄우고 **전선에 아무것도 안 나갔다.**
+ * 🔑 그래서 서버 로그에 예약 요청이 **0건**이었고, 사용자에게는 *"눌러도 테두리가 안 바뀐다"* 로 보였다.
+ *
+ * ⚠ **이것이 판정자 둘 문제다**(원장 §5.52 의 그 형태). 그때는 *여는 쪽* 을 하나로 모았고
+ * **보내는 쪽은 옛 판정자를 그대로 들고 있었다.** 여는 판정자와 보내는 판정자가 같아야 한다.
+ */
+function zoneActionOk(zoneId, act) {
+  const zs = zoneStateById().get(zoneId);
+  const a = zs && zs.actions && typeof zs.actions === 'object' ? zs.actions[act] : null;
+  return !!(a && a.ok === true);
 }
 
 el.grid.addEventListener('click', function (event) {
@@ -2806,6 +2858,12 @@ function renderZoneGrid() {
   el.zoneGrid.hidden = !on;
   el.grid.hidden = on;
   if (el.gridHead) el.gridHead.hidden = on;
+  /* 🔴 안내 문구도 **지금 무엇을 그리고 있는지**를 따라간다(REQ-0290). 두 격자가 다른 세계다. */
+  if (el.gridSub) {
+    el.gridSub.textContent = on
+      ? '' /* 아래에서 map 으로 채운다 */
+      : '옛 격자(자리 목록) 를 그리고 있습니다 — 빈자리를 눌러 예약합니다';
+  }
   if (!on) { renderZoneDetail(null, new Map()); return; }
 
   const m = state.map;
@@ -2964,6 +3022,14 @@ function renderZoneGrid() {
          `setSelectionRange` 를 던진다 — 그때 값까지 잃으면 안 되므로 조용히 포기한다. */
       try { if (caret.start !== null) inp.setSelectionRange(caret.start, caret.end); } catch (e) {}
     }
+  }
+  /* 🔴 지형을 **값으로** 말한다. 자리 수·주차 자리 수·조작 방법 — 정적 문구는 반드시 낡는다. */
+  if (el.gridSub) {
+    const nPark = m.zones.filter(function (z) { return z.kind === 'parking'; }).length;
+    const nArea = m.zones.length - nPark;
+    el.gridSub.textContent = m.rows + '행 × ' + m.cols + '열 · 자리 ' + m.zones.length + '개'
+      + ' (주차 ' + nPark + (nArea ? ' · 일반 영역 ' + nArea : '') + ')'
+      + ' · 칸을 누르면 오른쪽 “선택한 자리”에 상세와 조작이 열립니다';
   }
   renderZoneBanner(m, st);
 }
@@ -3271,6 +3337,18 @@ function renderZoneDetail(m, st) {
     acts.appendChild(b);
   }
   if (acts.childNodes.length) wrap.appendChild(acts);
+  else {
+    /* 🔴 **조작이 없는 것을 조용히 두지 않는다** (REQ-0290 · 루트 지시: *"눌러도 안 되는 것이면 그렇게 보이게"*).
+       ⚠ 그리고 **원인을 지어내지 않는다.** 화면이 아는 것은 두 가지뿐이다:
+         · 이 자리가 `parking` 인가 (v2 에서 예약은 주차 자리에만 성립한다)
+         · 서버가 `actions` 를 줬는가 (없으면 *"지금 이 자리에 그 조작이 없다"* 는 뜻이다 — socket 확정) */
+    const none = document.createElement('p');
+    none.className = 'zpanel__empty';
+    none.textContent = (z.kind === 'parking')
+      ? '지금 이 자리에 가능한 조작이 없습니다 — 서버가 이 자리의 조작을 내려보내지 않았습니다'
+      : '일반 영역입니다 — 예약은 주차 자리에만 있습니다 (모듈 조작은 위 목록에서 합니다)';
+    wrap.appendChild(none);
+  }
 }
 
 /** 1행 요약. 🔴 `kind` 로 먼저 가른다 — **입구에 "예약됨"이 없다**(설계서 §4.1). */

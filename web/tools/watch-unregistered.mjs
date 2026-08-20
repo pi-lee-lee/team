@@ -107,8 +107,12 @@ try {
         const dom = await evaluate(client, `(() => {
           const b = document.getElementById('slots-banner');
           return { bannerHidden: b ? b.hidden : null, bannerText: b ? b.textContent.slice(0, 140) : null,
-                   locked: [...document.querySelectorAll('#zone-grid .zbtn')].filter(x => x.getAttribute('aria-disabled') === 'true').length,
-                   marks: [...new Set([...document.querySelectorAll('#zone-grid .zbtn')].map(x => (x.textContent.match(/[⏱⚠⏳]/) || [''])[0]).filter(Boolean))] };
+                   /* 🔴 조작 버튼은 REQ-0288 부터 **우측 패널**에 있고, 거기엔 **선택한 자리 하나**의 것만 있다.
+                      즉 이 수는 이제 "격자 전체의 막힌 버튼 수"가 아니라 **"지금 선택된 자리의"** 것이다.
+                      ⚠ 선택자만 바꾸고 뜻이 바뀐 것을 안 적으면 다음 사람이 옛 뜻으로 읽는다. */
+                   lockedScope: 'selected-zone-only',
+                   locked: [...document.querySelectorAll('#zone-detail .zbtn')].filter(x => x.getAttribute('aria-disabled') === 'true').length,
+                   marks: [...new Set([...document.querySelectorAll('#zone-detail .zbtn')].map(x => (x.textContent.match(/[⏱⚠⏳]/) || [''])[0]).filter(Boolean))] };
         })()`).catch(e2 => ({ err: String(e2) }));
         console.log('🔴 ' + seenAt + ' — `node_unregistered` 잡혔다 → ' + JSON.stringify(hit));
         console.log('   그 순간 화면 → ' + JSON.stringify(dom));

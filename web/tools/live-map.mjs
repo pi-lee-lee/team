@@ -61,6 +61,26 @@ function ok(name, cond, detail) {
 function skip(name, why) { skipped++; console.log('  ⏭ ' + name + '  → 측정 불가: ' + why); }
 
 /* 🔴 §5.18 — 실패 집계는 catch 에서도 올린다. */
+/**
+ * 🔴🔴 **이 도구는 REQ-0288 이후 갱신되지 않았다** (2026-08-20).
+ *
+ * 화면이 바뀌었다: **격자 칸은 요약만** 그리고 **모듈 행·조작 버튼은 우측 패널(`#zone-detail`)** 에 있다.
+ * 이 파일에는 `#zone-grid .zbtn` · `#zone-grid .zmod` 류 선택자가 **16곳** 남아 있어서,
+ * 그대로 돌리면 **빈 집합을 받고 "서버가 안 보낸다" 로 읽게 된다** — 계측기가 못 본 것을
+ * 대상이 안 한 것으로 읽는 형태다(원장 §5.30). 그래서 **조용히 초록/빨강을 내지 않고 여기서 멈춘다.**
+ *
+ * 고치는 법: `zone-nodes.mjs` 의 `readZones` 를 보라 — **자리마다 칸을 눌러 패널을 읽는다.**
+ * 그 패턴을 그대로 옮기면 된다. 지금 안 옮긴 이유는 실기 관측이 보류라 **검증할 수 없기 때문**이다
+ * (고쳐 놓고 못 돌리면 "고쳤다"가 근거 없는 진술이 된다).
+ */
+if (!process.argv.includes('--i-know-it-is-stale')) {
+  console.log('\n🔴 중단: 이 도구는 REQ-0288(격자→패널) 반영 전이다.');
+  console.log('   모듈·조작이 #zone-detail 로 옮겨가 이 선택자들은 빈 집합을 돌려준다.');
+  console.log('   → zone-nodes.mjs 의 readZones 패턴(자리마다 칸 클릭 → 패널 읽기)으로 고친 뒤 써라.');
+  console.log('   그래도 지금 돌려 보려면: --i-know-it-is-stale\n');
+  process.exit(3);
+}
+
 let client = null;
 try {
   console.log('\n대상: ' + URL_ + '  (서버가 페이지도 WS 도 준다)\n');
