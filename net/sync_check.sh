@@ -38,11 +38,23 @@ for T in "$ROOT/조별과제샘플/server" "$ROOT/조별과제샘플/dev_server"
   if [ "$NEG" = "1" ] && [ "$name" = "dev_server" ]; then
     # 음성 대조 : 공개 API 이름 하나를 일부러 바꿔서 **정말 빨강이 나는지** 본다.
     #   ⚠ 원본은 안 건드린다. 사본 트리를 만들어 거기서만 바꾼다.
+    #
+    # 🔴 **2026-08-20 — 이 검사가 죽어 있었다.** 옛 대상이 `Spot& actuator` 였는데
+    #   조립 API v2 가 `actuator()` 를 없앴다. sed 가 **아무것도 안 바꿨고**,
+    #   그래서 음성 대조가 ✅ 를 냈다 — 무장 해제된 채로.
+    #   → 아래 `cmp` 가 그 상태를 **경보로 만든다.** 대상이 사라지면 조용히 통과하지 않는다.
+    #   🔑 검사 대상이 낡으면 그 검사는 스스로 무장 해제된다 — protected-check.sh 가 밟은 그 부류다.
     mkdir -p "$WORK/neg"
     cp "$T"/*.h "$WORK/neg/"
-    sed 's/Spot& actuator/Spot\& actuatorX/' "$T/parking.h" > "$WORK/neg/parking.h"
+    sed 's/Spot& module(/Spot\& moduleX(/' "$T/parking.h" > "$WORK/neg/parking.h"
+    if cmp -s "$T/parking.h" "$WORK/neg/parking.h"; then
+      echo "🔴🔴 음성 대조가 **무장 해제됐다** — 바꾸려던 이름이 parking.h 에 없다."
+      echo "     이 검사는 지금 **아무것도 안 잰다.** sync_check.sh 의 sed 대상을 고쳐라."
+      rc=1
+      continue
+    fi
     USE="$WORK/neg"
-    echo "   (음성 대조: dev_server 의 actuator 를 actuatorX 로 바꿔서 잰다)"
+    echo "   (음성 대조: dev_server 의 module 을 moduleX 로 바꿔서 잰다)"
   fi
   if c++ -std=c++11 -fsyntax-only -I "$USE" "$WORK/lot.cpp" 2>"$WORK/err"; then
     echo "✅ $name — lot.cpp 가 이 트리의 공개 API 로 컴파일된다"

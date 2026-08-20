@@ -71,7 +71,7 @@ lot.spot("A1").sensor("P1","A1").actuator("P1","LD");   // 조립
 lot.label("P1","LD","안내등");                           // 표시 이름
 lot.control("P1","LD").toggle();                         // 화면 조작 UI
 ```
-설명은 `docs/net/GUIDE-sample.md` 에 있다. **이 파일은 따라 치는 것이고 그 문서는 읽는 것이다.**
+설명은 같은 폴더의 `GUIDE-sample.md` 에 있다. **이 파일은 따라 치는 것이고 그 문서는 읽는 것이다.**
 
 ### 다 만들면 운영으로 옮긴다
 `lot.cpp` **하나만** `조별과제샘플/server/` 로 복사하면 된다 — **그것이 유일한 이음매다.**
