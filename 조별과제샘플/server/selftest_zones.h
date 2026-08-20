@@ -164,6 +164,89 @@
                 }
             }
 
+            // ㊵ 🔴🔴 **점유 변화 콜백** — 상승·하강·첫 관측·**에코 재귀** (REQ-0314)
+            //
+            //   🔴 이 시험의 본체는 마지막 갈래다: **명령 모듈(`LD`)의 에코 비트가 켜져도
+            //     점유가 안 움직여야 한다.** 안 그러면 콜백이 켠 LED 가 또 콜백을 부른다 —
+            //     **무한 토글**이고, 실물에서는 LED 가 깜빡이는 것으로 보인다.
+            //   🔑 그래서 **음성 대조가 이 시험의 값이다.** 양성만 보면 재귀를 못 본다.
+            {
+                ParkingLot L;
+                L.spot("A1").parking().module("P1", "A1").module("P1", "LD");
+                Server t; t.lot_ = &L; t.build_default_zones(); t.init_srv_id();
+                t.park.devid = "P1"; t.park.reg_done = true;
+                t.park.mods.push_back(std::make_pair(std::string("A1"), std::string("IP")));
+                t.park.mods.push_back(std::make_pair(std::string("LD"), std::string("OG")));
+                t.bind_modules(t.park);
+                t.park.mod_bits_n = 2;
+                t.park.mod_bits[0] = 0; t.park.mod_bits[1] = 0;
+
+                long long c0 = t.occ_change_n_;
+                t.notify_occupancy_changes();                    // ① 첫 관측 — 변화가 아니다
+                bool okFirst = (t.occ_change_n_ == c0);
+
+                t.park.mod_bits[0] = 1;                          // ② 센서 0→1 (상승)
+                t.notify_occupancy_changes();
+                bool okRise = (t.occ_change_n_ == c0 + 1);
+
+                t.notify_occupancy_changes();                    // ③ 같은 값 — 변화 없음
+                bool okSame = (t.occ_change_n_ == c0 + 1);
+
+                // 🔴 ④ **음성 대조** — 명령 모듈 `LD` 의 에코 비트만 켠다.
+                //   센서는 그대로다. **점유가 움직이면 안 된다.**
+                t.park.mod_bits[1] = 1;
+                t.notify_occupancy_changes();
+                bool okEcho = (t.occ_change_n_ == c0 + 1);
+
+                t.park.mod_bits[0] = 0;                          // ⑤ 센서 1→0 (하강)
+                t.notify_occupancy_changes();
+                bool okFall = (t.occ_change_n_ == c0 + 2);
+
+                bool ok40 = okFirst && okRise && okSame && okEcho && okFall;
+                std::cout << (ok40 ? "  ✓ " : "  ✗ ")
+                          << "점유 변화 — 첫관측 무(" << (okFirst ? "예" : "아니오")
+                          << ") · 상승(" << (okRise ? "예" : "아니오")
+                          << ") · 같은값 무(" << (okSame ? "예" : "아니오")
+                          << ") · 🔴 **LD 에코로 안 움직임**(" << (okEcho ? "예" : "아니오")
+                          << ") · 하강(" << (okFall ? "예" : "아니오") << ")\n";
+                if (!ok40) bad++;
+            }
+
+            // ㊶ 콜백이 **실제로 불리는가** — 자리 이름과 값이 그대로 오는가
+            //   ⚠ `owner_` 가 없으면 안 부른다(엔진이 아닌 경로에서 콜백이 새는 것을 막는다).
+            //     그래서 여기서 공개 객체를 하나 만들어 물린다.
+            {
+                ParkingLot L;
+                L.spot("A1").parking().module("P1", "A1");
+                ParkingServer ps(L);                   // 콜백 인자로 넘어갈 공개 객체
+                Server t; t.lot_ = &L; t.build_default_zones(); t.init_srv_id();
+                t.park.devid = "P1"; t.park.reg_done = true;
+                t.park.mods.push_back(std::make_pair(std::string("A1"), std::string("IP")));
+                t.bind_modules(t.park);
+                t.park.mod_bits_n = 1; t.park.mod_bits[0] = 0;
+                t.owner_ = &ps;
+                t.occ_cb_ = st_occ_probe;
+                g_st_occ_n = 0; g_st_occ_spot.clear(); g_st_occ_val = false;
+
+                t.notify_occupancy_changes();          // 첫 관측 — 안 불린다
+                bool q0 = (g_st_occ_n == 0);
+                t.park.mod_bits[0] = 1;
+                t.notify_occupancy_changes();          // 상승 — 불린다
+                bool q1 = (g_st_occ_n == 1 && g_st_occ_spot == "A1" && g_st_occ_val == true);
+                t.park.mod_bits[0] = 0;
+                t.notify_occupancy_changes();          // 하강 — 불린다
+                bool q2 = (g_st_occ_n == 2 && g_st_occ_val == false);
+                t.occ_cb_ = 0; t.owner_ = 0;
+
+                bool ok41 = q0 && q1 && q2;
+                std::cout << (ok41 ? "  ✓ " : "  ✗ ")
+                          << "점유 콜백 — 첫관측 0회(" << (q0 ? "예" : "아니오")
+                          << ") · 상승 A1/true(" << (q1 ? "예" : "아니오")
+                          << ") · 하강 false(" << (q2 ? "예" : "아니오")
+                          << ") · 누계 " << g_st_occ_n << "\n";
+                if (!ok41) bad++;
+            }
+
             // ㉕ 🔴 **`state` 봉투와 `actions`** (REQ-0203 4c)
             {
                 Server t; t.build_default_zones(); t.init_srv_id();

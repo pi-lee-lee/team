@@ -27,6 +27,15 @@ static std::string s_line(long seq, const char* occ, const char* res, long long 
     return p + cksum(p);
 }
 
+// 🔴 점유 변화 콜백 탐침 (㊶) — **파일 스코프여야 한다.** 시험 조각은 함수 몸통이라 여기 둔다.
+//   ⚠ 콜백은 함수 포인터라 람다·멤버를 못 쓴다. 그래서 전역 셋으로 받는다.
+static int         g_st_occ_n = 0;
+static std::string g_st_occ_spot;
+static bool        g_st_occ_val = false;
+static void st_occ_probe(ParkingServer&, const std::string& spot, bool occupied) {
+    g_st_occ_n++; g_st_occ_spot = spot; g_st_occ_val = occupied;
+}
+
 static int selftest() {
     int bad = 0;
     // RFC 6455 §1.3 예제 벡터 — SHA-1 과 base64 를 한 번에 검증한다

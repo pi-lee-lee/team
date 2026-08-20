@@ -384,6 +384,65 @@
 
     // 🔑 이 자리의 판정 방식. 조립 표가 안 정했으면 **서버 기본(OR)**.
     //   ⚠ 자리 id 로 찾는다 — 지형 `Zone` 과 조립 표 `Area` 가 같은 id 를 쓴다.
+    // 🔴🔴 **자리의 센서 값을 모으는 유일한 곳.**
+    //   화면 봉투(`state_json`)와 점유 변화 콜백이 **같은 함수**를 쓴다 —
+    //   두 곳에서 따로 세면 판정자가 둘이 되고, 갈리는 순간 어느 쪽이 맞는지 알 수 없다.
+    //
+    // 🔑 **`I` 로 시작하는 모듈만 든다.** 명령 모듈(`O…`)의 **에코 비트는 점유가 아니다.**
+    //   ⚠ 이것이 변화 콜백이 **자기 명령으로 재귀하지 않는 근거다** —
+    //     콜백이 `LD`(OG)를 켜면 그 에코 비트가 오르지만 **여기 안 들어오므로 점유가 안 움직인다.**
+    //     근거를 주석이 아니라 시험으로도 박아 뒀다(음성 대조).
+    void zone_readings(const Zone& z, std::vector<SensorReading>& out,
+                       int& v_known, int& v_total, int& v_ones) const {
+        v_known = v_total = v_ones = 0;
+        for (size_t m = 0; m < z.modules.size(); m++) {
+            const Node* mn = node_by_devid(z.modules[m].first);
+            int mi = -1;
+            if (mn)
+                for (size_t k = 0; k < mn->mods.size(); k++)
+                    if (mn->mods[k].first == z.modules[m].second) { mi = (int)k; break; }
+            if (mi < 0) continue;
+            if (!mn || mn->mods[mi].second.empty() || mn->mods[mi].second[0] != 'I') continue;
+            v_total++;
+            const bool known = (mi < mn->mod_bits_n);
+            const bool val   = known && mn->mod_bits[mi];
+            out.push_back(SensorReading(known, val));
+            if (known) { v_known++; if (val) v_ones++; }
+        }
+    }
+
+    // 자리가 **지금** 찼는가. 판단은 그 자리의 `SpotBehavior` 가 한다.
+    bool zone_occupied_now(const Zone& z) const {
+        std::vector<SensorReading> r; int k = 0, t = 0, o = 0;
+        zone_readings(z, r, k, t, o);
+        return behavior_for(z.id).occupied(r);
+    }
+
+    // 🔴 **점유 변화를 판정하고 기여자 콜백을 부른다.**
+    //
+    //   ⚠ **이 판정은 전에 없었다.** 자리 점유는 `state_json()` 이 직렬화할 때마다 새로 계산했고
+    //     직전 값과 대조하는 코드가 어디에도 없었다(`write_log_if_changed()` 는 **옛 10칸
+    //     `slots[]`** 를 본다 — 새 지형 자리와 다른 것을 센다). 그래서 여기서 처음 만든다.
+    //   🔑 대신 **계산 자체는 새로 만들지 않았다** — `zone_readings()` 하나를 화면과 같이 쓴다.
+    //
+    // 🔴 부르는 자리는 `S` 프레임 처리 안, **하행 flush 보다 먼저**다.
+    //   콜백이 낸 명령이 **그 창에 같이 나가야** 반응이 한 슬롯 빨라진다.
+    //   ⚠ 뒤에 두면 `flush_downq` 를 이미 지나서 **다음 창(1.2초 뒤)** 으로 밀린다.
+    void notify_occupancy_changes() {
+        for (size_t i = 0; i < lot.zones().size(); i++) {
+            const Zone& z = lot.zones()[i];
+            if (z.kind != "parking") continue;       // 일반영역은 점유를 말하지 않는다
+            const bool now = zone_occupied_now(z);
+            std::map<std::string, bool>::iterator it = occ_prev_.find(z.id);
+            if (it == occ_prev_.end()) { occ_prev_[z.id] = now; continue; }  // 첫 관측 — 변화 아님
+            if (it->second == now) continue;
+            it->second = now;
+            occ_change_n_++;                          // 🔑 콜백을 등록 안 해도 센다
+            logf("=", std::string("자리 ") + z.id + " 점유 " + (now ? "→ 찼다" : "→ 비었다"));
+            if (occ_cb_ && owner_) occ_cb_(*owner_, z.id, now);
+        }
+    }
+
     const SpotBehavior& behavior_for(const std::string& zoneId) const {
         if (lot_) {
             const std::vector<ParkingLot::Area>& as = lot_->areas();

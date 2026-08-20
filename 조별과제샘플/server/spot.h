@@ -29,6 +29,14 @@ struct SensorReading {
 //
 // ⚠ **기본 구현을 지우지 마라.** 자리가 자기 구현을 안 주면 이것이 쓰인다 —
 //   지금 모든 자리가 그 경우이고, 그래서 이 단계의 거동 변화가 0 이다.
+class ParkingServer;
+
+// 🔴 **자리 점유가 바뀌면 불린다.** `onCommandResult` 와 같은 계열이다 —
+//   기여자는 훅 하나를 더 배우는 것이 아니라 **같은 모양을 한 번 더 쓴다.**
+//   `occupied` : 바뀐 **뒤**의 값. 상승(비었다→찼다)과 하강(찼다→비었다) **둘 다** 온다
+// ⚠ 서버의 한 박자 안에서 불린다. 오래 걸리는 일을 하지 마라.
+typedef void (*OccupancyFn)(ParkingServer& srv, const std::string& spot, bool occupied);
+
 struct SpotBehavior {
     virtual ~SpotBehavior() {}
 

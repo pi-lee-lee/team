@@ -291,6 +291,15 @@
     CmdResultFn cmd_cb_;
     long long   cb_ok_, cb_rejected_, cb_noanswer_;   // 갈래별 누계. 요약에 싣는다
 
+    // ── 자리 점유 변화 콜백 (`spot.h` 의 `OccupancyFn`) ─────────────────────
+    // 🔑 등록 안 해도 **계수는 센다** — 볼 자리를 선택적인 것에 묶지 않는다.
+    OccupancyFn   occ_cb_;
+    ParkingServer* owner_;                 // 콜백에 넘길 공개 객체. 없으면 콜백을 안 부른다
+    std::map<std::string, bool> occ_prev_; // 자리 id → 직전 점유
+    // 🔴 **키가 없으면 "아직 안 봤다" 이고, 그때는 콜백을 안 부른다.**
+    //   안 그러면 기동 직후 모든 자리가 한 번씩 "변했다"로 불린다 — 그건 변화가 아니라 첫 관측이다.
+    long long occ_change_n_;               // 변화 횟수(상승+하강). 요약에 싣는다
+
     NodeLedger ledger_;
     long long  ledger_new_, ledger_review_;   // 이 인스턴스에서 본 사건 수(요약에 싣는다)
 

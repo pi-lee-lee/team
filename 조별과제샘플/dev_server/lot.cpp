@@ -108,3 +108,24 @@ void onCmdResult(const CmdResult& r) {
     //   ⚠ **로그가 거짓말해도 LED 는 안 한다.** 그게 이 확인이 강한 이유다.
     std::cout << "[명령] " << r.module << " " << r.value << " → " << r.kindName() << "\n";
 }
+
+// ④ 자리 점유가 바뀌면 불린다 — **센서가 말한 변화를 그대로 받는다**   자세히: §점유변화
+//   🔑 **상승·하강 둘 다 온다.** 한쪽만 쓰려면 `occupied` 로 갈라라.
+//   🔑 **첫 관측에서는 안 불린다** — 기동 직후의 값은 변화가 아니라 처음 본 것이다.
+void onOccupancy(ParkingServer& srv, const std::string& spot, bool occupied) {
+    // 🔴 **초음파에 물체가 잡힐 때마다 내장 LED(pin 13)를 토글한다.**
+    //   첫 번째 잡힘 → 켜짐 · 두 번째 잡힘 → 꺼짐 · 세 번째 → 켜짐 …
+    //   ⚠ **잡힐 때(0→1)만 센다.** 물체가 사라질 때(1→0)는 아무것도 안 한다 —
+    //     안 그러면 한 번 지나갈 때 두 번 토글되어 제자리로 돌아온다.
+    if (spot != "A1" || !occupied) return;
+
+    static bool ledOn = false;          // 🔑 `static` — 다음 호출까지 살아 있어야 한다
+    ledOn = !ledOn;
+    srv.send("P1", "LD", ledOn ? 1 : 0);
+
+    // 🔑 **다른 장치에 지시해도 된다** — `send` 의 첫 인자가 `devid` 다.
+    //   srv.send("KIM01", "LD", 1);   ← 남의 아두이노 표시등
+    //
+    // ⚠ **`LD` 를 켜도 이 콜백이 다시 불리지 않는다.** 점유는 `I` 로 시작하는 모듈만 보고
+    //   `LD` 는 `OG`(명령)라서 그 에코 비트가 점유에 안 들어간다. 재귀가 **구조적으로** 없다.
+}

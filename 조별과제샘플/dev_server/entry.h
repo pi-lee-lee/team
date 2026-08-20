@@ -40,7 +40,8 @@ int main(int argc, char** argv) {
         }
 
         ParkingServer srv(lot);
-        srv.onCommandResult(onCmdResult);       // ③ — 기여자가 비워 뒀으면 아무 일도 안 한다
+        srv.onCommandResult(onCmdResult);
+        srv.onOccupancyChanged(onOccupancy);    // ④ — 자리 점유가 바뀔 때       // ③ — 기여자가 비워 뒀으면 아무 일도 안 한다
 
         if (!srv.openPorts()) return 1;
         while (srv.serveOneTick()) {

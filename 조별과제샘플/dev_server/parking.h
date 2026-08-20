@@ -266,6 +266,22 @@ public:
     // ⚠ 이 함수 안에서 오래 걸리는 일을 하지 마라 — 서버의 한 박자 안에서 불린다.
     void onCommandResult(CmdResultFn fn);
 
+    // 🔴 **자리 점유가 바뀌면 불린다** — 센서가 말한 변화를 그대로 받는다.
+    //
+    //   ```
+    //   void onOccupancy(ParkingServer& srv, const std::string& spot, bool occupied) {
+    //       if (occupied) srv.send("P1", "LD", 1);     // 다른 장치에 지시해도 된다
+    //   }
+    //   srv.onOccupancyChanged(onOccupancy);
+    //   ```
+    //
+    // 🔑 **상승·하강 둘 다 온다.** 한쪽만 쓰려면 `occupied` 로 갈라라.
+    // 🔑 **첫 관측에서는 안 불린다** — 기동 직후의 값은 "변화"가 아니라 처음 본 것이다.
+    // ⚠ `parking()` 인 자리에만 온다. 일반영역은 점유를 보고할 의무가 없다.
+    // ⚠ 이 함수 안에서 오래 걸리는 일을 하지 마라 — 서버의 한 박자 안에서 불린다.
+    //   그리고 여기서 낸 명령은 **그 박자의 창에 실려 나간다.**
+    void onOccupancyChanged(OccupancyFn fn);
+
     // 🔑 **장치가 붙어서 등록까지 마쳤나.** 명령을 내기 전에 이것부터 봐라 —
     //   안 붙었으면 `send()` 가 `false` 를 내고 로그에 *"노드 `P1` 를 모른다"* 가 찍힌다.
     //   ⚠ **접속만으로는 부족하다.** 등록(`D`)이 끝나야 모듈 이름을 풀 수 있다.
@@ -314,5 +330,6 @@ private:
 void buildLot(ParkingLot& lot);              // ① 주차장을 조립한다
 void onTick(ParkingServer& srv);             // ② 한 박자마다 — 명령을 여기서 낸다
 void onCmdResult(const CmdResult& r);        // ③ 명령 결과 — 성공 / 거절 / 무응답
+void onOccupancy(ParkingServer& srv, const std::string& spot, bool occupied);  // ④ 점유 변화
 
 #endif  // PARKING_H

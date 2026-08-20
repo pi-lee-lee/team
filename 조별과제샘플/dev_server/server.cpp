@@ -317,6 +317,8 @@ struct ParkingServer::Impl {
 ParkingServer::ParkingServer(const ParkingLot& lot) : p_(new Impl) {
     p_->lot = lot;
     p_->srv.lot_ = &p_->lot;
+    // 🔑 점유 콜백에 넘길 **공개 객체**. 엔진은 자기를 감싼 것을 모르므로 여기서 알려 준다.
+    p_->srv.owner_ = this;
 }
 bool ParkingServer::send(const std::string& devid, const std::string& moduleName, long value) {
     return p_->srv.send_to_module(devid, moduleName, value);
@@ -334,6 +336,7 @@ ParkingServer::BatchResult ParkingServer::Batch::send() {
 int ParkingServer::maxPerBatch() const { return p_->srv.max_per_batch(); }
 long long ParkingServer::nowMs() const { return now_ms(); }
 void ParkingServer::onCommandResult(CmdResultFn fn) { p_->srv.cmd_cb_ = fn; }
+void ParkingServer::onOccupancyChanged(OccupancyFn fn) { p_->srv.occ_cb_ = fn; }
 bool ParkingServer::deviceReady(const std::string& devid) const {
     const Node* n = p_->srv.node_by_devid(devid);
     return n && n->reg_done;
