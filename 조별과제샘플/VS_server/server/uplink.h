@@ -349,7 +349,6 @@
                                     rid_release(drid);
                                 } else ++it;
                             }
-                            gate_want.clear();
                             break;
                         }
                 }
@@ -476,7 +475,7 @@
                 logf("!", std::string("장치가 거절했다(result=3) — ") + p.kind + " " + slot
                           + " rid=" + std::to_string(rid) + ". **재시도는 뜻이 없다**");
             }
-            if (p.ws_fd != BAD_SOCK) send_ack(p.ws_fd, p.browser_rid, slot, result, p.kind, p.top);
+            if (p.ws_fd != BAD_SOCK) send_ack(p.ws_fd, p.browser_rid, slot, result, p.kind);
             // 이음매 1: 직접 호출 → 이벤트. **같은 틱의 drain 이 같은 일을 한다**(2481행).
             // 한 틱에 ACK 가 여러 건 겹치면 기록·화면이 건별 → 1회로 접힌다 — 이미 옮긴
             // 3종과 같은 성질이고, 브라우저가 보는 최종 상태는 같다.

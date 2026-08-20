@@ -1,6 +1,6 @@
 // parking.h — 🔴 **공개 조립 API.** 이 파일만 읽으면 주차장을 만들 수 있어야 한다
 //
-// 사용자 요구(REQ-0272): *"복잡한 구조는 은닉화하여 간단한 구조로 이용 가능해야 한다"*
+// 사용자 요구: *"복잡한 구조는 은닉화하여 간단한 구조로 이용 가능해야 한다"*
 //                        *"코드 작성 시점에 해당 코드의 **흐름이 보인다**"*
 //
 // 그래서 이 헤더의 판정은 둘이다:
@@ -11,20 +11,22 @@
 //   바꿀 수 있다(언제 포트를 열지 · 어떻게 루프를 돌지 · 무엇을 어디에 배치할지) → **밖**
 //   바꿀 수 없다(한 박자 안의 고정 순서 · 등록 결속 · 재전송·격리) → **안**
 //
-// ── 쓰는 법 (이게 전부다) ────────────────────────────────────────────────
+// ── 쓰는 법 ──────────────────────────────────────────────────────────────
 //
 //   void buildLot(ParkingLot& lot) {              // ← `lot.cpp` 에 이 함수만 채운다
-//       lot.spot("A1").sensor("P1","A1").sensor("P1","B1");   // 자리 + 센서 둘(이중화)
-//       lot.gate("E1", Gate::IN);                             // 입구
-//       lot.spot("E1").actuator("P1","DR");                   // 그 입구의 차단봉
+//       lot.spot("A1").at(0,0).parking().label("1번 자리")
+//             .module("P1","A1").module("P1","B1");
 //   }
+//
+// 🔴 **예제는 여기 없다. `EXAMPLES.cpp` 에 있다** — 개념 하나에 함수 하나로,
+//   **컴파일되는 코드**로 들어 있다(자리·모듈 없는 자리·일반영역·내 판정·조작 선언·명령·콜백).
+//   🔑 **주석 안의 예시는 아무 검사도 안 받아서 조용히 낡는다.** 이 헤더의 예시가 실제로
+//     그렇게 낡았었다(없어진 API 를 쓰고 있었다). 그래서 예제를 **컴파일되는 자리로 옮겼다.**
 //
 // 🔴 **`main()` 은 여기 없다.** 포트를 열고 도는 것은 엔진(`entry.h`)이 한다 —
 //   그 순서는 호출자가 못 바꾸므로 드러내 봐야 **지킬 의무만** 생긴다.
-//   srv.closeDown();                            // ③ 요약을 남기고 닫는다
 //
-// ⚠ 순서 요구가 **없다**: `spot` 과 `gate` 는 어느 쪽을 먼저 써도 같다.
-//   `openPorts`→`serveOneTick`→`closeDown` 은 **순서가 아니라 흐름**이다 — 이름이 그것을 말한다.
+// ⚠ 조립에는 **순서 요구가 없다** — 자리를 어느 쪽부터 적어도 같다.
 #ifndef PARKING_H
 #define PARKING_H
 
@@ -39,19 +41,10 @@
 
 class ParkingLot;
 
-// 🔴🔴 **`<windows.h>` 가 `IN` 과 `OUT` 을 *빈 매크로* 로 정의한다** (SAL 주석용).
-//   그래서 `enum Kind { IN, OUT };` 이 `enum Kind { , };` 로 펼쳐져 **컴파일이 깨진다.**
-//
-//   ⚠ **이건 Windows 에서만 나고, 우리는 그 기계가 없다.** 그래서 macOS 에서 재현해 잡았다:
-//       c++ -fsyntax-only -DIN= -DOUT= -x c++ parking.h
-//       → `parking.h:44: error: expected identifier`
-//     🔑 **매크로 충돌은 그 매크로를 흉내 내면 어디서든 재현된다.** 플랫폼이 없어도 잴 수 있다.
-//
-// 🔑 **헤더가 스스로 막는다.** `server.cpp` 쪽에서 `#undef` 하면
-//   **`lot.cpp` 를 다른 순서로 포함하는 곳에서 다시 깨진다** — 기여자의 파일이 그렇다.
-//   > **이름을 가진 헤더가 그 이름을 지킨다.**
-// ⚠ 이름을 바꾸는 대신 매크로를 걷는 이유: `Gate::IN` 은 **기여자가 쓰는 공개 이름**이고
-//   `lot.cpp` 에 이미 적혀 있다. **우리 이름이 남의 매크로에 밀릴 이유가 없다.**
+// 🔴 **`<windows.h>` 대비.** 그것은 `IN`·`OUT` 같은 짧은 이름을 **빈 매크로**로 정의하고,
+//   그러면 우리 이름이 전처리 단계에서 조용히 지워진다(`enum { IN, OUT }` → `enum { , }`).
+//   비용은 두 줄이고, 없앴을 때의 손실은 **다른 플랫폼에서만 나는 빌드 실패**다.
+// 🔑 재현은 그 플랫폼 없이도 된다 — `c++ -fsyntax-only -DIN= -DOUT= parking.h`.
 #ifdef IN
 #undef IN
 #endif
@@ -59,58 +52,48 @@ class ParkingLot;
 #undef OUT
 #endif
 
-class Gate {
-public:
-    enum Kind { IN, OUT };          // 입구 · 출구
-};
-
-// 자리 하나. **센서를 배치하는 것이 유일한 일**이다.
+// 자리 하나. **기여자가 배우는 것은 다섯이다** — `spot` · `at` · `parking` · `label` · `module`.
 class Spot {
 public:
-    // 🔴 **1인자 형태 — "아무 장치나 그 이름을 가진 것"** (원래 있던 것. 지우지 않는다)
-    //   지금 `main.cpp` 의 선언이 전부 이 형태이고, **그것이 안 깨지는 것이 이 개정의 조건**이다.
-    Spot& sensor(const std::string& name);
+    // 🔴 **모듈을 붙인다.** 센서인지 명령인지 **여기서 안 가른다.**
+    //
+    //   ```
+    //   lot.spot("A1").module("P1","A1").module("P1","LD");
+    //   ```
+    // 🔑 **가르지 않는 이유**: **장치가 `kind` 첫 글자로 이미 말한다**(`I` 관측 · `O` 명령).
+    //   서버가 등록(`D`)을 받고 그것으로 가른다. **조립 표에서 또 가를 이유가 없다.**
+    // ⚠ **딸린 결과**: 등록 전에는 **무엇이 센서인지 모른다.** 그래서 그때는 센서 수가 0 이다 —
+    //   **그게 정직한 답이다.** 선언만 보고 세면 장치가 다른 것을 보고해도 안 바뀐다.
+    Spot& module(const std::string& devid, const std::string& name);
+    // 장치가 하나뿐이면 `devid` 를 빼도 된다 — "아무 장치나 그 이름을 가진 것".
+    Spot& module(const std::string& name);
 
-    // 🔴🔴 **2인자 형태 — 어느 장치의 어느 모듈인지 못 박는다** (2026-08-19)
+    // 🔴 **이 자리를 주차영역으로 만든다.** 안 부르면 **일반영역**이다.
     //
-    //   > **`devid` 를 받는 순간 "모듈 이름이 자리 id 와 같아야 한다"는 암묵 규칙이 사라진다.**
+    //   `parking()` 이 **유일하게 엔진 동작을 바꾼다**:
+    //     ① 점유 계산에 든다   ② 예약 대상이다   ③ 옛 격자(폴백)에 든다
+    //   그 밖에는 **엔진이 자리가 무엇인지 몰라도 된다**(사용자 확정).
     //
-    //   ```
-    //   lot.spot("A3").sensor("P2", "왼쪽센서");   // 이름이 자리 id 와 달라도 붙는다
-    //   ```
-    //   `Modules.h` 주석이 경고하던 함정 — *"다른 이름을 쓰면 등록은 성공하고 자리에는
-    //   아무것도 안 붙는다. 오류가 안 뜬다"* — 이 **구조적으로 없어진다.**
-    //
-    //   ⚠ 같은 이름을 여러 장치가 쓸 수 있게 되므로 **`devid` 가 그 구분자다.**
-    //     1인자 형태는 그 구분을 안 하겠다는 선언이다(장치가 하나뿐일 때 편하다).
-    Spot& sensor(const std::string& devid, const std::string& name);
+    // ⚠ **기본값이 "일반영역"인 이유**: 안 적었을 때 **점유·예약이 안 생기는 쪽**이
+    //   조용히 틀리지 않는다. 반대로 두면 입구가 *"비어 있는 주차 자리"* 로 화면에 뜬다.
+    //   > **틀렸을 때 조용한 쪽을 기본값으로 두지 마라.**
+    Spot& parking();
 
-    // 명령을 받는 모듈(차단봉·표시등 등). **점유 판정에 안 쓰인다.**
-    // 🔑 센서와 갈라 두는 이유: `occupied()` 가 받는 것은 **센서뿐**이어야 한다.
-    //   섞이면 차단봉 상태가 자리 점유로 새어 들어간다(명세 §8.1).
-    Spot& actuator(const std::string& devid, const std::string& name);
+    // 화면에 그릴 격자 위치(0-기준 행·열). 🔑 **사용자 인식용이고 엔진은 안 쓴다.**
+    // ⚠ 안 부르면 **선언 순서대로 자동 배치**된다.
+    // ⚠ 겹치면 서버가 **기동 로그에 두 자리 id 를 지목해 말한다. 막지는 않는다** —
+    //   겹침은 표시 문제이고 서버 동작은 멀쩡하다.
+    Spot& at(int row, int col);
 
-    // 🔴🔴 **이 자리의 판정 방식을 갈아끼운다** (2026-08-19)
-    //
-    //   ```
-    //   struct 내판정 : SpotBehavior {
-    //       virtual bool occupied(const std::vector<SensorReading>& s) const {
-    //           return s.size() >= 2 && s[0].known && s[1].known && s[0].value && s[1].value;  // AND
-    //       }
-    //   };
-    //   static 내판정 g_내판정;                       // 🔴 **서버보다 오래 살아야 한다**
-    //   lot.spot("A1").sensor("P1","A1").behavior(g_내판정);
-    //   ```
-    //   안 부르면 **기본(OR)** 이 쓰인다 — 지금 모든 자리가 그 경우다.
-    //
-    // ⚠ **참조를 든다. 사본이 아니다.** 지역 변수를 넘기면 그 함수가 끝나는 순간 죽는다 —
-    //   `static` 이나 전역으로 둬라. **그래서 인자가 `&` 다**(포인터였으면 `new` 를 부르게 된다).
+    // 이 자리의 표시 이름. 안 부르면 화면이 **자리 id** 를 쓴다.
+    Spot& label(const std::string& text);
+
+    // ── 심화(안 써도 된다) ─────────────────────────────────────────────
+    // 🔑 **위 다섯에 안 든다.** 기본 판정으로 충분하면 건너뛰어라.
+    //   이 자리의 점유 판정을 갈아끼운다. 안 부르면 **기본(OR)** 이 쓰인다.
+    // ⚠ **참조를 든다. 사본이 아니다** — `static` 이나 전역으로 둬라.
     Spot& behavior(SpotBehavior& b);
 
-    // 🔴 **이 자리의 표시 이름** (2026-08-20 · 사용자 지시)
-    //   `lot.spot("A1").label("1번 자리");`
-    //   안 부르면 화면이 **자리 id 를 그대로** 쓴다. 그래서 안 써도 된다.
-    Spot& label(const std::string& text);
 private:
     friend class ParkingLot;
     Spot(ParkingLot* lot, std::size_t idx) : lot_(lot), idx_(idx) {}
@@ -118,7 +101,7 @@ private:
     std::size_t idx_;
 };
 
-// 🔴🔴 **모듈 하나의 조작 UI 를 선언한다** (2026-08-20 · 화면 직접 조작)
+// 🔴🔴 **모듈 하나의 조작 UI 를 선언한다** — 화면이 이것을 보고 그린다.
 //
 //   ```
 //   lot.label("P1","LD","안내등");                     // 🔑 이름은 label 이 정한다
@@ -138,7 +121,7 @@ public:
     Control& number(long vmin, long vmax);
     Control& choice();
     // ⚠ `{{1,"열기"},…}` 대신 **연쇄**로 둔 이유: 초기화 리스트는 중괄호를 틀리기 쉽고
-    //   오류 문구가 길다. **`sensor().actuator()` 와 같은 모양**이 기여자에게 낫다.
+    //   오류 문구가 길다. **`module().module()` 과 같은 모양**이 기여자에게 낫다.
     Control& option(long value, const std::string& label);
 private:
     friend class ParkingLot;
@@ -151,13 +134,14 @@ private:
 class ParkingLot {
 public:
     Spot spot(const std::string& id);                    // 주차 자리를 만든다
-    void gate(const std::string& id, Gate::Kind kind);   // 입구/출구를 만든다
+    // 🔴 `gate(id, ...)` 는 없다 —
+    //   입구/출구는 `spot(...).label("입구")` 로 만든다. **자리 종류는 `parking()` 하나로 갈린다.**
 
     // 🔴 조작 UI 선언 (위 `Control` 주석 참조). **같은 (devid,name) 을 다시 부르면 덮어쓴다** —
     //   두 벌이 생기면 화면에 버튼이 둘 뜨고 어느 것이 참인지 아무도 모른다.
     Control control(const std::string& devid, const std::string& name);
 
-    // 🔴🔴 **모듈의 표시 이름** (2026-08-20 · 사용자 지시)
+    // 🔴🔴 **모듈의 표시 이름**
     //   `lot.label("P1", "LD", "안내등");`
     //
     // 🔑 **모듈 종류를 안 가린다 — 센서에도 붙는다.** 그게 이 함수가 생긴 이유다:
@@ -177,14 +161,17 @@ public:
     struct Attach {
         std::string devid;      // "" = **아무 장치나** (1인자 형태)
         std::string name;       // 전선 모듈 이름
-        bool        actuator;   // true = 명령 받는 모듈. **점유 판정에서 빠진다**
-        Attach() : actuator(false) {}
-        Attach(const std::string& d, const std::string& n, bool a)
-            : devid(d), name(n), actuator(a) {}
+        // 🔴 센서/명령을 **여기서 안 가른다** — **장치가 `kind` 첫 글자로 말한다**
+        //   (`I` 관측 · `O` 명령). 선언에서 또 가르면 두 곳이 갈릴 수 있다.
+        //   ⚠ 그래서 **등록 전에는 이 모듈이 센서인지 모른다.** 그게 정직한 상태다.
+        Attach() {}
+        Attach(const std::string& d, const std::string& n) : devid(d), name(n) {}
     };
     struct Area {
         std::string id;
-        std::string kind;                     // "parking" | "entrance" | "exit"
+        // 🔴 **`"parking"` 아니면 `"area"` 둘뿐**이다.
+        std::string kind;
+        int row, col;                         // 🔑 `at()` 이 준 격자 위치. **-1 = 자동 배치**
         // ⚠ 이름이 `sensors` 였다. **센서만 담지 않게 됐으므로 바꿨다** —
         //   담는 것이 바뀌었는데 이름이 그대로면 다음 사람이 센서만 있다고 읽는다.
         std::vector<Attach> modules;
@@ -192,7 +179,7 @@ public:
         // 🔑 `0` 이면 **서버의 기본 판정**을 쓴다. 자리마다 다른 것을 꽂을 수 있다.
         //   ⚠ 소유하지 않는다 — 호출자가 준 것이 살아 있어야 한다(위 `behavior()` 주석).
         SpotBehavior* behavior;
-        Area() : behavior(0) {}
+        Area() : row(-1), col(-1), behavior(0) {}
     };
     const std::vector<Area>& areas() const { return areas_; }
     const std::vector<ControlDecl>& controls() const { return controls_; }
@@ -214,7 +201,7 @@ public:
     explicit ParkingServer(const ParkingLot& lot);
     ~ParkingServer();
 
-    // 🔴 **모듈에 값을 보낸다** (2026-08-19)
+    // 🔴 **모듈에 값을 보낸다**
     //   `srv.send("P1", "LCD1", 1234567);`   ← 7자리 숫자
     //   `srv.send("P1", "LED1", 1);`         ← on/off
     //   `srv.send("P1", "DOOR", 2);`         ← 동작 — **뜻은 기여자가 정한 표**

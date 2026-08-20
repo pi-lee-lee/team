@@ -54,6 +54,7 @@
     <None Include="README.md" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="EXAMPLES.cpp" />
     <ClCompile Include="lot.cpp" />
     <ClCompile Include="server.cpp" />
   </ItemGroup>

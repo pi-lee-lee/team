@@ -112,6 +112,9 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="EXAMPLES.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
     <ClCompile Include="lot.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
