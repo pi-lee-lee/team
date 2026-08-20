@@ -74,7 +74,6 @@ uint8_t __heap_start = 0;
 //     `CommandRouter` 가 "아무도 안 쓰는 경로"가 되어 **검증이 사라진다.**
 //   🔑 §"시험이 실기가 안 하는 준비를 대신해 주면 실기만 빈다" 의 반대다 —
 //     여기서는 **시험이 실기가 *끄고 나간* 경로를 대신 밟아 준다.** 그 차이를 알고 켠다.
-#define VIRTUAL_MODULES 1
 // 🔴 **시험 하네스가 자기 모듈을 가진다** — `client.ino` 에 시험용 `#if` 를 두지 않으려고.
 //   사용자 지시로 샘플은 **LED 하나**만 남았는데, 그러면 명령 경로(거절 로그·에코·묶음 하행)를
 //   밟을 대상이 사라진다. 그 경로들은 **오늘 실제로 결함을 잡은** 시험이라 버릴 수 없다.
@@ -1216,7 +1215,7 @@ int main() {
     node.testArmed = false;
     // 🔴 가상 차단봉을 **닫힌 상태로 고정**한다 — 안 하면 slotNo 에 따라 값이 흔들려
     //   이 시험이 비결정적이 된다(자율 토글이 slotNo 를 본다).
-    gates.manual = true; gates.state = 0;
+    // 🔑 가상 차단봉이 없어져 자율 토글을 고정할 것이 없다(옛 판은 여기서 gates 를 잠갔다).
     char buf[64];
     uint8_t n = buildStatus(buf, sizeof buf);
     printf("      S = %s   (%u B)\n", buf, (unsigned)n);
@@ -1407,7 +1406,7 @@ int main() {
     // ✏️ 2026-08-19 — 가상 모듈이 들어와 `moduleCount() > sensorCount()` 이 됐다
     ok(moduleCount() >= sensorCount(),
                             "★★ 표가 실물 자리를 전부 포함한다");
-    ok(MODULE_N == 8,       "★ 표 길이가 8 이다 (센서 2 + 명령 4 + 가상 2)");
+    ok(MODULE_N == 6,       "★ 표 길이가 6 이다 (센서 2 + 명령 4). 🔑 가상 차단봉은 없앴다");
 
     // ① 🔴 **이름 열 개가 서버의 자리 id 와 같아야 한다** (socket 통보 2026-08-18)
     //   서버는 `D,<name>,<kind>` 의 **name 이 자리 id 와 같으면** 그 자리에 붙인다.
@@ -1420,7 +1419,9 @@ int main() {
     static const char* EXPECT[MODULE_CAP] = {"A1","B1"};   // 🔑 크기는 상한. 값은 둘뿐이다
     // ⚠ **실물 열 개만 본다** — 가상 모듈(E1·X1)은 아래에서 따로 검사한다
     bool allName = true;
-    for (uint8_t i = 0; i < MODULE_N; i++) {
+    // 🔴 **센서만 돈다.** `EXPECT` 는 센서 이름 둘이다 — `MODULE_N` 까지 돌면
+    //   `EXPECT[2]` 가 널이고 `strcmp` 가 그것을 읽어 죽는다(실제로 그렇게 죽었다).
+    for (uint8_t i = 0; i < sensorCount(); i++) {
       char nm[4]; moduleNameOf(i, nm);
       if (strcmp(nm, EXPECT[i]) != 0) { allName = false;
         printf("      🔴 i=%u: 표 '%s' 대 기대 '%s'\n", i, nm, EXPECT[i]); }
@@ -1431,10 +1432,13 @@ int main() {
     // ⚠ **실물 범위(sensorCount())까지만 돈다** — 가상 모듈은 핀이 없고
     //   `SLOT_PIN[]` 은 크기가 `sensorCount()` 이라 그 밖은 배열 밖 읽기다.
     bool allPin = true;
-    for (uint8_t i = 0; i < MODULE_N; i++)
-      if (pgm_read_byte(&MODULE_TABLE[i].pin) != modPin(i)) { allPin = false;
-        printf("      🔴 i=%u: 표 핀 %u 대 SLOT_PIN %u\n", i,
-               pgm_read_byte(&MODULE_TABLE[i].pin), modPin(i)); }
+    // 🔴 **기대값을 손으로 박는다.** 옛 판은 `표의 pin` 과 `modPin(i)` 를 비교했는데
+    //   `modPin` 이 그 표를 읽는 유일한 경로이므로 **자기끼리 대조**였다 — 늘 통과한다.
+    //   지금 묻는 것은 *"`setup()` 의 `.pin(...)` 이 실제로 그 값을 넣었나"* 다.
+    const uint8_t WANT[] = { 2, 9, (uint8_t)LED_BUILTIN, PIN_NONE };
+    for (uint8_t i = 0; i < 4; i++)
+      if (modPin(i) != WANT[i]) { allPin = false;
+        printf("      🔴 i=%u: 핀 %u · 기대 %u\n", i, modPin(i), WANT[i]); }
     ok(allPin,              "★★ 표의 핀이 SLOT_PIN 과 전부 같다 (이행 중 두 표가 공존한다)");
 
     // ③ 🔴 **전선에 나가는 바이트가 그대로인가** — 이 축의 최종 판정이다
@@ -1526,241 +1530,6 @@ int main() {
   //
   // ⚠ **새 기능을 밟는 시험이 하나도 없었다.** 기존 218 PASS 는 `n=12` 로 반응한 것뿐이고
   //   `G` 경로·자율 정지·에코는 **아무도 안 보고 있었다.** 오늘 세 번 밟은 그 형태다.
-  printf("\n[36] 가상 차단봉과 G 조작 명령\n");
-  {
-    wifi.refusePrompt = false;
-    gates.manual = false; gates.state = 0;
-    ackQ.clearCache(); ackQ.clearQueue();
-    node.occMask = 0; node.resMask = 0; node.testArmed = false;
-
-    // 🔴 **미등록 상태에서 먼저 확인한다** (2026-08-19 · 콜백 경로 도입).
-    //   `G` 는 이제 `CommandRouter` 를 탄다 — **등록이 없으면 `result=3`(수행 불가)** 이다.
-    //   ⚠ 이 시험이 없으면 "등록을 잊어도 조용히 성공하는" 회귀를 못 잡는다.
-    {
-      slotNo = 0;
-      char g0[] = "G,900,10,1,";  appendChecksum(g0, (uint8_t)strlen(g0));
-      handleFrameLine(g0);
-      const int8_t h0 = ackQ.find(900);
-      ok(h0 >= 0 && ackQ.at(h0).result == 3,
-                            "★★ **등록 없으면 result=3** — 조용히 성공하지 않는다");
-      ackQ.clearCache(); ackQ.clearQueue();
-    }
-
-    // 🔴 이제 `setup()` 과 **같은 등록**을 한다. 아래 시험들은 **콜백 경로로 도는 것**을 본다.
-    //   ⚠ 옛 판은 `G` 처리 안에 가상 차단봉이 하드코딩돼 있었다 — 지금은 등록이 그것을 정한다.
-    ok(router.on("E1", gateE1), "★★ E1 핸들러 등록 (이름→idx 를 라우터가 푼다)");
-    ok(router.on("X1", gateX1), "★★ X1 핸들러 등록");
-    ok(!router.on("ZZ", gateE1), "★★ 표에 없는 이름은 **false** — 조용히 무시하지 않는다");
-
-    // ── 🔓 **샘플 액추에이터 셋이 실제로 도는가** — 명령 왕복 세 꼴 ──────────────
-    //   🔴 컴파일만 되는 것으로는 부족하다. **전선에서 들어온 `G` 가 이 핸들러에 닿는가**를 본다.
-    //   표 순서: A1(0) B1(1) **LD(2) LC(3) DR(4)** E1(5) X1(6)
-    {
-      ok(router.on("LD", cmdLed),  "★★ LD 등록 (① on/off)");
-      ok(router.on("LC", cmdLcd),  "★★ LC 등록 (② 7자리 숫자)");
-      ok(router.on("DR", cmdDoor), "★★ DR 등록 (③ 동작 명령)");
-      ok(router.on("L2", cmdL2), "★★ L2 등록 — 🔑 **샘플의 핸들러**를 그대로 쓴다(덮어쓰지 않는다)");
-
-      // 🔴🔴 **이 시험이 `setup()` 과 갈라지지 않게 하는 단언이다.**
-      //   시험은 `setup()` 을 안 부르고 **여기서 직접 등록**한다. 그래서 `setup()` 에
-      //   `router.on` 을 하나 빠뜨려도 시험은 통과한다 — §"시험 경로 ≠ 실기 경로".
-      //   ⚠ 실제로 그렇게 됐다: `L2` 를 표에 넣고 `setup()` 에만 등록했더니
-      //     묶음 시험에서 **`등록 없음`** 으로 거절됐다.
-      //   🔑 그래서 **"명령 가능한 모듈은 전부 핸들러가 있다"** 를 불변식으로 건다.
-      //     새 `O*` 모듈을 표에 넣고 등록을 잊으면 **여기가 깨진다.**
-      {
-        bool everyOhasFn = true;
-        for (uint8_t i = 0; i < MODULE_N; i++) {
-          char k4[4]; moduleKindOf(i, k4);
-          if (k4[0] == 'O' && !router.has(i)) {
-            everyOhasFn = false;
-            char n4[4]; moduleNameOf(i, n4);
-            printf("      🔴 %s(idx %u · kind %s) 에 핸들러가 없다\n", n4, i, k4);
-          }
-        }
-        ok(everyOhasFn,     "★★★ **명령 가능한(O*) 모듈은 전부 핸들러가 있다**");
-      }
-
-      char gg[28];
-      // ① on/off — 핀이 실제로 바뀌는가
-      ackQ.clearCache(); ackQ.clearQueue();
-      snprintf(gg, sizeof gg, "G,401,2,1,"); appendChecksum(gg, (uint8_t)strlen(gg));
-      handleFrameLine(gg);
-      ok(g_pinLevel[LED_BUILTIN] == HIGH, "★★ ① LD 1 → 핀이 HIGH 다 (콜백이 실제로 돌았다)");
-      snprintf(gg, sizeof gg, "G,402,2,0,"); appendChecksum(gg, (uint8_t)strlen(gg));
-      handleFrameLine(gg);
-      ok(g_pinLevel[LED_BUILTIN] == LOW,  "★★ ① LD 0 → 핀이 LOW 다");
-
-      // ② 🔴 **7자리 숫자** — 이 시험이 `parseU32` 의 존재 이유다.
-      //   옛 파서는 16비트라 65,535 를 넘으면 `result=3` 이 나갔다. 7자리는 못 들어왔다.
-      ackQ.clearCache(); ackQ.clearQueue();
-      snprintf(gg, sizeof gg, "G,403,4,1234567,"); appendChecksum(gg, (uint8_t)strlen(gg));
-      handleFrameLine(gg);
-      { int8_t h = ackQ.find(403);
-        ok(h >= 0 && ackQ.at(h).result == 0,
-                            "★★ ② 7자리(1234567)가 그대로 들어와 성공한다 — 16비트였으면 3 이다"); }
-      // 상한 밖은 거절한다 — **핸들러가 스스로 판단한 거절**이지 파서 실패가 아니다
-      ackQ.clearCache(); ackQ.clearQueue();
-      snprintf(gg, sizeof gg, "G,404,4,10000000,"); appendChecksum(gg, (uint8_t)strlen(gg));
-      handleFrameLine(gg);
-      { int8_t h = ackQ.find(404);
-        ok(h >= 0 && ackQ.at(h).result == 3,
-                            "★★ ② 8자리는 result=3 — 표시할 수 없는 값을 거절한다"); }
-
-      // ③ 동작 명령 — **표에 있는 값은 성공, 없는 값은 거절**
-      ackQ.clearCache(); ackQ.clearQueue();
-      snprintf(gg, sizeof gg, "G,405,5,1,"); appendChecksum(gg, (uint8_t)strlen(gg));
-      handleFrameLine(gg);
-      ok(g_pinLevel[PIN_SAMPLE_DOOR] == HIGH, "★★ ③ DR 1(열기) → 핀이 HIGH 다");
-      { int8_t h = ackQ.find(405);
-        ok(h >= 0 && ackQ.at(h).result == 0, "★★ ③ 표에 있는 값은 result=0"); }
-      ackQ.clearCache(); ackQ.clearQueue();
-      // 🔴 **표에 없는 값**. 여기서 0 이 나오면 "조용히 성공"이라 사람이 원인을 못 찾는다
-      snprintf(gg, sizeof gg, "G,406,5,9,"); appendChecksum(gg, (uint8_t)strlen(gg));
-      handleFrameLine(gg);
-      { int8_t h = ackQ.find(406);
-        ok(h >= 0 && ackQ.at(h).result == 3,
-                            "★★ ③ 표에 **없는** 값(9)은 result=3 — 조용히 성공하지 않는다"); }
-      ok(g_pinLevel[PIN_SAMPLE_DOOR] == HIGH,
-                            "★★ ③ 거절된 명령은 **상태를 안 바꾼다** (열린 채 그대로다)");
-
-      // ── 🔴 **에코** — 서버가 "명령이 먹었나"를 아는 비트. 전선 비용 0B ──────────
-      //   표 순서: A1(0) B1(1) LD(2) LC(3) DR(4) E1(5) X1(6)
-      ok((router.echoMask() & (1u << 5)) != 0,
-                            "★★ DR 열기(1) 뒤 에코 비트가 선다");
-      ok((router.echoMask() & (1u << 2)) == 0,
-                            "★★ LD 는 마지막이 0(끔)이라 에코가 내려가 있다");
-      ok((router.echoMask() & (1u << 4)) != 0,
-                            "★★ LC 는 마지막이 1234567 이라 에코가 서 있다 (0 이 아니다)");
-      // 🔴 **거절된 명령은 에코를 안 바꾼다** — 위 `G,406,4,9` 가 거절됐고 DR 은 열린 채다
-      ok((router.echoMask() & (1u << 5)) != 0,
-                            "★★ 거절된 명령이 에코를 **뒤집지 않는다**");
-
-      // 🔴🔴 **이 시험이 `echoIs()` 의 존재 이유다.**
-      //   DR 의 명령표는 `1=열기 2=닫기` 다. 기본 규약(`arg != 0`)만 쓰면 **닫기(2)도 0 이 아니라서
-      //   에코가 켜진 채**로 남는다 — 문은 닫혔는데 서버는 열린 줄 안다. 조용히 틀린 자료다.
-      ackQ.clearCache(); ackQ.clearQueue();
-      snprintf(gg, sizeof gg, "G,407,5,2,"); appendChecksum(gg, (uint8_t)strlen(gg));
-      handleFrameLine(gg);
-      ok(g_pinLevel[PIN_SAMPLE_DOOR] == LOW, "★ DR 닫기(2)가 핀을 내린다");
-      ok((router.echoMask() & (1u << 5)) == 0,
-                            "★★ **닫기(2)면 에코가 내려간다** — 0 이 아닌 값인데도 (echoIs 가 정한다)");
-
-      // 나머지도 내려 두고 뒤 시험(가상 차단봉)이 자기 비트만 보게 한다
-      ackQ.clearCache(); ackQ.clearQueue();
-      snprintf(gg, sizeof gg, "G,408,4,0,"); appendChecksum(gg, (uint8_t)strlen(gg));
-      handleFrameLine(gg);
-      ok(router.echoMask() == 0,
-                            "★★ 전부 내리면 에코 마스크가 0 이다 (센서 비트를 안 건드린다)");
-
-      // 🔴 **센서 이름에는 명령 핸들러가 안 붙는다** — 붙으면 에코 비트가 **실제 점유 비트와 겹친다**
-      ok(!router.on("A1", cmdLed),
-                            "★★ 센서(kind I*)에는 명령 핸들러를 못 붙인다 — 에코가 점유와 겹친다");
-      ok(router.on("DR", cmdDoor),
-                            "★ 액추에이터(kind O*)에는 붙는다 (위 거절이 이름 탓이 아님을 보인다)");
-      ackQ.clearCache(); ackQ.clearQueue();
-    }
-
-    // ① 등록에 가상 모듈이 실린다 — 이름은 자리 id · kind 에 V 접미
-    char rbuf[BATCH_CAP + 1];
-    buildRegistration(rbuf, sizeof rbuf);
-    // 🔴 REQ-0271 — `OBV` → `OB`. **모의/실물 구분을 전선에서 없앴다**(사용자 확정).
-    //   ⚠ **`OBV` 가 안 나오는 것**도 같이 단언한다 — 긍정형만 두면 옛 값이 남아도 통과한다.
-    ok(strstr(rbuf, "D,E1,OB,")  != NULL, "★★ E1 이 OB(차단봉)로 선언된다");
-    ok(strstr(rbuf, "D,X1,OB,")  != NULL, "★★ X1 도 선언된다");
-    ok(strstr(rbuf, "OBV")       == NULL, "★★ 전선에 OBV 가 하나도 없다 (V 접미 제거 확인)");
-    ok(strstr(rbuf, "D,A1,IP,")  != NULL, "★ 실물 모듈은 그대로다 (V 없음)");
-
-    // ② 자율 모드 — slotNo 로 결정적으로 토글한다. **무작위가 아니다**
-    slotNo = 0;  bool e0 = gates.isOpen(0, slotNo), x0 = gates.isOpen(1, slotNo);
-    slotNo = 10; bool e1 = gates.isOpen(0, slotNo);
-    slotNo = 7;  bool x1 = gates.isOpen(1, slotNo);
-    ok(e0 && !e1,           "★★ E1 이 주기 20 으로 토글한다 (0→열림 · 10→닫힘)");
-    ok(x0 && !x1,           "★★ X1 은 주기 14 로 토글한다 — **서로 소라 조합이 다 나온다**");
-    slotNo = 0;
-    ok(gates.isOpen(0, slotNo) == e0,  "★ 같은 slotNo 면 같은 값이다 (결정적 · 재현 가능)");
-
-    // ③ 🔴 `G` 명령 — idx 6 = E1. 표 순서: A1(0) B1(1) LD(2) L2(3) LC(4) DR(5) E1(6) X1(7)
-    char g[24]; snprintf(g, sizeof g, "G,301,6,0,"); appendChecksum(g, (uint8_t)strlen(g));
-    handleFrameLine(g);
-    ok(gates.manual,         "★★ 첫 명령이 자율 토글을 **영구 정지**시킨다");
-    ok(!gates.isOpen(0, slotNo),       "★★ op=0 이면 닫힌다");
-    slotNo = 0;
-    ok(!gates.isOpen(0, slotNo),       "★★ 자율 주기가 와도 안 열린다 — **명령이 되돌려지지 않는다**");
-
-    snprintf(g, sizeof g, "G,302,6,1,"); appendChecksum(g, (uint8_t)strlen(g));
-    handleFrameLine(g);
-    ok(gates.isOpen(0, slotNo),        "★★ op=1 이면 열린다");
-
-    // ④ 🔴 에코 — occ 비트 10 에 실려 나간다. **완료 판정이 이걸로 이뤄진다**
-    char sbuf[64]; buildStatus(sbuf, sizeof sbuf);
-    printf("      S(E1 열림) = %s\n", sbuf);
-    {
-      // ✏️ 기대가 "002" 였는데 실제는 "003" 이다. **코드가 맞고 시험이 틀렸다:**
-      //   자율을 굳힌 시점이 `slotNo=0` 이라 **X1 도 열린 상태로 굳었다.**
-      //   슬롯10 → 비트 1 · 슬롯11 → 비트 0 → 둘 다 열림 = 0b…011 = "003"
-      // n=8 : E1(idx6) → 비트 1 · X1(idx7) → 비트 0 → 둘 다 열림 = 0b00000011 = "03"
-      ok(sFieldIs(sbuf, 2, "03"),
-                            "★★ E1·X1 이 열린 것이 occ 칸으로 나간다 (에코가 완료를 말한다)");
-      // 🔴 X1 만 닫아서 **비트가 따로 움직이는지** 본다 — 하나로 뭉쳐 있으면 못 가른다
-      char g2[24]; snprintf(g2, sizeof g2, "G,305,7,0,"); appendChecksum(g2, (uint8_t)strlen(g2));
-      handleFrameLine(g2);
-      char sb2[64]; buildStatus(sb2, sizeof sb2);
-      printf("      S(E1 열림·X1 닫힘) = %s\n", sb2);
-      ok(sFieldIs(sb2, 2, "02"),
-                            "★★ X1 만 닫으면 occ 칸이 02 — 두 비트가 **독립으로** 움직인다");
-    }
-
-    // ⑤ 🔴 모르는 idx — **조용히 안 버린다. 거절도 ACK 이 온다**
-    ackQ.clearQueue();
-    snprintf(g, sizeof g, "G,303,99,1,"); appendChecksum(g, (uint8_t)strlen(g));
-    handleFrameLine(g);
-    ok(ackQ.pending() == 1,      "★★ 모르는 idx 도 ACK 를 보낸다 (ack_timeout 을 안 만든다)");
-    { int8_t h = ackQ.find(303);
-      ok(h >= 0 && ackQ.at(h).result == 3,
-                            "★★ result=3 (수행할 수 없다) — 새 코드를 안 만들었다"); }
-
-    // ⑥ 실물 자리를 idx 로 조작하려 하면 거절 — 차단봉이 아니다
-    snprintf(g, sizeof g, "G,304,0,1,"); appendChecksum(g, (uint8_t)strlen(g));
-    handleFrameLine(g);
-    { int8_t h = ackQ.find(304);
-      ok(h >= 0 && ackQ.at(h).result == 3,
-                            "★★ 실물 센서 자리(idx 0 = A1)는 조작 대상이 아니다"); }
-
-    // ⑦ 멱등 — 같은 rid 를 다시 받으면 같은 답
-    ackQ.clearQueue();
-    snprintf(g, sizeof g, "G,302,6,0,"); appendChecksum(g, (uint8_t)strlen(g));
-    handleFrameLine(g);
-    ok(gates.isOpen(0, slotNo),        "★★ 같은 rid 는 상태를 다시 안 바꾼다 (열린 채 유지)");
-    ok(ackQ.pending() == 1,      "★ 그래도 ACK 는 다시 보낸다");
-
-    // 🔴 **G 의 ACK 가 전선에서 실제로 어떻게 보이나** — socket 이 명세에 적을 값이다.
-    //   ⚠ "코드가 이렇게 생겼다"가 아니라 **나가는 바이트로** 확인한다.
-    {
-      // ⚠ **조건부 ok 를 쓰지 않는다.** 조건이 거짓이면 조용히 아무것도 안 하고
-      //   PASS 수만 그대로여서 **검사된 것처럼 보인다.**
-      wifi.refusePrompt = false;
-      awaitingSendOk = false; sendOkT1Passed = false; inSend = false;
-      netOnline = true; lastSendEndAt = 0;
-      regPending = false; regAfterS = false;
-      ackQ.clearQueue();
-      ackQ.clearCache();
-      ackQ.put(401, 'G', '1', 0);       // idx 11 → '1' (= 11 % 10)
-      ackQ.push(401);
-      size_t before2 = wifi.sentLines.size();
-      uint8_t aa = 0; uint16_t bb = 0;
-      const bool sent2 = sendSlotBatch(&aa, &bb);
-      ok(sent2 && wifi.sentLines.size() == before2 + 1,
-                            "★ G 의 ACK 가 실린 배치가 나갔다");
-      const std::string& ln = wifi.sentLines.back();
-      printf("      G 의 ACK 전선 = %s\n", ln.c_str());
-      ok(ln.find("A,401,G1,0,") != std::string::npos,
-                            "★★ 전선 형식이 A,<rid>,G<d>,<result>, 다 (d = idx %% 10)");
-      { char sk[] = "SEND OK"; handleLine(sk); }
-    }
-
-    gates.manual = false; gates.state = 0; node.occMask = 0;
-  }
 
   // ── [37] 시뮬 점유가 지형과 맞는다 — A_i 와 B_i 는 같은 자리다 (REQ-0270) ──────
   //   🔴 **한쪽만 움직이면 서버가 한 자리에서 모순된 두 값을 본다.** socket 의 `센서갈림` 이
@@ -1785,11 +1554,13 @@ int main() {
 
     // 핀이 표에서 온다
     bool pinsMatch = true;
-    for (uint8_t i = 0; i < MODULE_N; i++)
-      if (modPin(i) != pgm_read_byte(&MODULE_TABLE[i].pin)) pinsMatch = false;
-    ok(pinsMatch,           "★★ modPin() 이 표의 `pin` 칸을 그대로 돌려준다");
-    ok(modPin(sensorCount()) == PIN_NONE,
-                            "★★ 센서 범위 밖은 PIN_NONE — 범위 가드가 산다");
+    // 🔴 `modPin(i)` 와 표를 비교하면 **자기끼리 대조**다(늘 통과한다). 리터럴로 묻는다.
+    if (!(modPin(0) == 2 && modPin(1) == 9)) pinsMatch = false;
+    ok(pinsMatch,           "★★ `.pin(2)` · `.pin(9)` 가 실제로 그 핀을 넣었다");
+    // 🔑 옛 판은 "센서 범위 밖"(= `SENSOR_N` 이후)을 물었다. 지금은 센서가 표 어디에 있어도
+    //   되므로 그 경계가 없다 — 남은 경계는 **모듈 범위 밖**이다.
+    ok(modPin(MODULE_N) == PIN_NONE,
+                            "★★ 모듈 범위 밖은 PIN_NONE — 범위 가드가 산다");
 
     // 자리 토큰(전선 ACK 이 되비추는 두 글자)이 표의 이름에서 온다
     ok(slotName0(0) == (char)pgm_read_byte(&MODULE_TABLE[0].name[0]) &&
@@ -1811,8 +1582,16 @@ int main() {
     // 🔴 이 장치는 **시뮬 점유 상태를 갖지 않는다.** 핀이 없으면 늘 0 이다 —
     //   가짜 점유를 만들지 않는다. 차 없이 시험할 수단은 오버라이드(`T` 프레임)다.
     node.testArmed = false; node.ovrActive = 0;
-    ok(node.readSensor(sensorCount()) == 0,
-                            "★★ 핀 없는 칸은 0 이다 (장치가 점유를 지어내지 않는다)");
+    // 🔴 지금 구성에는 **핀 없는 센서가 없다**(둘 다 핀을 적었다). 하나 만들어 묻고 되돌린다 —
+    //   ⚠ 안 되돌리면 뒤 시험의 지형 전제가 오염된다(그것으로 한 번 죽었다).
+    {
+      node.sensor("ZS");                     // `.pin()` 을 안 부른다 = 핀 없는 센서
+      const uint8_t k = (uint8_t)(MODULE_N - 1);
+      ok(modPin(k) == PIN_NONE && isSensor(k), "★ 사전 조건: 핀 없는 센서 칸을 만들었다");
+      ok(node.readSensor(k) == 0,
+                            "★★ 핀도 훅도 없는 센서는 0 이다 (장치가 점유를 지어내지 않는다)");
+      MODULE_N--;                            // 되돌린다
+    }
   }
 
   // ── [38] 🔓 센서 읽기 훅 — **샘플 초음파 예시를 실제로 부른다** ──────────────
@@ -2164,7 +1943,10 @@ int main() {
     //   🔑 그래서 이 검사가 옛 판보다 **강해졌다** — 옛 판은 핸들러만 지웠고 표는 컴파일 상수라
     //     "정말 `setup()` 이 만든 것인가" 를 물을 수 없었다. 지금은 표까지 비우고 다시 만든다.
     MODULE_N = 0; modOverflowed = 0;
+    // 🔑 **진짜 음성 대조는 여기다** — 비운 직후에는 아무것도 없어야 한다.
+    ok(MODULE_N == 0,       "★ 음성 대조: 표를 비우면 모듈이 0 이다 (이 시험이 실제로 돈다)");
 
+    setup();                                       // 🔴 실기가 부르는 그 함수
     // ⓐ 표가 기본이다 — 등록 호출이 **0회**인 상태에서 `LD` 가 명령을 받는다
     int8_t ldIdx = -1, senIdx = -1;
     for (uint8_t k = 0; k < MODULE_N; k++) {
@@ -2180,9 +1962,7 @@ int main() {
     // ⓑ 🔴 **음성 대조** — 표에 핸들러를 안 적은 모듈은 여전히 없다.
     //   이게 없으면 `has()` 가 늘 true 를 내는 것과 구별이 안 된다.
     ok(senIdx >= 0 && !router.has((uint8_t)senIdx),
-                            "★★★ 표에 `cmd` 를 안 적은 센서는 명령을 못 받는다 (음성 대조)");
-
-    setup();                                       // 🔴 실기가 부르는 그 함수
+                            "★★★ 표에 `cmd` 를 안 적은 센서는 명령을 못 받는다 (음성 대조)");                                       // 🔴 실기가 부르는 그 함수
 
     // ① 🔴 **샘플이 붙이는 것** — 지금 샘플은 `LD` 하나다(사용자 지시).
     //   이것이 *"콜백이 주석이 아니라 컴파일되어 돈다"* 의 전부다.
@@ -2197,19 +1977,23 @@ int main() {
                             "★★★ **setup() 이 LD 에 핸들러를 붙인다** (주석이 아니다)");
     }
 
-    // ② 🔴 **경계** — 시험이 늘린 모듈(LC·DR·L2)은 `setup()` 이 **안** 붙인다.
-    //   그것들은 시험 하네스 것이다. 여기가 갈리면 "샘플에 있다"의 뜻이 흐려진다.
+    // ② 🔴 **경계** — 전제가 뒤집혔다.
+    //   옛 판: 확장점이 **표(자료)** 라 `setup()` 이 시험 모듈을 안 붙였다 → "안 붙인다" 를 검사했다
+    //   지금: 확장점이 **`setup()` 안의 등록 줄** 이라 `setup()` 이 붙인다. 그것이 설계다
+    //   🔑 그래서 묻는 것을 바꾼다: **경계는 "누가 붙이나" 가 아니라 "어디에 붙나" 다** —
+    //     시험 모듈은 샘플 뒤에 온다. 샘플 인덱스(전선 `idx`)를 밀지 않는다는 것이 경계다
     {
-      bool extraUntouched = true;
-      // ⚠ `L2` 는 **샘플이 다시 가져갔다**(화면 입력 칸). 시험용은 `LC`·`DR` 둘이다.
-      for (const char* nm : {"LC", "DR"}) {
-        for (uint8_t k = 0; k < MODULE_N; k++) {
-          char n4[4]; moduleNameOf(k, n4);
-          if (strcmp(n4, nm) == 0 && router.has(k)) { extraUntouched = false;
-            printf("      🔴 %s 를 setup() 이 붙였다 — 샘플에 새 나갔다\n", nm); }
-        }
+      int8_t lastSample = -1, firstExtra = 127;
+      for (uint8_t k = 0; k < MODULE_N; k++) {
+        char n4[4]; moduleNameOf(k, n4);
+        if (strcmp(n4, "A1") == 0 || strcmp(n4, "B1") == 0 ||
+            strcmp(n4, "LD") == 0 || strcmp(n4, "L2") == 0) lastSample = (int8_t)k;
+        if (strcmp(n4, "LC") == 0 || strcmp(n4, "DR") == 0)
+          if ((int8_t)k < firstExtra) firstExtra = (int8_t)k;
       }
-      ok(extraUntouched,    "★★★ 시험용 모듈은 `setup()` 이 **안 붙인다** (경계가 산다)");
+      ok(lastSample >= 0 && firstExtra < 127, "★ 사전 조건: 샘플과 시험 모듈이 둘 다 있다");
+      ok(firstExtra > lastSample,
+                            "★★★ 시험 모듈은 **샘플 뒤에** 온다 — 샘플의 전선 `idx` 를 밀지 않는다");
     }
 
     // ③ 🔴 **센서 훅은 샘플이 안 붙인다** — 보드에 센서가 없기 때문이다. **그게 정직하다.**

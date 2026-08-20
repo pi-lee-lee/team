@@ -169,17 +169,6 @@ static bool cmdL2(uint32_t arg) {
 //   ⚠ `echoIs` 를 안 부르면 기본이 `arg != 0` 이라 **닫아도 서버는 열린 줄 안다**
 // ═════════════════════════════════════════════════════════════════════════
 
-#if VIRTUAL_MODULES
-// 시험용 가상 차단봉의 핸들러. **실물 액추에이터도 똑같은 모양으로 쓴다** —
-//   실물이 붙으면 아래 `setup()` 의 등록 한 줄만 바꾸면 된다.
-static bool virtualGate(uint8_t k, uint32_t arg) {
-  gates.latch(GATE_N, slotNo);      // 첫 명령이 자율 토글을 영구 정지시킨다
-  gates.set(k, arg != 0);
-  return true;
-}
-static bool gateE1(uint32_t arg) { return virtualGate(0, arg); }
-static bool gateX1(uint32_t arg) { return virtualGate(1, arg); }
-#endif
 
 // ██████████████████████████████████████████████████████████████████████████
 // █  🔓  **여기가 네 자리다** — 자기 핀과 자기 모듈만 적는다                █
@@ -201,10 +190,6 @@ void setup() {
   node.actuator("LD").pin(LED_BUILTIN).on(cmdLed);
   node.actuator("L2").on(cmdL2);              // 핀이 없는 모듈은 `.pin()` 을 안 적는다
   SAMPLE_EXTRA_MODULES                        // 회귀 시험만 쓴다. 평소엔 비어 있다
-#if VIRTUAL_MODULES
-  node.actuator("E1").on(gateE1);             // 시험용 가상 차단봉
-  node.actuator("X1").on(gateX1);
-#endif
 }
 
 void loop() {

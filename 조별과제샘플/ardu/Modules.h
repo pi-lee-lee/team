@@ -68,61 +68,6 @@ static_assert(11 * MODULE_CAP + 11 <= 160,
 // ★ **표 하나가 `n` 의 원천이다.** 폭·뒤집기 축·등록 줄 수가 전부 이 값을 따라간다.
 // `moduleCount()` 는 `Module.h` 에 있다 — 표와 같은 자리여야 한다.
 
-#if VIRTUAL_MODULES
-// ─────────────────────────────────────────────────────────────────────────
-// 🔴 가상 차단봉의 상태와 값 패턴 (REQ-0227 · 설계문서 §3)
-//
-// **자율 모드** : 명령을 한 번도 안 받았으면 **슬롯 번호로 토글**한다
-// **수동 모드** : 🔴 **첫 명령을 받으면 자율을 영구 정지**하고 명령대로만
-//   ⚠ 자율이 남아 있으면 **명령 효과가 나중에 되돌려져 "안 먹었다"로 보인다.**
-//     명령 반응이 주(主)이고 자율은 그것이 오기 전까지의 대용이다.
-//
-// ⚠ **무작위를 쓰지 않는다** — 재현이 안 되면 어긋났을 때 원인을 못 찾는다.
-// 🔑 주기를 **서로 소**로 잡았다(20 과 14):
-//     lcm = 140슬롯 ≈ 168초 안에 **네 조합(00·01·10·11)이 전부 나타난다.**
-//     같은 주기면 둘이 항상 같이 움직여 **"하나만 도는지"를 못 가른다.**
-// ═════════════════════════════════════════════════════════════════════════
-// 🔴 `VirtualGates` — 가상 차단봉의 상태 (REQ-0275 C단계 · 2026-08-19)
-//
-//   ⚠ **`slotNo` 를 인자로 받는다.** 옛 `vGateAuto()` 는 세션의 전역 `slotNo` 를 **몰래 읽었다** —
-//     노드 쪽 코드가 세션 상태에 손을 뻗는 형태였고, 서명만 봐서는 그 의존이 안 보였다.
-//     🔑 **인자로 드러내면 "이 값이 어디서 오는가"가 호출부에 남는다.**
-//   ⚠ 생성자 없음 · NSDMI 없음 — 전역은 `.bss` 로 0 시작이다(§AVR 전역 생성자 함정).
-// ═════════════════════════════════════════════════════════════════════════
-class VirtualGates {
- public:
-  bool     manual;      // 첫 명령을 받았나 (받으면 자율 정지)
-  uint16_t state;       // 비트 i = 이 가상 차단봉 묶음의 i 번째가 열렸나
-
-  // 자율 패턴 — `slotNo` 는 부팅부터 세므로 리셋하면 위상이 처음으로 돌아간다(재현 가능)
-  bool autoOpen(uint8_t k, uint32_t slotNo) const {
-    return (k == 0) ? ((slotNo % 20) < 10)     // E1 : 24.1초 주기
-                    : ((slotNo % 14) <  7);    // X1 : 16.9초 주기
-  }
-
-  // 지금 열려 있나 — `S` 의 비트열에 실릴 값
-  bool isOpen(uint8_t k, uint32_t slotNo) const {
-    return manual ? ((state >> k) & 1) : autoOpen(k, slotNo);
-  }
-
-  // 🔴 첫 명령이 자율 토글을 **영구 정지**시킨다. 지금 상태를 그대로 굳힌 뒤 잠근다.
-  //   ⚠ 안 굳히면 명령 효과가 다음 주기에 되돌려져 "안 먹었다"로 보인다.
-  void latch(uint8_t n, uint32_t slotNo) {
-    if (manual) return;
-    manual = true;
-    for (uint8_t j = 0; j < n; j++) if (autoOpen(j, slotNo)) state |= (uint16_t)(1u << j);
-  }
-  void set(uint8_t k, bool open) {
-    if (open) state |=  (uint16_t)(1u << k);
-    else      state &= (uint16_t)~(1u << k);
-  }
-};
-
-static VirtualGates gates;
-// 가상 차단봉의 개수와 **표에서의 시작 자리**. 표의 맨 끝에 붙는다.
-static const uint8_t GATE_N    = 2;
-static const uint8_t GATE_BASE = (uint8_t)(MODULE_N - GATE_N);
-#endif
 
 static void moduleNameOf(uint8_t i, char* out4) {
   out4[0] = modName0(i);
@@ -352,13 +297,6 @@ static uint8_t buildStatus(char* buf, uint8_t cap) {
   //   🔑 **완료 판정이 이 에코로 이뤄진다.** `ACK` 은 "받았다"이지 "됐다"가 아니다 —
   //     서버는 다음 `S` 에서 그 비트가 바뀌는 것으로 조작 성공을 안다.
   uint16_t occOut = node.occMask;
-#if VIRTUAL_MODULES
-  // 🔴 가상 차단봉은 **표의 맨 끝 두 칸**이다. 그 자리를 `MODULE_N` 에서 거꾸로 센다.
-  //   ⚠ **"센서 뒤는 전부 차단봉"으로 세지 마라.** 센서와 차단봉 사이에 다른 모듈
-  //     (액추에이터 등)이 끼면 그 모듈의 비트에 차단봉 상태가 얹혀 **없는 조작이 보고된다.**
-  for (uint8_t k = 0; k < GATE_N; k++)
-    if (gates.isOpen(k, slotNo)) occOut |= (uint16_t)(1u << (GATE_BASE + k));
-#endif
   // 🔴 **액추에이터 에코** — 명령이 먹은 것을 서버가 이 비트로 안다(전선 비용 0B).
   //   센서 비트와 안 겹친다: `router.on` 이 `O*` 모듈에만 붙기 때문이다.
   occOut |= router.echoMask();
