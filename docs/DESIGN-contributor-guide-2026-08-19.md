@@ -13,10 +13,12 @@
 
 **기여자가 고쳐야 하는 것(실측):**
 ```cpp
-// 조별과제샘플/ardu/Modules.h — PROGMEM 배열
+// 조별과제샘플/ardu/client.ino — PROGMEM 배열  ✏️ 정정: 표는 Modules.h 가 아니라 client.ino 에 있다
 static const ModuleDef MODULE_TABLE[] PROGMEM = {
-  {"A1", KIND_PARK_SENSOR,  2}, {"A2", KIND_PARK_SENSOR,  3}, …
+  {"A1", "IP",  2}, {"B1", "IP",  9}, …
 };
+// ✏️ 정정(2026-08-20) — `KIND_*` 매크로는 **없다.** 전선 값 문자열을 직접 적는다.
+//   계약은 **첫 글자뿐**이다: `I` 관측 · `O` 명령. 둘째 글자부터는 장치도 서버도 안 본다.
 // ⚠ 주석에만 있는 규칙 셋:
 //   · **끝에만 붙인다. 중간 삽입 금지** (idx 가 밀려 결속이 조용히 깨진다)
 //   · **이름은 자리 id 와 같아야 한다**
