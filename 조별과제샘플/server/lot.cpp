@@ -48,8 +48,8 @@ void buildLot(ParkingLot& lot) {
 
     lot.spot("E1")                       // 일반영역 — `parking()` 을 안 적었다
         .at(3, 4)
-        .label("입구")
-        .module("P1", "DR");             // 차단봉
+        .label("입구");                   // 🔑 **모듈이 없다.** 자리만 잡는 것도 정상이다 —
+                                         //   일반영역은 점유를 보고할 의무가 없다
 
     // 🔑 모듈 이름은 **정확히 2글자** — 장치 표(`client.ino`)와 글자 그대로 같아야 붙는다
     // 🔑 선언 안 한 모듈은 **꺼진 것**이다. 장치에 있어도 화면에 안 나온다
@@ -66,7 +66,7 @@ void buildLot(ParkingLot& lot) {
     lot.label("P1", "A1", "왼쪽 센서");    // 🔑 **조작 못 하는 모듈도 이름을 갖는다**
     lot.label("P1", "LD", "안내등");
     lot.label("P1", "L2", "표시기");
-    // ⚠ `B1`·`DR` 은 일부러 이름을 안 줬다 — **화면의 폴백 경로가 실제로 밟히도록.**
+    // ⚠ `B1` 은 일부러 이름을 안 줬다 — **화면의 폴백 경로가 실제로 밟히도록.**
     //   전부 이름을 달면 그 갈래가 한 번도 안 돌고, 그건 시험이 아니다
 
     lot.control("P1", "LD").toggle();                    // 0 / 1
@@ -86,7 +86,7 @@ void onTick(ParkingServer& srv) {
     //     srv.send("P1", "LD", 1);                     // 단건
     //
     //     ParkingServer::Batch b = srv.batch("P1");     // 묶음 — 한 창에 같이 나간다
-    //     b.add("LD",1).add("LC",1234567).add("DR",1).add("L2",7654321);
+    //     b.add("LD",1).add("L2",7654321);
     //     ParkingServer::BatchResult r = b.send();      // 최대 srv.maxPerBatch() 건
     // }
     //   🔑 주기 동작이 필요하면 `srv.nowMs()` — **단조 시계(ms)**. 벽시계가 아니다

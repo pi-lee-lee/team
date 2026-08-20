@@ -25,7 +25,7 @@ lot.spot("A1")                       // 자리 하나
     .module("P1", "B1")
     .module("P1", "LD");
 
-lot.spot("E1").at(0, 2).label("입구").module("P1", "DR");   // 일반영역(기본값)
+lot.spot("E1").at(0, 2).label("입구");                       // 일반영역(기본값) · 모듈 없음
 ```
 
 ### 🔴 `parking()` 이 **유일하게 엔진 동작을 바꾼다**
@@ -102,7 +102,9 @@ lot.spot("E1").at(0, 2).label("입구").module("P1", "DR");   // 일반영역(�
 ```cpp
 lot.control("P1", "LD").toggle();                    // 0 / 1
 lot.control("P1", "L2").number(0, 9999999);          // 숫자 입력 칸
-lot.control("P1", "DR").choice()                     // 🔑 이 선언이 곧 명령표다
+// ⚠ 아래 `choice` 는 **가상의 예**다 — 지금 이 샘플의 장치에는 그런 모듈이 없다.
+//   (차단봉을 없앴다 · 2026-08-20) **API 는 그대로 있으니 네 모듈에 쓰면 된다.**
+lot.control("KIM01", "DR").choice()                  // 🔑 이 선언이 곧 명령표다
       .option(1, "열기").option(2, "닫기");
 ```
 ```
@@ -120,9 +122,9 @@ lot.control("P1", "DR").choice()                     // 🔑 이 선언이 곧 �
 ## §명령 — `srv.send(devid, 모듈이름, 값)`
 
 ```cpp
-srv.send("P1", "LD", 1);          // on/off
-srv.send("P1", "LC", 1234567);    // 7자리 숫자
-srv.send("P1", "DR", 2);          // 동작
+srv.send("P1", "LD", 1);          // on/off       ← 이 샘플에 있는 모듈
+srv.send("P1", "L2", 1234567);    // 7자리 숫자     ← 이 샘플에 있는 모듈
+srv.send("KIM01", "DR", 2);       // 동작           ⚠ **가상** — 네 모듈로 바꿔 읽어라
 ```
 셋이 **같은 함수 하나**다. 다른 것은 **값의 뜻**뿐이다.
 
@@ -143,10 +145,10 @@ srv.send("P1", "DR", 2);          // 동작
 
 ❌ 표 없이 `1,2,3,4` 만 쓰지 마라. ✅ 이렇게 적는다:
 ```cpp
-// [DR 명령표]  (P1 / 모듈 "DR" · 정한 사람: 홍길동)
+// [DR 명령표]  ⚠ **가상의 예다** (모듈 "DR" · 정한 사람: 홍길동) — 이 샘플에는 없는 모듈이다
 //   1 = 열기   2 = 닫기   3 = 잠금   4 = 잠금해제
 //   ⚠ 그 외 값은 장치가 result=3(수행 불가)로 답한다
-srv.send("P1", "DR", 1);
+srv.send("KIM01", "DR", 1);
 ```
 장치 쪽(`client.ino`) — **같은 표를 그 위에 복사해 둔다:**
 ```cpp
@@ -196,7 +198,7 @@ void onCmdResult(const CmdResult& r) { /* r.module · r.value · r.kindName() */
 
 ```cpp
 ParkingServer::Batch b = srv.batch("P1");
-b.add("LD",1).add("LC",1234567).add("DR",1).add("L2",7654321);
+b.add("LD",1).add("L2",7654321);          // ⚠ 있는 모듈만 적어라 — 없는 이름은 거절된다
 ParkingServer::BatchResult r = b.send();
 ```
 
@@ -260,10 +262,11 @@ lot.spot("A1").parking().module("P1","A1").module("P1","B1").behavior(g_내판�
 
 명령을 보내면 다음 상태 프레임의 그 모듈 `value` 가 바뀐다.
 ```
-DR 1(열기) → value:true      DR 2(닫기) → value:false
+LD 1(켜기) → value:true      LD 0(끄기) → value:false
 ```
-🔑 **닫기가 계약을 시험한다** — 열기는 상식과 같아서 아무것도 안 가른다.
-`arg != 0` 규약이었으면 닫기(2)에서도 켜진 채 남아 *"문은 닫혔는데 서버는 열린 줄 안다"* 가 됐다.
+🔑 **계약은 `arg` 를 그대로 싣는 것**이지 `0/1` 로 접는 것이 아니다.
+전에 `arg != 0` 으로 접던 시절, 값 `2`(끄기로 정한 기여자의 표)가 **켜짐으로 남아**
+*"껐는데 서버는 켜진 줄 안다"* 가 됐다. **그래서 지금은 값을 그대로 보낸다.**
 
 ### 🔴 에코가 답하지 않는 것
 ```
