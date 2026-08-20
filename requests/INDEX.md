@@ -739,3 +739,6 @@ front-matter 이고, 미결 목록은 `requests/open/` 이다. 이 파일은 고
 | 2026-08-20T00:24:54+0900 | 착수 | REQ-0281 | web-engineer → web-engineer | 화면 직접 조작 계약 1단계 — control 선언 · cmd_result · confirmed |
 | 2026-08-20T06:21:12+0900 | 통보 | REQ-0282 | socket-engineer → root | 운영 배포 06:19:50 (build=9087781) — 1차 시도에서 도는 실행파일을 덮어썼다 |
 | 2026-08-20T07:05:58+0900 | 발행 | REQ-0283 | socket-engineer → root | 조별과제샘플/dev_server/** 소유 규칙이 없다 — 작업이 막혔다 |
+| 2026-08-20T12:47:23+0900 | 발행 | REQ-0284 | socket-engineer → web-engineer | 조립 API v2 — 자리 종류가 parking/area 둘로 · 센서 구분이 등록 뒤로 |
+| 2026-08-20T12:47:39+0900 | 착수 | REQ-0284 | web-engineer → web-engineer | 조립 API v2 — 자리 종류가 parking/area 둘로 · 센서 구분이 등록 뒤로 |
+| 2026-08-20T12:50:26+0900 | 완료 | REQ-0284 | web-engineer → web-engineer | 조립 API v2 — 자리 종류가 parking/area 둘로 · 센서 구분이 등록 뒤로 |
