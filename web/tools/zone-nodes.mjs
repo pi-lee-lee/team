@@ -58,6 +58,9 @@ let MAP = {
     /* 🔴 **cells 가 둘인 자리** — socket 이 길이 강제를 풀면 실재한다(REQ-0269).
        옛 코드는 이것을 **칸마다 통째로 다시 그려** 예약 버튼이 두 개가 됐다. */
     /* 🔑 `label` 이 오면 **내 ZONE_LABEL 표(A1→영역1)를 이겨야** 한다 — 정본은 기여자 선언이다. */
+    /* 🔴 **겹침** — `Z3` 과 같은 칸([0,2])을 쓴다. SPEC-assembly-v2 ④: 서버는 막지 않는다.
+       옛 코드는 나중 것이 앞 것을 **소리 없이 덮었다**. 이제 가려진 것이 화면에 적혀야 한다. */
+    { id: 'OV', kind: 'area', label: '겹친 자리', cells: [[0, 2]], modules: [] },
     { id: 'A1', kind: 'parking', label: '1번 자리', cells: [[1, 0], [1, 1]], modules: [
       { devid: 'P1', name: 'A1', kind: 'IP', idx: 0 } ] },
   ],
@@ -101,6 +104,7 @@ const readZones = `(() => {
       })),
       emptyBoxes: z.querySelectorAll('.znode--empty').length,
       emptyText: (z.querySelector('.znode--empty') || {}).textContent || null,
+      overlapText: (z.querySelector('.zone__overlap') || {}).textContent || null,
       reserveBtns: z.querySelectorAll('.zbtn[data-act="reserve"]').length,
     });
   }
@@ -174,6 +178,18 @@ try {
   }
   const LABELS = await evaluate(client, `(typeof ZONE_LABEL === 'object' && ZONE_LABEL) || {}`);
   ok('화면에 ZONE_LABEL 표가 있다', LABELS && Object.keys(LABELS).length > 0, JSON.stringify(LABELS));
+  /* 🔴 **겹쳐서 가려진 자리는 안 그려지는 것이 정상이다**(SPEC-assembly-v2 ④).
+     아래 대조들에서 빼지 않으면 **제품이 옳은데 검사가 빨강**이 된다 — 계측기가 틀린 것이다. */
+  const _hidden = (() => {
+    const seen = new Map(), out = [];
+    for (const zz of MAP.zones) for (const cc of (zz.cells || [])) {
+      const k = cc[0] + ',' + cc[1];
+      if (seen.has(k)) { out.push(zz.id); break; } else seen.set(k, zz.id);
+    }
+    return out;
+  })();
+  const visible = (list) => list.filter((id) => !_hidden.includes(id));
+
   const _read = await evaluate(client, readZones);
   const z = _read.zones;
 
@@ -184,7 +200,7 @@ try {
     for (const mod of zone.modules) (m[mod.devid] = m[mod.devid] || []).push(mod.name);
     expect[zone.id] = m;
   }
-  for (const zid of Object.keys(expect)) {
+  for (const zid of visible(Object.keys(expect))) {
     const want = Object.keys(expect[zid]);
     const got = (z[zid] ? z[zid].nodes.map((n) => n.devid) : []);
     ok('🔴 ' + zid + ' 의 노드 박스 집합 == modules 의 devid 집합  ' + S(got) + ' == ' + S(want),
@@ -257,8 +273,10 @@ try {
   }
   {
     /* 🔴 표시 이름 — **집합 대조**. "이름이 어딘가 있다"가 아니다. */
+    const srvLabelAll = {};
+    for (const zz of MAP.zones) if (typeof zz.label === 'string' && zz.label) srvLabelAll[zz.id] = zz.label;
     const labeled = Object.keys(z).filter((zid) => z[zid].name);
-    const wantLabeled = Object.keys(z).filter((zid) => LABELS[zid]);
+    const wantLabeled = Object.keys(z).filter((zid) => LABELS[zid] || srvLabelAll[zid]);
     ok('🔴 표시 이름이 붙은 자리 집합 == ZONE_LABEL 이 정의한 집합  ' + S(labeled) + ' == ' + S(wantLabeled),
        setEq(labeled, wantLabeled), '그렸다: ' + S(labeled) + ' · 표: ' + S(wantLabeled));
     /* 🔴 `zone.label` 이 온 자리는 **그것이 정본**이고 표를 이긴다. 나머지는 표를 쓴다. */
@@ -267,8 +285,12 @@ try {
     const wrong = wantLabeled.filter((zid) => z[zid].name !== (srvLabel[zid] || LABELS[zid]));
     ok('표시 이름의 글자가 정본과 같다 (zone.label 이 있으면 그것, 없으면 ZONE_LABEL)', wrong.length === 0,
        JSON.stringify(wrong.map((zid) => zid + ': ' + z[zid].name + ' != ' + (srvLabel[zid] || LABELS[zid]))));
-    if (Object.keys(srvLabel).length) {
-      const zid = Object.keys(srvLabel)[0];
+    /* 🔴 **보이는 자리 중에서 고른다.** 아무거나 첫째를 고르면 그 선택이 **남의 상태에 딸린다** —
+       실제로 겹쳐서 가려진 자리(OV)를 골라 빨강이 났다. 제품이 아니라 계측기가 틀린 것이었다
+       (CLAUDE.md §"하니스가 '첫 번째 것'을 고르면 그 선택 자체가 오염될 수 있다"). */
+    const pickable = visible(Object.keys(srvLabel));
+    if (pickable.length) {
+      const zid = pickable[0];
       ok('🔴 zone.label 이 내 ZONE_LABEL 표를 이긴다 (' + zid + ' → "' + srvLabel[zid] + '", 표는 "' + (LABELS[zid] || '없음') + '")',
          z[zid] && z[zid].name === srvLabel[zid], z[zid] && z[zid].name);
     } else skip('zone.label 우선순위', '이 지형에 zone.label 이 없다');
@@ -280,7 +302,7 @@ try {
 
   /* ── ③ 모듈 0개 영역 — 정상처럼 그리지 않는가 (있는 만큼 전부) ───── */
   {
-    const emptyZones = MAP.zones.filter((zz) => !(zz.modules || []).length).map((zz) => zz.id);
+    const emptyZones = visible(MAP.zones.filter((zz) => !(zz.modules || []).length).map((zz) => zz.id));
     if (!emptyZones.length) {
       skip('모듈 0개 영역 표시', '지금 지형에 모듈 0개인 영역이 없다');
     } else {
@@ -344,6 +366,26 @@ try {
   const lbl = (() => { const b = z.Z1 && z.Z1.nodes.find((n) => n.devid === 'P2'); return b && b.mods[0] ? b.mods[0].lampLabel : null; })();
   if (!LIVE) ok('등이 색만으로 뜻을 나르지 않는다 (접근 이름에 문장이 있다)',
      typeof lbl === 'string' && lbl.includes('모름'), '접근 이름: ' + lbl);
+
+  /* ── ④-b 🔴 **칸이 겹치면 가려진 자리를 화면이 말한다** (SPEC-assembly-v2 ④)
+     ⚠ **부정형으로 쓰지 않는다** — "안 사라졌다"는 자리 자체가 없어도 참이다.
+     ✅ **가려진 자리 id 가 화면 글자에 그대로 나온다**로 쓴다. */
+  {
+    const seen = new Map();
+    const hiddenIds = [];
+    for (const zz of MAP.zones) for (const cc of (zz.cells || [])) {
+      const k = cc[0] + ',' + cc[1];
+      if (seen.has(k)) hiddenIds.push(zz.id); else seen.set(k, zz.id);
+    }
+    if (!hiddenIds.length) skip('칸 겹침 표시', '이 지형에 겹치는 칸이 없다');
+    else {
+      const txt = Object.keys(z).map((k) => z[k].overlapText).filter(Boolean).join(' | ');
+      ok('🔴 가려진 자리 id 가 화면에 적힌다 (' + S(hiddenIds) + ')',
+         hiddenIds.every((id) => txt.includes(id)),
+         '화면 글자: ' + JSON.stringify(txt) + ' — 조용히 덮으면 기여자가 "내 자리가 왜 안 보이지"를 못 푼다');
+      ok('겹침 경고가 분모 0 이 아니다 (' + hiddenIds.length + '건)', hiddenIds.length > 0 && !!txt);
+    }
+  }
 
   /* ── ⑤ 🔴 게이트 조작은 **제거됐다**(사용자 확정 2026-08-20 · control 로 통일)
      ⚠ **"차단봉 버튼이 없다"로 쓰지 않는다** — 부정형은 자리 자체가 없어도 참이 된다.
