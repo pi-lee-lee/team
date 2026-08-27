@@ -1,0 +1,248 @@
+#!/usr/bin/env python3
+"""모의 노드 — 시험 인스턴스에 `S`/`D` 를 보내는 최소 클라이언트.
+
+🔴 **실물 보드를 대체하지 않는다.** 시리얼·보드는 배타적 자원이고 장치 인스턴스가 쓴다.
+   이건 **서버·화면 계약을 실기 경로로 밟기 위한 것**이고, 그 범위 밖의 판정에 쓰면 안 된다.
+
+⚠ **이 도구가 재는 것과 못 재는 것**
+   ✅ 잰다   : 등록(`D`)이 자리에 붙는가 · `map`/`state` 가 모듈 키를 실어 오는가
+              · `value`/`known`/`completion` 이 **실제로 무엇으로 오는가**
+   🔴 못 잰다 : 타이밍·반이중 UART·`SEND OK` 지연 — **전부 실물에서만 난다**
+              **여기서 "정상"이 나와도 장치가 정상이라는 뜻이 아니다.**
+
+⚠ **실물이 못 주는 것 하나를 이 도구가 준다: `G` 의 거절 갈래(`result=3`).**
+   실물은 가상 모듈이 정상이면 **거의 항상 `result=0`** 이라 그 갈래가 안 돌아간다.
+   `--gate-result 3` 으로 그 경로를 밟는다. 🔑 **반복이 필요한 갈래는 실물이 아니라 여기서 잰다.**
+
+사용:
+    python3 net/mock_node.py --port 18888 --devid P1 --seconds 120
+    # 🔴 시험 포트를 **명시해라.** 기본값은 운영 포트다 —
+    #   빼먹으면 시험한다고 치면서 운영에 붙는다(DEPLOY-CHECKLIST §3).
+    #   ⚠ `--port-offset` 은 2026-08-20 에 없어졌다. 셋을 하나씩 준다
+"""
+import argparse
+import socket
+import sys
+import time
+
+SLOTS = ["A1", "A2", "A3", "A4", "A5", "B1", "B2", "B3", "B4", "B5"]
+
+
+def cksum(prefix):
+    """전선 체크섬 — 서버 `cksum()` 과 **같은 규칙**이어야 한다.
+
+    🔑 다시 구현하는 것이 아니라 **같은 정의를 옮긴 것**이고, 갈리면 서버가
+    `체크섬 불량`으로 세므로 **조용히 틀리지는 않는다**(그 자리가 감시다).
+    """
+    x = 0
+    for ch in prefix:
+        x ^= ord(ch)
+    return "%02X" % x
+
+
+def line(body):
+    return body + cksum(body) + "\n"
+
+
+def bits_to_hex(bits, n):
+    """자리 비트열 → hex. **슬롯 i 는 비트 (n−1−i)** · `ceil(n/4)` 고정폭 · 대문자.
+
+    🔴 명세 §5 의 넷(대소문자·고정폭·비트순서·패딩 0)을 그대로 지킨다.
+    비트 순서가 뒤집혀도 **길이도 체크섬도 통과하고 값만 틀린다** — 그래서 여기 적어 둔다.
+    """
+    v = 0
+    for i in range(n):
+        if bits[i]:
+            v |= 1 << (n - 1 - i)
+    return ("%0*X" % ((n + 3) // 4, v))
+
+
+def build_reg(drain, n, gate_names, gate_kind, custom=None):
+    """등록 묶음. 🔴 **자리 먼저, 차단봉은 끝에** — 명세 §7.4 의 약속이고 서버가 대조한다."""
+    pkt = line("D,*,%d,%d," % (drain, n))
+    if custom:
+        for nm, kd in custom:
+            pkt += line("D,%s,%s," % (nm, kd))
+        return pkt
+    for sl in SLOTS:
+        pkt += line("D,%s,IP," % sl)
+    for g in gate_names:
+        pkt += line("D,%s,%s," % (g, gate_kind))
+    return pkt
+
+
+def main():
+    ap = argparse.ArgumentParser(description="모의 노드 (시험 전용)")
+    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--port", type=int, required=True, help="시험 인스턴스의 아두이노 포트")
+    ap.add_argument("--devid", default="P1")
+    ap.add_argument("--drain", type=int, default=7, help="선언할 슬롯당 ACK 배출 하한")
+    ap.add_argument("--slot-ms", type=int, default=1200, help="S 주기(ms)")
+    ap.add_argument("--seconds", type=float, default=120.0)
+    ap.add_argument("--occupied", default="", help="점유로 둘 자리 목록(쉼표) 예: A1,B2")
+    # 🔴 **전이 프레임 `E`** (SPEC-sensor-value.md §15.3) — `V` 폐기 뒤 유일한 값 경로다.
+    #   형식 : "슬롯번호:idx:r:값,…"  예) "3:0:1:3C0,6:0:0:"   (값은 hex3 또는 **빈 칸**)
+    #   🔑 슬롯번호로 주는 이유 : 전이는 **사건**이라 "언제" 가 그 자체로 시험 대상이다.
+    #   ⚠ 값을 비워 주는 것을 **반드시 한 번은 시험해라** — 실기에서 못 재는 것이 흔하고
+    #     그때 화면이 전이를 통째로 잃는 결함이 있었다(문을 value 로 열면 그렇게 된다).
+    ap.add_argument("--transitions", default="",
+                    help="전이 각본. 슬롯:idx:r:값 쉼표 (값은 hex3 또는 빈 칸 = 못 쟀다)")
+    # 🔴 서버가 내려보내는 `K`(판정 수치)를 받는가. **에코는 안 한다** —
+    #   실기 장치도 `K` 를 에코하지 않는다(§15.4). 흉내 내면 실기에 없는 것을 시험하게 된다.
+    #   🔑 대신 **받은 것을 찍는다** — 그것이 "서버가 실제로 보냈나" 의 판별자다.
+    # 🔴 **장치의 모듈 표를 그대로 흉내 낸다** — 굽기 전에 판정 기준을 미리 검증하려면 필요하다.
+    #   형식 : "이름:종류,이름:종류,…"   예) "A1:IP,B1:IP,LD:OG,LC:OL,DR:OB"
+    #   ⚠ **이름은 2글자다**(장치가 `char name[3]`). 어기면 실기에서 못 붙는다 — 여기서도 막는다.
+    #   ⚠ 순서가 곧 `idx` 다. 장치 표와 **같은 순서**로 줘라.
+    ap.add_argument("--modules", default="",
+                    help="모듈 표를 직접 준다(이름:종류 쉼표). 주면 --gates 와 기본 10자리를 무시한다")
+    ap.add_argument("--gates", type=int, default=0,
+                    help="차단봉 모듈 수. 자리 뒤에 붙는다 — **끝에만 붙인다**(명세 §7.4)")
+    # 🔴🔴 **기본값이 `OB` 다 — 펌웨어와 맞춘 것이다** (2026-08-19 정정)
+    #   이 도구는 오래 `OBV` 를 보냈는데 **펌웨어는 REQ-0271 에서 `V` 를 뺐다**(`FrameCodec.h:85`).
+    #   → 계측기가 **실기가 더 이상 안 보내는 형식**을 보내고 있었다. §"시험 경로 ≠ 실기 경로" 다.
+    #   ⚠ 그리고 그 낡은 값이 **명세 문서에까지 옮겨 적혔다**(대장 §4.5) — 내가 mock 출력을
+    #     장치 거동으로 읽었다. **fixture 를 실기 근거로 쓰면 이렇게 된다.**
+    #   🔑 옛 형태를 **지우지는 않았다** — 화면이 `V` 를 떼는 방어 경로가 있고
+    #     (`index.html` 의 `MOD_KIND_LABEL` 조회), 그 경로도 시험할 수 있어야 한다.
+    ap.add_argument("--gate-kind", default="OB", choices=["OB", "OBV"],
+                    help="차단봉 kind. 기본 OB(펌웨어와 같다). OBV 는 옛 형태 — 화면의 V 제거 경로 시험용")
+    ap.add_argument("--gate-result", type=int, default=0, choices=[0, 3],
+                    help="`G` 에 돌려줄 result. **3 = 장치가 수행 불가** — 실물로는 밟기 어려운 갈래다")
+    a = ap.parse_args()
+
+    custom = []
+    if a.modules:
+        for tok in a.modules.split(","):
+            tok = tok.strip()
+            if not tok: continue
+            nm, _, kd = tok.partition(":")
+            if len(nm) != 2:
+                print("🔴 모듈 이름 `%s` 은 2글자가 아니다 — 장치가 못 보낸다" % nm); return 2
+            custom.append((nm, kd or "IP"))
+        occ_set = set(x.strip() for x in a.occupied.split(",") if x.strip())
+    # 🔴 **차단봉은 자리 뒤에 온다.** 명세 §7.4 의 "끝에만 붙인다" 를 이 도구도 지킨다 —
+    #    여기서 순서를 다르게 만들면 **서버의 순서 대조 검사가 거짓 경보를 낸다.**
+    # 🔴 전이 각본 파싱. **형식이 틀리면 조용히 무시하지 않고 거절한다** —
+    #   각본이 안 돌면 시험이 *"아무 일도 안 일어났다"* 로 통과한다(헛통과).
+    trans = []
+    for item in [x.strip() for x in a.transitions.split(",") if x.strip()]:
+        f = item.split(":")
+        if len(f) != 4:
+            print("🔴 --transitions 항목 `%s` 이 슬롯:idx:r:값 넷이 아니다" % item); return 2
+        try:
+            tsl, tidx, tr = int(f[0]), int(f[1]), int(f[2])
+        except ValueError:
+            print("🔴 --transitions 의 슬롯/idx/r 은 숫자여야 한다 : %s" % item); return 2
+        if tr not in (0, 1):
+            print("🔴 --transitions 의 r 은 0/1 뿐이다 : %s" % item); return 2
+        # ⚠ 값은 **빈 칸이 정상**이다(못 쟀다). 빈 칸을 오류로 만들면 그 갈래를 못 밟는다.
+        if f[3] and len(f[3]) != 3:
+            print("🔴 --transitions 의 값은 hex 3자리이거나 빈 칸이어야 한다 : %s" % item); return 2
+        trans.append((tsl, tidx, tr, f[3]))
+    gate_names = ["E1", "X1", "G3", "G4"][:max(0, a.gates)]
+    names = [nm for nm, _ in custom] if custom else (SLOTS + gate_names)
+    n = len(names)
+    gate_state = [0] * len(gate_names)      # 장치가 들고 있는 차단봉 상태 — `S` 에 에코된다
+    s = socket.create_connection((a.host, a.port), timeout=5)
+    print("[mock] 접속 %s:%d · devid=%s · n=%d" % (a.host, a.port, a.devid, n), flush=True)
+
+    seq = 0
+    uptime = 1
+    t_end = time.time() + a.seconds
+    sent_reg = False
+    try:
+        while time.time() < t_end:
+            # 🔑 **비트 `>= len(SLOTS)` 는 자리 점유가 아니라 차단봉 상태다**(명세 §7.2).
+            #    같은 비트열인데 의미가 다르고 그 구분은 `kind` 에 있다.
+            # 🔴 표를 직접 준 경우에는 **그 표의 이름들**로 비트를 만든다.
+            #   전에는 `SLOTS` 고정이라 `--modules` 와 폭도 이름도 어긋났다 —
+            #   그러면 **액추에이터 에코 비트를 세워 볼 수가 없다**(그 자리가 표에 없다).
+            if custom:
+                occ = [1 if nm in occ_set else 0 for nm, _ in custom]
+            else:
+                occ = [1 if sl in occ_set else 0 for sl in SLOTS] + list(gate_state)
+            res = [0] * n
+            body = "S,%d,%s,%s,%d,%s," % (
+                seq, bits_to_hex(occ, n), bits_to_hex(res, n), uptime, a.devid)
+            s.sendall(line(body).encode())
+            if seq == 0:
+                print("[mock] S 보냄 — %s" % line(body).strip(), flush=True)
+
+            # 🔑 **둘째 슬롯부터 `D`**(명세 §5). 첫 슬롯은 `S` 만 — 그것이 승격을 만든다.
+            if not sent_reg and seq == 1:
+                pkt = build_reg(a.drain, n, gate_names, a.gate_kind, custom)
+                s.sendall(pkt.encode())
+                sent_reg = True
+                print("[mock] 등록 %d줄 · %dB 보냄" % (n + 1, len(pkt)), flush=True)
+
+            # 🔴 **전이 `E`** — 각본에 이 슬롯이 있으면 낸다. `S` **뒤에** 보내는 것이 아니라
+            #   `S` 와 같은 창에 이어 붙인다(실기의 `sendSlotBatch` 와 같은 모양).
+            #   ⚠ 실기는 한 `espWrite` 로 낸다. 여기서는 별도 `sendall` 이라 **완전히 같지 않다** —
+            #     그 차이가 문제 되는 시험(도착 위상)에는 이 도구를 쓰지 마라.
+            for (tsl, tidx, tr, tv) in trans:
+                if tsl == seq:
+                    s.sendall(line("E,%d,%d,%s," % (tidx, tr, tv)).encode())
+                    print("[mock] E idx=%d r=%d v=%s" % (tidx, tr, tv or "(못 쟀다)"), flush=True)
+
+            # 서버가 보내는 것(하행·`Q`)을 비운다 — 안 비우면 버퍼가 차서 서버 송신이 막힌다
+            s.setblocking(False)
+            try:
+                while True:
+                    d = s.recv(4096)
+                    if not d:
+                        print("[mock] 서버가 닫았다", flush=True)
+                        return 0
+                    for ln in d.decode("utf-8", "replace").splitlines():
+                        if ln.startswith("Q,"):
+                            # 🔴 `Q` 는 "등록을 다시 보내라"다. 상한을 두지 않는다 —
+                            #    비용이 서버 창에 있으므로 상한은 서버가 갖는다(명세 §5).
+                            s.sendall(build_reg(a.drain, n, gate_names).encode())
+                            print("[mock] Q 받음 → 등록 재전송", flush=True)
+                        elif ln.startswith("K,"):
+                            # 🔴 판정 수치. **에코 안 한다**(실기도 안 한다). 받은 것을 찍는다 —
+                            #   🔑 그것이 *"서버가 실제로 보냈나"* 의 유일한 판별자다.
+                            print("[mock] K 받음 — %s" % ln.strip(), flush=True)
+                        elif ln.startswith("G,"):
+                            # 🔴 `G,<rid>,<idx>,<op>,<ck>` — **실물로는 밟기 어려운 거절 갈래**를
+                            #    이 도구가 만든다. `--gate-result 3` 이면 상태를 안 바꾸고 3 을 돌려준다.
+                            #    ⚠ **거절해도 ACK 은 보낸다.** 안 보내면 서버가 `ack_timeout` 을 내고
+                            #      **"안 갔다"와 "갔는데 거절됐다"가 같은 칸에 섞인다**(명세 §7.3).
+                            f = ln.split(",")
+                            if len(f) >= 4:
+                                try:
+                                    grid, gidx, gop = int(f[1]), int(f[2]), int(f[3])
+                                except ValueError:
+                                    continue
+                                # 🔴 **표를 직접 준 경우**(`--modules`)는 자리/차단봉 구분이 없다.
+                                #   등록한 모듈이면 받는다 — 실기의 `router.on(...)` 등록과 같은 뜻이다.
+                                # ⚠ **에코는 안 한다.** 실기에서 `LD`·`LC`·`DR` 은 `occ` 비트에
+                                #   상태를 싣지 않는다(상태를 싣는 것은 가상 차단봉뿐이다).
+                                #   여기서 에코를 흉내 내면 **실기에 없는 것을 시험하게 된다.**
+                                if custom:
+                                    gres = 0 if (a.gate_result == 0 and 0 <= gidx < len(names)) else 3
+                                else:
+                                    k = gidx - len(SLOTS)
+                                    if a.gate_result == 0 and 0 <= k < len(gate_state):
+                                        gate_state[k] = 1 if gop else 0
+                                        gres = 0
+                                    else:
+                                        gres = 3
+                                s.sendall(line("A,%d,G%d,%d," % (grid, gidx % 10, gres)).encode())
+                                print("[mock] G idx=%d op=%d → result=%d" % (gidx, gop, gres),
+                                      flush=True)
+            except (BlockingIOError, socket.error):
+                pass
+            s.setblocking(True)
+
+            seq = (seq + 1) & 0xFFFF
+            uptime += 1
+            time.sleep(a.slot_ms / 1000.0)
+    finally:
+        s.close()
+        print("[mock] 종료 · seq=%d" % seq, flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

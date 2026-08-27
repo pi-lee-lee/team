@@ -1,0 +1,7 @@
+/Users/idong-u/learn/cpp/digitcam/verify/build-host/CMakeFiles/core_test.dir
+/Users/idong-u/learn/cpp/digitcam/verify/build-host/CMakeFiles/plate_test.dir
+/Users/idong-u/learn/cpp/digitcam/verify/build-host/CMakeFiles/motion_test.dir
+/Users/idong-u/learn/cpp/digitcam/verify/build-host/CMakeFiles/photo_test.dir
+/Users/idong-u/learn/cpp/digitcam/verify/build-host/CMakeFiles/ocr_test.dir
+/Users/idong-u/learn/cpp/digitcam/verify/build-host/CMakeFiles/edit_cache.dir
+/Users/idong-u/learn/cpp/digitcam/verify/build-host/CMakeFiles/rebuild_cache.dir

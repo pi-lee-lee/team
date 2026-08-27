@@ -1,0 +1,242 @@
+{
+  "base": "http://127.0.0.1:10500/",
+  "results": [
+    {
+      "name": "페이지가 연 WebSocket 은 정확히 하나",
+      "ok": true,
+      "detail": "[\"ws://127.0.0.1:10500/ws\"]"
+    },
+    {
+      "name": "그 대상이 시험 인스턴스다 (ws://127.0.0.1:10500/ws)",
+      "ok": true,
+      "detail": "ws://127.0.0.1:10500/ws"
+    },
+    {
+      "name": "🔴 운영 포트로 새지 않았다",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "name": "푸터가 실제 접속 대상을 말한다",
+      "ok": true,
+      "detail": "ws://127.0.0.1:10500/ws"
+    },
+    {
+      "name": "연결 상태가 WebSocket 연결됨",
+      "ok": true,
+      "detail": "WebSocket 연결됨"
+    },
+    {
+      "name": "10칸이 그려졌다",
+      "ok": true,
+      "detail": "10"
+    },
+    {
+      "name": "칸이 \"상태 미상\"에서 벗어났다 (서버 값이 실제로 반영됐다)",
+      "ok": true,
+      "detail": "[{\"slot\":\"A1\",\"state\":\"사용 중\",\"meta\":\"예약 없이 주차됨\"},{\"slot\":\"A2\",\"state\":\"빈 자리\",\"meta\":\"눌러서 예약\"},{\"slot\":\"A3\",\"state\":\"빈 자리\",\"meta\":\"눌러서 예약\"}]"
+    },
+    {
+      "name": "장치 ID 가 표시된다",
+      "ok": true,
+      "detail": "QT1"
+    },
+    {
+      "name": "자리 결손 배너가 뜨지 않는다 (서버가 10칸을 다 싣고 있다)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "note": "스크린샷 web/artifacts/1-ws-connected.png"
+    },
+    {
+      "note": "대상 칸 A2 (동작으로 골랐다 · 문구 아님)"
+    },
+    {
+      "note": "서버 로그 = net/slotq-test-2026-08-17.log"
+    },
+    {
+      "note": "브라우저 사용자 ujafnq33"
+    },
+    {
+      "name": "확인 대화상자가 열렸다 (키보드 접근 가능한 <dialog>)",
+      "ok": true,
+      "detail": "예약하시겠습니까?"
+    },
+    {
+      "note": "스크린샷 web/artifacts/2-confirm-dialog.png"
+    },
+    {
+      "name": "브라우저가 예약 요청을 전선으로 보냈다",
+      "ok": true,
+      "detail": "[\"{\\\"type\\\":\\\"reserve\\\",\\\"slot\\\":\\\"A2\\\",\\\"user_id\\\":\\\"ujafnq33\\\",\\\"rid\\\":\\\"r1-pn5o88\\\"}\"]"
+    },
+    {
+      "name": "서버가 장치로 R 을 내보냈다 (→ARD R,…,A2)",
+      "ok": true,
+      "detail": "→ARD R,11,A2,ujafnq33,26 (S+0ms)"
+    },
+    {
+      "name": "장치가 A 로 응답했다 (←ARD A)",
+      "ok": true,
+      "detail": "←ARD A,11,A2,0,02 (rx=12B)"
+    },
+    {
+      "name": "서버 ACK 가 브라우저까지 돌아왔다",
+      "ok": true,
+      "detail": "{\"type\":\"ack\",\"rid\":\"r1-pn5o88\",\"slot\":\"A2\",\"result\":0,\"message\":\"예약되었습니다\"}"
+    },
+    {
+      "name": "🔴 화면이 예약을 반영했다 (815ms)",
+      "ok": true,
+      "detail": "예약됨 (입차 전)"
+    },
+    {
+      "note": "스크린샷 web/artifacts/3-reserved.png"
+    },
+    {
+      "name": "같은 칸을 다시 누르면 취소를 묻는다 (예약이 화면에 실제로 잡혀 있다는 뜻)",
+      "ok": true,
+      "detail": "예약을 취소하시겠습니까?"
+    },
+    {
+      "name": "예약이 취소돼 원래 상태로 돌아왔다",
+      "ok": true,
+      "detail": "취소 접수됨 · 전송 대기…"
+    },
+    {
+      "name": "스냅샷 프레임을 받았다",
+      "ok": true,
+      "detail": "6개"
+    },
+    {
+      "note": "device 키: [\"online\",\"device_id\",\"uptime\",\"seq\",\"last_frame_ts\"]"
+    },
+    {
+      "name": "device.last_frame_ts 가 WS 스냅샷에 있다 (REQ-0132)",
+      "ok": true,
+      "detail": "[\"online\",\"device_id\",\"uptime\",\"seq\",\"last_frame_ts\"]"
+    },
+    {
+      "name": "값이 null 이거나 epoch ms 다 (0 이 아니다)",
+      "ok": true,
+      "detail": "1786966297335"
+    },
+    {
+      "note": "스냅샷 원문 web/artifacts/ws-snapshot.json"
+    },
+    {
+      "note": "WS 와 파일의 last_frame_ts 간격 = 125506ms  (파일은 상태 변화 때만 다시 써진다 — server.cpp:1340. 벌어지는 것이 정상)"
+    },
+    {
+      "note": "WS last_frame_ts = 1786966297335 · 파일 = 1786966171829"
+    },
+    {
+      "note": "화면의 \"마지막 프레임\" 표시 = \"1초 전 수신 · 기록 시점에 이미 0초 침묵\""
+    },
+    {
+      "name": "화면이 실제 시각을 그린다 (\"알 수 없음\" 이 아니다)",
+      "ok": true,
+      "detail": "\"1초 전 수신 · 기록 시점에 이미 0초 침묵\""
+    },
+    {
+      "note": "스크린샷 web/artifacts/7-freshness.png"
+    },
+    {
+      "name": "끊김을 화면이 즉시 말한다 (2ms)",
+      "ok": true,
+      "detail": "연결 끊김 — 0초 후 재연결 시도 (1회)"
+    },
+    {
+      "name": "전환을 알림으로도 말한다",
+      "ok": true,
+      "detail": "서버 연결이 끊겼습니다. 파일 폴백으로 전환합니다오후 8:31:38A2 · 예약되었습니다오후 8:31:36서버에 연결되었습니다오후 8:31:34"
+    },
+    {
+      "name": "🔴 끊긴 뒤에도 화면이 비지 않는다 (폴백이 이어받는다)",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "note": "스크린샷 web/artifacts/6-ws-cut.png"
+    },
+    {
+      "name": "끊긴 소켓이 저절로 다시 붙는다",
+      "ok": true,
+      "detail": "재연결됨"
+    },
+    {
+      "name": "폴백 시험용 죽은 포트가 운영 포트가 아니다",
+      "ok": true,
+      "detail": "52227"
+    },
+    {
+      "name": "WS 실패 후 파일 폴백으로 넘어갔다",
+      "ok": true,
+      "detail": "파일 폴백 (data_log.json)"
+    },
+    {
+      "name": "폴백 경로에서도 10칸이 상태를 말한다",
+      "ok": true,
+      "detail": "[\"사용 중\",\"빈 자리\",\"빈 자리\"]"
+    },
+    {
+      "name": "포트 불일치 경고가 떴다 (WS 와 폴백이 다른 서버를 가리킬 수 있는 상태)",
+      "ok": true,
+      "detail": "이 페이지는 :10500 에서 받았는데 WebSocket 은 :52227 로 붙습니다. 서로 다른 서버라면 화면이 두 인스턴스의 상태를 섞어 보여 줍니다 — 예약은 :52227 쪽 장치로 내려갑니다.오후 8:31:3"
+    },
+    {
+      "note": "출처 표시 = \"data_log.json 폴링 (폴백)\""
+    },
+    {
+      "note": "스크린샷 web/artifacts/4-fallback.png"
+    },
+    {
+      "name": "§9.1 개정 4 폴백+무장 데모 버튼이 있다",
+      "ok": true,
+      "detail": "#e2e-demo-btn"
+    },
+    {
+      "name": "무장 표시가 켜졌다",
+      "ok": true,
+      "detail": "\"⚠ 테스트 모드 무장됨 — 지금 보이는 점유 상태는 진짜가 아닐 수 있습니다주입된 칸 1개 · 빗금 친 칸이\""
+    },
+    {
+      "name": "주입된 칸에 ⚑ 주입값 빗금이 보인다 (A3 기대)",
+      "ok": true,
+      "detail": "[\"A3\"]"
+    },
+    {
+      "note": "스크린샷 web/artifacts/5-demo-armed.png"
+    },
+    {
+      "name": "페이지 예외·오류 없음",
+      "ok": true,
+      "detail": "[]"
+    },
+    {
+      "note": "GET /              → 200"
+    },
+    {
+      "note": "GET /index.html?x  → 200"
+    },
+    {
+      "note": "GET /?x            → 200"
+    },
+    {
+      "name": "GET / 는 200",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "name": "GET /index.html?x 는 200",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "name": "GET /?x 도 200 (REQ-0132 이후. 404 면 옛 빌드이거나 회귀다)",
+      "ok": true,
+      "detail": "200 · 404 라면: path==\"/\" 판정이 쿼리 제거보다 먼저인 옛 serve_file"
+    }
+  ]
+}

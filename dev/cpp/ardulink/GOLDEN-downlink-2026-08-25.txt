@@ -1,0 +1,20 @@
+# 서버 하행 골든 바이트 — 2026-08-25 · cpp-engineer
+#
+# 만든 것 : 서버의 **진짜** build_line/cksum (server_device.h:122·128)
+#   🔑 체크섬을 다시 구현하지 않았다. 다시 구현하면 시험이 자기 자신과만 일치한다
+# 재현   : c++ -std=c++20 -I조별과제샘플/VS_server_multi/server_multi golden_gen.cpp
+#          (생성기는 cpp/ardulink/golden_gen.cpp)
+# 개행   : **뗐다.** verify_line 은 개행 없는 줄을 받는다(server_device.h:133)
+#
+# 무엇                     바이트                    필드수·자가검증
+G 기본                     G,7,3,1,72                   nf=4 verify=OK
+G 최악길이               G,999,255,4294967295,41      nf=4 verify=OK
+G 음수인자               G,1,0,-1,5A                  nf=4 verify=OK
+R uid 있음                 R,12,A1,kim,4E               nf=4 verify=OK
+R uid 빈값(정상)         R,7,A1,,15                   nf=4 verify=OK
+R uid 8자 경계            R,65535,B2,user-_09,78       nf=4 verify=OK
+C 기본                     C,13,A2,1E                   nf=3 verify=OK
+T slot 미상                T,14,A,??,-,11               nf=5 verify=OK
+T 기본                     T,20,B,A1,1,79               nf=5 verify=OK
+M (rid 뿐)                  M,15,49                      nf=2 verify=OK
+Q (필드 없음)            Q,7D                         nf=1 verify=OK
