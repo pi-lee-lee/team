@@ -65,6 +65,25 @@ class ParkingLot;
 #ifdef far
 #undef far
 #endif
+// 🔴🔴 **`min`·`max` 는 위 넷과 같은 함정인데 여기 없었다** (실측 2026-08-27)
+//   `Measure& min(long cm);` 이 바로 아래에 있다. `<windows.h>` 의 `min` 은 **함수형 매크로**라
+//   그 줄이 *"인자가 모자란 매크로 호출"* 이 되고, 이어서 **생성자까지 깨진다.**
+//   측정값 — `min`/`max` 를 켠 채 이 트리를 파싱시키면:
+//     `parking.h:170 error: too few arguments provided to function-like macro invocation`
+//     `parking.h:173 error: constructor for 'Measure' must explicitly initialize ... 'min'`
+//
+//   ⚠ **지금 서버 빌드에서는 안 터진다** — `server.cpp` 가 `<windows.h>` 앞에서 `NOMINMAX` 를 켠다.
+//   🔴 문제는 **그 보호가 다른 파일에 있다는 것**이다. 이 헤더는 **기여자가 include 하는 공개 API** 라
+//     `<windows.h>` 를 먼저 넣고 `NOMINMAX` 를 안 준 번역 단위에서는 그대로 깨진다.
+//   ★ 위 넷은 스스로 막으면서 이 둘만 남의 `#define` 에 기대고 있었다 —
+//     **방어 블록의 선언("`<windows.h>` 대비")과 실제 범위가 어긋나 있었다.**
+//   🔑 `NOMINMAX` 를 지우지는 않는다. 그쪽은 `std::min`/`std::max` 를 지키고 여기는 **우리 이름**을 지킨다.
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
 
 // 자리 하나. **기여자가 배우는 것은 다섯이다** — `spot` · `at` · `parking` · `label` · `module`.
 class Spot {

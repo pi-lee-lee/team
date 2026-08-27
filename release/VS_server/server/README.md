@@ -19,11 +19,47 @@ macOS/Linux   c++ -std=c++11 -O2 -o srv server.cpp lot.cpp   →  ./srv
 ## 🔴🔴 **빌드는 검증되지 않았다** — 우리는 macOS 에서 작업한다
 
 ```
-🔴 **MSVC 가 없다.** 이 폴더는 **텍스트로만** 검증했다:
+🔴 **MSVC 가 없다.** 다만 **텍스트로만** 은 아니다 — 아래 §"윈도우 갈래를 실제로 파싱한다" 를 봐라
    ✅ 소스 34개 정본과 동일
    ✅ `.vcxproj` 파일 목록 정합 — 헤더 31 · cpp 3 · **빠진 것 0**
-   ✅ `.vcxproj` ↔ `.filters` 어긋남 **0**
+   ✅ `.vcxproj` ↔ `.filters` 어긋남 **0** · **컴파일 대상**도 맥 빌드와 같다
+   ✅ **`_WIN32` 갈래를 컴파일러에 태운다** — `windows.h` 매크로를 켠 채로 (2026-08-27)
 🔴 **"빌드된다" 고 말하지 않는다.** 윈도우에서 처음 여는 사람이 그것을 확인한다
+```
+
+## ✅ 윈도우 갈래를 **실제로 파싱한다** — 그리고 그 검사에 이빨이 있다 (2026-08-27)
+
+```bash
+cd 릴리즈/VS_server/server
+c++ -std=c++20 -fsyntax-only -Wall -Wextra -Wreorder -Wsign-compare \
+    -I ../../../cpp/winparse/shim -I . \
+    -Wno-macro-redefined -Wno-unknown-pragmas \
+    -include ../../../net/probe/win_shim_extra.h \
+    ../../../cpp/winparse/win_parse.cpp
+```
+`cpp/winparse/` 는 `_WIN32` 를 켜고 이 트리를 파싱시키는 하니스다. shim 이 진짜 `<windows.h>` 처럼
+**`near`·`far`·`IN`·`OUT` 을 빈 매크로로** 정의하기 때문에, 그 함정이 여기서 드러난다.
+
+### 🔴🔴 **초록불이 "안 봤다" 가 아니라는 증거 — 같은 명령이 샘플 트리에서는 빨강이다**
+
+```
+릴리즈/VS_server/server          →  ✅ exit=0 · 오류 0 · 경고 0
+조별과제샘플/VS_server/server     →  🔴 exit=1 · 오류 **6**
+     parking.h:149  Measure& near(long cm);   ← `near` 매크로에 먹혔다
+     parking.h:150  Measure& far(long cm);
+     server.cpp:313·314  Measure::near / Measure::far
+```
+> ### ★★ **그러니 "샘플이 검증된 판이다" 는 틀렸다.**
+> ### 샘플은 `near`/`far` 고침이 **들어가기 전 판**이고, **윈도우에서 컴파일되지 않는다.**
+> ### 🔑 **샘플에서 윈도우 대응을 베껴 오면 이 결함이 되살아난다.**
+
+⚠ **이것은 MSVC 가 아니다.** clang 이 `_WIN32` 갈래를 파싱한 것이고, shim 은 진짜 SDK 가 아니다.
+  ✅ 정확한 뜻 : *"컴파일 단계에서 **볼 수 있는 것**에는 없다."*  ❌ 아닌 뜻 : *"빌드된다."*
+
+### ⚠ shim 에 없는 것은 `net/probe/win_shim_extra.h` 로 채운다
+```
+runtime.h:298  `_fullpath`  →  shim 에 없다(cpp 소유라 그쪽을 안 고쳤다)
+시그니처는 Microsoft Learn 으로 대조 : char *_fullpath(char*, const char*, size_t)  <stdlib.h>
 ```
 ### ⚠ 깨질 만한 자리 — **오류가 나면 여기부터 봐라**
 ```
@@ -48,8 +84,11 @@ macOS/Linux   c++ -std=c++11 -O2 -o srv server.cpp lot.cpp   →  ./srv
 
 🔴 **못 확인한 것**(윈도우에서 처음 여는 사람이 볼 것)
 ```
-[1] `_CRT_SECURE_NO_WARNINGS` 가 **없다**(grep 0) → `snprintf`·`strncpy` 에 **경고**가 날 수 있다
-    ★ 경고지 오류가 아닐 가능성이 높다. **오류면 프로젝트 속성 → C/C++ → 전처리기**에 추가
+[1] ~~`_CRT_SECURE_NO_WARNINGS` 가 **없다**(grep 0)~~ → 🔴 **거짓이었다. `server.cpp:33` 에 있다**
+    ★ 내가 **`.vcxproj` 만 세고 소스에는 안 댔다.** `grep 0` 은 참이었는데 **grep 한 곳이 틀렸다**
+    🔑 §"`0` 이 나오면 **내 자가 이걸 잴 수 있나** 를 먼저 물어라" — 그 `0` 은 *"없다"* 가 아니라
+      *"내가 딴 데를 봤다"* 였다. **거짓 `0` 은 없는 결함을 쫓게 한다**
+    🔵 그래서 이 항목은 **위험이 아니다** — 소스가 스스로 켠다
 [2] `#include` 순서 — `winsock2.h` 는 `server.cpp` 의 `_WIN32` 갈래 안에 있다.
     ⚠ 다른 헤더가 `windows.h` 를 먼저 끌어오면 충돌한다. **그때 오류 문구에 `WinSock` 이 뜬다**
 [3] 🔵 **표준은 문제없다** — `.vcxproj:121  <LanguageStandard>stdcpp20</LanguageStandard>`.
@@ -106,6 +145,27 @@ c++ -fsyntax-only -DIN= -DOUT= -x c++ parking.h
 > **이름을 가진 헤더가 그 이름을 지킨다.**
 ⚠ **이 결함은 옛 단일 파일(`vs_win_server.cpp`)에는 없었다** — 조립 API(`parking.h`)가
 새로 생기면서 들어왔다. **옛 포팅이 통과했다는 사실이 지금을 보증하지 않는다.**
+
+### 🔴 같은 자리에서 하나 더 — `Measure::min` 은 **남의 `#define` 에 기대고 있었다** (2026-08-27)
+
+```
+parking.h  IN · OUT · near · far   → 스스로 `#undef` 한다
+parking.h  Measure& min(long cm);  → 🔴 **`min` 은 그 목록에 없었다**
+```
+지금 안 터진 이유는 **다른 파일**에 있었다 — `server.cpp:62 #define NOMINMAX`.
+
+**값으로 쟀다** (하니스에 `min`/`max` 매크로를 켜서 = `NOMINMAX` 가 없는 상황):
+```
+고치기 전 → 🔴 exit=1
+   parking.h:170  error: too few arguments provided to function-like macro invocation
+   parking.h:173  error: constructor for 'Measure' must explicitly initialize ... 'min'
+고친 뒤   → ✅ exit=0
+```
+🔴 **`min` 은 함수형 매크로**라 `near`/`far`(빈 매크로)와 증상이 다르다 — 인자 개수 오류로 뜨고
+   **생성자까지 번진다.** 그래서 오류 목록이 길어지고 **첫 원인이 안 보인다.**
+🔑 `NOMINMAX` 를 지우지 않는다 — 그쪽은 `std::min`/`std::max` 를 지키고 여기는 **우리 이름**을 지킨다.
+★ 판별자는 *"이 헤더가 스스로 서 있나"* 다. `parking.h` 는 **기여자가 include 하는 공개 API** 라
+  `<windows.h>` 를 먼저 넣은 남의 번역 단위에서도 서야 한다.
 
 ### 🔴 남은 함정 (우리가 못 재는 것) — 직접 만들 때 쓰라
 ```
@@ -232,29 +292,34 @@ VS_server/    Windows. dev 와 **같은 소스** + VS 프로젝트 파일
 | `config.h` 포트 3줄 | server ≠ dev·VS | 동시에 돌려야 한다(운영 8888/9990/8911 · dev 9900/9991/5500) |
 | `entry.h` · `listen.h` · `runtime.h` · `serve.h` | server ≠ dev·VS | dev 는 **콘솔 전용**(파일 로그 없음 · 자가검증 없음 · 소크 요약 안 찍음 · 실패를 사람 말로) |
 | `parking.h` 훅 선언 · `server.cpp` include | server ≠ dev·VS | `lot.cpp` 가 진짜 번역 단위라서 |
-| 🔴 `entry.h` 의 `#include <windows.h>` · `SetConsoleOutputCP(65001)` | **VS 에만** | Windows 콘솔 UTF-8 |
-| 🔴 `server.cpp` 의 `#define _CRT_SECURE_NO_WARNINGS` | **VS 에만** | MSVC 경고 |
+| ~~`entry.h` 의 `#include <windows.h>` · `SetConsoleOutputCP(65001)`~~ | ~~VS 에만~~ | 🔴 **정본에도 있다**(`entry.h:20~33`, `#ifdef _WIN32` 로 감싼 채) |
+| ~~`server.cpp` 의 `#define _CRT_SECURE_NO_WARNINGS`~~ | ~~VS 에만~~ | 🔴 **정본에도 있다**(`server.cpp:33`) |
 | `server.slnx` · `.vcxproj` · `.filters` | VS 에만 | VS 빌드 정의 |
+| 🔵 `user8080.html` · `user8081.html` | **이 폴더에만**(샘플엔 없다) | **의도한 것이다** — 이용자 화면 둘(`web` 소유). 샘플은 그 화면이 생기기 전 판이다. 서버가 **포트마다 다른 문서**를 준다(`serve.h:153·161`) : `9900 → index.html` · `8080 → user8080.html`(주차위치 확인) · `8081 → user8081.html`(자리 선택). `F5` 인자의 `--web-root=$(ProjectDir).` 가 이 폴더를 뿌리로 잡아 **셋 다 나온다** |
 
-> ### 🔴 **위 목록에 없는 차이는 "낡음"이다.** 갱신하는 사람은 `git hash-object` 로 파일별 대조하고
-> ### 다른 것만 **내용으로** 반영해라 — **파일 복사 금지**(사용자 확정). 위 셋은 **살려 둔다.**
+> ### 🔴 **위 표에서 취소선 그은 둘은 2026-08-27 에 거짓이 됐다.**
+> ### 정본이 그 코드를 흡수했다 — **`서머리/server` 와 이 폴더의 `.h`/`.cpp` 34개는 지금 바이트 동일이다.**
 
-## ⚠ 이 트리(`VS_server/`)는 **자동 검사 밖이다**
+## ✅ 이 트리는 이제 **자동 검사 안이다** (2026-08-27)
 
 ```
-net/sync_check.sh  →  `server/` 와 `dev_server/` **둘만** 대조한다. 여기는 안 본다
-🔴 즉 이 사본은 **조용히 낡는다.** 낡아도 아무 데서도 빨강이 안 난다
+python3 net/release_sync_check.py          검사만 (다르면 exit 1)
+python3 net/release_sync_check.py --sync   정본 → 사본으로 맞춘다
+```
+```
+① 내용        : 정본 34개 == 릴리즈/server == 릴리즈/VS_server/server · 사본끼리도 댄다
+② 빌드 대상   : `.vcxproj` · `.filters` · 맥 빌드 줄이 **같은 `.cpp` 를 컴파일하나**
+③ 문서 예제   : `EXAMPLES.cpp` 가 정본 `parking.h` 로 여전히 컴파일되나
 ```
 
-**검사에 안 넣은 이유**(값으로 정했다):
-```
-이 트리에는 **의도된 Windows 전용 차이**가 있다 —
-  entry.h   : #include <windows.h> · SetConsoleOutputCP(65001)
-  server.cpp: #define _CRT_SECURE_NO_WARNINGS
-  그리고 server.vcxproj · server.vcxproj.filters (우리 트리에 없다)
-검사를 파일 대조로 걸면 **이 넷이 매번 발화한다** →
-🔑 **항상 발화하는 검사는 아무 말도 안 하는 검사다.**
-```
+### ⚠ 전에 안 넣었던 이유와, 그것이 왜 무너졌나
+
+전에는 *"의도된 Windows 전용 차이가 넷 있어서 파일 대조를 걸면 매번 발화한다"* 였다.
+🔑 **그 논리는 맞았다.** 다만 **전제가 사라졌다** — 그 넷 중 **코드 둘이 정본으로 올라갔고**,
+남은 둘(`.vcxproj`·`.filters`)은 **정본에 없는 파일**이라 `.h`/`.cpp` 대조의 분모에 안 들어간다.
+
+> ### ★ **"항상 발화하는 검사는 아무 말도 안 하는 검사다" 를 피하는 법은 검사를 빼는 것이 아니라**
+> ### **분모를 정확히 고르는 것이었다.** 빼 두는 동안 `릴리즈/server` 가 실제로 셋 낡았다.
 
 **대신 지금 걸려 있는 것 · 갱신하는 사람이 해야 할 것:**
 ```
