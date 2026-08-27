@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f2f8fc">
+<meta name="screen-build" content="user8081-20260827-a">
+<title>주차 공간 선택</title>
+<style>
+/* ═══ 0 바탕 ═══ */
+:root{
+  --ink:#183750; --muted:#63788a; --paper:#f2f8fc; --card:#fff;
+  --line:#d5e4ee; --primary:#258bd5; --primary-dark:#146baa; --primary-soft:#dff2ff;
+  --amber:#b8771d; --amber-bg:#fff0d5; --red:#a8463a; --red-bg:#f9e5e1;
+  --blue:#315fbb; --blue-bg:#e7efff;
+  --gray:#6b7d8a; --gray-bg:#eef2f5;
+  --shadow:0 18px 50px rgba(37,91,132,.12);
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--paper);color:var(--ink);
+  font-family:"Segoe UI Variable","Segoe UI",Pretendard,"Noto Sans KR","Apple SD Gothic Neo",sans-serif}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.30;
+  background-image:radial-gradient(#8fb8d4 1px,transparent 1px);background-size:24px 24px;
+  mask-image:linear-gradient(to bottom,#000,transparent 48%)}
+button{font:inherit}
+/* 🔴 세로 여백을 **창 높이에 비례**시킨다 — 고정값이면 낮은 창에서 격자와 확정 버튼이
+   아래로 밀려 스크롤을 요구한다. 고를 시한이 15초인데 스크롤을 찾게 하면 안 된다. */
+.shell{position:relative;width:min(1120px,100%);min-height:100vh;margin:auto;
+  padding:clamp(16px,2.6vh,28px) clamp(18px,4vw,52px) clamp(16px,3vh,40px)}
+
+/* ═══ 1 머리 ═══ */
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:clamp(18px,3.4vh,42px)}
+.brand{display:flex;align-items:center;gap:12px;font-weight:850;letter-spacing:-.03em}
+.mark{display:grid;place-items:center;width:42px;height:42px;border-radius:13px;background:var(--ink);
+  color:#fff;font:900 22px/1 "Segoe UI Variable","Segoe UI",sans-serif;box-shadow:0 8px 20px rgba(24,55,80,.20)}
+.brand small{display:block;color:var(--muted);font-size:11px;letter-spacing:.14em;text-transform:uppercase;margin-top:2px}
+.link{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--line);border-radius:999px;
+  background:rgba(255,255,255,.76);color:var(--muted);font-size:13px;font-weight:700}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--red)}
+.link[data-ok="1"] .dot{background:#38a8e8;box-shadow:0 0 0 4px rgba(56,168,232,.14)}
+
+/* ═══ 2 머리말·빈자리 수 ═══ */
+.hero{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(230px,.65fr);gap:clamp(14px,2vw,28px);align-items:stretch;margin-bottom:clamp(14px,2.4vh,28px)}
+.intro,.count-card{border:1px solid rgba(37,91,132,.11);border-radius:28px;background:rgba(255,255,255,.90);box-shadow:var(--shadow)}
+.intro{padding:clamp(20px,3.4vh,44px) clamp(24px,3.4vw,48px)}
+.eyebrow{display:flex;align-items:center;gap:9px;color:var(--primary);font-size:13px;font-weight:850;letter-spacing:.09em;text-transform:uppercase}
+.eyebrow:before{content:"";width:28px;height:2px;background:currentColor}
+/* 🔑 가로만 보고 키우면 **낮고 넓은 창**에서 넘친다. 폭과 높이 중 작은 쪽을 따른다. */
+h1{font-size:clamp(30px,min(5vw,6.4vh),58px);line-height:1.08;letter-spacing:-.055em;
+  margin:clamp(10px,1.8vh,18px) 0 clamp(8px,1.4vh,14px);max-width:700px}
+.lead{margin:0;color:var(--muted);font-size:clamp(16px,2vw,19px);line-height:1.7;word-break:keep-all}
+.count-card{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:clamp(18px,2.6vh,30px);text-align:center;
+  background:var(--ink);color:#fff;overflow:hidden;position:relative}
+.count-card:after{content:"P";position:absolute;right:-20px;bottom:-56px;color:rgba(255,255,255,.045);
+  font:900 190px/1 "Segoe UI Variable","Segoe UI",sans-serif}
+.count-label{position:relative;color:#c4dbea;font-weight:750}
+.count{position:relative;font:900 clamp(48px,min(10vw,11vh),96px)/1 "Segoe UI Variable","Segoe UI",sans-serif;margin:clamp(6px,1.2vh,12px) 0 8px;letter-spacing:-.055em}
+.count-unit{position:relative;font-weight:800}
+
+/* ═══ 3 자리 격자 ═══ */
+.panel{border:1px solid rgba(37,91,132,.11);border-radius:28px;background:var(--card);box-shadow:var(--shadow);
+  padding:clamp(16px,2.4vh,34px) clamp(20px,3vw,34px)}
+.panel-head{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:clamp(12px,2vh,24px)}
+.panel h2{font-size:clamp(22px,3vw,30px);letter-spacing:-.04em;margin:0 0 7px}
+.panel-sub{margin:0;color:var(--muted);line-height:1.5}
+.legend{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
+.legend span{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;font-weight:700}
+.legend i{width:9px;height:9px;border-radius:50%;background:#93a7b5}
+.legend .free{background:var(--primary)}.legend .busy{background:var(--red)}
+.legend .reserved{background:var(--amber)}.legend .off{background:var(--gray)}
+.slots{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
+.slot{position:relative;min-height:clamp(132px,20vh,178px);padding:clamp(14px,2vh,20px);border:1.5px solid var(--line);border-radius:22px;
+  background:#f7fafc;color:var(--ink);text-align:left;overflow:hidden;
+  transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+.slot:before{content:"";position:absolute;left:18px;right:18px;top:14px;height:5px;
+  border:solid #c7d8e4;border-width:2px 0;border-radius:2px;opacity:.8}
+.slot-code{display:block;font:900 clamp(30px,4vh,39px)/1 "Segoe UI Variable","Segoe UI",sans-serif;margin-top:clamp(18px,3vh,29px);letter-spacing:-.055em}
+.slot-state{display:flex;align-items:center;gap:8px;margin-top:clamp(10px,1.8vh,17px);color:var(--muted);font-size:14px;font-weight:800}
+.slot-state:before{content:"";width:9px;height:9px;border-radius:50%;background:#96a9b6}
+.slot-tag{position:absolute;right:15px;top:29px;color:var(--primary);font-size:11px;font-weight:900;letter-spacing:.05em}
+
+.slot[data-state="EMPTY"]{background:#edf8ff;border-color:#9fd6f4}
+.slot[data-state="EMPTY"] .slot-state{color:var(--primary)}
+.slot[data-state="EMPTY"] .slot-state:before{background:var(--primary)}
+.slot[data-state="OCCUPIED"]{background:var(--red-bg);border-color:#e7b9b1}
+.slot[data-state="OCCUPIED"] .slot-state{color:var(--red)}
+.slot[data-state="OCCUPIED"] .slot-state:before{background:var(--red)}
+.slot[data-state="RESERVED"]{background:var(--amber-bg);border-color:#eccb95}
+.slot[data-state="RESERVED"] .slot-state{color:var(--amber)}
+.slot[data-state="RESERVED"] .slot-state:before{background:var(--amber)}
+.slot[data-state="SELECTED"],.slot[data-candidate="1"]{background:var(--blue-bg);border-color:#7da5c4;box-shadow:0 0 0 3px rgba(49,94,132,.12)}
+.slot[data-state="SELECTED"] .slot-state,.slot[data-candidate="1"] .slot-state{color:var(--blue)}
+.slot[data-state="SELECTED"] .slot-state:before,.slot[data-candidate="1"] .slot-state:before{background:var(--blue)}
+/* 🔴 못 쓰는 자리와 모르는 자리 — 옛 화면에 **칸이 없어서** 빈 자리처럼 보였다 */
+.slot[data-state="UNUSABLE"],.slot[data-state="UNKNOWN"]{background:var(--gray-bg);border-color:#cbd6de}
+.slot[data-state="UNUSABLE"] .slot-state,.slot[data-state="UNKNOWN"] .slot-state{color:var(--gray)}
+.slot[data-state="UNUSABLE"] .slot-state:before,.slot[data-state="UNKNOWN"] .slot-state:before{background:var(--gray)}
+.slot[data-state="UNUSABLE"]{background-image:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(107,125,138,.07) 8px,rgba(107,125,138,.07) 16px)}
+
+.slot[data-pick="1"]{cursor:pointer}
+.slot[data-pick="1"]:hover{transform:translateY(-4px);box-shadow:0 14px 30px rgba(37,139,213,.16);border-color:var(--primary)}
+.slot[data-pick="1"]:focus-visible{outline:3px solid rgba(37,139,213,.30);outline-offset:3px}
+.slot:disabled{cursor:not-allowed}
+
+/* ═══ 4 조작줄 ═══ */
+.actionbar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:clamp(12px,2vh,22px);
+  padding:clamp(12px,1.8vh,18px) 20px;border-radius:18px;background:#f0f7fb;border:1px solid var(--line)}
+.action-copy{min-width:0}
+.action-copy strong{display:block;font-size:16px;margin-bottom:4px}
+.action-copy span{color:var(--muted);font-size:13px;line-height:1.45}
+.action-side{display:flex;align-items:center;gap:14px;flex:0 0 auto}
+.countdown{font-size:15px;font-weight:850;color:var(--primary-dark);font-variant-numeric:tabular-nums;white-space:nowrap}
+.confirm{min-width:168px;min-height:54px;border:0;border-radius:16px;background:var(--primary);color:#fff;font-weight:850;
+  cursor:pointer;box-shadow:0 10px 22px rgba(37,139,213,.25)}
+.confirm:hover{background:var(--primary-dark)}
+.confirm:disabled{background:#aab8c1;box-shadow:none;cursor:not-allowed}
+.notice{display:none;margin-top:18px;padding:14px 16px;border-radius:14px;font-size:14px;font-weight:700;line-height:1.5}
+.notice[data-kind]{display:block}
+.notice[data-kind="info"]{background:var(--blue-bg);color:var(--blue)}
+.notice[data-kind="error"]{background:var(--red-bg);color:var(--red)}
+.notice[data-kind="ok"]{background:var(--primary-soft);color:var(--primary-dark)}
+footer{display:flex;justify-content:space-between;gap:16px;color:#778d9c;font-size:12px;margin-top:clamp(10px,1.6vh,22px);padding:0 6px}
+
+/* 🔴 좁은 기기에서는 **격자가 주인공**이다.
+   실측(360x640): 머리말과 빈자리 카드가 화면을 다 먹어 **자리가 하나도 안 보였다.**
+   고를 자리가 안 보이면 이 화면은 아무 일도 못 한다. */
+@media(max-width:760px){
+  .shell{padding-top:14px}
+  .hero{grid-template-columns:1fr;gap:10px;margin-bottom:12px}
+  .intro{padding:14px 16px}
+  h1{font-size:clamp(21px,5.6vw,30px);margin:6px 0 4px}
+  /* 설명은 접는다 — 같은 뜻이 아래 조작줄에 있다(중복이다). 자리를 보이는 것이 먼저다. */
+  .lead{display:none}
+  /* 빈자리 수를 **한 줄로** 눕힌다. 세로로 세우면 그것만으로 화면 3분의 1이다 */
+  .count-card{min-height:0;flex-direction:row;align-items:baseline;justify-content:center;gap:10px;padding:11px 16px}
+  .count-card:after{display:none}
+  .count-label{font-size:13px}
+  .count{font-size:32px;margin:0}
+  .count-unit{font-size:13px}
+  .slots{grid-template-columns:repeat(2,1fr)}
+  .panel-head{align-items:flex-start;flex-direction:column;margin-bottom:10px}
+  .legend{justify-content:flex-start}
+  /* 🔴🔴 **조작줄을 화면 아래에 붙인다.** 자리가 접혀 세로로 길어지면 확정 버튼이 스크롤
+     아래로 가는데, 고를 시한이 15초다 — **스크롤을 찾는 사이에 창이 닫힌다.**
+     ⚠ `.panel` 에 `overflow` 를 주지 마라. 주면 이 `sticky` 가 조용히 죽는다. */
+  .actionbar{position:sticky;bottom:0;z-index:5;align-items:stretch;flex-direction:column;
+    box-shadow:0 -10px 24px rgba(24,55,80,.12)}
+  .action-side{justify-content:space-between}
+  .confirm{width:100%}
+  header{margin-bottom:14px}
+  .brand small{display:none}
+}
+@media(max-width:390px){
+  .slots{grid-template-columns:1fr 1fr;gap:10px}
+  .slot{min-height:108px;padding:12px}
+  .slot:before{top:9px;height:4px}
+  .slot-code{font-size:28px;margin-top:12px}
+  .slot-state{margin-top:8px;font-size:13px}
+  .slot-tag{top:14px;right:12px}
+  .link{padding:7px 9px}
+  .link .link-word{display:none}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main class="shell">
+
+  <header>
+    <div class="brand"><div class="mark">P</div><div>SMART PARKING<small>Entry guidance</small></div></div>
+    <div class="link" id="link" data-ok="0"><span class="dot"></span><span id="link-text">서버 연결 중</span><span class="link-word"></span></div>
+  </header>
+
+  <section class="hero">
+    <div class="intro">
+      <div class="eyebrow" id="eyebrow">주차 현황</div>
+      <h1 id="title">한눈에 확인하고<br>편하게 주차하세요.</h1>
+      <p class="lead" id="lead">입구에 차량이 감지되면 이용 가능한 주차 공간을 선택할 수 있습니다.</p>
+    </div>
+    <aside class="count-card" aria-label="남은 주차면">
+      <span class="count-label">현재 이용 가능한 자리</span>
+      <strong class="count" id="free-count">–</strong>
+      <span class="count-unit" id="free-unit">자리 남음</span>
+    </aside>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <div><h2>주차 공간</h2><p class="panel-sub" id="panel-sub">실시간 주차 현황을 불러오고 있습니다.</p></div>
+      <div class="legend" aria-label="상태 범례">
+        <span><i class="free"></i>사용 가능</span>
+        <span><i class="busy"></i>사용 중</span>
+        <span><i class="reserved"></i>예약됨</span>
+        <span><i class="off"></i>점검 중</span>
+      </div>
+    </div>
+    <div class="slots" id="slots" aria-live="polite"></div>
+    <div class="actionbar">
+      <div class="action-copy">
+        <strong id="act-title">입차 차량을 기다리고 있습니다</strong>
+        <span id="act-desc">빈자리 현황은 언제든 확인할 수 있습니다.</span>
+      </div>
+      <div class="action-side">
+        <span class="countdown" id="count"></span>
+        <button class="confirm" id="confirm" type="button" disabled>주차면 선택하기</button>
+      </div>
+    </div>
+    <div class="notice" id="notice" role="status" aria-live="polite"></div>
+  </section>
+
+  <footer><span>선택과 배정은 주차 서버에서 확인합니다.</span><span>SMART PARKING</span></footer>
+</main>
+
+<script>
+'use strict';
+/* ══════════════════════════════════════════════════════════════════════
+   목차 — style · body · script 가 같은 번호를 쓴다
+     0 연결        어디에 붙나
+     1 진행 단계   entry.phase 하나를 화면 갈래 하나로
+     2 자리 상태   zones[] 하나를 상태 낱말 하나로
+     3 화면        머리말 · 격자 · 조작줄
+     4 상행        chooser · pick_slot
+     5 WS          수신 분기
+   📖 계약 정본 : docs/net/parking-protocol.md · SPEC-manual-plate-2026-08-25.md
+   📖 화면 명세 : docs/SPEC-web8080-8081-2026-08-26.md
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ═══ 0. 연결 — HTML 을 준 그 포트의 WS 에 붙는다 ═══ */
+/**
+ * ⚠ 주소를 하드코딩하지 마라 — IP 는 바뀐다. `location.host` 가 host 와 port 를 같이 준다.
+ * ⚠ 경로는 `/ws` 다. 서버는 접두 3글자만 보므로 `/ws/무엇` 도 **핸드셰이크가 통과한다** —
+ *   그러면 화면이 "연결됨" 을 켜 놓고 하행을 하나도 못 받는다. 붙었다는 것이 살아 있다는 뜻이 아니다.
+ */
+var WS_PATH = '/ws';
+function wsUrl() {
+  var raw = new URLSearchParams(location.search).get('ws');
+  if (raw !== null) {
+    var n = Number(raw);
+    if (String(raw).trim() !== '' && Number.isInteger(n) && n >= 1 && n <= 65535) {
+      return 'ws://' + (location.hostname || 'localhost') + ':' + n + WS_PATH;   /* 시험용 덮어쓰기 */
+    }
+  }
+  return 'ws://' + (location.host || 'localhost') + WS_PATH;
+}
+
+var S = {
+  zones: null, labels: {}, phase: null, entry: null,
+  view: 'idle', candidate: '', sending: false, timer: 0, nodeKey: null,
+  /* 🔵 **자리 선택이 배정에 관여하나** — 서버가 `--no-chooser` 로 끌 수 있다(`snapshot.chooser_enabled`).
+     ```
+     null  = **모른다**(옛 서버에는 이 개념이 없다) → 화면은 아무것도 안 바꾼다
+     true  = 고를 수 있다
+     false = 서버가 자동 배정한다 — **"고를 수 있습니다" 라고 약속하면 거짓이다**
+     ```
+     🔴 `false` 를 기본값으로 두지 마라. 그러면 옛 서버가 전부 *"자동 배정"* 이라고 말한다 — 거짓 경보다. */
+  chooserOn: null
+};
+var el = {
+  link: document.getElementById('link'), linkText: document.getElementById('link-text'),
+  eyebrow: document.getElementById('eyebrow'), title: document.getElementById('title'),
+  lead: document.getElementById('lead'), panelSub: document.getElementById('panel-sub'),
+  freeCount: document.getElementById('free-count'), freeUnit: document.getElementById('free-unit'),
+  slots: document.getElementById('slots'),
+  actTitle: document.getElementById('act-title'), actDesc: document.getElementById('act-desc'),
+  count: document.getElementById('count'), confirm: document.getElementById('confirm'),
+  notice: document.getElementById('notice')
+};
+
+/* ═══ 1. 진행 단계 — 서버의 `entry.phase` 를 화면 갈래로 ═══ */
+/**
+ * 🔴 **뭉치지 않는다.** 서버는 열한 단계를 구별해서 보내는데 화면이 셋으로 접으면
+ * "빈자리가 없다" 와 "차를 기다린다" 가 같은 문장이 된다 — 그건 거짓말이다.
+ * ⚠ 표에 없는 낱말이 오면 `unknown` 이다. 아는 척하지 않고 그 낱말을 그대로 보여 준다.
+ */
+var PHASE_VIEW = {
+  idle: 'idle',
+  shooting: 'wait', rejected: 'wait', assigning: 'wait',
+  choosing: 'choose',
+  full: 'full',
+  /* 🔴 자리가 정해진 뒤의 다섯 — 이 화면은 **처음 화면으로 돌아간다.**
+     이 기기는 입구에 붙박인 **공용 키오스크**다(사용자 결정 2026-08-27). 안내를 계속 띄우면
+     다음 사람이 앞사람의 배정을 자기 것으로 읽는다. 안내는 차 안에서 볼 것이 아니라
+     안내등과 LCD 가 한다 — 이 화면이 그것을 흉내 낼 이유가 없다. */
+  assigned: 'idle', gate_open: 'idle', passing: 'idle', gate_close: 'idle', wait_park: 'idle'
+};
+
+/** `wait` 안에서 무엇을 기다리는지는 셋이 다르다 — 사람이 할 일이 달라진다. */
+var WAIT_DESC = {
+  shooting: '차량 번호를 확인하고 있습니다.',
+  rejected: '번호가 아직 안 왔습니다. 잠시만 기다려 주세요.',
+  assigning: '자리를 배정하고 있습니다.'
+};
+
+var VIEW_TEXT = {
+  idle: {
+    eyebrow: '주차 현황',
+    title: '한눈에 확인하고<br>편하게 주차하세요.',
+    lead: '입구에 차량이 감지되면 이용 가능한 주차 공간을 선택할 수 있습니다.',
+    sub: '입차 전에도 현재 빈자리를 확인할 수 있습니다.',
+    actTitle: '입차 차량을 기다리고 있습니다',
+    actDesc: '빈자리 현황은 언제든 확인할 수 있습니다.',
+    btn: '주차면 선택하기'
+  },
+  wait: {
+    eyebrow: '차량 확인 중',
+    title: '차량을<br>확인하고 있습니다.',
+    lead: '확인이 끝나면 주차 공간을 고르실 수 있습니다.',
+    sub: '지금은 현황만 보여 드립니다.',
+    actTitle: '차량을 확인하고 있습니다',
+    actDesc: '잠시만 기다려 주세요.',
+    btn: '주차면 선택하기'
+  },
+  choose: {
+    eyebrow: '입차 차량 감지',
+    title: '주차할 공간을<br>선택해 주세요.',
+    lead: '파란색으로 표시된 공간을 누른 뒤 선택을 확정해 주세요.',
+    sub: '선택 가능한 빈자리가 활성화되었습니다.',
+    actTitle: '이용할 주차면을 눌러 주세요',
+    /* ⚠ **버튼의 자리를 문구에 박지 마라.** 좁은 기기에서는 오른쪽이 아니라 아래에 붙는다 —
+       화면이 바뀌면 문구가 조용히 거짓이 된다. 이름으로 가리켜라. */
+    actDesc: '누른 뒤 확정 버튼을 눌러 주세요.',
+    btn: '주차면 선택하기'
+  },
+  full: {
+    eyebrow: '빈자리 없음',
+    title: '지금은 빈자리가<br>없습니다.',
+    lead: '차가 한 대 나가면 바로 이 화면이 바뀝니다. 잠시만 기다려 주세요.',
+    sub: '모든 자리가 사용 중입니다.',
+    actTitle: '지금은 빈자리가 없습니다',
+    actDesc: '자리가 나면 자동으로 선택 화면이 열립니다.',
+    btn: '주차면 선택하기'
+  },
+  unknown: {
+    eyebrow: '알 수 없는 상태',
+    title: '진행 상태를<br>읽지 못했습니다.',
+    lead: '서버가 이 화면이 모르는 상태를 보냈습니다. 아래에 그 값을 그대로 적었습니다.',
+    sub: '현황은 계속 보여 드립니다.',
+    actTitle: '알 수 없는 진행 상태입니다',
+    actDesc: '',
+    btn: '주차면 선택하기'
+  }
+};
+
+function viewOf(phase) {
+  if (typeof phase !== 'string' || !phase) return 'idle';
+  return PHASE_VIEW[phase] || 'unknown';
+}
+function canChoose() { return S.view === 'choose'; }
+
+/* ═══ 2. 자리 상태 — zones[] 하나를 상태 낱말 하나로 ═══ */
+/**
+ * 🔴 **순서가 뜻이다.** 못 쓰는 자리가 `occupied` 보다 먼저인 이유:
+ *   `usable.ok === false` 는 그 자리의 센서를 못 읽는다는 뜻이라 `occupied` 값도 못 믿는다.
+ * 🔴 `value_state !== 'known'` 을 `EMPTY` 로 읽으면 **모르는 자리를 "비었다" 고 말하게 된다.**
+ *   서버 주석이 그것을 명시한다 — `unknown` 일 때 `occupied:false` 는 "비었다"가 아니라 "모른다".
+ */
+var STATE_WORD = {
+  EMPTY: '사용 가능', OCCUPIED: '사용 중', RESERVED: '예약됨',
+  SELECTED: '선택됨', UNUSABLE: '점검 중', UNKNOWN: '확인 중'
+};
+function slotState(z, selected) {
+  if (selected && z.id === selected) return 'SELECTED';
+  if (z.usable && z.usable.ok === false) return 'UNUSABLE';
+  if (z.occupied === true) return 'OCCUPIED';
+  if (z.reserved === true) return 'RESERVED';
+  if (typeof z.value_state === 'string' && z.value_state !== 'known') return 'UNKNOWN';
+  return 'EMPTY';
+}
+
+/** 자리만 고른다. ⚠ 서버 계약 의존: `wsjson.h` 가 자리(si>=0)에만 `plate` 키를 싣는다 —
+    입·출구는 그 키가 아예 없다. 바뀌면 여기가 조용히 빈다. */
+function parkingZones() {
+  if (!S.zones) return [];
+  return S.zones.filter(function (z) { return z && typeof z.plate !== 'undefined'; });
+}
+
+function lotNumber(id) {
+  var lab = S.labels[id];
+  if (!lab) return id;                        /* 라벨이 없으면 자리 id 를 그대로 — 지어내지 않는다 */
+  var n = lab.replace(/[^0-9]/g, '');
+  return n || lab;
+}
+
+/* ═══ 3. 화면 ═══ */
+function notice(text, kind) {
+  if (!text) { el.notice.removeAttribute('data-kind'); el.notice.textContent = ''; return; }
+  el.notice.textContent = text;
+  el.notice.setAttribute('data-kind', kind || 'info');
+}
+
+/**
+ * 🔴 **노드는 자리 목록이 바뀔 때만 만든다. 상태는 속성만 갱신한다.**
+ * 매 프레임 갈아엎으면 누르는 사이(pointerdown→up)에 버튼이 새 노드가 되어 `click` 이 안 난다.
+ * 📖 docs/web/LEDGER.md §"같은 병에 같은 약이 아니다"
+ * ⚠ 키에 상태를 넣지 마라 — 넣으면 옆 자리가 찰 때마다 격자 전체가 새로 만들어진다.
+ */
+/* 🔴 **화면에 나열하는 순서만 뒤집는다** (사용자 지시 2026-08-27).
+   ```
+   봉투 순서 : A1 A2 A3 A4 A5
+   화면 순서 : **A5 A4 A3 A2 A1**  → 왼쪽부터 5 4 3 2 1
+   ```
+   ⚠ **라벨도 자리 id 도 안 바꾼다** — A1 은 계속 "1번 자리" 다. **놓는 자리만** 바뀐다.
+   🔑 그래서 배정·예약·로그는 **한 글자도 안 달라진다.** 화면이 읽는 쪽에서만 뒤집는다.
+   ⚠ `slice()` 로 **복사한 뒤** 뒤집어라 — `reverse()` 는 원본을 바꾼다.
+     `parkingZones()` 는 매번 새 배열을 주지만, 그것에 기대지 마라(그 함수가 바뀌면 조용히 깨진다). */
+function displayOrder(zs) { return zs.slice().reverse(); }
+
+function drawSlots() {
+  var zs = displayOrder(parkingZones());
+  var sel = (S.entry && typeof S.entry.slot === 'string') ? S.entry.slot : '';
+  var key = zs.map(function (z) { return z.id + ':' + lotNumber(z.id); }).join(',');
+
+  if (key !== S.nodeKey) {
+    S.nodeKey = key;
+    el.slots.textContent = '';
+    for (var i = 0; i < zs.length; i++) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'slot';
+      b.dataset.zone = zs[i].id;
+      var code = document.createElement('span');
+      code.className = 'slot-code';
+      code.textContent = lotNumber(zs[i].id);
+      var st = document.createElement('span');
+      st.className = 'slot-state';
+      var tag = document.createElement('span');
+      tag.className = 'slot-tag';
+      b.appendChild(code); b.appendChild(st); b.appendChild(tag);
+      el.slots.appendChild(b);
+    }
+  }
+
+  var btns = el.slots.querySelectorAll('.slot');
+  for (var j = 0; j < btns.length; j++) {
+    var btn = btns[j];
+    var z = zs[j];
+    if (!z) continue;
+    var s = slotState(z, sel);
+    var pickable = canChoose() && s === 'EMPTY' && !S.sending;
+    btn.dataset.state = s;
+    btn.disabled = !pickable;
+    if (pickable) btn.dataset.pick = '1'; else btn.removeAttribute('data-pick');
+    if (S.candidate === z.id) btn.dataset.candidate = '1'; else btn.removeAttribute('data-candidate');
+    btn.querySelector('.slot-state').textContent =
+      (S.candidate === z.id) ? '선택 예정' : (STATE_WORD[s] || '확인 중');
+    btn.querySelector('.slot-tag').textContent = pickable ? '선택 가능' : '';
+  }
+
+  /* 🔑 빈자리 수는 **화면이 센다** — 봉투에 그 수가 없다. 세는 규칙은 위 `slotState` 하나뿐이다.
+     🔴🔴 **분모를 같이 본다.** 상태를 믿을 수 있는 자리가 하나도 없으면 그때의 `0` 은
+     *"빈자리가 없다"* 가 아니라 **"못 쟀다"** 다 — 그런데 화면에서는 둘이 똑같이 `0` 으로 보인다.
+     ★ 실기에서 실제로 그랬다: 보드가 안 붙어 다섯 칸 전부 점검 중인데 크게 `0` 이 떴다.
+       이용자는 그것을 **만차**로 읽는다. 있지도 않은 사실이다. */
+  var total = zs.length, known = 0, free = 0;
+  for (var k = 0; k < total; k++) {
+    var ss = slotState(zs[k], sel);
+    if (ss === 'UNUSABLE' || ss === 'UNKNOWN') continue;     /* 상태를 못 믿는 자리는 분모가 아니다 */
+    known++;
+    if (ss === 'EMPTY') free++;
+  }
+  if (!total) { el.freeCount.textContent = '–'; el.freeUnit.textContent = '자리 남음'; }
+  else if (!known) { el.freeCount.textContent = '?'; el.freeUnit.textContent = '지금 확인할 수 없습니다'; }
+  else {
+    el.freeCount.textContent = String(free);
+    /* 일부만 아는 경우 **분모를 밝힌다** — 안 밝히면 나머지도 세어 본 것처럼 읽힌다 */
+    el.freeUnit.textContent = (known < total) ? ('확인된 ' + known + '칸 기준') : '자리 남음';
+  }
+}
+
+function render() {
+  var t = VIEW_TEXT[S.view] || VIEW_TEXT.idle;
+  el.eyebrow.textContent = t.eyebrow;
+  el.title.innerHTML = t.title;               /* 고정 문자열이다 — 서버 값이 들어오지 않는다 */
+  el.lead.textContent = t.lead;
+  el.panelSub.textContent = t.sub;
+  el.actTitle.textContent = t.actTitle;
+
+  var desc = t.actDesc;
+  if (S.view === 'wait') desc = WAIT_DESC[S.phase] || t.actDesc;
+  /* 🔴 **선택 서비스가 꺼져 있으면 대기 문구가 거짓말이 된다.**
+     "입구에 차량이 감지되면 … 선택할 수 있습니다" 는 그때 **오지 않을 일을 약속한다** —
+     붙었는데 아무 일도 안 일어나면 이용자는 **고장으로 읽는다.**
+     ⚠ 문구를 화면에 박지 않고 **서버 값으로 가른다**. 서버가 되돌리면 화면도 같이 돌아온다. */
+  if (S.chooserOn === false && S.view === 'idle') {
+    el.lead.textContent = '지금은 주차 자리가 자동으로 배정됩니다. 기다리지 않으셔도 됩니다.';
+    desc = '현황은 계속 보여 드립니다.';
+  }
+  /* 🔴 모르는 낱말은 **그대로 보여 준다.** 뭉개면 다음 사람이 무엇을 물어야 할지 모른다. */
+  if (S.view === 'unknown') desc = '서버가 보낸 값: ' + String(S.phase);
+  if (S.view === 'choose' && S.candidate) {
+    el.actTitle.textContent = lotNumber(S.candidate) + '번 자리를 선택할까요?';
+    desc = '확정 버튼을 누르면 이 자리로 배정됩니다.';
+  }
+  el.actDesc.textContent = desc;
+
+  drawSlots();
+
+  var label = t.btn;
+  if (S.sending) label = '선택 확인 중…';
+  else if (canChoose() && S.candidate) label = lotNumber(S.candidate) + '번 자리로 확정';
+  el.confirm.textContent = label;
+  el.confirm.disabled = !(canChoose() && S.candidate && !S.sending);
+}
+
+/* 서버가 준 시한으로만 센다 — 화면이 자기 시계로 세면 시계가 둘이 된다. */
+function startCount(ms) {
+  stopCount();
+  var left = Math.max(0, Math.ceil(ms / 1000));
+  el.count.textContent = left > 0 ? (left + '초 안에 골라 주세요') : '';
+  S.timer = setInterval(function () {
+    left -= 1;
+    if (left <= 0) { stopCount(); el.count.textContent = ''; return; }
+    el.count.textContent = left + '초 안에 골라 주세요';
+  }, 1000);
+}
+function stopCount() { if (S.timer) { clearInterval(S.timer); S.timer = 0; } }
+
+function applyEntry(e) {
+  S.entry = e || null;
+  var wasChoose = canChoose();
+  S.phase = (e && typeof e.phase === 'string') ? e.phase : null;
+  S.view = viewOf(S.phase);
+
+  if (canChoose()) {
+    if (!wasChoose) { S.sending = false; S.candidate = ''; notice(''); }   /* 방금 열렸다 */
+    /* 프레임마다 서버 값으로 다시 맞춘다 — 한 번만 걸면 그때부터 화면이 제 시계로 센다.
+       서버가 조용하면 숫자도 멈춘다. 그것이 정직한 화면이다.
+       ⚠ `startCount` 가 안에서 `stopCount()` 를 먼저 부르므로 타이머가 겹치지 않는다 */
+    var lim = Number(e && e.limit_ms), used = Number(e && e.elapsed_ms);
+    startCount(Number.isFinite(lim) && lim > 0 ? Math.max(0, lim - (Number.isFinite(used) ? used : 0)) : 0);
+  } else {
+    /* 고르는 창을 벗어났다. 왜 닫혔는지(골랐다·시한·차가 감)를 화면이 구별할 필요가 없다. */
+    stopCount();
+    el.count.textContent = '';
+    if (wasChoose) { S.candidate = ''; S.sending = false; notice(''); }
+  }
+  render();
+}
+
+/* ═══ 4. 상행 — 둘뿐이다 ═══ */
+/* 후보를 고르는 것은 화면 안의 일이다. 서버에 보내는 것은 확정 버튼뿐이다. */
+el.slots.addEventListener('click', function (ev) {
+  var b = ev.target.closest('.slot');
+  if (!b || b.disabled || b.dataset.pick !== '1') return;
+  S.candidate = b.dataset.zone;
+  notice('');
+  render();
+});
+
+el.confirm.addEventListener('click', function () {
+  if (!canChoose() || !S.candidate || S.sending) return;
+  S.sending = true;
+  notice('');
+  render();                                    /* 누른 즉시 전부 잠근다 — 눌린 것이 보여야 한다 */
+  send({ type: 'pick_slot', rid: rid(), slot: S.candidate });
+});
+
+/* ═══ 5. WS ═══ */
+var ridSeq = 0;
+function rid() { ridSeq += 1; return 'u8081-' + ridSeq + '-' + Math.random().toString(36).slice(2, 7); }
+
+var ws = null, retry = 0, pending = new Map();
+function send(frame) {
+  if (!ws || ws.readyState !== 1) {
+    notice('연결이 끊겨 보내지 못했습니다.', 'error');
+    S.sending = false; render(); return;
+  }
+  if (frame.rid) pending.set(frame.rid, frame);
+  ws.send(JSON.stringify(frame));
+}
+
+function setLink(ok, why) {
+  el.link.dataset.ok = ok ? '1' : '0';
+  el.linkText.textContent = ok ? '실시간 연결됨' : ('연결되지 않음' + (why ? ' — ' + why : ''));
+}
+
+function connect() {
+  try { ws = new WebSocket(wsUrl()); }
+  catch (e) { setLink(false, '주소가 잘못되었습니다'); return; }
+
+  ws.onopen = function () {
+    retry = 0; setLink(true);
+    /* 붙었다고 알린다. 서버는 "차단봉이 들리는 그 순간 선택 기기가 있나" 를 알아야 하고,
+       그것을 아는 것은 살아 있는 연결을 쥔 쪽뿐이다(HTTP GET 은 순간이라 답이 안 된다).
+       🔴 이 한 줄이 없으면 서버가 `choosing` 을 **아예 만들지 않는다** — 붙어 있어도 못 고른다. */
+    send({ type: 'chooser', rid: rid(), on: true });
+  };
+
+  ws.onmessage = function (ev) {
+    var m = null;
+    try { m = JSON.parse(ev.data); } catch (e) { return; }
+    if (!m || typeof m !== 'object') return;
+
+    if (m.type === 'state') {
+      if (Array.isArray(m.zones)) S.zones = m.zones;
+      applyEntry(m.entry);
+      return;
+    }
+    /* 🔵 서버 수준 사실이라 `snapshot` 에 온다(socket 확정 · REQ-0518).
+       ⚠ **키가 없으면 아무것도 안 바꾼다** — 옛 서버에서 안 깨진다.
+       🔑 그리고 이 봉투는 **원래도 오고 있었다**(실측 26장). 화면이 안 읽고 있었을 뿐이다. */
+    if (m.type === 'snapshot') {
+      if (Object.prototype.hasOwnProperty.call(m, 'chooser_enabled')) {
+        var on = (m.chooser_enabled !== false);
+        if (on !== S.chooserOn) { S.chooserOn = on; render(); }
+      }
+      return;
+    }
+    if (m.type === 'map' && Array.isArray(m.zones)) {
+      var lab = {};
+      for (var i = 0; i < m.zones.length; i++) {
+        var z = m.zones[i];
+        if (z && z.id && typeof z.label === 'string' && z.label) lab[z.id] = z.label;
+      }
+      S.labels = lab;
+      S.nodeKey = null;                        /* 라벨이 바뀌면 번호를 다시 찍는다 */
+      render();
+      return;
+    }
+    if (m.type === 'ack' && m.rid && pending.has(m.rid)) {
+      var f = pending.get(m.rid); pending.delete(m.rid);
+      if (f.type === 'pick_slot') {
+        /* 성공을 화면이 선언하지 않는다 — 배정은 다음 `state` 의 진행 단계가 말한다. */
+        notice(lotNumber(f.slot) + '번 자리로 요청했습니다. 안내를 따라 들어가세요.', 'ok');
+        /* 잠금을 푼다. 안 풀면 창이 아직 열려 있는데 다시 못 고른다 —
+           정상 경로에서는 곧 단계가 바뀌어 창이 닫히지만, 안 바뀌면 영영 잠긴다.
+           ⚠ 얼어붙는 쪽보다 다시 고를 수 있는 쪽이 낫다 — 중복 선택은 서버가 판정한다 */
+        S.sending = false;
+        render();
+      }
+      return;
+    }
+    if (m.type === 'error' && m.rid && pending.has(m.rid)) {
+      pending.delete(m.rid);
+      S.sending = false;
+      /* 🔴 거절 사유를 갈라 말한다 — 사람이 할 일이 다르다.
+         `message` 하나로 뭉치면 "다시 고르면 된다" 는 행동이 사라진다.
+         ⚠ 모르는 사유는 서버 문장을 그대로 보여 준다. 지어내지 않는다. */
+      if (m.code === 'not_reservable') {
+        S.candidate = '';
+        notice('그 자리는 방금 다른 분이 선택했습니다. 다른 자리를 골라 주세요.', 'error');
+      } else if (m.code === 'not_ready') {
+        notice('지금은 자리를 고를 수 없습니다.', 'error');
+      } else {
+        notice((typeof m.message === 'string' && m.message) ? m.message : '자리를 배정할 수 없습니다.', 'error');
+      }
+      render();
+      return;
+    }
+  };
+
+  ws.onclose = function () {
+    setLink(false, '다시 연결하는 중');
+    /* 되붙으면 `chooser{on:true}` 를 다시 보낸다(onopen). 서버는 끊긴 소켓을 알아서 뺀다. */
+    retry = Math.min(retry + 1, 6);
+    setTimeout(connect, 500 * retry);
+  };
+  ws.onerror = function () { /* onclose 가 이어서 온다 */ };
+}
+
+render();
+connect();
+</script>
+</body>
+</html>

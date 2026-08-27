@@ -77,8 +77,9 @@ cpp/winparse/README.md
 
 # Visual Studio
 x64/
-Debug/
-Release/
+Win32/
+**/x64/Debug/
+**/x64/Release/
 *.vcxproj.user
 .vs/
 

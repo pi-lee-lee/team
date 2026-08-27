@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DigitCam</string>
+
+    <string name="no_value">—</string>
+
+    <!--
+      계약 §8 이 요구하는 표시 항목을 두 줄로 나눴다.
+      state_line   : 정지/움직임 · 안정 여부 · conf · reason · format
+      metric_line  : motion · sharp 실측값 · 번호판 검출 여부 · ms · OpenCV 버전
+      reason 을 그대로 노출하는 것이 중요하다 — 실패가 전부 빈 값으로만 보이면 튜닝을 못 한다.
+    -->
+    <string name="state_line">%1$s · %2$s · conf %3$.2f · reason %4$s · %5$s</string>
+    <!--
+      motion 뒤의 px 는 단위 표시다. REQ-0014 에서 이 값이 '평균 프레임 차분(0~255)' 에서
+      '이동 화소 수(160×120 기준)' 로 바뀌었는데, 숫자만 띄우면 사용자가 어느 눈금으로
+      vision.motion_threshold 를 정해야 할지 알 수 없다.
+    -->
+    <string name="metric_line">motion %1$.2fpx · sharp %2$.1f · %3$s · %4$.1f ms · OpenCV %5$s</string>
+    <!-- 🔑 "모델이 실렸는가" 는 인식률 표의 분모다. 안 실린 채로 잰 표는 예전 경로의 표다. -->
+    <string name="model_line">인식모델 %1$s</string>
+    <!-- 🔴 메모리 압력으로 해상도가 내려갔을 때. 조용히 강등되면 인식률 표가 거짓말이 된다. -->
+    <string name="degraded_line">  ⚠ 저메모리 강등 %1$dpx</string>
+
+    <string name="stable_yes">안정</string>
+    <string name="stable_no">불안정</string>
+
+    <!-- 계약 §8 — 움직이는 동안 인식을 건너뛴다는 걸 사용자가 알아야 한다. -->
+    <string name="motion_still">정지</string>
+    <string name="motion_moving">움직임 — 정지하면 인식</string>
+
+    <string name="plate_found">번호판 검출</string>
+    <string name="plate_none">번호판 없음</string>
+
+    <string name="opencv_unavailable">미연결</string>
+
+    <!--
+      host 가 없어도 port 는 보여 준다. 외부 설정 파일이 assets 기본값을 이기므로(계약 §6),
+      앱을 예전에 한 번이라도 돌린 기기에는 옛 포트(5000)가 남아 있다. 그 상태로 두면
+      "전송은 되는데 서버 로그가 빈다" 를 인식기 탓으로 오해하게 된다 — 화면에서 바로 보이게 한다.
+    -->
+    <string name="server_not_configured">서버 미설정 (server.host 비어 있음 · port %1$d)</string>
+    <string name="server_connecting">서버 연결중 %1$s:%2$d</string>
+    <string name="server_connected">서버 연결됨 %1$s:%2$d</string>
+    <string name="server_disconnected">서버 끊김 (재시도 %1$d)</string>
+
+    <!--
+      방향 전환 버튼 (REQ-0025). ⟳ 는 사이클(전환) 표시다.
+      글자는 "지금 누르면 무엇이 되는가" 를 가리킨다 — 세로 화면에서는 "가로로", 가로에서는 "세로로".
+    -->
+    <string name="orientation_to_landscape">⟳ 가로</string>
+    <string name="orientation_to_portrait">⟳ 세로</string>
+    <!-- 접근성 라벨. 현재 방향과 누르면 일어날 일을 함께 읽어 준다. -->
+    <string name="orientation_desc_now_portrait">현재 세로 방향. 누르면 가로로 전환한다.</string>
+    <string name="orientation_desc_now_landscape">현재 가로 방향. 누르면 세로로 전환한다.</string>
+
+    <!-- 촬영 → 촬영본에서 번호추출. 사용자 확정 2026-08-24. -->
+    <string name="shutter">📷 촬영 후 번호추출</string>
+    <string name="shutter_desc">사진을 찍고 그 촬영본에서 번호판을 읽는다</string>
+    <string name="shutter_sample_mode">샘플 모드에서는 촬영하지 않는다 — 샘플을 끄고 눌러라</string>
+    <string name="shutter_camera_unavailable">카메라가 아직 안 열렸다 — 권한과 바인딩을 확인하라</string>
+
+    <string name="reload_config">설정 다시 읽기</string>
+    <!-- 가로 하단 바는 버튼 6개가 한 줄에 들어가야 해서 짧은 라벨을 쓴다(뜻은 같다). -->
+    <string name="reload_config_short">다시읽기</string>
+    <string name="sample_mode_off">샘플 모드</string>
+    <string name="sample_mode_on">샘플 끄기</string>
+    <string name="sample_prev">◀</string>
+    <string name="sample_next">▶</string>
+
+    <!-- %1$d/%2$d 번째 · %3$s 파일명 · %4$d×%5$d 크기 -->
+    <string name="sample_playing">샘플 %1$d/%2$d · %3$s (%4$d×%5$d)</string>
+    <string name="sample_expected_unknown">정답표에 없는 파일</string>
+
+    <!--
+      기대 안내는 expected.json 의 rule 로 정한다 — 파일명으로 추측하지 않는다(개정 4).
+      파일명 규칙(blur3)으로 판단했다가 라벨이 틀려 화면이 정답표와 어긋난 적이 있다.
+    -->
+    <string name="sample_rule_exact">기대 %1$s (정확히 일치해야 정답)</string>
+    <string name="sample_rule_exact_or_empty">기대 %1$s · 못 읽고 거절해도 정답 (경계 케이스)</string>
+    <string name="sample_rule_empty">빈 값이 정답 — 읽어내면 오검출이다</string>
+    <string name="sample_rule_unknown">기대 %1$s (알 수 없는 rule)</string>
+    <string name="sample_decode_failed">샘플 이미지를 디코딩하지 못했다: %1$s</string>
+    <string name="no_samples">assets/samples 에 이미지가 없다</string>
+    <string name="sample_image_desc">네이티브에 투입 중인 샘플 프레임</string>
+
+    <string name="config_reloaded">설정을 다시 읽었다: %1$s</string>
+    <string name="config_from_assets">assets 기본값</string>
+
+    <!-- 설정 입력 화면 (계약 §6.1) -->
+    <string name="cfg_title">설정</string>
+    <string name="open_settings">설정</string>
+
+    <string name="cfg_host">서버 주소 (server.host)</string>
+    <string name="cfg_host_hint">예: 192.168.0.10</string>
+    <string name="cfg_host_help">비워 두면 전송하지 않는다("서버 미설정"으로 표시). 인식과 화면은 계속 동작한다.</string>
+    <string name="cfg_port">포트 (server.port)</string>
+    <string name="cfg_format">전송 형식 (server.format)</string>
+    <string name="cfg_send_mode">전송 시점 (send.mode)</string>
+    <string name="cfg_min_interval">최소 전송 간격 ms (send.min_interval_ms)</string>
+    <string name="cfg_reconnect">재접속 간격 ms (reconnect.interval_ms)</string>
+    <string name="cfg_connect_timeout">접속 제한시간 ms (socket.connect_timeout_ms)</string>
+    <string name="cfg_keepalive">TCP keepalive 사용 (socket.keepalive)</string>
+
+    <string name="cfg_vision_title">인식·촬영 손잡이 (vision.* · camera.*)</string>
+    <!-- 값의 의미는 네이티브가 정한다. 앱은 키와 값을 글자 그대로 옮길 뿐이다. -->
+    <string name="cfg_vision_help">아래 항목은 파일에 있는 키를 그대로 읽어 온 것이다. 앱은 값의 의미를 해석하지 않고 네이티브에 그대로 전달한다 — 키가 늘어나면 여기에도 자동으로 나타난다.</string>
+    <string name="cfg_vision_empty">파일에 vision.* / camera.* 키가 없다</string>
+    <!-- 🔴 빈 칸은 "꺼짐" 이 아니다. 기본값 자체는 적지 않는다 — 적으면 진실이 두 곳이 된다. -->
+    <string name="cfg_vision_empty_hint">비우면 기본값을 따른다</string>
+
+    <string name="cfg_save">저장</string>
+    <string name="cfg_restore">기본값으로 되돌리기</string>
+    <string name="cfg_cancel">취소</string>
+    <!-- Apache-2.0 §4(d) 고지 의무. 모델·OpenCV·AndroidX 가 전부 Apache-2.0 이다. -->
+    <string name="cfg_notices">오픈소스 고지</string>
+    <string name="cfg_notices_failed">고지 파일을 읽지 못했다</string>
+    <string name="cfg_saved">저장했다. 설정을 다시 적용한다.</string>
+    <string name="cfg_restored">assets 기본값으로 되돌렸다</string>
+    <string name="cfg_restore_failed">기본값 복원에 실패했다</string>
+    <string name="cfg_save_failed_read">설정 파일을 읽지 못해 저장할 수 없다</string>
+    <string name="cfg_save_failed_write">설정 파일을 쓰지 못했다</string>
+    <string name="cfg_file_path">편집 대상 파일: %1$s</string>
+    <string name="cfg_no_external">외부 저장소를 쓸 수 없음</string>
+
+    <string name="cfg_err_not_number">%1$s: \'%2$s\' 는 숫자가 아니다</string>
+    <string name="cfg_err_range">%1$s: %2$d 는 허용 범위(%3$d~%4$d) 밖이다</string>
+
+    <string name="camera_permission_denied">카메라 권한이 없어 프리뷰를 켤 수 없다</string>
+    <string name="camera_open_failed">카메라를 열지 못했다: %1$s</string>
+    <string name="camera_bind_failed">카메라 바인딩 실패: %1$s</string>
+</resources>

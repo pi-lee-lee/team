@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  전체화면 프리뷰 + 오버레이 한 장(계약 §8).
+  AppCompat 테마를 요구하지 않도록 프레임워크 위젯만 쓴다 — 액티비티가 ComponentActivity 라
+  Theme.AppCompat 이 없고, MaterialButton 등을 쓰면 인플레이트 단계에서 죽는다.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <androidx.camera.view.PreviewView
+        android:id="@+id/previewView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!--
+      샘플 모드에서 네이티브에 실제로 넣고 있는 그레이 프레임을 그대로 띄운다.
+      이게 없으면 오버레이(quad)가 샘플 좌표계인데 배경은 라이브 카메라라서, 사각형이
+      엉뚱한 곳에 그려져 오히려 사람을 헷갈리게 한다.
+
+      scaleType 은 fitCenter 다. 번호판 샘플은 4.5:1 가로로 긴 그림이라 세로 화면에서
+      centerCrop 을 쓰면 글자 하나만 확대돼 보인다(실제로 그렇게 나왔다). 전체가 보여야
+      인식 결과와 대조할 수 있다. OverlayView 도 샘플 모드에서는 같은 fit 계산을 쓴다.
+    -->
+    <ImageView
+        android:id="@+id/sampleImageView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#000000"
+        android:contentDescription="@string/sample_image_desc"
+        android:scaleType="fitCenter"
+        android:visibility="gone" />
+
+    <com.example.digitcam.OverlayView
+        android:id="@+id/overlayView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!--
+      상단: 인식된 값(크게) + 세부 지표.
+      상태바 높이만큼의 여백은 코드에서 넣는다(edge-to-edge 강제 대응) — 여기에 고정값을
+      박으면 기기마다 어긋난다.
+    -->
+    <LinearLayout
+        android:id="@+id/topPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:background="#99000000"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <!--
+          번호판 문자열은 한글 포함 8자(123가4568)까지 온다. 48sp 로 두면 좁은 화면에서
+          잘리므로 42sp + 한 줄 고정으로 둔다.
+        -->
+        <TextView
+            android:id="@+id/valueText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:text="@string/no_value"
+            android:textColor="#FFFFFF"
+            android:textSize="42sp"
+            android:textStyle="bold" />
+
+        <!-- 정지/움직임 · 안정 · conf · reason · format -->
+        <TextView
+            android:id="@+id/stateText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="4dp"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+
+        <!-- motion · sharp 실측값 · 번호판 검출 · ms · OpenCV 버전 (임계값 튜닝용) -->
+        <TextView
+            android:id="@+id/metricText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="2dp"
+            android:textColor="#B0BEC5"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/serverText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="2dp"
+            android:textColor="#DDDDDD"
+            android:textSize="13sp" />
+
+        <!--
+          🔵 진행 단계(REQ-0500). 인식이 10~40초라 **기다리는 중이라는 것**이 보여야 한다.
+          여러 줄이다 — 재요청이 앞 결과를 덮으면 "왜 실패했는지" 가 사라진다.
+          🔑 등폭 글꼴을 쓰는 이유: 경과 초가 0.1초마다 바뀌는데 비례 글꼴이면 **줄이 떨린다**.
+        -->
+        <TextView
+            android:id="@+id/progressText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:maxWidth="380dp"
+            android:paddingTop="4dp"
+            android:shadowColor="#FF000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="4"
+            android:textColor="#B2FF59"
+            android:textSize="10sp"
+            android:visibility="gone" />
+        <TextView
+            android:id="@+id/noticeText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingTop="6dp"
+            android:textColor="#FFD54F"
+            android:textSize="12sp"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!--
+      하단 버튼. 계약 §8 이 요구하는 셋(설정 / 설정 다시 읽기 / 샘플 모드)에 샘플 이전·다음이
+      더해져 다섯이라, 한 줄에 몰면 글자가 뭉개진다. 두 줄로 나눈다.
+    -->
+    <LinearLayout
+        android:id="@+id/bottomPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#99000000"
+        android:orientation="vertical"
+        android:padding="8dp">
+
+        <!--
+            🔴 주 동작이다 — 사용자 확정(2026-08-24): "사진 촬영하여 촬영된 이미지를 기반으로 추출".
+            누르면 즉시 셔터가 눌리고, 인식은 그 **촬영본**에서 돈다. 프리뷰 검출을 기다리지 않는다.
+            서버가 없어도 이 경로를 사람이 직접 밟을 수 있어야 해서 화면에 둔다.
+        -->
+        <Button
+            android:id="@+id/shutterButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="17sp"
+            android:text="@string/shutter" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <!-- 방향 전환. 가로/세로 양쪽에 있어야 되돌아올 수 있다(REQ-0025 요구 2). -->
+            <Button
+                android:id="@+id/orientationButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="0.8"
+                android:textSize="15sp"
+                android:text="@string/orientation_to_landscape" />
+
+            <!-- 폰만으로 서버 주소를 바꾸는 유일한 수단이다(계약 §6.1). -->
+            <Button
+                android:id="@+id/settingsButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="13sp"
+                android:text="@string/open_settings" />
+
+            <Button
+                android:id="@+id/reloadButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1.6"
+                android:textSize="13sp"
+                android:text="@string/reload_config" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/sampleButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="2"
+                android:textSize="13sp"
+                android:text="@string/sample_mode_off" />
+
+            <!-- 26장을 한 장씩 넘겨 봐야 하므로 이전/다음을 따로 둔다(계약 개정 3). -->
+            <Button
+                android:id="@+id/prevButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="14sp"
+                android:text="@string/sample_prev" />
+
+            <Button
+                android:id="@+id/nextButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textSize="14sp"
+                android:text="@string/sample_next" />
+        </LinearLayout>
+    </LinearLayout>
+
+</FrameLayout>

@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  설정 입력 화면 (계약 §6.1).
+
+  server.* / send.* / socket.* 은 Kotlin 이 의미를 아는 값이라 형식에 맞는 입력칸을 고정으로 둔다.
+  vision.* 은 반대다 — 키 목록을 여기에 적지 않고 파일에서 읽어 visionContainer 에 만들어 넣는다.
+  그래야 cpp-engineer 가 임계값을 추가해도 이 XML 도 Kotlin 도 안 고친다.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/settingsRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- 계약 §6.1 6번: server.host 를 가장 위에. 제일 자주 바뀌고, 비면 전송이 꺼진다. -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/cfg_host"
+                android:textStyle="bold" />
+
+            <EditText
+                android:id="@+id/hostInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/cfg_host_hint"
+                android:importantForAutofill="no"
+                android:inputType="textUri" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingTop="4dp"
+                android:text="@string/cfg_host_help"
+                android:textSize="12sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingTop="12dp"
+                android:text="@string/cfg_port" />
+
+            <EditText
+                android:id="@+id/portInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:importantForAutofill="no"
+                android:inputType="number" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingTop="12dp"
+                android:text="@string/cfg_format" />
+
+            <Spinner
+                android:id="@+id/formatSpinner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingTop="12dp"
+                android:text="@string/cfg_send_mode" />
+
+            <Spinner
+                android:id="@+id/sendModeSpinner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingTop="12dp"
+                android:text="@string/cfg_min_interval" />
+
+            <EditText
+                android:id="@+id/minIntervalInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:importantForAutofill="no"
+                android:inputType="number" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingTop="12dp"
+                android:text="@string/cfg_reconnect" />
+
+            <EditText
+                android:id="@+id/reconnectInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:importantForAutofill="no"
+                android:inputType="number" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingTop="12dp"
+                android:text="@string/cfg_connect_timeout" />
+
+            <EditText
+                android:id="@+id/connectTimeoutInput"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:importantForAutofill="no"
+                android:inputType="number" />
+
+            <CheckBox
+                android:id="@+id/keepAliveCheck"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingTop="12dp"
+                android:text="@string/cfg_keepalive" />
+
+            <!-- vision.* 구역 -->
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="24dp"
+                android:text="@string/cfg_vision_title"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="4dp"
+                android:paddingBottom="4dp"
+                android:text="@string/cfg_vision_help"
+                android:textSize="12sp" />
+
+            <!-- 여기에 파일에서 읽은 vision.* 키가 코드로 채워진다. XML 에 키를 적지 않는다. -->
+            <LinearLayout
+                android:id="@+id/visionContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <TextView
+                android:id="@+id/filePathText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:paddingTop="20dp"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </ScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="8dp">
+
+        <Button
+            android:id="@+id/saveButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.4"
+            android:text="@string/cfg_save" />
+
+        <Button
+            android:id="@+id/restoreButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.6"
+            android:textSize="12sp"
+            android:text="@string/cfg_restore" />
+
+        <Button
+            android:id="@+id/cancelButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/cfg_cancel" />
+    </LinearLayout>
+
+    <!--
+        오픈소스 고지. **Apache-2.0 §4(d) 의 의무다** — 모델(PaddleOCR)·OpenCV·AndroidX 가
+        전부 Apache-2.0 이고, 배포물에 귀속 고지를 실어야 한다. 화면 어딘가에서 볼 수 있어야
+        의무가 충족되므로 설정 화면 맨 아래에 둔다(자주 볼 것이 아니라 있어야 하는 것이다).
+    -->
+    <Button
+        android:id="@+id/noticesButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textSize="12sp"
+        android:text="@string/cfg_notices" />
+
+</LinearLayout>

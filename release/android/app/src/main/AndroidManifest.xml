@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 계약 §8 — 카메라는 런타임 권한, 소켓 전송은 INTERNET. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      카메라가 없는 기기에도 설치는 되게 required="false" 로 둔다.
+      autofocus 까지 필수로 걸면 일부 기기에서 설치가 막힌다.
+    -->
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
+
+    <application
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen"
+        android:usesCleartextTraffic="true">
+
+        <!--
+          기본은 가로다(REQ-0025 요구 1). 실행 중 방향은 OrientationPref 가 정하고,
+          여기 값은 첫 창이 뜰 때의 기본값이다.
+
+          ⚠ landscape/portrait 는 **센서를 보지 않는 값**이다. sensorLandscape·userLandscape·
+          fullSensor·unspecified 로 바꾸면 기기를 기울일 때 따라 돌아가 요구 3이 깨진다.
+        -->
+        <!--
+          🔴 configChanges — **인식 도중에 액티비티가 재생성되면 답이 통째로 사라진다**
+          (onDestroy → engine.shutdown()). 인식이 10초대라 그 창이 실재한다.
+
+          ✅ 여기 적은 것들은 흡수한다: 다크모드·글꼴 크기·화면 밀도·언어·키보드.
+             레이아웃을 갈아 끼울 필요가 없어 재생성 없이 견딜 수 있다.
+
+          🔴 **orientation·screenSize·screenLayout 은 일부러 뺐다.**
+             화면의 방향 전환 버튼(OrientationPref.toggle)이 **재생성을 통해**
+             layout-land/ ↔ layout/ 를 갈아 끼운다 — 흡수하면 그 기능이 조용히 깨진다.
+             ⚠ 기기를 기울이는 것은 원래 재생성을 안 한다(screenOrientation 이 센서를 안 본다).
+             ★ 그러니 남은 재생성 방아쇠는 **사람이 그 버튼을 누르는 것**뿐이고,
+               그건 흡수가 아니라 [나](인식·소켓을 액티비티 밖으로) 로만 막힌다.
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="uiMode|fontScale|density|locale|layoutDirection|keyboard|keyboardHidden|navigation"
+            android:exported="true"
+            android:screenOrientation="landscape">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          설정 입력 화면(계약 §6.1). 폰만으로 server.properties 를 고칠 수단이다.
+          목록에 뜰 필요가 없으므로 exported=false. 밝은 테마를 쓰는 이유는 입력 폼이라
+          프리뷰 화면의 전체화면 어두운 테마가 맞지 않아서다.
+        -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:label="@string/cfg_title"
+            android:screenOrientation="landscape"
+            android:theme="@android:style/Theme.Material.Light"
+            android:windowSoftInputMode="adjustResize" />
+
+    </application>
+
+</manifest>

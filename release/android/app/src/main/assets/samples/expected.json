@@ -1,0 +1,297 @@
+{
+  "_설명": "파일명 → 기대 결과. 인식기 자동 검증의 정답표다. 값이 틀렸다고 판단되면 고치지 말고 루트에 알려라 — 정답표를 구현에 맞추면 시험이 아니게 된다.",
+  "plates": {
+    "kor8-seunghap-plain.png": {
+      "value": "700가4568",
+      "band": false,
+      "format": "new",
+      "note": "국토교통부 안내도 분할 · 띠 없음",
+      "rule": "exact"
+    },
+    "kor8-hwamul-plain.png": {
+      "value": "800가4568",
+      "band": false,
+      "format": "new",
+      "note": "국토교통부 안내도 분할 · 띠 없음",
+      "rule": "exact"
+    },
+    "kor8-teuksu-plain.png": {
+      "value": "980가4568",
+      "band": false,
+      "format": "new",
+      "note": "국토교통부 안내도 분할 · 띠 없음",
+      "rule": "exact"
+    },
+    "kor8-seunghap-band.png": {
+      "value": "700가4568",
+      "band": true,
+      "format": "new",
+      "note": "국토교통부 안내도 분할 · 파란 KOR 띠 있음",
+      "rule": "exact"
+    },
+    "kor8-hwamul-band.png": {
+      "value": "800가4568",
+      "band": true,
+      "format": "new",
+      "note": "국토교통부 안내도 분할 · 파란 KOR 띠 있음",
+      "rule": "exact"
+    },
+    "kor8-teuksu-band.png": {
+      "value": "980가4568",
+      "band": true,
+      "format": "new",
+      "note": "국토교통부 안내도 분할 · 파란 KOR 띠 있음",
+      "rule": "exact"
+    },
+    "kor8-reflective-hires.png": {
+      "value": "123가4568",
+      "band": true,
+      "format": "new",
+      "note": "반사필름식 번호판 원본(621x172) · 이 세트에서 가장 해상도가 높다",
+      "rule": "exact"
+    },
+    "variants/kor8-reflective-hires-tilt-p12.png": {
+      "value": "123가4568",
+      "band": true,
+      "format": "new",
+      "note": "시계 반대방향 12도 — 투시보정 시험",
+      "rule": "exact"
+    },
+    "variants/kor8-reflective-hires-tilt-m12.png": {
+      "value": "123가4568",
+      "band": true,
+      "format": "new",
+      "note": "시계방향 12도 — 투시보정 시험",
+      "rule": "exact"
+    },
+    "variants/kor8-reflective-hires-dark.png": {
+      "value": "123가4568",
+      "band": true,
+      "format": "new",
+      "note": "저조도 45% — 적응 이진화 시험",
+      "rule": "exact"
+    },
+    "variants/kor8-reflective-hires-small.png": {
+      "value": "123가4568",
+      "band": true,
+      "format": "new",
+      "note": "1/3 축소 — 원거리 번호판",
+      "rule": "exact_or_empty"
+    },
+    "variants/kor8-seunghap-plain-tilt-p12.png": {
+      "value": "700가4568",
+      "band": false,
+      "format": "new",
+      "note": "시계 반대방향 12도 — 투시보정 시험",
+      "rule": "exact"
+    },
+    "variants/kor8-seunghap-plain-tilt-m12.png": {
+      "value": "700가4568",
+      "band": false,
+      "format": "new",
+      "note": "시계방향 12도 — 투시보정 시험",
+      "rule": "exact"
+    },
+    "variants/kor8-seunghap-plain-dark.png": {
+      "value": "700가4568",
+      "band": false,
+      "format": "new",
+      "note": "저조도 45% — 적응 이진화 시험",
+      "rule": "exact"
+    },
+    "variants/kor8-seunghap-plain-small.png": {
+      "value": "700가4568",
+      "band": false,
+      "format": "new",
+      "note": "1/3 축소 — 원거리 번호판",
+      "rule": "exact_or_empty"
+    },
+    "scenes/scene-01-front-45.png": {
+      "value": "123가4568",
+      "band": true,
+      "format": "new",
+      "note": "정면 · 번호판 폭 45% — 가장 쉬운 장면. 여기서 안 되면 뒤는 볼 것 없다",
+      "rule": "exact"
+    },
+    "scenes/scene-02-tilt-35.png": {
+      "value": "700가4568",
+      "band": false,
+      "format": "new",
+      "note": "띠 없는 번호판 · 폭 35% · 8도 기울기 — 축 정렬 crop 이면 여기서 무너진다",
+      "rule": "exact"
+    },
+    "scenes/scene-03-persp-60.png": {
+      "value": "800가4568",
+      "band": true,
+      "format": "new",
+      "note": "왼쪽에서 본 원근 · 폭 60% — getPerspectiveTransform 없이는 글자가 기운다",
+      "rule": "exact"
+    },
+    "scenes/scene-04-far-28.png": {
+      "value": "980가4568",
+      "band": false,
+      "format": "new",
+      "note": "원거리 · 폭 28% — min_plate_width_ratio 기본값 0.25 바로 위다",
+      "rule": "exact"
+    },
+    "scenes/scene-05-dark-50.png": {
+      "value": "123가4568",
+      "band": true,
+      "format": "new",
+      "note": "저조도 · 폭 50% — 적응 이진화 시험",
+      "rule": "exact"
+    },
+    "scenes/scene-07-negative.png": {
+      "value": "",
+      "band": false,
+      "format": "",
+      "note": "⚠ 번호판이 없다. 번호판 크기의 빈 사각형만 있다. 정답은 value:\"\" — 무언가를 읽어냈다면 오검출이다",
+      "rule": "empty"
+    },
+    "variants/kor8-reflective-hires-motion15.png": {
+      "value": "123가4568",
+      "band": true,
+      "format": "new",
+      "rule": "exact_or_empty",
+      "note": "가벼운 모션 블러 — 읽어도 되고 blurry 로 거절해도 된다. 틀린 값만 실패"
+    },
+    "variants/kor8-reflective-hires-motion45.png": {
+      "value": "",
+      "band": true,
+      "format": "",
+      "rule": "empty",
+      "note": "⚠ 심한 모션 블러 — 사람도 못 읽는다. 반드시 비어야 한다(선명도 게이트 증명)"
+    },
+    "variants/kor8-seunghap-plain-motion15.png": {
+      "value": "700가4568",
+      "band": false,
+      "format": "new",
+      "rule": "exact_or_empty",
+      "note": "가벼운 모션 블러 — 읽어도 되고 blurry 로 거절해도 된다. 틀린 값만 실패"
+    },
+    "variants/kor8-seunghap-plain-motion45.png": {
+      "value": "",
+      "band": false,
+      "format": "",
+      "rule": "empty",
+      "note": "⚠ 심한 모션 블러 — 사람도 못 읽는다. 반드시 비어야 한다(선명도 게이트 증명)"
+    },
+    "scenes/scene-06-motion-50.png": {
+      "value": "",
+      "band": true,
+      "format": "",
+      "rule": "empty",
+      "note": "⚠ 심한 모션 블러 — 반드시 비어야 한다. 움직이는 중에는 읽지 않는다는 요구의 시험"
+    },
+    "new/KakaoTalk_Photo_2026-08-24-20-24-02 001.jpeg": {
+      "value": "123바9898",
+      "band": false,
+      "format": "new",
+      "note": "실촬영 · 흰 종이 스티커(검은 테두리 있음) · 책상 위 · 실내등 · 원본 4032x2268 · EXIF orientation=6 · 판이 **세로**(90°)로 누워 있다 — 15장 중 유일 · 판폭 눈대중 중간",
+      "rule": "exact"
+    },
+    "new/KakaoTalk_Photo_2026-08-24-20-24-02 002.jpeg": {
+      "value": "123바9898",
+      "band": false,
+      "format": "new",
+      "note": "실촬영 · 흰 종이 스티커(검은 테두리 있음) · 책상 위 · 실내등 · 원본 4032x2268 · EXIF orientation=6 · 판 가로 · 정면 · 판폭 눈대중 작다",
+      "rule": "exact"
+    },
+    "new/KakaoTalk_Photo_2026-08-24-20-24-02 003.jpeg": {
+      "value": "123바9898",
+      "band": false,
+      "format": "new",
+      "note": "실촬영 · 흰 종이 스티커(검은 테두리 있음) · 책상 위 · 실내등 · 원본 4032x2268 · EXIF orientation=6 · 판 가로 · 살짝 기움 · 판폭 눈대중 작다",
+      "rule": "exact"
+    },
+    "new/KakaoTalk_Photo_2026-08-24-20-24-03 004.jpeg": {
+      "value": "123바9898",
+      "band": false,
+      "format": "new",
+      "note": "실촬영 · 흰 종이 스티커(검은 테두리 있음) · 책상 위 · 실내등 · 원본 4032x2268 · EXIF orientation=1 · 판 가로 · 정면 · 판폭 눈대중 작다",
+      "rule": "exact"
+    },
+    "new/KakaoTalk_Photo_2026-08-24-20-24-03 005.jpeg": {
+      "value": "123바9898",
+      "band": false,
+      "format": "new",
+      "note": "실촬영 · 흰 종이 스티커(검은 테두리 있음) · 책상 위 · 실내등 · 원본 4032x2268 · EXIF orientation=1 · 판 가로 · 정면 · 판폭 눈대중 중간",
+      "rule": "exact"
+    },
+    "new/KakaoTalk_Photo_2026-08-24-20-24-03 006.jpeg": {
+      "value": "123바9898",
+      "band": false,
+      "format": "new",
+      "note": "실촬영 · 흰 종이 스티커(검은 테두리 있음) · 책상 위 · 실내등 · 원본 4032x2268 · EXIF orientation=3 · 판 가로 · 약 25도 기움 · 판폭 눈대중 중간",
+      "rule": "exact"
+    },
+    "new/KakaoTalk_Photo_2026-08-24-20-24-03 007.jpeg": {
+      "value": "123바9898",
+      "band": false,
+      "format": "new",
+      "note": "실촬영 · 흰 종이 스티커(검은 테두리 있음) · 책상 위 · 실내등 · 원본 4032x2268 · EXIF orientation=3 · 판 가로 · 원거리 + 저대비(판면과 책상이 거의 같은 밝기) · 판폭 눈대중 아주 작다",
+      "rule": "exact"
+    },
+    "new/KakaoTalk_Photo_2026-08-24-20-24-03 008.jpeg": {
+      "value": "123바9898",
+      "band": false,
+      "format": "new",
+      "note": "실촬영 · 흰 종이 스티커(검은 테두리 있음) · 책상 위 · 실내등 · 원본 4032x2268 · EXIF orientation=8 · 판 가로 · 약 10도 기움 · 판폭 눈대중 작다",
+      "rule": "exact"
+    },
+    "new/KakaoTalk_Photo_2026-08-24-20-24-03 009.jpeg": {
+      "value": "123바9898",
+      "band": false,
+      "format": "new",
+      "note": "실촬영 · 흰 종이 스티커(검은 테두리 있음) · 책상 위 · 실내등 · 원본 4032x2268 · EXIF orientation=3 · 판 가로 · **심한 모션블러** · 판폭 눈대중 중간",
+      "rule": "exact_or_empty"
+    },
+    "new/KakaoTalk_Photo_2026-08-24-20-24-04 010.jpeg": {
+      "value": "123바9898",
+      "band": false,
+      "format": "new",
+      "note": "실촬영 · 흰 종이 스티커(검은 테두리 있음) · 책상 위 · 실내등 · 원본 4032x2268 · EXIF orientation=1 · 판 가로 · 정면 · 근접 · 판폭 눈대중 크다",
+      "rule": "exact"
+    },
+    "new/KakaoTalk_Photo_2026-08-24-20-24-04 011.jpeg": {
+      "value": "123바9898",
+      "band": false,
+      "format": "new",
+      "note": "실촬영 · 흰 종이 스티커(검은 테두리 있음) · 책상 위 · 실내등 · 원본 4032x2268 · EXIF orientation=1 · 판 가로 · 정면 · 판폭 눈대중 중간",
+      "rule": "exact"
+    },
+    "new/KakaoTalk_Photo_2026-08-24-20-24-04 012.jpeg": {
+      "value": "123바9898",
+      "band": false,
+      "format": "new",
+      "note": "실촬영 · 흰 종이 스티커(검은 테두리 있음) · 책상 위 · 실내등 · 원본 4032x2268 · EXIF orientation=1 · 판 가로 · 정면 · 근접(이 세트에서 가장 크다) · 판폭 눈대중 크다",
+      "rule": "exact"
+    },
+    "new/KakaoTalk_Photo_2026-08-24-20-24-04 013.jpeg": {
+      "value": "123바9898",
+      "band": false,
+      "format": "new",
+      "note": "실촬영 · 흰 종이 스티커(검은 테두리 있음) · 책상 위 · 실내등 · 원본 4032x2268 · EXIF orientation=8 · 판 가로 · 약 20도 기움 · 반사광이 판면을 가로지른다 · 판폭 눈대중 중간",
+      "rule": "exact"
+    },
+    "new/KakaoTalk_Photo_2026-08-24-20-24-04 014.jpeg": {
+      "value": "123바9898",
+      "band": false,
+      "format": "new",
+      "note": "실촬영 · 흰 종이 스티커(검은 테두리 있음) · 책상 위 · 실내등 · 원본 4032x2268 · EXIF orientation=8 · 판 가로 · 약 15도 기움 · 판폭 눈대중 중간",
+      "rule": "exact"
+    },
+    "new/KakaoTalk_Photo_2026-08-24-20-24-04 015.jpeg": {
+      "value": "123바9898",
+      "band": false,
+      "format": "new",
+      "note": "실촬영 · 흰 종이 스티커(검은 테두리 있음) · 책상 위 · 실내등 · 원본 4032x2268 · EXIF orientation=8 · 판 가로 · 정면 · 판폭 눈대중 중간",
+      "rule": "exact"
+    }
+  },
+  "_판정규칙": {
+    "exact": "value 가 정확히 일치해야 한다",
+    "exact_or_empty": "일치하거나 빈 문자열이어야 한다. **다른 값이 나오면 실패** — 계약 §9.4",
+    "empty": "반드시 빈 문자열이어야 한다(못 읽을 이미지 / 번호판 없음)"
+  }
+}
