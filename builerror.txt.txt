@@ -1,0 +1,146 @@
+오전 9:10에 빌드를 시작함...
+1>------ 빌드 시작: 프로젝트: server, 구성: Debug x64 ------
+1>  lot.cpp
+1>  server.cpp
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(69,24): error C2146: 구문 오류: ')'이(가) 'far' 식별자 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(69,24): error C2065: 'far': 선언되지 않은 식별자입니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(69,24): error C2059: 구문 오류: ')'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(71,13): error C2146: 구문 오류: ')'이(가) 'far' 식별자 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(71,13): error C2065: 'far': 선언되지 않은 식별자입니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(71,13): error C2059: 구문 오류: ')'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(71,13): error C2059: 구문 오류: 'if'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(71,13): error C2143: 구문 오류: ';'이(가) '{' 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(71,49): error C2947: template-argument-list을(를) 끝내려면 '>' 기호가 있어야 하는데 '>'이(가) 있습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(72,13): error C2146: 구문 오류: ')'이(가) 'far' 식별자 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(72,13): error C2065: 'far': 선언되지 않은 식별자입니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(72,13): error C2059: 구문 오류: ')'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(72,13): error C2059: 구문 오류: 'if'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(72,13): error C2143: 구문 오류: ';'이(가) '{' 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(72,49): error C2947: template-argument-list을(를) 끝내려면 '>' 기호가 있어야 하는데 '>'이(가) 있습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(74,44): error C2146: 구문 오류: ')'이(가) 'far' 식별자 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(74,44): error C2065: 'far': 선언되지 않은 식별자입니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(74,44): error C2059: 구문 오류: ')'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(74,44): error C2059: 구문 오류: 'if'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(74,44): error C2143: 구문 오류: ';'이(가) '{' 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(74,86): error C2947: template-argument-list을(를) 끝내려면 '>' 기호가 있어야 하는데 '>'이(가) 있습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(75,44): error C2146: 구문 오류: ')'이(가) 'far' 식별자 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(75,44): error C2065: 'far': 선언되지 않은 식별자입니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(75,44): error C2059: 구문 오류: ')'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(75,44): error C2059: 구문 오류: 'if'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(75,44): error C2143: 구문 오류: ';'이(가) '{' 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(75,86): error C2947: template-argument-list을(를) 끝내려면 '>' 기호가 있어야 하는데 '>'이(가) 있습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(76,13): error C2146: 구문 오류: ')'이(가) 'far' 식별자 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(76,13): error C2065: 'far': 선언되지 않은 식별자입니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(76,13): error C2059: 구문 오류: ')'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(76,13): error C2059: 구문 오류: 'if'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(76,13): error C2143: 구문 오류: ';'이(가) '{' 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(76,51): error C2947: template-argument-list을(를) 끝내려면 '>' 기호가 있어야 하는데 '>'이(가) 있습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(78,17): error C2146: 구문 오류: ')'이(가) 'far' 식별자 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(78,17): error C2065: 'far': 선언되지 않은 식별자입니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(78,17): error C2059: 구문 오류: ')'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(78,17): error C2059: 구문 오류: 'if'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(78,17): error C2143: 구문 오류: ';'이(가) '{' 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(79,31): error C2947: template-argument-list을(를) 끝내려면 '>' 기호가 있어야 하는데 '>'이(가) 있습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(81,36): error C2146: 구문 오류: ')'이(가) 'far' 식별자 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(81,36): error C2065: 'far': 선언되지 않은 식별자입니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(81,36): error C2059: 구문 오류: ')'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(81,36): error C2059: 구문 오류: 'if'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(81,36): error C2143: 구문 오류: ';'이(가) '{' 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(81,62): error C2947: template-argument-list을(를) 끝내려면 '>' 기호가 있어야 하는데 '>'이(가) 있습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(87,17): error C2146: 구문 오류: ')'이(가) 'far' 식별자 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(87,17): error C2065: 'far': 선언되지 않은 식별자입니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(87,17): error C2059: 구문 오류: ')'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(87,17): error C2059: 구문 오류: 'if'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(87,17): error C2143: 구문 오류: ';'이(가) '{' 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(88,35): error C2947: template-argument-list을(를) 끝내려면 '>' 기호가 있어야 하는데 '>'이(가) 있습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(92,17): error C2146: 구문 오류: ')'이(가) 'far' 식별자 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(92,17): error C2065: 'far': 선언되지 않은 식별자입니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(92,17): error C2059: 구문 오류: ')'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(92,17): error C2059: 구문 오류: 'if'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(92,17): error C2143: 구문 오류: ';'이(가) '{' 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(93,35): error C2947: template-argument-list을(를) 끝내려면 '>' 기호가 있어야 하는데 '>'이(가) 있습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(96,17): error C2146: 구문 오류: ')'이(가) 'far' 식별자 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(96,17): error C2065: 'far': 선언되지 않은 식별자입니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(96,17): error C2059: 구문 오류: ')'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(96,17): error C2059: 구문 오류: 'if'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(96,17): error C2143: 구문 오류: ';'이(가) '{' 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(97,31): error C2947: template-argument-list을(를) 끝내려면 '>' 기호가 있어야 하는데 '>'이(가) 있습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(105,21): error C2146: 구문 오류: ')'이(가) 'far' 식별자 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(105,21): error C2065: 'far': 선언되지 않은 식별자입니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(105,21): error C2059: 구문 오류: ')'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(105,43): error C2059: 구문 오류: ')'
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(105,45): error C2143: 구문 오류: ';'이(가) '{' 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(137,21): error C2146: 구문 오류: ')'이(가) 'far' 식별자 앞에 없습니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(137,21): error C2065: 'far': 선언되지 않은 식별자입니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
+1>D:\새 폴더 (2)\vs_server\server\server\serve.h(137,21): error C1003: 오류 수가 100개를 초과했습니다. 컴파일을 중지합니다.
+1>  (소스 파일 'server.cpp'을(를) 컴파일하는 중)
