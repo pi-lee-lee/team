@@ -65,6 +65,19 @@ class ParkingLot;
 #ifdef far
 #undef far
 #endif
+
+
+#ifdef NEAR
+#undef NEAR
+#define NEAR
+#endif
+
+#ifdef FAR
+#undef FAR
+#define FAR
+#endif
+
+
 // 🔴🔴 **`min`·`max` 는 위 넷과 같은 함정인데 여기 없었다** (실측 2026-08-27)
 //   `Measure& min(long cm);` 이 바로 아래에 있다. `<windows.h>` 의 `min` 은 **함수형 매크로**라
 //   그 줄이 *"인자가 모자란 매크로 호출"* 이 되고, 이어서 **생성자까지 깨진다.**

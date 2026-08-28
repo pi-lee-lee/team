@@ -15,6 +15,14 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="lot.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="server.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
     <ClInclude Include="cli.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -46,9 +54,6 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="measure.h">
-      <Filter>헤더 파일</Filter>
-    </ClInclude>
-    <ClInclude Include="shots.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="metrics.h">
@@ -87,6 +92,9 @@
     <ClInclude Include="server_wire.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="shots.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
     <ClInclude Include="spot.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
@@ -110,24 +118,14 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <!-- EXAMPLES.cpp 는 빌드 대상이 아니라 문서다. 이유는 server.vcxproj 의 주석에 있다.
-         소스 파일 폴더에 그대로 두는 것은 트리에서 보이게 하기 위해서다. -->
-    <None Include="EXAMPLES.cpp">
-      <Filter>소스 파일</Filter>
-    </None>
     <None Include="index.html">
-      <Filter>헤더 파일</Filter>
-    </None>
-    <None Include="README.md">
-      <Filter>헤더 파일</Filter>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="lot.cpp">
       <Filter>소스 파일</Filter>
-    </ClCompile>
-    <ClCompile Include="server.cpp">
+    </None>
+    <None Include="user8080.html">
       <Filter>소스 파일</Filter>
-    </ClCompile>
+    </None>
+    <None Include="user8081.html">
+      <Filter>소스 파일</Filter>
+    </None>
   </ItemGroup>
 </Project>
