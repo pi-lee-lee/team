@@ -1,3 +1,0 @@
-/Users/idong-u/learn/cpp/digitcam/verify/build-abi-base64/CMakeFiles/digitcam.dir
-/Users/idong-u/learn/cpp/digitcam/verify/build-abi-base64/CMakeFiles/edit_cache.dir
-/Users/idong-u/learn/cpp/digitcam/verify/build-abi-base64/CMakeFiles/rebuild_cache.dir
